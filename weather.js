@@ -20,11 +20,10 @@ const WeatherService = (() => {
 
   // ── Unit System ─────────────────────────────────────────────
   // 'metric' (°C, km/h, mm, hPa) or 'imperial' (°F, mph, in, inHg)
-  let currentUnits = localStorage.getItem('weathermap_units') || 'metric';
+  let currentUnits = 'metric';
 
   function setUnits(units) {
     currentUnits = units;
-    localStorage.setItem('weathermap_units', units);
   }
 
   function getUnits() {
@@ -51,30 +50,8 @@ const WeatherService = (() => {
     return code >= 95 && code <= 99;
   }
 
-  // ── Safe localStorage helper (#17) ──────────────────────────
-  function safeSetItem(key, value) {
-    try {
-      localStorage.setItem(key, value);
-    } catch (e) {
-      // Quota exceeded — evict oldest weathermap cache entries
-      if (e.name === 'QuotaExceededError' || e.code === 22) {
-        const cacheKeys = [];
-        for (let i = 0; i < localStorage.length; i++) {
-          const k = localStorage.key(i);
-          if (k && k.startsWith('weathermap_cache_')) {
-            cacheKeys.push(k);
-          }
-        }
-        // Remove up to 5 oldest cache entries
-        cacheKeys.slice(0, 5).forEach(k => localStorage.removeItem(k));
-        try {
-          localStorage.setItem(key, value);
-        } catch {
-          // Still failing — give up silently
-        }
-      }
-    }
-  }
+  // ── Safe localStorage helper (deprecated — no-op) ──────────
+  function safeSetItem(key, value) {}
 
   // ── WMO Weather Code Mapping ───────────────────────────────
   // Maps WMO 4677 weather interpretation codes to human-readable
@@ -122,7 +99,7 @@ const WeatherService = (() => {
    * @param {number} lng - Longitude
    * @returns {Promise<Object>} Parsed weather data
    */
-  async function fetchForecast(lat, lng) {
+  async function fetchForecast(lat, lng, retries = 2) {
     const params = new URLSearchParams({
       latitude: lat.toFixed(4),
       longitude: lng.toFixed(4),
@@ -160,19 +137,25 @@ const WeatherService = (() => {
       forecast_days: FORECAST_DAYS,
     });
 
-    const response = await fetch(`${FORECAST_URL}?${params}`);
-    if (!response.ok) {
-      throw new Error(`Weather API error: ${response.status} ${response.statusText}`);
+    for (let attempt = 0; attempt <= retries; attempt++) {
+      try {
+        const response = await fetch(`${FORECAST_URL}?${params}`);
+        if (!response.ok) {
+          throw new Error(`Weather API error: ${response.status} ${response.statusText}`);
+        }
+        const data = await response.json();
+        if (!data.hourly || !data.hourly.time || !data.daily) {
+          throw new Error('Unexpected weather API response format');
+        }
+        return data;
+      } catch (err) {
+        if (attempt < retries) {
+          await new Promise(r => setTimeout(r, 1000 * Math.pow(2, attempt)));
+        } else {
+          throw err;
+        }
+      }
     }
-
-    const data = await response.json();
-
-    // Validate that we got the expected data shape
-    if (!data.hourly || !data.hourly.time || !data.daily) {
-      throw new Error('Unexpected weather API response format');
-    }
-
-    return data;
   }
 
   /**
@@ -360,28 +343,36 @@ const WeatherService = (() => {
    * @param {string} query - Search query (city name)
    * @returns {Promise<Array>} Array of location results
    */
-  async function searchLocations(query) {
+  async function searchLocations(query, retries = 1) {
     if (!query || query.trim().length < 2) return [];
 
     const params = new URLSearchParams({
       name: query.trim(),
-      count: 5,
+      count: 8,
       language: 'en',
       format: 'json',
     });
 
-    const response = await fetch(`${GEOCODING_URL}?${params}`);
-    if (!response.ok) return [];
-
-    const data = await response.json();
-    return (data.results || []).map(r => ({
-      name: r.name,
-      country: r.country || '',
-      admin1: r.admin1 || '',
-      latitude: r.latitude,
-      longitude: r.longitude,
-      displayName: [r.name, r.admin1, r.country].filter(Boolean).join(', '),
-    }));
+    for (let attempt = 0; attempt <= retries; attempt++) {
+      try {
+        const response = await fetch(`${GEOCODING_URL}?${params}`);
+        if (!response.ok) return [];
+        const data = await response.json();
+        return (data.results || []).map(r => ({
+          name: r.name,
+          country: r.country || '',
+          admin1: r.admin1 || '',
+          latitude: r.latitude,
+          longitude: r.longitude,
+          displayName: [r.name, r.admin1, r.country].filter(Boolean).join(', '),
+        }));
+      } catch {
+        if (attempt < retries) {
+          await new Promise(r => setTimeout(r, 500 * Math.pow(2, attempt)));
+        }
+      }
+    }
+    return [];
   }
 
   /**
@@ -983,41 +974,6 @@ const WeatherService = (() => {
   //  DATA EXPORT
   //  ================================================================
 
-  function exportWeatherJSON(weatherData, airQualityData, selectedName) {
-    if (!weatherData) return null;
-    const now = new Date().toISOString();
-    const h = weatherData.hourly;
-    const hourly = h.time.map((t, i) => ({
-      time: t,
-      temperature: h.temperature_2m[i],
-      humidity: h.relative_humidity_2m[i],
-      feelsLike: h.apparent_temperature[i],
-      precipProb: h.precipitation_probability[i],
-      precipitation: h.precipitation[i],
-      weatherCode: h.weather_code[i],
-      cloudCover: h.cloud_cover[i],
-      windSpeed: h.wind_speed_10m[i],
-      windDirection: h.wind_direction_10m[i],
-      windGusts: h.wind_gusts_10m[i],
-      uvIndex: h.uv_index[i],
-      pressure: h.pressure_msl[i],
-      visibility: h.visibility[i],
-      isDay: h.is_day[i],
-      aqi: airQualityData?.hourly?.us_aqi?.[i] ?? null,
-      pm25: airQualityData?.hourly?.pm2_5?.[i] ?? null,
-      pm10: airQualityData?.hourly?.pm10?.[i] ?? null,
-      ozone: airQualityData?.hourly?.ozone?.[i] ?? null,
-    }));
-    return {
-      exportTime: now,
-      location: selectedName,
-      latitude: weatherData.latitude,
-      longitude: weatherData.longitude,
-      hourly,
-      daily: weatherData.daily,
-    };
-  }
-
   // ================================================================
   //  PREDICTIVE ARRIVAL (upwind query)
   //  ================================================================
@@ -1445,7 +1401,7 @@ const WeatherService = (() => {
     findNextRainHour,
     detectAnomaly,
     getHistoricalPattern,
-    exportWeatherJSON,
+
     getUpwindPoint,
     getConfidenceBands,
     computeDiurnalBias,
@@ -1468,6 +1424,5 @@ const WeatherService = (() => {
     isRainCode,
     isSnowCode,
     isStormCode,
-    safeSetItem,
   };
 })();

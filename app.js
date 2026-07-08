@@ -19,10 +19,6 @@
  * ============================================================
  */
 
-import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js';
-import { getAuth, signInWithPopup, GoogleAuthProvider, signOut, onAuthStateChanged } from 'https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js';
-import { getFirestore, doc, setDoc, getDoc, deleteDoc } from 'https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js';
-
 class AurafiskyApp {
   constructor() {
     // ── Firebase Configuration & State ────────────────────────
@@ -34,9 +30,7 @@ class AurafiskyApp {
       authDomain: "aurafisky.firebaseapp.com",
       messagingSenderId: "206842187982"
     };
-    this.firebaseApp = null;
-    this.auth = null;
-    this.db = null;
+    this._fb = null;     // Firebase modules (lazy-loaded)
     this.user = null;
     this.syncHistory = true;
 
@@ -60,7 +54,8 @@ class AurafiskyApp {
     
     // Bookmarks List
     this.bookmarks = [];                // Saved locations {name, lat, lng}
-    
+    this.searchHistory = this._loadSearchHistory();
+
     // Radar/Satellite Sequence State
     this.radarActive = false;           // Weather overlay state
     this.radarLayers = [];              // Array of Leaflet tile layers
@@ -70,6 +65,9 @@ class AurafiskyApp {
     this.radarPlaying = false;          // Radar playing status
     this.overlayType = 'radar';         // 'radar' or 'satellite'
     this.radarOpacity = 0.55;           // Current overlay opacity
+
+    // Terms & Conditions (cloud-only, defaults to not accepted)
+    this.termsAccepted = false;
 
     // Soundscape State
     this.audioActive = false;           // Audio mute state
@@ -134,8 +132,7 @@ class AurafiskyApp {
     this._alertPollTimer = null;
 
     // Toast dedup tracking (UI #16)
-    this._lastToastMessage = null;
-    this._lastToastTime = 0;
+    
 
     // ── DOM References ────────────────────────────────────────
     this.$ = {
@@ -145,12 +142,10 @@ class AurafiskyApp {
       searchSpinner:     document.getElementById('searchSpinner'),
       searchDropdown:    document.getElementById('searchDropdown'),
       searchResults:     document.getElementById('searchResults'),
-      darkModeBtn:       document.getElementById('darkModeBtn'),
+
       myLocationBtn:     document.getElementById('myLocationBtn'),
-      ambientSoundBtn:   document.getElementById('ambientSoundBtn'),
-      soundOffIcon:      document.getElementById('soundOffIcon'),
-      soundOnIcon:       document.getElementById('soundOnIcon'),
-      volumeSlider:      document.getElementById('volumeSlider'),
+      settingsSoundToggle:   document.getElementById('settingsSoundToggle'),
+      settingsVolumeSlider:  document.getElementById('settingsVolumeSlider'),
       bookmarksBtn:      document.getElementById('bookmarksBtn'),
       bookmarksDropdown: document.getElementById('bookmarksDropdown'),
       bookmarksList:     document.getElementById('bookmarksList'),
@@ -164,6 +159,8 @@ class AurafiskyApp {
       timelineBadge:     document.getElementById('timelineBadge'),
       timelineDays:      document.getElementById('timelineDays'),
       nowIndicator:      document.getElementById('nowIndicator'),
+      timelineTooltip:   document.getElementById('timelineTooltip'),
+      timelineTicks:     document.getElementById('timelineTicks'),
       loadingOverlay:    document.getElementById('loadingOverlay'),
       toastContainer:    document.getElementById('toastContainer'),
       weatherPanelSkeleton: document.getElementById('weatherPanelSkeleton'),
@@ -184,6 +181,8 @@ class AurafiskyApp {
       radarOpacitySlider:document.getElementById('radarOpacitySlider'),
       legendPrecip:     document.getElementById('legendPrecip'),
       legendTemp:       document.getElementById('legendTemp'),
+      zoomInBtn:        document.getElementById('zoomInBtn'),
+      zoomOutBtn:       document.getElementById('zoomOutBtn'),
 
       // SVG Sparkline
       trendSvg:          document.getElementById('trendSvg'),
@@ -223,9 +222,12 @@ class AurafiskyApp {
       pollenMugwort:     document.getElementById('pollenMugwort'),
       pollenAlder:       document.getElementById('pollenAlder'),
       uvChart:           document.getElementById('uvChart'),
-      metricSearch:      document.getElementById('metricSearch'),
+
       shortcutsModal:    document.getElementById('shortcutsModal'),
       shortcutsCloseBtn: document.getElementById('shortcutsCloseBtn'),
+      appInfoModal:      document.getElementById('appInfoModal'),
+      appInfoCloseBtn:   document.getElementById('appInfoCloseBtn'),
+      appInfoBtn:        document.getElementById('appInfoBtn'),
 
       // Advisory Alert Elements
       advisoryBanner:    document.getElementById('advisoryBanner'),
@@ -271,9 +273,10 @@ class AurafiskyApp {
       compareDescB:      document.getElementById('compareDescB'),
 
       // New Feature Elements
-      unitToggleBtn:     document.getElementById('unitToggleBtn'),
-      unitLabel:         document.getElementById('unitLabel'),
+
       shareWeatherBtn:   document.getElementById('shareWeatherBtn'),
+      panelMinimizeBtn:  document.getElementById('panelMinimizeBtn'),
+      hourlyTabContent:  document.getElementById('hourlyTabContent'),
 
       hourlyStrip:       document.getElementById('hourlyStrip'),
       bestWindowCard:    document.getElementById('bestWindowCard'),
@@ -281,7 +284,7 @@ class AurafiskyApp {
 
       // Install & Auto-refresh buttons
       installBtn:       document.getElementById('installBtn'),
-      autoRefreshBtn:   document.getElementById('autoRefreshBtn'),
+
 
       // New Features
       comfortIndex:     document.getElementById('comfortIndex'),
@@ -289,8 +292,8 @@ class AurafiskyApp {
       pressureTendency: document.getElementById('pressureTendency'),
       timelineDelta:    document.getElementById('timelineDelta'),
       nextRainBtn:      document.getElementById('nextRainBtn'),
-      exportWeatherBtn: document.getElementById('exportWeatherBtn'),
-      minimalModeBtn:   document.getElementById('minimalModeBtn'),
+
+
       predictiveArrival:document.getElementById('predictiveArrival'),
       anomalyLabel:     document.getElementById('anomalyLabel'),
       patternLabel:     document.getElementById('patternLabel'),
@@ -304,7 +307,7 @@ class AurafiskyApp {
       momentumLabel:    document.getElementById('momentumLabel'),
       paramImportance:  document.getElementById('paramImportance'),
       freshnessLabel:   document.getElementById('freshnessLabel'),
-      temporalGrid:     document.getElementById('temporalGrid'),
+      // temporalGrid (class-based, no ID needed)
       briefingBtn:      document.getElementById('briefingBtn'),
       briefingContent:  document.getElementById('briefingContent'),
       regimeLabel:      document.getElementById('regimeLabel'),
@@ -334,6 +337,12 @@ class AurafiskyApp {
       settingsSyncHistoryToggle:document.getElementById('settingsSyncHistoryToggle'),
       settingsClearCacheBtn:document.getElementById('settingsClearCacheBtn'),
       settingsDeleteDataBtn:document.getElementById('settingsDeleteDataBtn'),
+      settingsAutoRefreshToggle:document.getElementById('settingsAutoRefreshToggle'),
+      settingsTermsBtn:    document.getElementById('settingsTermsBtn'),
+      termsModal:          document.getElementById('termsModal'),
+      termsAcceptBtn:      document.getElementById('termsAcceptBtn'),
+      copyContactEmailBtn: document.getElementById('copyContactEmailBtn'),
+      termsCornerLink:     document.getElementById('termsCornerLink'),
     };
 
     // ── Initialize ────────────────────────────────────────────
@@ -342,17 +351,10 @@ class AurafiskyApp {
 
   /** Initialize application settings, maps, bookmarks, and UI triggers. */
   async init() {
-    // Restore theme preference
-    this.isDark = localStorage.getItem('weathermap_dark') === 'true';
-    if (this.isDark) {
-      document.documentElement.classList.add('dark');
-      const sunIcon = document.getElementById('darkModeIconSun');
-      const moonIcon = document.getElementById('darkModeIconMoon');
-      if (sunIcon) sunIcon.classList.add('hidden');
-      if (moonIcon) moonIcon.classList.remove('hidden');
-    }
+    // Theme defaults to light (user sign-in will restore cloud preference)
+    this.isDark = false;
 
-    // Load saved bookmarks
+    // Load bookmarks (in-memory until cloud sync)
     this.loadBookmarks();
     this.startBookmarkAlertPolling();
 
@@ -364,7 +366,6 @@ class AurafiskyApp {
 
     // Bind event handlers
     this.bindEvents();
-    this.initMetricSearch();
     this.initKeyboardShortcuts();
 
     // Register Service Worker for PWA
@@ -373,24 +374,13 @@ class AurafiskyApp {
     // Sync unit toggle label
     this.syncUnitLabel();
 
-    // Restore compact mode preference
-    if (localStorage.getItem('weathermap_compact') === 'true') {
-      this.minimalMode = true;
-      document.documentElement.classList.add('compact');
-      this.$.minimalModeBtn.querySelector('span').textContent = '🗖';
-    }
-
-    // Auto-detect location on first visit
-    if (!localStorage.getItem('weathermap_visited')) {
-      WeatherService.safeSetItem('weathermap_visited', 'true');
-      this.getMyLocation();
-    }
-
     // Read shareable URL params (?lat=...&lng=...&name=...)
     this.readShareableUrl();
 
     // Initialize Firebase Auth & Firestore
     this.initFirebase();
+
+    // Terms shown only on sign-in or via settings button / corner link
   }
 
   // ================================================================
@@ -427,8 +417,7 @@ class AurafiskyApp {
         this.lightTiles.addTo(this.map);
       }
 
-      // Zoom position adjustments
-      L.control.zoom({ position: 'bottomright' }).addTo(this.map);
+      // Zoom controls are integrated into radar controls panel instead
 
       // Bind map click handler
       this.map.on('click', (e) => {
@@ -464,23 +453,65 @@ class AurafiskyApp {
     this.$.favoriteToggleBtn.addEventListener('click', () => this.toggleFavoriteCurrentLocation());
 
     // ── Map Controls ──────────────────────────────────────────
-    this.$.darkModeBtn.addEventListener('click', () => this.toggleDarkMode());
+    // Dark mode toggle is in settings panel only
     this.$.myLocationBtn.addEventListener('click', () => this.getMyLocation());
-    this.$.ambientSoundBtn.addEventListener('click', () => this.toggleAmbientSoundscape());
     this.$.panelCloseBtn.addEventListener('click', () => this.hideWeatherPanel());
+    this.$.panelMinimizeBtn?.addEventListener('click', () => this.toggleMinimizeWeatherPanel());
     this.$.compareCloseBtn.addEventListener('click', () => this.hideComparePanel());
     
-    // ── Volume Control ────────────────────────────────────────
-    this.$.volumeSlider.addEventListener('input', (e) => {
-      this.handleVolumeChange(parseInt(e.target.value, 10) / 100);
-    });
+    // ── Volume Control (now in settings panel) ────────────────
+    if (this.$.settingsVolumeSlider) {
+      this.$.settingsVolumeSlider.addEventListener('input', (e) => {
+        this.handleVolumeChange(parseInt(e.target.value, 10) / 100);
+      });
+    }
+
+    // ── Settings Panel Toggles (always active, not Firebase-dependent) ──
+    if (this.$.settingsUnitsToggle) {
+      this.$.settingsUnitsToggle.addEventListener('change', (e) => {
+        const useFahrenheit = e.target.checked;
+        WeatherService.setUnits(useFahrenheit ? 'imperial' : 'metric');
+        this.syncUnitLabel();
+        if (this.weatherData) this.updateWeatherDisplay(parseInt(this.$.timelineSlider.value, 10));
+        this.saveUserDataToCloud();
+      });
+    }
+    if (this.$.settingsThemeToggle) {
+      this.$.settingsThemeToggle.addEventListener('change', () => {
+        this.toggleDarkMode();
+        this.saveUserDataToCloud();
+      });
+    }
+    if (this.$.settingsCompactToggle) {
+      this.$.settingsCompactToggle.addEventListener('change', () => {
+        this.toggleMinimalMode();
+        this.saveUserDataToCloud();
+      });
+    }
+    if (this.$.settingsSoundToggle) {
+      this.$.settingsSoundToggle.addEventListener('change', (e) => {
+        this.toggleAmbientSoundscape(e.target.checked);
+      });
+    }
+    if (this.$.settingsAutoRefreshToggle) {
+      this.$.settingsAutoRefreshToggle.addEventListener('change', () => this.toggleAutoRefresh());
+    }
 
     // ── Time Slider ───────────────────────────────────────────
     this.$.timelineSlider.addEventListener('input', (e) => {
       this.handleTimelineChange(parseInt(e.target.value, 10));
+      this.updateTimelineTooltip(parseInt(e.target.value, 10));
+    });
+    this.$.timelineSlider.addEventListener('change', () => {
+      if (this._tooltipHideTimer) clearTimeout(this._tooltipHideTimer);
+      this._tooltipHideTimer = setTimeout(() => {
+        if (this.$.timelineTooltip) this.$.timelineTooltip.classList.add('hidden');
+      }, 2500);
     });
 
     // ── Weather Overlay controls ────────────────────────────────
+    this.$.zoomInBtn?.addEventListener('click', () => this.map?.zoomIn());
+    this.$.zoomOutBtn?.addEventListener('click', () => this.map?.zoomOut());
     this.$.radarToggleBtn.addEventListener('click', () => this.toggleRadar());
     this.$.layerTypeSelect.addEventListener('change', (e) => {
       this.overlayType = e.target.value;
@@ -503,6 +534,8 @@ class AurafiskyApp {
           if (this.$.legendTemp) this.$.legendTemp.classList.add('hidden');
           this.activeEffectType = 'wind';
           this.radarActive = true;
+          this.initWindParticles();
+          if (!this.animationFrameId) this.runWeatherCanvasLoop();
         } else {
           this.clearTempOverlay();
           this.activeEffectType = 'none';
@@ -518,21 +551,8 @@ class AurafiskyApp {
     // ── Climate Time Machine trigger ─────────────────────────
     this.$.timeMachineTrigger.addEventListener('click', () => this.toggleClimateTimeMachine());
 
-    // ── Unit Toggle ──────────────────────────────────────────
-    this.$.unitToggleBtn.addEventListener('click', () => this.toggleUnits());
-
     // ── Share Weather ────────────────────────────────────────
     this.$.shareWeatherBtn.addEventListener('click', () => this.shareWeather());
-
-    // ── Export Weather Data ──────────────────────────────────
-    this.$.exportWeatherBtn.addEventListener('click', () => this.exportWeatherData());
-    this.$.exportWeatherBtn.addEventListener('contextmenu', (e) => { e.preventDefault(); this.exportWeatherImage(); });
-
-    // ── Minimal Mode Toggle ──────────────────────────────────
-    this.$.minimalModeBtn.addEventListener('click', () => this.toggleMinimalMode());
-
-    // ── Auto-Refresh Toggle ──────────────────────────────────
-    this.$.autoRefreshBtn.addEventListener('click', () => this.toggleAutoRefresh());
 
     // ── PWA Install Button ───────────────────────────────────
     this.$.installBtn.addEventListener('click', () => this.installPWA());
@@ -611,8 +631,41 @@ class AurafiskyApp {
     };
     document.addEventListener('click', this._boundDocClick);
 
-    // ── Resize for canvas ───────────────────────────────────
-    this._boundResize = () => this.resizeWeatherCanvas();
+    // ── Pull-to-refresh: detect downward swipe on map ────────
+    this._pullStartY = 0;
+    this._pullActive = false;
+    this._pullNotified = false;
+    document.addEventListener('touchstart', (e) => {
+      if (e.touches.length !== 1) return;
+      this._pullStartY = e.touches[0].clientY;
+      this._pullActive = true;
+      this._pullNotified = false;
+    }, { passive: true });
+    document.addEventListener('touchmove', (e) => {
+      if (!this._pullActive || e.touches.length !== 1) return;
+      const dy = e.touches[0].clientY - this._pullStartY;
+      if (dy > 100 && !this._pullNotified && window.scrollY === 0) {
+        this._pullNotified = true;
+        this._pullActive = false;
+        this.showToast('Refreshing weather...', 'info');
+        if (this.selectedLat && this.selectedLng && this.selectedName) {
+          this.selectLocation(this.selectedLat, this.selectedLng, this.selectedName);
+        } else {
+          this.getMyLocation();
+        }
+      }
+    }, { passive: true });
+    document.addEventListener('touchend', () => { this._pullActive = false; }, { passive: true });
+
+    // ── Resize for canvas (RAF-throttled) ────────────────────
+    this._resizeRAF = null;
+    this._boundResize = () => {
+      if (this._resizeRAF) return;
+      this._resizeRAF = requestAnimationFrame(() => {
+        this._resizeRAF = null;
+        this.resizeWeatherCanvas();
+      });
+    };
     window.addEventListener('resize', this._boundResize);
   }
 
@@ -653,6 +706,18 @@ class AurafiskyApp {
     if (lat == null || lng == null || isNaN(lat) || isNaN(lng)) {
       return;
     }
+    if (this._isFetching) return;
+    this._isFetching = true;
+
+    const wasMinimal = this.minimalMode;
+    if (wasMinimal) {
+      const panel = this.$.weatherPanel;
+      panel.innerHTML = panel.dataset.fullContent || '';
+      this.rebindPanelEvents();
+      document.documentElement.classList.remove('compact');
+      this.minimalMode = false;
+    }
+
     this.selectedLat = lat;
     this.selectedLng = lng;
     this.selectedName = name;
@@ -708,21 +773,6 @@ class AurafiskyApp {
       // Store freshness timestamp
       this.freshnessTimestamp = Date.now();
 
-      // Save to offline cache
-      try {
-        WeatherService.safeSetItem(cacheKey, JSON.stringify({
-          name,
-          lat,
-          lng,
-          forecast,
-          airQuality,
-          timestamp: Date.now()
-        }));
-        this._addCacheKey(cacheKey);
-      } catch (e) {
-        console.warn('LocalStorage caching failed:', e);
-      }
-
       this.updateOfflineBadge(false);
 
       // Populate slider timeline tick boundaries
@@ -742,6 +792,7 @@ class AurafiskyApp {
       if (this.$.weatherPanelSkeleton && this.$.weatherPanelContent) {
         this.$.weatherPanelContent.classList.remove('hidden');
         this.$.weatherPanelSkeleton.classList.add('hidden');
+        requestAnimationFrame(() => { this.$.weatherPanelContent.scrollTop = 0; });
       }
 
     } catch (error) {
@@ -768,12 +819,43 @@ class AurafiskyApp {
         if (this.$.weatherPanelSkeleton && this.$.weatherPanelContent) {
           this.$.weatherPanelContent.classList.remove('hidden');
           this.$.weatherPanelSkeleton.classList.add('hidden');
+          requestAnimationFrame(() => { this.$.weatherPanelContent.scrollTop = 0; });
         }
       } else {
         this.showToast(this.isOffline ? 'You are offline and no cached data is available for this city.' : 'Could not fetch weather metrics.', 'error');
         this.hideWeatherPanel();
       }
     }
+
+    // Re-enter minimal mode if it was active
+    if (wasMinimal) {
+      document.documentElement.classList.add('compact');
+      const panel = this.$.weatherPanel;
+      panel.dataset.fullContent = panel.innerHTML;
+      panel.innerHTML = `
+        <div class="flex items-center justify-between px-5 pt-5 pb-3">
+          <div class="min-w-0 flex-1">
+            <h3 class="text-lg font-bold truncate text-slate-900 dark:text-white">${this.selectedName || 'Weather'}</h3>
+          </div>
+          <button id="minimalExitBtn" class="p-1.5 rounded-lg hover:bg-slate-200/60 dark:hover:bg-slate-600/40 transition-colors flex-shrink-0" aria-label="Exit minimal mode">
+            <svg class="w-5 h-5 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4" />
+            </svg>
+          </button>
+        </div>
+        <div class="flex-1 flex items-center justify-center px-5 pb-5">
+          <div class="text-center">
+            <div class="text-7xl mb-3">${this.$.panelIcon.textContent}</div>
+            <div class="text-6xl font-extrabold text-slate-900 dark:text-white mb-2">${this.$.panelTemp.textContent}</div>
+            <div class="text-lg text-slate-500 dark:text-slate-400 mb-1">${this.$.panelDescription.textContent}</div>
+            <div class="text-sm text-slate-400">${WeatherService.formatDateTime(this.weatherData?.hourly?.time[parseInt(this.$.timelineSlider.value)], this.weatherData?.timezone, this.weatherData?.utc_offset_seconds)}</div>
+          </div>
+        </div>
+      `;
+      panel.querySelector('#minimalExitBtn').addEventListener('click', () => this.toggleMinimalMode());
+      this.minimalMode = true;
+    }
+    this._isFetching = false;
   }
 
   getNearestCachedLocation(lat, lng) {
@@ -792,39 +874,29 @@ class AurafiskyApp {
       }
     }
 
-    if (nearestKey) {
-      try {
-        return JSON.parse(localStorage.getItem(nearestKey));
-      } catch {
-        return null;
-      }
+    if (!nearestKey) return null;
+    try {
+      return JSON.parse(localStorage.getItem(nearestKey));
+    } catch {
+      return null;
     }
-    return null;
   }
 
   _getCacheKeyList() {
-    let keys = localStorage.getItem('weathermap_cache_keys');
-    if (keys) {
-      try { return JSON.parse(keys); } catch { /* fall through */ }
-    }
-    // Build index from all localStorage keys
-    const index = [];
-    for (let i = 0; i < localStorage.length; i++) {
-      const key = localStorage.key(i);
-      if (key.startsWith('weathermap_cache_')) {
-        index.push(key);
+    try {
+      const keys = [];
+      for (let i = 0; i < localStorage.length; i++) {
+        const key = localStorage.key(i);
+        if (key.startsWith('weathermap_cache_')) keys.push(key);
       }
+      return keys;
+    } catch {
+      return [];
     }
-    WeatherService.safeSetItem('weathermap_cache_keys', JSON.stringify(index));
-    return index;
   }
 
   _addCacheKey(key) {
-    const keys = this._getCacheKeyList();
-    if (!keys.includes(key)) {
-      keys.push(key);
-      WeatherService.safeSetItem('weathermap_cache_keys', JSON.stringify(keys));
-    }
+    // No-op: caching removed
   }
 
   updateOfflineBadge(isCachedDisplay) {
@@ -893,7 +965,18 @@ class AurafiskyApp {
 
     // Header labels
     this.$.panelLocationName.textContent = this.selectedName;
-    this.$.panelTimeLabel.textContent = WeatherService.formatDateTime(weather.time, this.weatherData?.timezone, this.weatherData?.utc_offset_seconds);
+    const now = new Date();
+    const timezone = this.weatherData?.timezone;
+    this.$.panelTimeLabel.textContent = now.toLocaleDateString('en-US', {
+      weekday: 'short',
+      month: 'short',
+      day: 'numeric',
+      timeZone: timezone
+    }) + ' · ' + now.toLocaleTimeString('en-US', {
+      hour: 'numeric',
+      minute: '2-digit',
+      timeZone: timezone
+    });
 
     // Weather type display
     this.$.panelIcon.textContent = weather.icon;
@@ -1422,18 +1505,69 @@ class AurafiskyApp {
     this.$.timelineDays.style.position = 'relative';
     this.$.timelineDays.style.height = '16px';
 
+    // Tick marks at 6-hour intervals
+    this.$.timelineTicks.innerHTML = '';
+    for (let i = 0; i < totalHours; i++) {
+      const h = new Date(hourlyTimes[i] + 'Z').getUTCHours();
+      if (h % 6 === 0) {
+        const tick = document.createElement('span');
+        tick.className = 'absolute text-[8px] text-slate-400 dark:text-slate-500 font-medium';
+        tick.style.left = `${(i / (totalHours - 1)) * 100}%`;
+        tick.style.transform = 'translateX(-50%)';
+        tick.style.top = '0';
+        tick.textContent = `${h.toString().padStart(2, '0')}`;
+        this.$.timelineTicks.appendChild(tick);
+      }
+    }
+
     const nowIdx = WeatherService.getCurrentHourIndex(this.weatherData);
     const nowPct = (nowIdx / (totalHours - 1)) * 100;
 
     this.$.nowIndicator.style.left = `${nowPct}%`;
     this.$.nowIndicator.classList.remove('hidden');
     this.$.timelineSlider.style.setProperty('--now-position', `${nowPct}%`);
+    this.updateTrackColors();
   }
 
-  /**
-   * Throttled timeline handler — avoids expensive re-renders
-   * at 60fps slider drag events (perf #5).
-   */
+  updateTimelineTooltip(hourIndex) {
+    const tip = this.$.timelineTooltip;
+    if (!tip || !this.weatherData?.hourly) return;
+    const timeStr = this.weatherData.hourly.time[hourIndex];
+    const temp = this.weatherData.hourly.temperature_2m?.[hourIndex];
+    if (!timeStr) { tip.classList.add('hidden'); return; }
+    const date = new Date(timeStr + 'Z');
+    const timeLabel = date.toLocaleString('en-US', { weekday: 'short', hour: 'numeric', minute: '2-digit' });
+    const tempLabel = temp != null ? `${Math.round(temp)}°` : '--°';
+    tip.textContent = `${timeLabel} • ${tempLabel}`;
+    const slider = this.$.timelineSlider;
+    const pct = hourIndex / (slider.max - slider.min);
+    tip.style.left = `${pct * 100}%`;
+    tip.classList.remove('hidden');
+  }
+
+  updateTrackColors() {
+    if (!this.weatherData?.hourly?.weather_code) return;
+    const totalHours = this.weatherData.hourly.time.length;
+    const colors = [];
+    for (let i = 0; i < totalHours; i++) {
+      const code = this.weatherData.hourly.weather_code[i];
+      let color;
+      if (code >= 95) color = '#dc2626';
+      else if (code >= 71 && code <= 77) color = '#e0e7ff';
+      else if (code >= 51 && code <= 67) color = '#60a5fa';
+      else if (code >= 80 && code <= 86) color = '#3b82f6';
+      else if (code >= 61 && code <= 66) color = '#2563eb';
+      else if (code >= 45 && code <= 48) color = '#94a3b8';
+      else if (code >= 3 && code <= 4) color = '#94a3b8';
+      else if (code === 2) color = '#cbd5e1';
+      else color = '#fbbf24';
+      colors.push(color);
+    }
+    const stops = colors.map((c, i) => `${c} ${(i / (totalHours - 1)) * 100}%`).join(', ');
+    this.$.timelineSlider.style.setProperty('--track-colors', `linear-gradient(to right, ${stops})`);
+    this.$.timelineSlider.style.background = `linear-gradient(to right, ${stops})`;
+  }
+
   handleTimelineChange(hourIndex) {
     if (!this.weatherData) return;
     if (this._timelinePending) return;
@@ -1441,8 +1575,11 @@ class AurafiskyApp {
     requestAnimationFrame(() => {
       this._timelinePending = false;
       // Invalidate cached decomposition on hour change
-      this._cachedDecomposition = null;
+    this._cachedDecomposition = null;
+    this._isFetching = false;
       this.updateWeatherDisplay(hourIndex);
+      this.updateTimelineTooltip(hourIndex);
+      this.updateTrackColors();
     });
   }
 
@@ -1573,6 +1710,7 @@ class AurafiskyApp {
 
   startRadarPlayback() {
     if (this.radarLayers.length === 0) return;
+    if (this.radarTimer) clearInterval(this.radarTimer);
     this.radarLayers.forEach((layer, i) => {
       layer.setOpacity(i === this.radarIndex ? this.radarOpacity : 0.0);
     });
@@ -1629,17 +1767,12 @@ class AurafiskyApp {
   // ================================================================
 
   loadBookmarks() {
-    try {
-      this.bookmarks = JSON.parse(localStorage.getItem('weathermap_bookmarks')) || [];
-    } catch {
-      this.bookmarks = [];
-    }
+    this.bookmarks = [];
     this.renderBookmarksList();
     this.refreshBookmarkPins();
   }
 
   saveBookmarks() {
-    WeatherService.safeSetItem('weathermap_bookmarks', JSON.stringify(this.bookmarks));
     this.renderBookmarksList();
     this.updateStarUI();
     this.refreshBookmarkPins();
@@ -1648,6 +1781,12 @@ class AurafiskyApp {
 
   toggleFavoriteCurrentLocation() {
     if (!this.selectedLat || !this.selectedLng) return;
+
+    if (!this.user) {
+      this.toggleAccountDialog(true);
+      this.showToast('Sign in with Google to save bookmarks', 'info');
+      return;
+    }
 
     const isFav = this.isCurrentLocationFavorited();
     if (isFav) {
@@ -1835,8 +1974,7 @@ class AurafiskyApp {
   }
 
   syncUnitLabel() {
-    const units = WeatherService.getUnits();
-    this.$.unitLabel.textContent = units === 'imperial' ? '°F' : '°C';
+    // Unit label was in the top bar (removed — now only in settings)
   }
 
   // ================================================================
@@ -1852,10 +1990,20 @@ class AurafiskyApp {
     const weather = WeatherService.getHourlyAtIndex(this.weatherData, parseInt(this.$.timelineSlider.value, 10));
     if (!weather) return;
 
+    const time = WeatherService.formatDateTime(weather.time, this.weatherData?.timezone, this.weatherData?.utc_offset_seconds);
     const aqiVal = this.airQualityData?.hourly?.us_aqi[parseInt(this.$.timelineSlider.value, 10)];
-    const aqiText = aqiVal != null ? ` AQI ${Math.round(aqiVal)}.` : '';
+    const aqiText = aqiVal != null ? ` | AQI: ${Math.round(aqiVal)}` : '';
+    const gust = weather.windGusts != null ? ` | Gusts: ${WeatherService.formatWind(weather.windGusts)}` : '';
+    const pressure = weather.pressure != null ? ` | Pressure: ${WeatherService.formatPressure(weather.pressure)}` : '';
+    const uv = weather.uvIndex != null ? ` | UV: ${weather.uvIndex.toFixed(1)}` : '';
+    const vis = weather.visibility != null ? ` | Visibility: ${(weather.visibility / 1000).toFixed(1)} km` : '';
+    const clouds = weather.cloudCover != null ? ` | Clouds: ${weather.cloudCover}%` : '';
+    const precip = weather.precipProb != null && weather.precipProb > 0 ? ` | Precip: ${weather.precipProb}%` : '';
 
-    const text = `${this.selectedName} — ${WeatherService.formatTemp(weather.temperature)} ${weather.description}. Feels like ${WeatherService.formatTemp(weather.feelsLike)}. Humidity ${weather.humidity}%, Wind ${WeatherService.formatWind(weather.windSpeed)} ${WeatherService.getWindDirection(weather.windDirection)}.${aqiText} ${weather.icon}`;
+    const text = `${this.selectedName} — ${WeatherService.formatTemp(weather.temperature)} ${weather.icon} ${weather.description}
+${time}
+Feels like ${WeatherService.formatTemp(weather.feelsLike)} | Humidity: ${weather.humidity}%
+Wind: ${WeatherService.formatWind(weather.windSpeed)} ${WeatherService.getWindDirection(weather.windDirection)}${gust}${pressure}${uv}${vis}${clouds}${precip}${aqiText}`;
 
     // Try native share API first (mobile)
     if (navigator.share) {
@@ -1884,45 +2032,48 @@ class AurafiskyApp {
     if (!this.weatherData || !this.weatherData.hourly) return;
 
     const h = this.weatherData.hourly;
-    const endIdx = Math.min(currentIdx + 24, h.time.length);
     const nowIdx = WeatherService.getCurrentHourIndex(this.weatherData);
+    const limit = Math.min(h.time.length, nowIdx + 48);
 
-    let html = '';
-    for (let i = currentIdx; i < endIdx; i++) {
+    const allHours = [];
+    for (let i = nowIdx; i < limit; i++) {
+      allHours.push(i);
+    }
+
+    this.renderHourlyTabContent(allHours, nowIdx);
+  }
+
+  renderHourlyTabContent(hours, nowIdx) {
+    const container = this.$.hourlyTabContent;
+    if (!container) return;
+    const h = this.weatherData.hourly;
+
+    container.innerHTML = hours.map(i => {
       const temp = h.temperature_2m[i];
       const code = h.weather_code[i];
       const isDay = h.is_day ? h.is_day[i] : 1;
       const info = WeatherService.getWeatherInfo(code, isDay);
-      const precipProb = h.precipitation_probability[i] || 0;
+      const precipProb = h.precipitation_probability?.[i] || 0;
+      const wind = h.wind_speed_10m?.[i];
+      const humidity = h.relative_humidity_2m?.[i];
       const isNow = i === nowIdx;
-
       const timeStr = new Date(h.time[i]).toLocaleTimeString([], { hour: 'numeric', hour12: true });
 
-      html += `
-        <div class="hourly-pill ${isNow ? 'now-pill' : ''}" tabindex="0" role="button" data-idx="${i}" aria-label="${isNow ? 'Now' : timeStr}: ${info.description}, ${WeatherService.formatTemp(temp)}">
-          <span class="pill-time">${isNow ? 'Now' : timeStr}</span>
-          <span class="pill-icon">${info.icon}</span>
-          <span class="pill-temp">${WeatherService.formatTemp(temp)}</span>
-          ${precipProb > 0 ? `<span class="pill-precip">💧${precipProb}%</span>` : ''}
-        </div>
-      `;
-    }
+      return `<button class="hourly-row w-full flex items-center gap-2 px-3 py-2 rounded-xl text-left transition-colors ${isNow ? 'bg-primary/10 border border-primary/20' : 'hover:bg-slate-100/60 dark:hover:bg-slate-800/40 border border-transparent'}" data-idx="${i}" aria-label="${isNow ? 'Now' : timeStr}: ${info.description}">
+        <span class="w-10 text-[10px] font-semibold text-slate-500 dark:text-slate-400 flex-shrink-0">${isNow ? 'Now' : timeStr}</span>
+        <span class="text-lg flex-shrink-0 w-7 text-center">${info.icon}</span>
+        <span class="w-10 text-sm font-bold text-slate-800 dark:text-slate-100 flex-shrink-0">${WeatherService.formatTemp(temp)}</span>
+        ${precipProb > 0 ? `<span class="text-[10px] text-blue-500 font-semibold w-10 flex-shrink-0">${precipProb}%</span>` : '<span class="w-10 flex-shrink-0"></span>'}
+        <span class="text-[10px] text-slate-400 flex-1 min-w-0 truncate">${wind != null ? `💨 ${WeatherService.formatWind(wind)}` : ''}</span>
+        <span class="text-[10px] text-slate-400 flex-shrink-0">${humidity != null ? `💧${humidity}%` : ''}</span>
+      </button>`;
+    }).join('');
 
-    this.$.hourlyStrip.innerHTML = html;
-
-    // Bind click and keydown handlers for hourly strip pills (UI #15)
-    this.$.hourlyStrip.querySelectorAll('.hourly-pill').forEach(pill => {
-      const idx = parseInt(pill.dataset.idx, 10);
-      const selectPill = () => {
+    container.querySelectorAll('.hourly-row').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const idx = parseInt(btn.dataset.idx, 10);
         this.$.timelineSlider.value = idx;
         this.handleTimelineChange(idx);
-      };
-      pill.addEventListener('click', selectPill);
-      pill.addEventListener('keydown', (e) => {
-        if (e.key === 'Enter' || e.key === ' ') {
-          e.preventDefault();
-          selectPill();
-        }
       });
     });
   }
@@ -1932,17 +2083,17 @@ class AurafiskyApp {
   // ================================================================
 
   renderBestOutdoorWindow(startIdx) {
-    const window = WeatherService.findBestOutdoorWindow(this.weatherData, startIdx);
+    const bestWindow = WeatherService.findBestOutdoorWindow(this.weatherData, startIdx);
     
-    if (!window) {
+    if (!bestWindow) {
       this.$.bestWindowCard.classList.add('hidden');
       return;
     }
 
-    const startTime = new Date(window.startTime).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit', hour12: true });
-    const endTime = new Date(window.endTime).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit', hour12: true });
+    const startTime = new Date(bestWindow.startTime).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit', hour12: true });
+    const endTime = new Date(bestWindow.endTime).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit', hour12: true });
 
-    this.$.bestWindowText.textContent = `${startTime} – ${endTime} (${window.hours}h, avg ${WeatherService.formatTemp(window.avgTemp)}, no rain)`;
+    this.$.bestWindowText.textContent = `${startTime} – ${endTime} (${bestWindow.hours}h, avg ${WeatherService.formatTemp(bestWindow.avgTemp)}, no rain)`;
     this.$.bestWindowCard.classList.remove('hidden');
   }
 
@@ -1952,7 +2103,7 @@ class AurafiskyApp {
 
   renderTemporalGrid(matrices) {
     if (!matrices || !this.$.dailyForecast) return;
-    const todayStr = new Date().toISOString().split('T')[0];
+    const todayStr = new Date().toLocaleDateString('en-CA');
     const future = matrices.filter(m => m.date >= todayStr).slice(0, 7);
 
     if (future.length === 0) return;
@@ -2105,7 +2256,7 @@ class AurafiskyApp {
   // ================================================================
 
   async updatePredictiveArrival(weather, hourIndex) {
-    if (!weather || !this.weatherData) return;
+    if (!weather || !this.weatherData || !this.$.predictiveArrival) return;
     const windDir = weather.windDirection;
     if (windDir == null || windDir < 0) {
       this.$.predictiveArrival.classList.add('hidden');
@@ -2117,25 +2268,12 @@ class AurafiskyApp {
       return;
     }
 
-    // Check cache for upwind forecast
-    const cacheKey = `weathermap_upwind_${upwind.lat.toFixed(2)}_${upwind.lng.toFixed(2)}`;
     let upwindData = null;
     try {
-      const cached = localStorage.getItem(cacheKey);
-      if (cached) {
-        const parsed = JSON.parse(cached);
-        if (Date.now() - parsed.ts < 600000) upwindData = parsed.data; // 10 min cache
-      }
-    } catch {}
-
-    if (!upwindData) {
-      try {
-        upwindData = await WeatherService.fetchForecast(upwind.lat, upwind.lng);
-        WeatherService.safeSetItem(cacheKey, JSON.stringify({ data: upwindData, ts: Date.now() }));
-      } catch {
-        this.$.predictiveArrival.classList.add('hidden');
-        return;
-      }
+      upwindData = await WeatherService.fetchForecast(upwind.lat, upwind.lng);
+    } catch {
+      this.$.predictiveArrival.classList.add('hidden');
+      return;
     }
 
     const nowIdx = WeatherService.getCurrentHourIndex(upwindData);
@@ -2157,154 +2295,100 @@ class AurafiskyApp {
   //  DATA EXPORT
   // ================================================================
 
-  exportWeatherData() {
-    const data = WeatherService.exportWeatherJSON(this.weatherData, this.airQualityData, this.selectedName);
-    if (!data) {
-      this.showToast('No weather data to export.', 'error');
-      return;
-    }
-    const json = JSON.stringify(data, null, 2);
-    const blob = new Blob([json], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `weather_${this.selectedName?.split(',')[0]?.trim() || 'data'}_${new Date().toISOString().split('T')[0]}.json`;
-    a.click();
-    URL.revokeObjectURL(url);
-    this.showToast('Weather data exported as JSON', 'success');
-  }
-
-  exportWeatherImage() {
-    const weather = WeatherService.getHourlyAtIndex(this.weatherData, parseInt(this.$.timelineSlider.value, 10));
-    if (!weather) { this.showToast('No weather data.', 'error'); return; }
-    const canvas = document.createElement('canvas');
-    canvas.width = 500; canvas.height = 320;
-    const ctx = canvas.getContext('2d');
-    const isDark = this.isDark;
-    ctx.fillStyle = isDark ? '#0f172a' : '#f8fafc';
-    ctx.fillRect(0, 0, 500, 320);
-    const grad = ctx.createLinearGradient(0, 0, 0, 320);
-    if (isDark) { grad.addColorStop(0, '#1e293b'); grad.addColorStop(1, '#0f172a'); }
-    else { grad.addColorStop(0, '#ffffff'); grad.addColorStop(1, '#f1f5f9'); }
-    ctx.fillStyle = grad;
-    ctx.fillRect(0, 0, 500, 320);
-    ctx.fillStyle = isDark ? '#f1f5f9' : '#1e293b';
-    ctx.font = 'bold 24px Inter, sans-serif';
-    ctx.fillText('Aurafisky', 30, 50);
-    ctx.fillStyle = isDark ? '#94a3b8' : '#64748b';
-    ctx.font = '11px Inter, sans-serif';
-    ctx.fillText('WEATHER · RADAR · FORECAST', 30, 70);
-    ctx.fillStyle = isDark ? '#e2e8f0' : '#334155';
-    ctx.font = 'bold 16px Inter, sans-serif';
-    ctx.fillText(this.selectedName || '', 30, 105);
-    ctx.fillStyle = isDark ? '#94a3b8' : '#64748b';
-    ctx.font = '12px Inter, sans-serif';
-    ctx.fillText(WeatherService.formatDateTime(weather.time, this.weatherData?.timezone, this.weatherData?.utc_offset_seconds), 30, 125);
-    ctx.font = '48px serif';
-    ctx.fillText(weather.icon || '☀️', 30, 190);
-    ctx.fillStyle = isDark ? '#f1f5f9' : '#1e293b';
-    ctx.font = 'bold 42px Inter, sans-serif';
-    ctx.fillText(WeatherService.formatTemp(weather.temperature), 90, 195);
-    ctx.fillStyle = isDark ? '#94a3b8' : '#64748b';
-    ctx.font = '14px Inter, sans-serif';
-    ctx.fillText(weather.description || '', 90, 220);
-    ctx.fillStyle = isDark ? '#94a3b8' : '#64748b';
-    ctx.font = '11px Inter, sans-serif';
-    ctx.fillText(`💧 ${weather.humidity ?? '--'}%  💨 ${WeatherService.formatWind(weather.windSpeed)}  📊 ${WeatherService.formatPressure(weather.pressure)}`, 30, 260);
-    ctx.fillStyle = isDark ? '#6366f1' : '#4f46e5';
-    ctx.font = '10px Inter, sans-serif';
-    ctx.fillText('aura-fisky.vercel.app', 30, 300);
-    const blobUrl = canvas.toDataURL('image/png');
-    const a = document.createElement('a');
-    a.href = blobUrl;
-    a.download = `aura_${this.selectedName?.split(',')[0]?.trim() || 'weather'}_${new Date().toISOString().split('T')[0]}.png`;
-    a.click();
-    this.showToast('Weather card exported as PNG', 'success');
-  }
-
   // ================================================================
   //  EXTREME MINIMAL MODE
   // ================================================================
 
+  enterMinimalMode() {
+    document.documentElement.classList.add('compact');
+    const panel = this.$.weatherPanel;
+    panel.dataset.fullContent = panel.innerHTML;
+    panel.innerHTML = `
+      <div class="flex items-center justify-between px-5 pt-5 pb-3">
+        <div class="min-w-0 flex-1">
+          <h3 class="text-lg font-bold truncate text-slate-900 dark:text-white">${this.selectedName || 'Weather'}</h3>
+        </div>
+        <button id="minimalExitBtn" class="p-1.5 rounded-lg hover:bg-slate-200/60 dark:hover:bg-slate-600/40 transition-colors flex-shrink-0" aria-label="Exit minimal mode">
+          <svg class="w-5 h-5 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4" />
+          </svg>
+        </button>
+      </div>
+      <div class="flex-1 flex items-center justify-center px-5 pb-5">
+        <div class="text-center">
+          <div class="text-7xl mb-3">${this.$.panelIcon.textContent}</div>
+          <div class="text-6xl font-extrabold text-slate-900 dark:text-white mb-2">${this.$.panelTemp.textContent}</div>
+          <div class="text-lg text-slate-500 dark:text-slate-400 mb-1">${this.$.panelDescription.textContent}</div>
+          <div class="text-sm text-slate-400">${WeatherService.formatDateTime(this.weatherData?.hourly?.time[parseInt(this.$.timelineSlider.value)], this.weatherData?.timezone, this.weatherData?.utc_offset_seconds)}</div>
+        </div>
+      </div>
+    `;
+    panel.querySelector('#minimalExitBtn').addEventListener('click', () => this.toggleMinimalMode());
+  }
+
   toggleMinimalMode() {
     this.minimalMode = !this.minimalMode;
-    document.documentElement.classList.toggle('compact', this.minimalMode);
-    localStorage.setItem('weathermap_compact', this.minimalMode);
-    const panel = this.$.weatherPanel;
-    const inner = panel.querySelector('.flex-1.overflow-y-auto');
     if (this.minimalMode) {
-      panel.dataset.fullContent = panel.innerHTML;
-      panel.innerHTML = `
-        <div class="flex items-center justify-between px-5 pt-5 pb-3">
-          <div class="min-w-0 flex-1">
-            <h3 class="text-lg font-bold truncate text-slate-900 dark:text-white">${this.selectedName || 'Weather'}</h3>
-          </div>
-          <button id="minimalExitBtn" class="p-1.5 rounded-lg hover:bg-slate-200/60 dark:hover:bg-slate-600/40 transition-colors flex-shrink-0" aria-label="Exit minimal mode">
-            <svg class="w-5 h-5 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-              <path stroke-linecap="round" stroke-linejoin="round" d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4" />
-            </svg>
-          </button>
-        </div>
-        <div class="flex-1 flex items-center justify-center px-5 pb-5">
-          <div class="text-center">
-            <div class="text-7xl mb-3">${this.$.panelIcon.textContent}</div>
-            <div class="text-6xl font-extrabold text-slate-900 dark:text-white mb-2">${this.$.panelTemp.textContent}</div>
-            <div class="text-lg text-slate-500 dark:text-slate-400 mb-1">${this.$.panelDescription.textContent}</div>
-            <div class="text-sm text-slate-400">${WeatherService.formatDateTime(this.weatherData?.hourly?.time[parseInt(this.$.timelineSlider.value)], this.weatherData?.timezone, this.weatherData?.utc_offset_seconds)}</div>
-          </div>
-        </div>
-      `;
-      panel.querySelector('#minimalExitBtn').addEventListener('click', () => this.toggleMinimalMode());
-      this.$.minimalModeBtn.innerHTML = '🗖';
+      this.enterMinimalMode();
     } else {
+      const panel = this.$.weatherPanel;
       panel.innerHTML = panel.dataset.fullContent || '';
-      this.$.minimalModeBtn.innerHTML = '🗕';
       this.rebindPanelEvents();
+      document.documentElement.classList.remove('compact');
     }
     this.updateSettingsUIFromLocal();
     this.saveUserDataToCloud();
   }
 
   rebindPanelEvents() {
-    // Re-fetch DOM refs that were destroyed by innerHTML swap
-    const ids = ['panelCloseBtn','favoriteToggleBtn','starOutlineIcon','starFilledIcon','shareWeatherBtn','panelLocationName','panelTempDelta',
+    const ids = ['panelCloseBtn','panelMinimizeBtn','favoriteToggleBtn','starOutlineIcon','starFilledIcon','shareWeatherBtn','panelLocationName','panelTempDelta',
       'panelTimeLabel','panelIcon','panelTemp','panelDescription','panelFeelsLike','panelHumidity','panelWind','windArrow','panelDewPoint','panelWindGusts','panelVisibility',
       'panelPressure','pressureTendency','panelClouds','panelUV','panelPrecip','aqiCard','panelAQILabel','panelAQIMetrics',
       'panelAQIBadge','advisoryBanner','advisoryIcon','advisoryTitle','advisoryDesc',
       'comfortIndex','comfortLabel','hourlyStrip','bestWindowCard','bestWindowText','dailyForecast','trendSvg','chartHours',
       'chartLine','chartArea','chartPoints','timeMachineTrigger','timeMachineChevron','timeMachineDrawer','timeMachineSvg',
       'timeMachineLine','timeMachinePoints','timeMachineRows','offlineTimeMachineBadge','predictiveArrival','anomalyLabel',
-      'patternLabel','exportWeatherBtn','nextRainBtn','minimalModeBtn','timelineDelta','sunArcPassed','sunArcDot',
+      'patternLabel','nextRainBtn','timelineDelta','sunArcPassed','sunArcDot',
       'sunSunrise','sunSunset','sunDayLength','sunCountdown','moonLitPath','moonPhaseLabel','moonPhasePercent','moonPhaseDesc',
       'confidenceToggle','signalNoiseBtn','percentileLabel','trustScore','momentumLabel','cumulativeCurve','paramImportance',
       'freshnessLabel','briefingBtn','briefingContent','regimeLabel','spatialGradLabel','analogLabel',
       'weatherPanelSkeleton','weatherPanelContent',
       'pollenCard','pollenBirch','pollenGrass','pollenMugwort','pollenAlder',
-      'uvChart','metricSearch'];
+      'uvChart','zoomInBtn','zoomOutBtn'];
+
+    // Detach old listeners before rebinding to prevent duplicates
+    if (this._rebindCleanups) {
+      this._rebindCleanups.forEach(fn => fn());
+    }
+    this._rebindCleanups = [];
+
+    const addSafe = (el, event, handler) => {
+      if (!el) return;
+      el.addEventListener(event, handler);
+      this._rebindCleanups.push(() => el.removeEventListener(event, handler));
+    };
 
     ids.forEach(id => {
       const el = document.getElementById(id);
       if (el) this.$[id] = el;
     });
 
-    // Re-bind panel events
-    this.$.panelCloseBtn?.addEventListener('click', () => this.hideWeatherPanel());
-    this.$.favoriteToggleBtn?.addEventListener('click', () => this.toggleFavoriteCurrentLocation());
-    this.$.shareWeatherBtn?.addEventListener('click', () => this.shareWeather());
-    this.$.timeMachineTrigger?.addEventListener('click', () => this.toggleClimateTimeMachine());
-    this.$.nextRainBtn?.addEventListener('click', () => this.jumpToNextRain());
-    this.$.minimalModeBtn?.addEventListener('click', () => this.toggleMinimalMode());
+    addSafe(this.$.panelCloseBtn, 'click', () => this.hideWeatherPanel());
+    addSafe(this.$.panelMinimizeBtn, 'click', () => this.toggleMinimizeWeatherPanel());
+    addSafe(this.$.favoriteToggleBtn, 'click', () => this.toggleFavoriteCurrentLocation());
+    addSafe(this.$.shareWeatherBtn, 'click', () => this.shareWeather());
+    addSafe(this.$.timeMachineTrigger, 'click', () => this.toggleClimateTimeMachine());
+    addSafe(this.$.nextRainBtn, 'click', () => this.jumpToNextRain());
     this.$.installBtn?.addEventListener('click', () => this.installPWA());
-    this.$.autoRefreshBtn?.addEventListener('click', () => this.toggleAutoRefresh());
-    this.$.exportWeatherBtn?.addEventListener('click', () => this.exportWeatherData());
-    this.$.signalNoiseBtn?.addEventListener('click', () => this.toggleSignalNoiseView());
-    this.$.confidenceToggle?.addEventListener('click', () => {
+    addSafe(this.$.zoomInBtn, 'click', () => this.map.zoomIn());
+    addSafe(this.$.zoomOutBtn, 'click', () => this.map.zoomOut());
+    addSafe(this.$.signalNoiseBtn, 'click', () => this.toggleSignalNoiseView());
+    addSafe(this.$.confidenceToggle, 'click', () => {
       this.showConfidence = !this.showConfidence;
       this.$.confidenceToggle?.classList.toggle('toggle-active', this.showConfidence);
       if (this.weatherData) this.drawHourlySparkline(parseInt(this.$.timelineSlider.value, 10));
     });
-    this.$.briefingBtn?.addEventListener('click', () => this.generateBriefing());
-    this.initMetricSearch();
+    addSafe(this.$.briefingBtn, 'click', () => this.generateBriefing());
     this.initDashboardDrag();
   }
 
@@ -2317,12 +2401,22 @@ class AurafiskyApp {
     
     if (e.key === 'ArrowDown') {
       e.preventDefault();
-      this.searchHighlightIndex = Math.min(this.searchHighlightIndex + 1, items.length - 1);
+      if (this.searchHighlightIndex < items.length - 1) {
+        this.searchHighlightIndex++;
+      } else {
+        this.searchHighlightIndex = 0; // wrap to top
+      }
       this.highlightSearchItem(items);
+      items[this.searchHighlightIndex]?.scrollIntoView({ block: 'nearest' });
     } else if (e.key === 'ArrowUp') {
       e.preventDefault();
-      this.searchHighlightIndex = Math.max(this.searchHighlightIndex - 1, 0);
+      if (this.searchHighlightIndex > 0) {
+        this.searchHighlightIndex--;
+      } else {
+        this.searchHighlightIndex = items.length - 1; // wrap to bottom
+      }
       this.highlightSearchItem(items);
+      items[this.searchHighlightIndex]?.scrollIntoView({ block: 'nearest' });
     } else if (e.key === 'Enter') {
       e.preventDefault();
       if (this.searchHighlightIndex >= 0 && items[this.searchHighlightIndex]) {
@@ -2341,59 +2435,77 @@ class AurafiskyApp {
   }
 
   getSearchHistory() {
+    return [...this.searchHistory];
+  }
+
+  _loadSearchHistory() {
     try {
-      return JSON.parse(localStorage.getItem(this.searchHistoryKey)) || [];
-    } catch {
-      return [];
-    }
+      const raw = localStorage.getItem(this.searchHistoryKey);
+      if (raw) return JSON.parse(raw);
+    } catch {}
+    return [];
+  }
+
+  _saveSearchHistory() {
+    try {
+      localStorage.setItem(this.searchHistoryKey, JSON.stringify(this.searchHistory));
+    } catch {}
   }
 
   addToSearchHistory(result) {
-    let history = this.getSearchHistory();
     // Remove duplicate if exists
-    history = history.filter(h => h.displayName !== result.displayName);
+    this.searchHistory = this.searchHistory.filter(h => h.displayName !== result.displayName);
     // Add to front
-    history.unshift({
+    this.searchHistory.unshift({
       displayName: result.displayName || result.name,
       latitude: result.latitude || result.lat,
       longitude: result.longitude || result.lng
     });
     // Keep last 5
-    history = history.slice(0, 5);
-    WeatherService.safeSetItem(this.searchHistoryKey, JSON.stringify(history));
+    this.searchHistory = this.searchHistory.slice(0, 5);
+    this._saveSearchHistory();
   }
 
   showSearchHistory() {
     const history = this.getSearchHistory();
     if (history.length === 0) return;
+    const { createElement, clearElement } = window.domUtils;
+    const container = this.$.searchResults;
+    clearElement(container);
 
-    this.$.searchResults.innerHTML = `
-      <div class="search-history-label">
-        <svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-          <path stroke-linecap="round" stroke-linejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-        </svg>
-        Recent
-      </div>
-    ` + history.map((r, i) => `
-      <button
-        class="search-result-item w-full text-left px-4 py-2.5 flex items-center gap-3 cursor-pointer"
-        data-index="${i}"
-      >
-        <span class="text-sm flex-shrink-0">🕐</span>
-        <span class="text-xs text-slate-700 dark:text-slate-200 truncate">${r.displayName}</span>
-      </button>
-    `).join('');
+    const header = createElement('div', { className: 'search-history-label' },
+      createElement('svg', { className: 'w-3 h-3', innerHTML: '<path stroke-linecap="round" stroke-linejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/>' }),
+      createElement('span', { textContent: 'Recent' }),
+      createElement('button', {
+        className: 'ml-auto text-[10px] text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 transition-colors',
+        textContent: 'Clear',
+        title: 'Clear search history',
+      })
+    );
+    header.querySelector('button').addEventListener('click', (e) => {
+      e.stopPropagation();
+      this.searchHistory = [];
+      this._saveSearchHistory();
+      this.$.searchDropdown.classList.remove('open');
+    });
+    container.appendChild(header);
 
-    this.$.searchResults.querySelectorAll('.search-result-item').forEach((btn) => {
+    history.forEach((r, i) => {
+      const btn = createElement('button', {
+        className: 'search-result-item w-full text-left px-4 py-2.5 flex items-center gap-3 cursor-pointer',
+        'data-index': String(i),
+      },
+        createElement('span', { className: 'text-sm flex-shrink-0', textContent: '🕐' }),
+        createElement('span', { className: 'text-xs text-slate-700 dark:text-slate-200 truncate', textContent: r.displayName })
+      );
       btn.addEventListener('click', (e) => {
         e.stopPropagation();
-        const idx = parseInt(btn.dataset.index, 10);
-        const r = history[idx];
         this.$.searchDropdown.classList.remove('open');
         this.$.searchInput.value = r.displayName;
         this.$.searchClearBtn.classList.remove('hidden');
         this.selectLocation(r.latitude, r.longitude, r.displayName);
       });
+      container.appendChild(btn);
     });
 
     this.$.searchDropdown.classList.add('open');
@@ -2461,19 +2573,11 @@ class AurafiskyApp {
   }
 
   _getBookmarkPinCache() {
-    try {
-      return JSON.parse(localStorage.getItem('weathermap_pin_cache')) || {};
-    } catch {
-      return {};
-    }
+    return this._pinCache || {};
   }
 
   _saveBookmarkPinCache(cache) {
-    try {
-      WeatherService.safeSetItem('weathermap_pin_cache', JSON.stringify(cache));
-    } catch (e) {
-      console.warn('Pin cache save failed:', e);
-    }
+    this._pinCache = cache;
   }
 
   // ================================================================
@@ -2482,6 +2586,7 @@ class AurafiskyApp {
 
   initWeatherCanvas() {
     this.canvas = document.getElementById('weatherCanvas');
+    if (!this.canvas) return;
     this.ctx = this.canvas.getContext('2d');
 
     // Resize canvas to cover map exactly
@@ -2584,134 +2689,121 @@ class AurafiskyApp {
   }
 
   runWeatherCanvasLoop() {
-    const draw = () => {
+    if (this.animationFrameId) return;
+    const TWO_PI = Math.PI * 2;
+    const draw = (now) => {
       if (this.activeEffectType === 'none' && this.lightningFlash === 0) {
-        // Pause the loop entirely when idle (perf #7)
         this.animationFrameId = null;
         return;
       }
 
-      this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
+      const ctx = this.ctx;
+      const w = this.canvas.width;
+      const h = this.canvas.height;
+      ctx.clearRect(0, 0, w, h);
 
-      // Handle lightning flash overlay during storm animations
+      // Lightning flash (rare, fast path)
       if (this.activeEffectType === 'storm') {
-        if (Math.random() < 0.004) {
-          this.lightningFlash = 0.8; // Trigger flash attack
-        }
+        if (Math.random() < 0.004) this.lightningFlash = 0.8;
         if (this.lightningFlash > 0.01) {
-          this.ctx.fillStyle = `rgba(255, 255, 255, ${this.lightningFlash})`;
-          this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
-          this.lightningFlash *= 0.88; // Fast decay
+          ctx.fillStyle = `rgba(255,255,255,${this.lightningFlash})`;
+          ctx.fillRect(0, 0, w, h);
+          this.lightningFlash *= 0.88;
         }
       }
 
-      // Draw particle instances
-      const w = this.canvas.width;
-      const h = this.canvas.height;
-
-      // Calculate wind vectors based on real wind direction (degrees clockwise from North)
-      // Convert to radians and flip direction to represent drift
-      const theta = ((this.currentWindDirection || 0) - 90) * Math.PI / 180; // offset by 90 for canvas angle
+      // Wind vectors (shared for all effects)
+      const theta = ((this.currentWindDirection || 0) - 90) * Math.PI / 180;
       const windIntensity = (this.currentWindSpeed || 0) / 10;
-      const windDx = Math.cos(theta) * windIntensity;
-      const windDy = Math.sin(theta) * windIntensity;
+      const cosT = Math.cos(theta);
+      const sinT = Math.sin(theta);
+      const windDx = cosT * windIntensity;
+      const windDy = sinT * windIntensity;
+
+      const particles = this.particles;
+      const len = particles.length;
 
       if (this.activeEffectType === 'rain' || this.activeEffectType === 'storm') {
-        this.ctx.strokeStyle = this.isDark ? 'rgba(129, 140, 248, 0.45)' : 'rgba(59, 130, 246, 0.35)';
-        this.ctx.lineWidth = 1.2;
-        this.particles.forEach((p) => {
-          const vx = windDx * 1.5 - 0.5; // Wind drift + slight fall slant
-          const vy = p.vyBase + Math.max(0, windDy * 0.2);
-
-          this.ctx.beginPath();
-          this.ctx.moveTo(p.x, p.y);
-          this.ctx.lineTo(p.x + vx, p.y + p.len);
-          this.ctx.stroke();
-
-          // Move
+        ctx.strokeStyle = this.isDark ? 'rgba(129,140,248,0.45)' : 'rgba(59,130,246,0.35)';
+        ctx.lineWidth = 1.2;
+        ctx.beginPath();
+        for (let i = 0; i < len; i++) {
+          const p = particles[i];
+          const vx = windDx * 1.5 - 0.5;
+          const vy = p.vyBase + (windDy > 0 ? windDy * 0.2 : 0);
+          ctx.moveTo(p.x, p.y);
+          ctx.lineTo(p.x + vx, p.y + p.len);
           p.x += vx;
           p.y += vy;
-
-          // Recycle bottom-bounding particles
-          if (p.y > h) {
-            p.y = -p.len;
-            p.x = Math.random() * w;
-          }
+          if (p.y > h) { p.y = -p.len; p.x = Math.random() * w; }
           if (p.x < -20) p.x = w + 20;
-          if (p.x > w + 20) p.x = -20;
-        });
+          else if (p.x > w + 20) p.x = -20;
+        }
+        ctx.stroke();
 
       } else if (this.activeEffectType === 'snow') {
-        this.ctx.fillStyle = this.isDark ? 'rgba(255, 255, 255, 0.85)' : 'rgba(156, 163, 175, 0.7)';
-        this.particles.forEach((p) => {
-          const vx = windDx * 0.6 + Math.sin(Date.now() * p.swingSpeed + p.swingOffset) * 0.2;
-          const vy = p.vyBase + Math.max(0, windDy * 0.05);
-
-          this.ctx.beginPath();
-          // Circular drifts
-          this.ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
-          this.ctx.fill();
-
-          // Move
+        ctx.fillStyle = this.isDark ? 'rgba(255,255,255,0.85)' : 'rgba(156,163,175,0.7)';
+        const t = now * 0.001;
+        ctx.beginPath();
+        for (let i = 0; i < len; i++) {
+          const p = particles[i];
+          const vx = windDx * 0.6 + Math.sin(t * p.swingSpeed + p.swingOffset) * 0.2;
+          const vy = p.vyBase + (windDy > 0 ? windDy * 0.05 : 0);
+          ctx.moveTo(p.x, p.y);
+          ctx.arc(p.x, p.y, p.r, 0, TWO_PI);
           p.y += vy;
           p.x += vx;
-
-          // Recycle
-          if (p.y > h) {
-            p.y = -p.r * 2;
-            p.x = Math.random() * w;
-          }
+          if (p.y > h) { p.y = -p.r * 2; p.x = Math.random() * w; }
           if (p.x < -20) p.x = w + 20;
-          if (p.x > w + 20) p.x = -20;
-        });
+          else if (p.x > w + 20) p.x = -20;
+        }
+        ctx.fill();
 
       } else if (this.activeEffectType === 'wind') {
-        this.ctx.strokeStyle = this.isDark ? 'rgba(255, 255, 255, 0.2)' : 'rgba(148, 163, 184, 0.35)';
-        this.ctx.lineWidth = 1.5;
-        this.particles.forEach((p) => {
-          this.ctx.beginPath();
-          
-          // Wind lines follow the actual wind angle vector
-          const vx = Math.cos(theta) * p.vBase;
-          const vy = Math.sin(theta) * p.vBase;
-
+        ctx.strokeStyle = this.isDark ? 'rgba(255,255,255,0.2)' : 'rgba(148,163,184,0.35)';
+        ctx.lineWidth = 1.5;
+        ctx.beginPath();
+        for (let i = 0; i < len; i++) {
+          const p = particles[i];
           const startX = p.x;
           const startY = p.y;
-          this.ctx.moveTo(startX, startY);
-
-          // Draw trailing wind lines along angle
-          const endX = startX - Math.cos(theta) * p.len;
-          const endY = startY - Math.sin(theta) * p.len + Math.sin(startX * 0.008 + p.curveOffset) * 10;
-          this.ctx.lineTo(endX, endY);
-          this.ctx.stroke();
-
-          // Move
+          const vx = cosT * p.vBase;
+          const vy = sinT * p.vBase;
+          ctx.moveTo(startX, startY);
+          ctx.lineTo(
+            startX - cosT * p.len,
+            startY - sinT * p.len + Math.sin(startX * 0.008 + p.curveOffset) * 10
+          );
           p.x += vx;
           p.y += vy;
-
-          // Recycle offscreen
           if (p.x > w + 200 || p.x < -300 || p.y > h + 200 || p.y < -200) {
             p.x = Math.random() * w - 50;
             p.y = Math.random() * h;
           }
-        });
+        }
+        ctx.stroke();
       }
 
       this.animationFrameId = requestAnimationFrame(draw);
     };
 
-    draw();
+    this.animationFrameId = requestAnimationFrame(draw);
   }
 
   // ================================================================
   //  IMMERSIVE AUDIO WEATHER SOUNDSCAPES (Web Audio Synthesizer)
   // ================================================================
 
-  toggleAmbientSoundscape() {
-    this.audioActive = !this.audioActive;
+  toggleAmbientSoundscape(forceState) {
+    if (forceState !== undefined) {
+      this.audioActive = forceState;
+    } else {
+      this.audioActive = !this.audioActive;
+    }
 
-    this.$.soundOffIcon.classList.toggle('hidden', this.audioActive);
-    this.$.soundOnIcon.classList.toggle('hidden', !this.audioActive);
+    if (this.$.settingsSoundToggle) {
+      this.$.settingsSoundToggle.checked = this.audioActive;
+    }
 
     if (this.audioActive) {
       if (!this.audioContext) {
@@ -2938,9 +3030,11 @@ class AurafiskyApp {
       this.renderSearchResults(results);
     } catch (error) {
       console.error('Search query error:', error);
-      this.$.searchResults.innerHTML = `
-        <div class="px-4 py-3 text-sm text-slate-400">No results found</div>
-      `;
+      const { createElement, clearElement } = window.domUtils;
+      clearElement(this.$.searchResults);
+      this.$.searchResults.appendChild(
+        createElement('div', { className: 'px-4 py-3 text-sm text-slate-400', textContent: 'No results found' })
+      );
       this.$.searchDropdown.classList.add('open');
     } finally {
       this.$.searchSpinner.classList.add('hidden');
@@ -2948,41 +3042,44 @@ class AurafiskyApp {
   }
 
   renderSearchResults(results) {
+    const { createElement, clearElement } = window.domUtils;
+    const container = this.$.searchResults;
+    clearElement(container);
+
     if (!results || results.length === 0) {
-      this.$.searchResults.innerHTML = `
-        <div class="px-4 py-3 text-sm text-slate-400 dark:text-slate-500">No results found</div>
-      `;
+      container.appendChild(
+        createElement('div', { className: 'px-4 py-3 text-sm text-slate-400 dark:text-slate-500', textContent: 'No results found' })
+      );
       this.$.searchDropdown.classList.add('open');
       return;
     }
 
-    this.$.searchResults.innerHTML = results.map((r, i) => {
-      // Resolve country flag emoji dynamically from ISO country code
+    this.searchHighlightIndex = -1;
+
+    results.forEach((r, i) => {
       let flagEmoji = '📍';
-      if (r.country) {
+      if (r.country && r.country.length === 2) {
         try {
           const codePoints = r.country.toUpperCase().split('').map(char => 127397 + char.charCodeAt(0));
           flagEmoji = String.fromCodePoint(...codePoints);
         } catch {}
       }
 
-      return `
-        <button
-          class="search-result-item w-full text-left px-4 py-2.5 flex items-center gap-3 cursor-pointer"
-          data-index="${i}"
-        >
-          <span class="text-sm flex-shrink-0">${flagEmoji}</span>
-          <span class="text-xs text-slate-700 dark:text-slate-200 truncate">${r.displayName}</span>
-        </button>
-      `;
-    }).join('');
+      const btn = createElement('button', {
+        className: 'search-result-item w-full text-left px-4 py-2.5 flex items-center gap-3 cursor-pointer',
+        'data-index': String(i),
+      },
+        createElement('span', { className: 'text-sm flex-shrink-0', textContent: flagEmoji }),
+        createElement('span', { className: 'text-xs text-slate-700 dark:text-slate-200 truncate', textContent: r.displayName })
+      );
 
-    this.$.searchResults.querySelectorAll('.search-result-item').forEach((btn) => {
       btn.addEventListener('click', (e) => {
         e.stopPropagation();
         const idx = parseInt(btn.dataset.index, 10);
         this.selectSearchResult(results[idx]);
       });
+
+      container.appendChild(btn);
     });
 
     this.$.searchDropdown.classList.add('open');
@@ -3013,7 +3110,6 @@ class AurafiskyApp {
 
   toggleDarkMode() {
     this.isDark = !this.isDark;
-    WeatherService.safeSetItem('weathermap_dark', this.isDark);
 
     document.documentElement.classList.toggle('dark', this.isDark);
 
@@ -3029,10 +3125,9 @@ class AurafiskyApp {
       this.lightTiles.addTo(this.map);
     }
 
-    const sunIcon = document.getElementById('darkModeIconSun');
-    const moonIcon = document.getElementById('darkModeIconMoon');
-    if (sunIcon) sunIcon.classList.toggle('hidden', this.isDark);
-    if (moonIcon) moonIcon.classList.toggle('hidden', !this.isDark);
+    // Update theme-color meta tag for browser chrome
+    const meta = document.querySelector('meta[name="theme-color"]');
+    if (meta) meta.content = this.isDark ? '#0f172a' : '#6366f1';
     this.updateSettingsUIFromLocal();
     this.saveUserDataToCloud();
   }
@@ -3122,11 +3217,17 @@ class AurafiskyApp {
   // ================================================================
 
   destroy() {
+    if (this._rebindCleanups) {
+      this._rebindCleanups.forEach(fn => fn());
+      this._rebindCleanups = null;
+    }
     document.removeEventListener('keydown', this._boundKeydown);
     document.removeEventListener('click', this._boundDocClick);
     window.removeEventListener('online', this._boundOnline);
     window.removeEventListener('offline', this._boundOffline);
     window.removeEventListener('resize', this._boundResize);
+    this.$.searchInput?.removeEventListener('focus', this._boundSearchFocus);
+    this.audioContext?.close().catch(() => {});
     if (this.animationFrameId) {
       cancelAnimationFrame(this.animationFrameId);
       this.animationFrameId = null;
@@ -3139,15 +3240,31 @@ class AurafiskyApp {
     this._noiseBuffer = null;
     this._historicalResults = null;
     this.biasMap = null;
+    if (this._alertPollTimer) clearInterval(this._alertPollTimer);
+    if (this.autoRefreshTimer) clearTimeout(this.autoRefreshTimer);
+    if (this.tempOverlayTimer) clearInterval(this.tempOverlayTimer);
+    if (this._resizeRAF) {
+      cancelAnimationFrame(this._resizeRAF);
+      this._resizeRAF = null;
+    }
+    if (this.searchDebounceTimer) clearTimeout(this.searchDebounceTimer);
+    if (this._tooltipHideTimer) clearTimeout(this._tooltipHideTimer);
 
   }
 
   showWeatherPanel() {
     this.$.weatherPanel.classList.add('open');
+    this.$.weatherPanel.classList.remove('minimized');
+    if (this.$.panelMinimizeBtn) {
+      this.$.panelMinimizeBtn.classList.remove('chevron-flipped');
+    }
   }
 
   hideWeatherPanel() {
-    this.$.weatherPanel.classList.remove('open');
+    this.$.weatherPanel.classList.remove('open', 'minimized');
+    if (this.$.panelMinimizeBtn) {
+      this.$.panelMinimizeBtn.classList.remove('chevron-flipped');
+    }
     this.stopAllSounds();
     if (this.audioActive) {
       this.toggleAmbientSoundscape();
@@ -3161,6 +3278,13 @@ class AurafiskyApp {
     // Guard against canvas not being initialized (#3)
     if (this.ctx && this.canvas) {
       this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
+    }
+  }
+
+  toggleMinimizeWeatherPanel() {
+    this.$.weatherPanel.classList.toggle('minimized');
+    if (this.$.panelMinimizeBtn) {
+      this.$.panelMinimizeBtn.classList.toggle('chevron-flipped', this.$.weatherPanel.classList.contains('minimized'));
     }
   }
 
@@ -3543,7 +3667,7 @@ class AurafiskyApp {
       favicon.rel = 'icon';
       document.head.appendChild(favicon);
     }
-    favicon.href = `data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='80' font-size='80'>${emoji}</text></svg>`;
+    favicon.href = `data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='80' font-size='80'>${encodeURIComponent(emoji)}</text></svg>`;
   }
 
   // ================================================================
@@ -3554,8 +3678,11 @@ class AurafiskyApp {
     if ('serviceWorker' in navigator) {
       window.addEventListener('load', () => {
         navigator.serviceWorker.register('./sw.js')
-          .then(() => console.log('Service Worker registered successfully.'))
-          .catch((err) => console.warn('Service Worker registration failed:', err));
+          .then(() => console.debug('Service Worker registered'))
+          .catch((err) => {
+            console.warn('Service Worker registration failed:', err);
+            window.toastModule?.show('Offline support unavailable', 'error');
+          });
       });
     }
   }
@@ -3586,25 +3713,27 @@ class AurafiskyApp {
 
   toggleAutoRefresh() {
     this.autoRefreshActive = !this.autoRefreshActive;
+    if (this.autoRefreshTimer) { clearTimeout(this.autoRefreshTimer); this.autoRefreshTimer = null; }
     if (this.autoRefreshActive) {
-      this.$.autoRefreshBtn.classList.add('bg-primary/20', 'text-primary');
-      this.$.autoRefreshBtn.querySelector('svg').classList.add('text-primary');
-      this.autoRefreshTimer = setInterval(() => {
-        if (this.selectedLat && this.selectedLng) {
-          this.selectLocation(this.selectedLat, this.selectedLng, this.selectedName);
-          this.showToast('Auto-refreshed weather data', 'info');
-        }
-      }, 300000);
+      const scheduleNext = () => {
+        this.autoRefreshTimer = setTimeout(async () => {
+          if (this.selectedLat && this.selectedLng) {
+            await this.selectLocation(this.selectedLat, this.selectedLng, this.selectedName);
+            this.showToast('Auto-refreshed weather data', 'info');
+          }
+          scheduleNext();
+        }, 300000);
+      };
+      scheduleNext();
       this.showToast('Auto-refresh enabled (every 5 min)', 'success');
     } else {
-      this.$.autoRefreshBtn.classList.remove('bg-primary/20', 'text-primary');
-      this.$.autoRefreshBtn.querySelector('svg').classList.remove('text-primary');
       if (this.autoRefreshTimer) {
-        clearInterval(this.autoRefreshTimer);
+        clearTimeout(this.autoRefreshTimer);
         this.autoRefreshTimer = null;
       }
       this.showToast('Auto-refresh disabled', 'info');
     }
+    this.updateSettingsUIFromLocal();
   }
 
   installPWA() {
@@ -3634,13 +3763,14 @@ class AurafiskyApp {
     }
 
     try {
-      const results = await Promise.all(
-        points.map(p =>
-          fetch(`https://api.open-meteo.com/v1/forecast?latitude=${p.lat}&longitude=${p.lng}&current=temperature_2m,weather_code&timezone=auto`)
-            .then(r => r.json())
-            .catch(() => null)
-        )
-      );
+      const results = [];
+      for (const p of points) {
+        const r = await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${p.lat}&longitude=${p.lng}&current=temperature_2m,weather_code&timezone=auto`)
+          .then(res => res.json())
+          .catch(() => null);
+        results.push(r);
+        await new Promise(r => setTimeout(r, 100));
+      }
 
       const tempMin = Math.min(...results.filter(r => r?.current?.temperature_2m != null).map(r => r.current.temperature_2m));
       const tempMax = Math.max(...results.filter(r => r?.current?.temperature_2m != null).map(r => r.current.temperature_2m));
@@ -3727,41 +3857,12 @@ class AurafiskyApp {
   // ================================================================
   //  METRIC SEARCH
   // ================================================================
-
-  initMetricSearch() {
-    const input = this.$.metricSearch;
-    if (!input) return;
-    input.addEventListener('input', () => {
-      const q = input.value.trim().toLowerCase();
-      const cards = document.querySelectorAll('.metric-card');
-      cards.forEach(card => {
-        const text = card.textContent.toLowerCase();
-        const match = !q || text.includes(q);
-        card.style.opacity = match ? '1' : '0.2';
-        card.style.transition = 'opacity 0.2s';
-      });
-    });
-  }
-
-  // ================================================================
   //  CUSTOMIZABLE DASHBOARD (Drag-to-Reorder Metric Cards)
   // ================================================================
 
   initDashboardDrag() {
     const grid = document.querySelector('.grid-cols-2.gap-2\\.5');
     if (!grid) return;
-    const storageKey = `dashboard_order_${this.selectedLat?.toFixed(2)}_${this.selectedLng?.toFixed(2)}`;
-    const saved = localStorage.getItem(storageKey);
-    if (saved) {
-      try {
-        const order = JSON.parse(saved);
-        const children = Array.from(grid.children);
-        order.forEach(id => {
-          const el = children.find(c => c.id === id);
-          if (el) grid.appendChild(el);
-        });
-      } catch {}
-    }
     let dragEl = null;
     const onStart = (e) => {
       const card = e.target.closest('.metric-card');
@@ -3777,8 +3878,6 @@ class AurafiskyApp {
       const target = e.target.closest('.metric-card');
       if (target && target !== dragEl) {
         grid.insertBefore(dragEl, target.nextSibling);
-        const order = Array.from(grid.children).filter(c => c.classList.contains('metric-card') || c.id).map(c => c.id || '');
-        localStorage.setItem(storageKey, JSON.stringify(order));
       }
       dragEl = null;
     };
@@ -3803,10 +3902,15 @@ class AurafiskyApp {
         }
         return;
       }
+      // Close app info modal on Escape
+      if (e.key === 'Escape' && this.$.appInfoModal && this.$.appInfoModal.style.display !== 'none') {
+        this.toggleAppInfoModal();
+        return;
+      }
       switch (e.key.toLowerCase()) {
         case '?':
           e.preventDefault();
-          this.toggleShortcutsModal();
+          this.toggleAppInfoModal();
           break;
         case 'd':
           e.preventDefault();
@@ -3838,6 +3942,18 @@ class AurafiskyApp {
         if (e.target === this.$.shortcutsModal) this.toggleShortcutsModal();
       });
     }
+    // ── App Info Modal ──────────────────────────────────────
+    if (this.$.appInfoCloseBtn) {
+      this.$.appInfoCloseBtn.addEventListener('click', () => this.toggleAppInfoModal());
+    }
+    if (this.$.appInfoModal) {
+      this.$.appInfoModal.addEventListener('click', (e) => {
+        if (e.target === this.$.appInfoModal) this.toggleAppInfoModal();
+      });
+    }
+    if (this.$.appInfoBtn) {
+      this.$.appInfoBtn.addEventListener('click', () => this.toggleAppInfoModal());
+    }
   }
 
   toggleShortcutsModal() {
@@ -3845,6 +3961,13 @@ class AurafiskyApp {
     const isHidden = this.$.shortcutsModal.style.display === 'none' || !this.$.shortcutsModal.style.display;
     this.$.shortcutsModal.style.display = isHidden ? 'flex' : 'none';
     this.$.shortcutsModal.classList.toggle('hidden', !isHidden);
+  }
+
+  toggleAppInfoModal() {
+    if (!this.$.appInfoModal) return;
+    const isHidden = this.$.appInfoModal.style.display === 'none' || !this.$.appInfoModal.style.display;
+    this.$.appInfoModal.style.display = isHidden ? 'flex' : 'none';
+    this.$.appInfoModal.classList.toggle('hidden', !isHidden);
   }
 
   // ================================================================
@@ -3869,11 +3992,14 @@ class AurafiskyApp {
             this.showToast(`⚠️ ${bm.name}: ${severe[0].title}`, 'error');
           }
         }
-      } catch {}
+      } catch (e) {
+        console.warn('Bookmark alert check failed for', bm.name, e);
+      }
     }
   }
 
   startBookmarkAlertPolling() {
+    if (this._alertPollTimer) clearInterval(this._alertPollTimer);
     this.checkBookmarkAlerts();
     this._alertPollTimer = setInterval(() => this.checkBookmarkAlerts(), 600000);
   }
@@ -3883,45 +4009,7 @@ class AurafiskyApp {
   // ================================================================
 
   showToast(message, type = 'info') {
-    // Deduplicate rapid identical toasts (#16)
-    const now = Date.now();
-    if (message === this._lastToastMessage && now - this._lastToastTime < 2000) {
-      return;
-    }
-    this._lastToastMessage = message;
-    this._lastToastTime = now;
-
-    // Limit visible toasts to 3 — remove oldest
-    const existing = this.$.toastContainer.children;
-    while (existing.length >= 3) {
-      existing[0].remove();
-    }
-
-    const colors = {
-      info:    'bg-white dark:bg-slate-800 border-primary/20',
-      error:   'bg-white dark:bg-slate-800 border-red-400/30',
-      success: 'bg-white dark:bg-slate-800 border-emerald-400/30',
-    };
-    const icons = {
-      info:    'ℹ️',
-      error:   '⚠️',
-      success: '✅',
-    };
-
-    const toast = document.createElement('div');
-    toast.setAttribute('role', 'alert');
-    toast.className = `toast pointer-events-auto glass rounded-xl px-4 py-3 flex items-center gap-3 border ${colors[type]} shadow-lg max-w-sm z-[9999]`;
-    toast.innerHTML = `
-      <span class="text-lg">${icons[type]}</span>
-      <span class="text-sm text-slate-700 dark:text-slate-200">${message}</span>
-    `;
-
-    this.$.toastContainer.appendChild(toast);
-
-    setTimeout(() => {
-      toast.classList.add('hiding');
-      toast.addEventListener('animationend', () => toast.remove());
-    }, 4000);
+    window.toastModule?.show(message, type);
   }
 
   hideLoadingOverlay() {
@@ -3931,15 +4019,33 @@ class AurafiskyApp {
     setTimeout(() => overlay.remove(), 500);
   }
 
+  showTermsModal() {
+    if (!this.$.termsModal) return;
+    this.$.termsModal.classList.remove('hidden');
+    this.$.termsModal.style.display = 'flex';
+  }
+
+  hideTermsModal() {
+    if (!this.$.termsModal) return;
+    this.$.termsModal.classList.add('hidden');
+    this.$.termsModal.style.display = 'none';
+  }
+
   // ================================================================
   //  FIREBASE INTEGRATION & SECURITY
   // ================================================================
 
-  initFirebase() {
+  async initFirebase() {
     try {
-      this.firebaseApp = initializeApp(this.firebaseConfig);
-      this.auth = getAuth(this.firebaseApp);
-      this.db = getFirestore(this.firebaseApp);
+      // Lazy-load Firebase only when needed
+      const fbApp = await import('https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js');
+      const fbAuth = await import('https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js');
+      const fbFirestore = await import('https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js');
+
+      const app = fbApp.initializeApp(this.firebaseConfig);
+      const auth = fbAuth.getAuth(app);
+      const db = fbFirestore.getFirestore(app);
+      this._fb = { app, auth, db, ...fbAuth, ...fbFirestore };
 
       // Bind UI auth triggers
       if (this.$.googleSignInBtn) {
@@ -3964,29 +4070,7 @@ class AurafiskyApp {
         this.$.settingsCloseBtn.addEventListener('click', () => this.toggleSettingsPanel(false));
       }
       
-      // Settings triggers
-      if (this.$.settingsUnitsToggle) {
-        this.$.settingsUnitsToggle.addEventListener('change', (e) => {
-          const useFahrenheit = e.target.checked;
-          WeatherService.setUnits(useFahrenheit ? 'imperial' : 'metric');
-          this.syncUnitLabel();
-          // Force display update
-          if (this.weatherData) this.updateWeatherDisplay(this.currentHourIndex);
-          this.saveUserDataToCloud();
-        });
-      }
-      if (this.$.settingsThemeToggle) {
-        this.$.settingsThemeToggle.addEventListener('change', () => {
-          this.toggleDarkMode();
-          this.saveUserDataToCloud();
-        });
-      }
-      if (this.$.settingsCompactToggle) {
-        this.$.settingsCompactToggle.addEventListener('change', () => {
-          this.toggleMinimalMode();
-          this.saveUserDataToCloud();
-        });
-      }
+      // Settings triggers (Firestore-dependent only)
       if (this.$.settingsSyncHistoryToggle) {
         this.$.settingsSyncHistoryToggle.addEventListener('change', (e) => {
           this.syncHistory = e.target.checked;
@@ -3995,17 +4079,46 @@ class AurafiskyApp {
       }
       if (this.$.settingsClearCacheBtn) {
         this.$.settingsClearCacheBtn.addEventListener('click', () => {
-          localStorage.clear();
-          this.showToast('Local cache cleared. Reloading...', 'success');
+          this.showToast('Reloading...', 'success');
           setTimeout(() => window.location.reload(), 1500);
         });
       }
       if (this.$.settingsDeleteDataBtn) {
         this.$.settingsDeleteDataBtn.addEventListener('click', () => this.deleteCloudUserData());
       }
+      if (this.$.settingsTermsBtn) {
+        this.$.settingsTermsBtn.addEventListener('click', () => this.showTermsModal());
+      }
+      if (this.$.termsCornerLink) {
+        this.$.termsCornerLink.addEventListener('click', () => this.showTermsModal());
+      }
+      if (this.$.termsAcceptBtn) {
+        this.$.termsAcceptBtn.addEventListener('click', () => {
+          this.termsAccepted = true;
+          this.hideTermsModal();
+          this.saveUserDataToCloud();
+          this.showToast('Terms & Conditions accepted.', 'success');
+        });
+      }
+      if (this.$.termsModal) {
+        this.$.termsModal.addEventListener('click', (e) => {
+          if (e.target === this.$.termsModal && this.termsAccepted) {
+            this.hideTermsModal();
+          }
+        });
+      }
+      if (this.$.copyContactEmailBtn) {
+        this.$.copyContactEmailBtn.addEventListener('click', () => {
+          navigator.clipboard.writeText('applicationmanifester@gmail.com').then(() => {
+            this.showToast('Email copied to clipboard!', 'success');
+          }).catch(() => {
+            this.showToast('Could not copy email.', 'error');
+          });
+        });
+      }
 
       // Track auth state shifts
-      onAuthStateChanged(this.auth, (user) => {
+      this._fb.onAuthStateChanged(this._fb.auth, (user) => {
         if (user) {
           this.user = user;
           this.onUserSignIn();
@@ -4021,9 +4134,15 @@ class AurafiskyApp {
   }
 
   async signInWithGoogle() {
-    const provider = new GoogleAuthProvider();
+    if (!this.termsAccepted) {
+      this.showToast('Please accept the Terms & Conditions first.', 'info');
+      this.showTermsModal();
+      return;
+    }
+    if (!this._fb) return;
+    const provider = new this._fb.GoogleAuthProvider();
     try {
-      await signInWithPopup(this.auth, provider);
+      await this._fb.signInWithPopup(this._fb.auth, provider);
       this.showToast('Logged in successfully.', 'success');
     } catch (e) {
       console.error('Google Sign-In failed:', e);
@@ -4032,8 +4151,9 @@ class AurafiskyApp {
   }
 
   async signOutUser() {
+    if (!this._fb) return;
     try {
-      await signOut(this.auth);
+      await this._fb.signOut(this._fb.auth);
       this.showToast('Logged out successfully.', 'success');
       this.toggleAccountDialog(false);
     } catch (e) {
@@ -4077,22 +4197,25 @@ class AurafiskyApp {
   async loadUserDataFromCloud() {
     if (!this.user) return;
     try {
-      const userDocRef = doc(this.db, 'users', this.user.uid);
-      const userDoc = await getDoc(userDocRef);
+      const userDocRef = this._fb.doc(this._fb.db, 'users', this.user.uid);
+      const userDoc = await this._fb.getDoc(userDocRef);
       
       if (userDoc.exists()) {
         const data = userDoc.data();
         
         if (data.bookmarks) {
           this.bookmarks = data.bookmarks;
-          WeatherService.safeSetItem('weathermap_bookmarks', JSON.stringify(this.bookmarks));
           this.renderBookmarksList();
           this.updateStarUI();
           this.refreshBookmarkPins();
         }
 
         if (data.searchHistory) {
-          WeatherService.safeSetItem(this.searchHistoryKey, JSON.stringify(data.searchHistory));
+          this.searchHistory = data.searchHistory;
+        }
+
+        if (data.termsAccepted) {
+          this.termsAccepted = true;
         }
 
         if (data.preferences) {
@@ -4140,12 +4263,12 @@ class AurafiskyApp {
   async saveUserDataToCloud() {
     if (!this.user) return;
     try {
-      const userDocRef = doc(this.db, 'users', this.user.uid);
+      const userDocRef = this._fb.doc(this._fb.db, 'users', this.user.uid);
       
       const units = WeatherService.getUnits();
       const theme = this.isDark ? 'dark' : 'light';
       const compact = this.minimalMode || false;
-      const searchHist = this.syncHistory ? (JSON.parse(localStorage.getItem(this.searchHistoryKey)) || []) : [];
+      const searchHist = this.syncHistory ? [...this.searchHistory] : [];
 
       const dataToSave = {
         preferences: {
@@ -4156,10 +4279,11 @@ class AurafiskyApp {
         },
         bookmarks: this.bookmarks,
         searchHistory: searchHist,
+        termsAccepted: this.termsAccepted,
         updatedAt: new Date().toISOString()
       };
 
-      await setDoc(userDocRef, dataToSave, { merge: true });
+      await this._fb.setDoc(userDocRef, dataToSave, { merge: true });
       if (this.$.syncStatusTime) {
         this.$.syncStatusTime.textContent = 'Last synced: ' + new Date().toLocaleTimeString();
       }
@@ -4172,8 +4296,8 @@ class AurafiskyApp {
     if (!this.user) return;
     if (!confirm('Are you sure you want to delete all your cloud data? This cannot be undone.')) return;
     try {
-      const userDocRef = doc(this.db, 'users', this.user.uid);
-      await deleteDoc(userDocRef);
+      const userDocRef = this._fb.doc(this._fb.db, 'users', this.user.uid);
+      await this._fb.deleteDoc(userDocRef);
       this.showToast('Cloud data deleted successfully.', 'success');
       this.toggleSettingsPanel(false);
       await this.signOutUser();
@@ -4216,10 +4340,23 @@ class AurafiskyApp {
     if (this.$.settingsSyncHistoryToggle) {
       this.$.settingsSyncHistoryToggle.checked = this.syncHistory;
     }
+    if (this.$.settingsAutoRefreshToggle) {
+      this.$.settingsAutoRefreshToggle.checked = this.autoRefreshActive || false;
+    }
+    if (this.$.settingsSoundToggle) {
+      this.$.settingsSoundToggle.checked = this.audioActive || false;
+    }
+    if (this.$.settingsVolumeSlider) {
+      this.$.settingsVolumeSlider.value = Math.round((this.volumeLevel || 0.5) * 100);
+    }
   }
 }
 
 // ── Instantiate App ─────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', () => {
   window.app = new AurafiskyApp();
+  // Cleanup on page unload
+  window.addEventListener('beforeunload', () => {
+    if (window.app?.destroy) window.app.destroy();
+  });
 });

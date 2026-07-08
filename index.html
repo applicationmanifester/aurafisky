@@ -1,0 +1,819 @@
+<!DOCTYPE html>
+<!--
+  ============================================================
+  Aurafisky — Real-Time & Forecast Weather (No API Keys!)
+  ============================================================
+  A single-page application combining Leaflet.js + OpenStreetMap
+  with live weather data from the Open-Meteo API.
+
+  ✅ No API keys required — everything is free and open-source.
+  Just open this file in a browser and start exploring weather!
+
+  Map:     Leaflet.js + CartoDB/OpenStreetMap tiles
+  Weather: Open-Meteo (free, no registration)
+  Search:  Open-Meteo Geocoding (free, no registration)
+  ============================================================
+-->
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Aurafisky — Live Weather Explorer</title>
+  <meta name="description" content="Interactive weather map with real-time conditions, hourly forecasts, and a time-travel slider. No API keys needed." />
+  <link rel="icon" type="image/svg+xml" href="favicon.svg" />
+  <link rel="alternate icon" href="favicon.svg" type="image/svg+xml" />
+  <link rel="apple-touch-icon" href="favicon.svg" />
+  <link rel="manifest" href="manifest.json" />
+  <meta name="theme-color" content="#6366f1" />
+
+  <!-- Google Font: Inter -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+
+  <!-- Leaflet.js (open-source map library) -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+        integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+          integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+
+  <!-- Tailwind CSS (CDN) -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ['Inter', 'system-ui', '-apple-system', 'sans-serif'],
+          },
+          colors: {
+            primary: { DEFAULT: '#6366f1', light: '#818cf8', dark: '#4f46e5' },
+            surface: { light: '#f8fafc', dark: '#0f172a' },
+          },
+        },
+      },
+    };
+  </script>
+
+  <!-- Custom Styles -->
+  <link rel="stylesheet" href="styles.css" />
+</head>
+
+<body class="bg-surface-light dark:bg-surface-dark text-slate-800 dark:text-slate-200 font-sans antialiased">
+
+  <!-- ============================================================ -->
+  <!-- TOP BAR — Logo + Search + Controls                           -->
+  <!-- ============================================================ -->
+  <div class="fixed top-0 left-0 right-0 z-[1000] p-3 sm:p-4 pointer-events-none">
+    <div class="max-w-2xl mx-auto flex items-start gap-2 sm:gap-3">
+
+      <!-- Brand Logo -->
+      <div class="flex-shrink-0 pointer-events-auto glass rounded-2xl px-3 py-2.5 flex items-center gap-2" title="Aurafisky">
+        <svg class="w-7 h-7 flex-shrink-0" viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <defs>
+            <linearGradient id="lsky" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stop-color="#1e1b4b"/><stop offset="50%" stop-color="#312e81"/><stop offset="100%" stop-color="#4338ca"/>
+            </linearGradient>
+            <linearGradient id="laurora" x1="0" y1="0" x2="1" y2="1">
+              <stop offset="0%" stop-color="#6366f1"/><stop offset="35%" stop-color="#8b5cf6"/><stop offset="65%" stop-color="#06b6d4"/><stop offset="100%" stop-color="#10b981"/>
+            </linearGradient>
+            <linearGradient id="lsun" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stop-color="#fbbf24"/><stop offset="100%" stop-color="#f59e0b"/>
+            </linearGradient>
+          </defs>
+          <circle cx="50" cy="50" r="48" fill="url(#lsky)" opacity="0.2"/>
+          <circle cx="50" cy="50" r="48" stroke="url(#laurora)" stroke-width="1.5" opacity="0.5"/>
+          <path d="M 14 58 Q 28 35 42 52 Q 56 32 70 48 Q 82 36 90 52" stroke="url(#laurora)" stroke-width="3" stroke-linecap="round" opacity="0.85"/>
+          <path d="M 12 64 Q 24 44 38 60 Q 52 40 66 56 Q 78 44 92 58" stroke="url(#laurora)" stroke-width="2" stroke-linecap="round" opacity="0.5"/>
+          <circle cx="50" cy="36" r="12" fill="url(#lsun)" opacity="0.95"/>
+          <g stroke="#fbbf24" stroke-width="1.8" stroke-linecap="round" opacity="0.7">
+            <line x1="50" y1="18" x2="50" y2="12"/><line x1="50" y1="54" x2="50" y2="60"/>
+            <line x1="32" y1="36" x2="26" y2="36"/><line x1="68" y1="36" x2="74" y2="36"/>
+            <line x1="37" y1="23" x2="33" y2="19"/><line x1="63" y1="23" x2="67" y2="19"/>
+            <line x1="37" y1="49" x2="33" y2="53"/><line x1="63" y1="49" x2="67" y2="53"/>
+          </g>
+          <circle cx="22" cy="18" r="2" fill="#c7d2fe" opacity="0.7"/>
+          <circle cx="78" cy="20" r="1.5" fill="#c7d2fe" opacity="0.5"/>
+        </svg>
+        <span class="hidden sm:inline text-sm font-bold bg-gradient-to-r from-indigo-500 via-purple-500 to-teal-400 bg-clip-text text-transparent select-none">Aurafisky</span>
+      </div>
+
+      <!-- Search Card -->
+      <div class="flex-1 pointer-events-auto glass rounded-2xl overflow-hidden">
+        <div class="flex items-center px-4 py-3">
+          <!-- Search Icon -->
+          <svg class="w-5 h-5 text-slate-400 dark:text-slate-500 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+          </svg>
+          <input
+            id="searchInput"
+            type="text"
+            placeholder="Search for a city or place..."
+            autocomplete="off"
+            class="flex-1 ml-3 bg-transparent border-none outline-none text-sm text-slate-800 dark:text-slate-100 placeholder-slate-400 dark:placeholder-slate-500"
+          />
+          <!-- Clear button -->
+          <button id="searchClearBtn" class="hidden p-1 hover:bg-slate-200/60 dark:hover:bg-slate-600/40 rounded-full transition-colors">
+            <svg class="w-4 h-4 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+          <!-- Loading spinner -->
+          <div id="searchSpinner" class="hidden w-5 h-5 border-2 border-primary/30 border-t-primary rounded-full animate-spin"></div>
+        </div>
+
+        <!-- Search Results Dropdown -->
+        <div id="searchDropdown" class="search-dropdown border-t border-slate-200/60 dark:border-slate-600/30">
+          <div id="searchResults" class="py-1"></div>
+        </div>
+      </div>
+
+      <!-- Control Buttons -->
+      <div class="flex gap-1.5 pointer-events-auto">
+        <!-- Dark Mode Toggle -->
+        <button
+          id="darkModeBtn"
+          title="Toggle dark mode"
+          aria-label="Toggle dark mode"
+          class="glass w-11 h-11 rounded-xl flex items-center justify-center hover:bg-white/80 dark:hover:bg-slate-700/50 transition-all active:scale-95"
+        >
+          <svg id="darkModeIconSun" class="w-5 h-5 text-amber-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z" />
+          </svg>
+          <svg id="darkModeIconMoon" class="w-5 h-5 text-indigo-300 hidden" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z" />
+          </svg>
+        </button>
+
+        <!-- Unit Toggle -->
+        <button
+          id="unitToggleBtn"
+          title="Toggle °C / °F"
+          aria-label="Toggle temperature units"
+          class="glass w-11 h-11 rounded-xl flex items-center justify-center hover:bg-white/80 dark:hover:bg-slate-700/50 transition-all active:scale-95"
+        >
+          <span id="unitLabel" class="text-xs font-bold text-primary dark:text-primary-light">°C</span>
+        </button>
+
+        <!-- My Location -->
+        <button
+          id="myLocationBtn"
+          title="Go to my location"
+          aria-label="Go to my location"
+          class="glass w-11 h-11 rounded-xl flex items-center justify-center hover:bg-white/80 dark:hover:bg-slate-700/50 transition-all active:scale-95"
+        >
+          <svg class="w-5 h-5 text-primary" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
+            <path stroke-linecap="round" stroke-linejoin="round" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
+          </svg>
+        </button>
+
+        <!-- Minimal Mode -->
+        <button
+          id="minimalModeBtn"
+          title="Toggle minimal mode"
+          aria-label="Toggle minimal mode"
+          class="glass w-11 h-11 rounded-xl flex items-center justify-center hover:bg-white/80 dark:hover:bg-slate-700/50 transition-all active:scale-95"
+        >
+          <span class="text-sm">🗕</span>
+        </button>
+
+        <!-- PWA Install Button (hidden by default) -->
+        <button
+          id="installBtn"
+          title="Install Aurafisky"
+          aria-label="Install Aurafisky"
+          class="hidden glass w-11 h-11 rounded-xl flex items-center justify-center hover:bg-white/80 dark:hover:bg-slate-700/50 transition-all active:scale-95"
+        >
+          <svg class="w-5 h-5 text-slate-600 dark:text-slate-300" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+          </svg>
+        </button>
+
+        <!-- Auto-Refresh Button -->
+        <button
+          id="autoRefreshBtn"
+          title="Enable auto-refresh (every 5 min)"
+          aria-label="Toggle auto-refresh"
+          class="glass w-11 h-11 rounded-xl flex items-center justify-center hover:bg-white/80 dark:hover:bg-slate-700/50 transition-all active:scale-95"
+        >
+          <svg class="w-5 h-5 text-slate-500 dark:text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+          </svg>
+        </button>
+
+        <!-- Ambient sound control -->
+        <div class="relative group flex items-center gap-1.5">
+          <button
+            id="ambientSoundBtn"
+            title="Toggle weather soundscapes"
+            aria-label="Toggle weather soundscapes"
+            class="glass w-11 h-11 rounded-xl flex items-center justify-center hover:bg-white/80 dark:hover:bg-slate-700/50 transition-all active:scale-95 flex-shrink-0"
+          >
+            <svg id="soundOffIcon" class="w-5 h-5 text-slate-500 dark:text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z" />
+              <path stroke-linecap="round" stroke-linejoin="round" d="M17 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2" />
+            </svg>
+            <svg id="soundOnIcon" class="w-5 h-5 text-emerald-500 hidden" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M15.536 8.464a5 5 0 010 7.072m2.828-9.9a9 9 0 010 12.728M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z" />
+            </svg>
+          </button>
+          
+          <!-- Volume slider (slides out on hover / focus) -->
+          <div id="volumeSliderContainer" class="w-0 opacity-0 overflow-hidden group-hover:w-20 group-hover:opacity-100 focus-within:w-20 focus-within:opacity-100 transition-all duration-300 ease-out flex items-center bg-white/70 dark:bg-slate-900/60 backdrop-blur-md rounded-xl h-11 px-2 border border-white/30 dark:border-slate-700/20 shadow-md">
+            <input
+              id="volumeSlider"
+              type="range"
+              min="0"
+              max="100"
+              value="50"
+              class="w-16 cursor-pointer h-1 rounded-lg appearance-none bg-slate-300 dark:bg-slate-700 accent-primary"
+              title="Soundscape Volume"
+            />
+          </div>
+        </div>
+
+        <!-- Saved Locations Dropdown -->
+        <div class="relative flex-shrink-0">
+          <button
+            id="bookmarksBtn"
+            title="Saved locations"
+            aria-label="Saved locations"
+            class="glass w-11 h-11 rounded-xl flex items-center justify-center hover:bg-white/80 dark:hover:bg-slate-700/50 transition-all active:scale-95"
+          >
+            <svg class="w-5 h-5 text-amber-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.197-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.784-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z" />
+            </svg>
+          </button>
+          
+          <div id="bookmarksDropdown" class="hidden absolute top-14 right-0 w-64 glass rounded-2xl overflow-hidden shadow-2xl border border-slate-200/60 dark:border-slate-600/30 p-2 mt-2 z-[1001]">
+            <div class="px-3 py-2 text-xs font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wider">Favorites</div>
+            <div id="bookmarksList" class="max-h-56 overflow-y-auto custom-scrollbar text-sm text-slate-600 dark:text-slate-300">
+              <!-- Dynamically populated -->
+              <div class="px-3 py-3 text-xs text-slate-400 text-center">No saved locations</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============================================================ -->
+  <!-- LEAFLET MAP — Full-screen container                          -->
+  <!-- ============================================================ -->
+  <div class="relative w-full h-full">
+    <div id="map"></div>
+    <canvas id="weatherCanvas" class="absolute inset-0 z-[499] pointer-events-none w-full h-full"></canvas>
+  </div>
+
+  <!-- ============================================================ -->
+  <!-- WEATHER PANEL — Slide-in detail card                         -->
+  <!-- ============================================================ -->
+  <div id="weatherPanel" class="weather-panel fixed top-20 sm:top-20 left-3 sm:left-4 z-[1000] w-[340px] max-w-[calc(100%-24px)] max-h-[calc(100vh-180px)] glass rounded-2xl overflow-hidden flex flex-col">
+    <!-- Panel Header -->
+      <div class="flex items-center justify-between px-5 pt-5 pb-3">
+        <div class="min-w-0 flex-1">
+          <h3 id="panelLocationName" class="text-lg font-bold truncate text-slate-900 dark:text-white">Loading...</h3>
+          <p id="panelTimeLabel" class="text-xs text-slate-500 dark:text-slate-400 mt-0.5"></p>
+          <div id="trustScore" class="text-[9px] font-semibold text-slate-400 mt-0.5"></div>
+          <div id="freshnessLabel" class="text-[9px] text-slate-400 mt-0.5"></div>
+        </div>
+      <!-- Bookmark Star Toggle Button -->
+      <button id="favoriteToggleBtn" class="ml-2 p-1.5 rounded-lg hover:bg-slate-200/60 dark:hover:bg-slate-600/40 transition-colors flex-shrink-0" title="Bookmark location" aria-label="Bookmark this location">
+        <svg id="starOutlineIcon" class="w-5 h-5 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.197-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.784-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z" />
+        </svg>
+        <svg id="starFilledIcon" class="w-5 h-5 text-amber-500 hidden" fill="currentColor" viewBox="0 0 20 20">
+          <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
+        </svg>
+      </button>
+      <!-- Share Weather -->
+      <button id="exportWeatherBtn" class="ml-1 p-1.5 rounded-lg hover:bg-slate-200/60 dark:hover:bg-slate-600/40 transition-colors flex-shrink-0" title="Export weather data" aria-label="Export weather data">
+        <svg class="w-4 h-4 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+        </svg>
+      </button>
+      <button id="shareWeatherBtn" class="ml-1 p-1.5 rounded-lg hover:bg-slate-200/60 dark:hover:bg-slate-600/40 transition-colors flex-shrink-0" title="Share weather" aria-label="Share weather">
+        <svg class="w-4 h-4 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z" />
+        </svg>
+      </button>
+      <button id="panelCloseBtn" class="ml-1.5 p-1.5 rounded-lg hover:bg-slate-200/60 dark:hover:bg-slate-600/40 transition-colors flex-shrink-0" aria-label="Close weather panel">
+        <svg class="w-4 h-4 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
+        </svg>
+      </button>
+    </div>
+
+    <!-- Loading Skeleton (UI #13) -->
+    <div id="weatherPanelSkeleton" class="hidden flex-1 overflow-y-auto px-5 pb-5 space-y-5 animate-pulse">
+      <div class="h-3 bg-slate-200 dark:bg-slate-700/60 rounded-md w-1/3 mt-4"></div>
+      <div class="h-3 bg-slate-200 dark:bg-slate-700/60 rounded-md w-1/4"></div>
+      <div class="flex items-center gap-4 my-6">
+        <div class="w-14 h-14 bg-slate-200 dark:bg-slate-700/60 rounded-full"></div>
+        <div class="space-y-2 flex-1">
+          <div class="h-8 bg-slate-200 dark:bg-slate-700/60 rounded-lg w-1/2"></div>
+          <div class="h-3 bg-slate-200 dark:bg-slate-700/60 rounded-md w-1/3"></div>
+        </div>
+      </div>
+      <div class="grid grid-cols-2 gap-3">
+        <div class="col-span-2 h-14 bg-slate-200 dark:bg-slate-700/60 rounded-xl"></div>
+        <div class="col-span-2 h-10 bg-slate-200 dark:bg-slate-700/60 rounded-xl"></div>
+        <div class="h-16 bg-slate-200 dark:bg-slate-700/60 rounded-xl"></div>
+        <div class="h-16 bg-slate-200 dark:bg-slate-700/60 rounded-xl"></div>
+        <div class="h-16 bg-slate-200 dark:bg-slate-700/60 rounded-xl"></div>
+        <div class="h-16 bg-slate-200 dark:bg-slate-700/60 rounded-xl"></div>
+      </div>
+    </div>
+
+    <!-- Scrollable Content -->
+    <div id="weatherPanelContent" class="flex-1 overflow-y-auto custom-scrollbar px-5 pb-5">
+      <!-- Main Temperature Display -->
+      <div class="flex items-center gap-4 mb-4">
+        <span id="panelIcon" class="text-5xl leading-none">☀️</span>
+        <div>
+          <div class="flex items-baseline gap-2">
+            <span id="panelTemp" class="text-4xl font-extrabold text-slate-900 dark:text-white">--°</span>
+            <span id="panelTempDelta" class="text-xs font-semibold hidden"></span>
+          </div>
+          <p id="panelDescription" class="text-sm text-slate-600 dark:text-slate-300 mt-0.5">--</p>
+          <p id="panelFeelsLike" class="text-xs text-slate-400 dark:text-slate-500 mt-0.5">Feels like --°</p>
+          <div id="percentileLabel" class="text-[10px] font-semibold text-slate-400 mt-0.5"></div>
+          <div id="regimeLabel" class="text-[10px] font-bold text-indigo-500 dark:text-indigo-400 mt-0.5"></div>
+        </div>
+      </div>
+
+      <!-- Advisory Alerts Banner -->
+      <div id="advisoryBanner" class="hidden mb-3 rounded-xl p-3 border shadow-sm flex items-start gap-2.5 transition-all duration-300">
+        <span id="advisoryIcon" class="text-lg flex-shrink-0">⚠️</span>
+        <div class="min-w-0 flex-1">
+          <div id="advisoryTitle" class="text-xs font-bold uppercase tracking-wider">Warning</div>
+          <div id="advisoryDesc" class="text-[10px] text-slate-600 dark:text-slate-300 mt-0.5 leading-relaxed">Alert details.</div>
+        </div>
+      </div>
+
+      <!-- Briefing -->
+      <div class="mb-3">
+        <div class="flex items-center gap-2 mb-2">
+          <button id="briefingBtn" class="text-[10px] font-bold px-2.5 py-1.5 rounded-lg bg-gradient-to-r from-indigo-500/10 to-purple-500/10 text-indigo-600 dark:text-indigo-400 border border-indigo-200/30 dark:border-indigo-700/30 hover:bg-indigo-500/20 transition-colors">📡 Generate Briefing</button>
+        </div>
+        <div id="briefingContent" class="hidden text-[11px] text-slate-600 dark:text-slate-300 leading-relaxed bg-slate-100/50 dark:bg-slate-800/40 rounded-xl p-3 border border-slate-200/30 dark:border-slate-700/30"></div>
+      </div>
+
+      <!-- Parameter Importance -->
+      <div id="paramImportance" class="text-[10px] text-slate-400 mb-2"></div>
+
+      <!-- Spatial Gradient -->
+      <div id="spatialGradLabel" class="text-[10px] text-slate-400 mb-2"></div>
+
+      <!-- Predictive Arrival -->
+      <div id="predictiveArrival" class="hidden mb-4">
+        <div class="bg-gradient-to-r from-indigo-500/5 to-purple-500/5 dark:from-indigo-500/10 dark:to-purple-500/10 rounded-xl p-3 border border-indigo-200/30 dark:border-indigo-700/20 flex flex-col gap-1"></div>
+      </div>
+
+      <!-- Metrics Grid -->
+      <div class="grid grid-cols-2 gap-2.5 mb-5">
+        <!-- AQI Card -->
+        <div id="aqiCard" class="col-span-2 bg-slate-100/60 dark:bg-slate-700/40 rounded-xl px-3.5 py-3.5 flex items-center justify-between transition-all duration-300">
+          <div class="min-w-0 flex-1 pr-2">
+            <div class="text-xs text-slate-500 dark:text-slate-400 mb-1 flex items-center gap-1.5">
+              <span>🍃</span> Air Quality
+            </div>
+            <div id="panelAQILabel" class="text-sm font-semibold text-slate-800 dark:text-slate-100 truncate">Loading Air Quality...</div>
+            <div id="panelAQIMetrics" class="text-[9px] text-slate-400 dark:text-slate-500 mt-0.5 font-medium truncate">PM2.5: -- | PM10: -- | O3: --</div>
+          </div>
+          <div id="panelAQIBadge" class="text-[10px] font-bold px-2.5 py-1.5 rounded-xl bg-slate-200 dark:bg-slate-800 text-slate-500 uppercase tracking-wider text-center min-w-[70px] flex-shrink-0">
+            --
+          </div>
+        </div>
+
+        <!-- Metric Search -->
+        <div class="col-span-2 mb-2">
+          <input id="metricSearch" type="text" placeholder="🔍 Search metrics..." class="w-full text-xs bg-transparent border border-slate-200 dark:border-slate-600 rounded-lg px-3 py-1.5 outline-none focus:border-primary/50 transition-colors placeholder:text-slate-400" />
+        </div>
+
+        <!-- Pollen Index -->
+        <div id="pollenCard" class="col-span-2 hidden bg-slate-100/60 dark:bg-slate-700/40 rounded-xl px-3.5 py-3">
+          <div class="text-xs text-slate-500 dark:text-slate-400 mb-2 flex items-center gap-1.5"><span>🌸</span> Pollen Index</div>
+          <div class="grid grid-cols-4 gap-2 text-center">
+            <div><div class="text-[9px] text-slate-400">Birch</div><div id="pollenBirch" class="text-sm font-bold">--</div></div>
+            <div><div class="text-[9px] text-slate-400">Grass</div><div id="pollenGrass" class="text-sm font-bold">--</div></div>
+            <div><div class="text-[9px] text-slate-400">Mugwort</div><div id="pollenMugwort" class="text-sm font-bold">--</div></div>
+            <div><div class="text-[9px] text-slate-400">Alder</div><div id="pollenAlder" class="text-sm font-bold">--</div></div>
+          </div>
+        </div>
+
+        <!-- Comfort Index -->
+        <div class="col-span-2 bg-slate-100/60 dark:bg-slate-700/40 rounded-xl px-3.5 py-2.5 flex items-center justify-between">
+          <div>
+            <div class="text-[10px] text-slate-500 dark:text-slate-400 font-semibold flex items-center gap-1">🌡️ Comfort Index</div>
+            <div id="comfortLabel" class="text-[10px] font-semibold text-slate-400"></div>
+          </div>
+          <span id="comfortIndex" class="text-lg font-extrabold text-slate-400">--</span>
+        </div>
+
+        <div class="metric-card bg-slate-100/60 dark:bg-slate-700/40 rounded-xl px-3.5 py-3">
+          <div class="text-xs text-slate-500 dark:text-slate-400 mb-1 flex items-center gap-1.5"><span>💧</span> Humidity</div>
+          <div id="panelHumidity" class="text-lg font-semibold text-slate-800 dark:text-slate-100">--%</div>
+        </div>
+        <div class="metric-card bg-slate-100/60 dark:bg-slate-700/40 rounded-xl px-3.5 py-3">
+          <div class="text-xs text-slate-500 dark:text-slate-400 mb-1 flex items-center gap-1.5"><span>💧</span> Dew Point</div>
+          <div id="panelDewPoint" class="text-lg font-semibold text-slate-800 dark:text-slate-100">--°</div>
+        </div>
+        <div class="metric-card bg-slate-100/60 dark:bg-slate-700/40 rounded-xl px-3.5 py-3">
+          <div class="text-xs text-slate-500 dark:text-slate-400 mb-1 flex items-center gap-1.5"><span>💨</span> Wind</div>
+          <div class="text-lg font-semibold text-slate-800 dark:text-slate-100 flex items-center gap-1">
+            <span id="panelWind">-- km/h</span>
+            <span id="windArrow" class="inline-block text-primary dark:text-primary-light transition-transform duration-300 font-normal">➔</span>
+          </div>
+        </div>
+        <div class="metric-card bg-slate-100/60 dark:bg-slate-700/40 rounded-xl px-3.5 py-3">
+          <div class="text-xs text-slate-500 dark:text-slate-400 mb-1 flex items-center gap-1.5"><span>💨</span> Gusts</div>
+          <div id="panelWindGusts" class="text-lg font-semibold text-slate-800 dark:text-slate-100">--</div>
+        </div>
+        <div class="metric-card bg-slate-100/60 dark:bg-slate-700/40 rounded-xl px-3.5 py-3">
+          <div class="text-xs text-slate-500 dark:text-slate-400 mb-1 flex items-center gap-1.5"><span>📊</span> Pressure</div>
+          <div id="panelPressure" class="text-lg font-semibold text-slate-800 dark:text-slate-100">-- hPa</div>
+          <div id="pressureTendency" class="text-[10px] font-medium text-slate-400 mt-0.5"></div>
+        </div>
+        <div class="metric-card bg-slate-100/60 dark:bg-slate-700/40 rounded-xl px-3.5 py-3">
+          <div class="text-xs text-slate-500 dark:text-slate-400 mb-1 flex items-center gap-1.5"><span>☁️</span> Clouds</div>
+          <div id="panelClouds" class="text-lg font-semibold text-slate-800 dark:text-slate-100">--%</div>
+        </div>
+        <div class="metric-card bg-slate-100/60 dark:bg-slate-700/40 rounded-xl px-3.5 py-3">
+          <div class="text-xs text-slate-500 dark:text-slate-400 mb-1 flex items-center gap-1.5"><span>☀️</span> UV Index</div>
+          <div id="panelUV" class="text-lg font-semibold text-slate-800 dark:text-slate-100">--</div>
+        </div>
+        <div class="metric-card bg-slate-100/60 dark:bg-slate-700/40 rounded-xl px-3.5 py-3">
+          <div class="text-xs text-slate-500 dark:text-slate-400 mb-1 flex items-center gap-1.5"><span>🌧️</span> Precip</div>
+          <div id="panelPrecip" class="text-lg font-semibold text-slate-800 dark:text-slate-100">-- mm</div>
+        </div>
+        <div class="metric-card bg-slate-100/60 dark:bg-slate-700/40 rounded-xl px-3.5 py-3">
+          <div class="text-xs text-slate-500 dark:text-slate-400 mb-1 flex items-center gap-1.5"><span>👁️</span> Visibility</div>
+          <div id="panelVisibility" class="text-lg font-semibold text-slate-800 dark:text-slate-100">--</div>
+        </div>
+      </div>
+
+      <!-- Astronomy & Sun/Moon Widget -->
+      <div class="mb-5">
+        <h4 class="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-2">Astronomy & Cycles</h4>
+        <div class="grid grid-cols-2 gap-2.5">
+          <!-- Sun Arc Card -->
+          <div class="bg-slate-100/60 dark:bg-slate-700/40 rounded-xl p-3.5 flex flex-col justify-between h-[120px] relative overflow-hidden">
+            <div class="text-[10px] text-slate-500 dark:text-slate-400 font-semibold uppercase tracking-wider flex items-center gap-1.5">
+              <span>🌞</span> Day Cycle
+            </div>
+            <div class="relative w-full h-[50px] mt-2">
+              <svg id="sunArcSvg" class="w-full h-full overflow-visible" viewBox="0 0 100 50">
+                <path d="M 5,45 A 45,45 0 0,1 95,45" fill="none" stroke="#cbd5e1" stroke-width="1.5" stroke-dasharray="3,3" stroke-linecap="round" class="dark:stroke-slate-600"/>
+                <path id="sunArcPassed" d="M 5,45 A 45,45 0 0,1 5,45" fill="none" stroke="#f59e0b" stroke-width="2" stroke-linecap="round"/>
+                <circle id="sunArcDot" cx="5" cy="45" r="4" fill="#f59e0b" filter="drop-shadow(0 0 4px rgba(245,158,11,0.6))"/>
+              </svg>
+            </div>
+            <div class="flex justify-between text-[8px] text-slate-400 dark:text-slate-500 font-semibold mt-1">
+              <span id="sunSunrise">--:--</span>
+              <div class="flex flex-col items-center">
+                <span id="sunDayLength" class="text-slate-500 dark:text-slate-400">--h --m</span>
+                <span id="sunCountdown" class="text-[7px] text-emerald-500 dark:text-emerald-400 font-bold mt-0.5"></span>
+              </div>
+              <span id="sunSunset">--:--</span>
+            </div>
+          </div>
+          
+          <!-- Moon Phase Card -->
+          <div class="bg-slate-100/60 dark:bg-slate-700/40 rounded-xl p-3.5 flex flex-col justify-between h-[120px]">
+            <div class="text-[10px] text-slate-500 dark:text-slate-400 font-semibold uppercase tracking-wider flex items-center gap-1.5">
+              <span>🌙</span> Moon Cycle
+            </div>
+            <div class="flex items-center justify-center gap-3 my-1">
+              <div class="relative w-12 h-12 flex-shrink-0">
+                <svg class="w-full h-full overflow-visible" viewBox="0 0 40 40">
+                  <circle cx="20" cy="20" r="18" fill="#1e293b" class="dark:fill-slate-950" />
+                  <path id="moonLitPath" fill="#fef08a" d="M 20 2 A 18 18 0 0 1 20 38 A 18 18 0 0 1 20 2" />
+                  <circle cx="20" cy="20" r="18" fill="none" stroke="#e2e8f0" stroke-width="0.5" class="dark:stroke-slate-700"/>
+                </svg>
+              </div>
+              <div class="min-w-0 text-left">
+                <div id="moonPhaseLabel" class="text-xs font-bold text-slate-800 dark:text-slate-200 truncate">--</div>
+                <div id="moonPhasePercent" class="text-[9px] text-slate-400 mt-0.5">--% lit</div>
+              </div>
+            </div>
+            <div class="text-[8px] text-slate-400 dark:text-slate-500 font-semibold text-center truncate" id="moonPhaseDesc">
+              --
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Climate Time-Machine Card -->
+      <div class="mb-5">
+        <div class="flex items-center justify-between mb-2">
+          <h4 class="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Climate Time-Machine</h4>
+          <span id="offlineTimeMachineBadge" class="hidden text-[8px] font-bold px-1.5 py-0.5 rounded-md bg-amber-500/10 text-amber-500">Offline Only</span>
+        </div>
+        <div class="bg-slate-100/60 dark:bg-slate-700/40 rounded-xl p-3.5">
+          <button id="timeMachineTrigger" class="w-full flex items-center justify-between text-xs font-bold text-primary dark:text-primary-light hover:underline py-1">
+            <span>⏳ Compare with past decades</span>
+            <svg id="timeMachineChevron" class="w-4 h-4 transform transition-transform duration-200" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7" />
+            </svg>
+          </button>
+          
+          <div id="timeMachineDrawer" class="hidden mt-3 space-y-3 pt-3 border-t border-slate-200/50 dark:border-slate-700/40">
+            <!-- Micro SVG Trend Graph -->
+            <div class="relative w-full h-14 bg-slate-200/30 dark:bg-slate-800/40 rounded-lg p-2 overflow-visible">
+              <svg id="timeMachineSvg" class="w-full h-full overflow-visible" viewBox="0 0 200 40" preserveAspectRatio="none">
+                <path id="timeMachineLine" fill="none" stroke="#f59e0b" stroke-width="2" stroke-linecap="round" d=""></path>
+                <g id="timeMachinePoints"></g>
+              </svg>
+            </div>
+            
+            <div id="timeMachineRows" class="space-y-1.5 text-xs">
+              <!-- Dynamically populated rows: 5 years, 10 years, 20 years ago -->
+            </div>
+            <div id="analogLabel" class="hidden text-[10px] font-semibold mt-1"></div>
+            <div id="anomalyLabel" class="hidden text-[10px] font-semibold mt-2"></div>
+            <div id="patternLabel" class="hidden text-[10px] font-semibold mt-1"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Predictive Arrival -->
+      <div id="predictiveArrival" class="hidden mb-4">
+        <div class="bg-gradient-to-r from-indigo-500/5 to-purple-500/5 dark:from-indigo-500/10 dark:to-purple-500/10 rounded-xl p-3 border border-indigo-200/30 dark:border-indigo-700/20 flex flex-col gap-1"></div>
+      </div>
+
+      <!-- Hourly Trend SVG Sparkline -->
+      <div class="mb-5">
+        <div class="flex items-center justify-between mb-2">
+          <h4 class="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">24h Temperature Trend</h4>
+          <div class="flex items-center gap-1.5">
+            <button id="signalNoiseBtn" class="text-[9px] font-bold px-1.5 py-0.5 rounded bg-slate-200/50 dark:bg-slate-700/40 text-slate-500 dark:text-slate-400 hover:bg-slate-300/50 transition-colors" title="Toggle signal/noise view">📊 Signal</button>
+            <button id="confidenceToggle" class="text-[9px] font-bold px-1.5 py-0.5 rounded bg-slate-200/50 dark:bg-slate-700/40 text-slate-500 dark:text-slate-400 hover:bg-slate-300/50 transition-colors" title="Toggle confidence bands">📈 σ</button>
+          </div>
+        </div>
+        <div class="bg-slate-100/40 dark:bg-slate-800/40 rounded-2xl p-4 border border-slate-200/40 dark:border-slate-700/30">
+          <div class="relative w-full h-20">
+            <svg id="trendSvg" class="w-full h-full overflow-visible" viewBox="0 0 300 80" preserveAspectRatio="none">
+              <!-- Gradient fill -->
+              <defs>
+                <linearGradient id="chartGrad" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stop-color="#6366f1" stop-opacity="0.3"></stop>
+                  <stop offset="100%" stop-color="#6366f1" stop-opacity="0.0"></stop>
+                </linearGradient>
+              </defs>
+              <path id="chartArea" fill="url(#chartGrad)" d=""></path>
+              <path id="chartLine" fill="none" stroke="#6366f1" stroke-width="2.5" stroke-linecap="round" d=""></path>
+              <g id="chartPoints"></g>
+            </svg>
+          </div>
+          <!-- Label strip below sparkline -->
+          <div id="chartHours" class="flex justify-between text-[9px] text-slate-400 dark:text-slate-500 mt-2.5 font-medium px-0.5">
+            <span>--</span><span>--</span><span>--</span><span>--</span><span>--</span>
+          </div>
+          <!-- Cumulative precipitation probability curve -->
+          <div id="cumulativeCurve" class="relative w-full h-5 mt-2.5"></div>
+        </div>
+      </div>
+
+      <!-- Hourly Forecast Scroll Strip -->
+      <div class="mb-5">
+        <h4 class="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-2">Hourly Forecast</h4>
+        <div id="hourlyStrip" class="hourly-strip flex gap-2 overflow-x-auto pb-2 custom-scrollbar"></div>
+      </div>
+
+      <!-- Best Outdoor Window -->
+      <div id="bestWindowCard" class="hidden mb-5">
+        <div class="bg-gradient-to-r from-green-500/8 to-emerald-500/8 dark:from-green-500/10 dark:to-emerald-500/10 rounded-xl px-3.5 py-3 border border-green-200/30 dark:border-green-700/20">
+          <div class="text-[10px] font-bold text-green-600 dark:text-green-400 uppercase tracking-wider mb-1 flex items-center gap-1.5">
+            <span>🌿</span> Best Time to Go Outside
+          </div>
+          <div id="bestWindowText" class="text-xs text-slate-700 dark:text-slate-200 font-semibold"></div>
+        </div>
+      </div>
+
+      <!-- Daily Forecast -->
+      <div>
+        <h4 class="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-2.5">7-Day Forecast</h4>
+        <div id="dailyForecast" class="space-y-1"></div>
+      </div>
+
+      <!-- UV Forecast Chart -->
+      <div class="mt-4 mb-1">
+        <h4 class="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-2">UV Index Forecast</h4>
+        <div id="uvChartContainer" class="bg-slate-100/60 dark:bg-slate-700/40 rounded-xl p-3 h-[100px] relative">
+          <svg id="uvChart" class="w-full h-full" viewBox="0 0 280 80" preserveAspectRatio="none"></svg>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============================================================ -->
+  <!-- COMPARISON PANEL — Slide-in comparison card                  -->
+  <!-- ============================================================ -->
+  <div id="comparePanel" class="weather-panel fixed top-20 sm:top-20 right-3 sm:right-4 z-[1000] w-[340px] max-w-[calc(100%-24px)] max-h-[calc(100vh-180px)] glass rounded-2xl overflow-hidden flex flex-col hidden">
+    <!-- Panel Header -->
+    <div class="flex items-center justify-between px-5 pt-5 pb-3 border-b border-slate-200/10">
+      <div>
+        <h3 class="text-sm font-bold uppercase tracking-wider text-primary">Compare Weather</h3>
+        <p id="compareHeading" class="text-[10px] text-slate-500 dark:text-slate-400 mt-0.5">Comparing locations...</p>
+      </div>
+      <button id="compareCloseBtn" class="p-1.5 rounded-lg hover:bg-slate-200/60 dark:hover:bg-slate-600/40 transition-colors flex-shrink-0">
+        <svg class="w-4 h-4 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
+        </svg>
+      </button>
+    </div>
+    <!-- Panel Content -->
+    <div class="flex-1 overflow-y-auto custom-scrollbar p-5 space-y-4">
+      <div class="space-y-3">
+        <!-- Loc A vs Loc B Temperature -->
+        <div class="bg-slate-100/40 dark:bg-slate-800/40 rounded-xl p-3">
+          <div class="text-[9px] text-slate-400 uppercase tracking-wider mb-1">Temperature</div>
+          <div class="flex justify-between items-center text-sm font-bold">
+            <span id="compareTempA" class="text-slate-700 dark:text-slate-200">--°C</span>
+            <span class="text-[10px] font-normal text-slate-400">vs</span>
+            <span id="compareTempB" class="text-slate-700 dark:text-slate-200">--°C</span>
+          </div>
+        </div>
+        <!-- Wind -->
+        <div class="bg-slate-100/40 dark:bg-slate-800/40 rounded-xl p-3">
+          <div class="text-[9px] text-slate-400 uppercase tracking-wider mb-1">Wind Speed</div>
+          <div class="flex justify-between items-center text-sm font-bold">
+            <span id="compareWindA" class="text-slate-700 dark:text-slate-200">-- km/h</span>
+            <span class="text-[10px] font-normal text-slate-400">vs</span>
+            <span id="compareWindB" class="text-slate-700 dark:text-slate-200">-- km/h</span>
+          </div>
+        </div>
+        <!-- Air Quality -->
+        <div class="bg-slate-100/40 dark:bg-slate-800/40 rounded-xl p-3">
+          <div class="text-[9px] text-slate-400 uppercase tracking-wider mb-1">Air Quality (AQI)</div>
+          <div class="flex justify-between items-center text-sm font-bold">
+            <span id="compareAQIA" class="text-slate-700 dark:text-slate-200">--</span>
+            <span class="text-[10px] font-normal text-slate-400">vs</span>
+            <span id="compareAQIB" class="text-slate-700 dark:text-slate-200">--</span>
+          </div>
+        </div>
+        <!-- Humidity -->
+        <div class="bg-slate-100/40 dark:bg-slate-800/40 rounded-xl p-3">
+          <div class="text-[9px] text-slate-400 uppercase tracking-wider mb-1">Humidity</div>
+          <div class="flex justify-between items-center text-sm font-bold">
+            <span id="compareHumidityA" class="text-slate-700 dark:text-slate-200">--%</span>
+            <span class="text-[10px] font-normal text-slate-400">vs</span>
+            <span id="compareHumidityB" class="text-slate-700 dark:text-slate-200">--%</span>
+          </div>
+        </div>
+        <!-- Conditions -->
+        <div class="bg-slate-100/40 dark:bg-slate-800/40 rounded-xl p-3">
+          <div class="text-[9px] text-slate-400 uppercase tracking-wider mb-1">Conditions</div>
+          <div class="flex justify-between items-center text-xs font-semibold">
+            <span id="compareDescA" class="text-slate-600 dark:text-slate-300 truncate max-w-[110px]">--</span>
+            <span class="text-[10px] font-normal text-slate-400">vs</span>
+            <span id="compareDescB" class="text-slate-600 dark:text-slate-300 truncate max-w-[110px]">--</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============================================================ -->
+  <!-- TIMELINE SLIDER — Bottom time-travel bar                     -->
+  <!-- ============================================================ -->
+  <div id="timelineBar" class="timeline-container fixed bottom-0 left-0 right-0 z-[1000] p-3 sm:p-4 pointer-events-none">
+    <div class="max-w-3xl mx-auto pointer-events-auto glass rounded-2xl px-5 py-4">
+      <div class="flex items-center justify-between mb-3">
+        <div class="flex items-center gap-2 flex-1 min-w-0">
+          <span id="timelineLabel" class="text-sm font-semibold text-slate-700 dark:text-slate-200 truncate">Click the map or search a city to view weather</span>
+          <span id="timelineDelta" class="text-[10px] font-medium text-slate-400 flex-shrink-0"></span>
+          <span id="momentumLabel" class="text-[10px] font-medium text-slate-400 flex-shrink-0"></span>
+        </div>
+        <div class="flex items-center gap-2 flex-shrink-0">
+          <button id="nextRainBtn" class="hidden text-[10px] font-bold px-2 py-1 rounded-full bg-blue-500/10 text-blue-500 dark:text-blue-400 hover:bg-blue-500/20 transition-colors whitespace-nowrap">🌧️ Next rain</button>
+          <span id="timelineBadge" class="hidden text-xs font-medium px-2.5 py-1 rounded-full bg-primary/10 text-primary dark:bg-primary-light/15 dark:text-primary-light">Now</span>
+        </div>
+      </div>
+
+      <!-- Day Labels -->
+      <div id="timelineDays" class="timeline-day-labels flex justify-between text-[11px] text-slate-400 dark:text-slate-500 font-medium mb-1.5 px-0.5"></div>
+
+      <!-- Slider Track -->
+      <div class="relative">
+        <div id="nowIndicator" class="now-indicator hidden"></div>
+        <input
+          id="timelineSlider"
+          type="range"
+          min="0"
+          max="239"
+          value="72"
+          step="1"
+          disabled
+          class="timeline-slider w-full disabled:opacity-40 disabled:cursor-not-allowed"
+        />
+      </div>
+    </div>
+  </div>
+
+  <!-- ============================================================ -->
+  <!-- RADAR CONTROLS Map Overlay                                   -->
+  <!-- ============================================================ -->
+  <div id="radarControls" class="fixed bottom-[114px] sm:bottom-[114px] left-3 sm:left-4 z-[1000] pointer-events-auto">
+    <div class="glass rounded-xl p-2.5 border border-slate-200/60 dark:border-slate-600/30 shadow-lg space-y-2">
+      <div class="flex items-center gap-3">
+        <button id="radarToggleBtn" class="flex items-center gap-2 text-xs font-bold px-3 py-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 transition-colors">
+          <span id="radarDot" class="w-2 h-2 rounded-full bg-slate-400 transition-all duration-300"></span>
+          <span id="radarStatusText" class="text-slate-700 dark:text-slate-300">Radar Off</span>
+        </button>
+
+        <!-- Layer selector (Radar vs Satellite) -->
+        <select id="layerTypeSelect" class="bg-transparent border-none outline-none text-xs font-bold text-slate-700 dark:text-slate-300 cursor-pointer hover:text-primary transition-colors focus:ring-0">
+          <option value="radar" class="bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200">Radar (Rain)</option>
+          <option value="satellite" class="bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200">Satellite (Clouds)</option>
+          <option value="temperature" class="bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200">Temperature</option>
+          <option value="wind" class="bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200">Wind Flow</option>
+        </select>
+        
+        <!-- Radar Playback Controls (visible only when radar is active) -->
+        <div id="radarPlayback" class="hidden flex items-center gap-2.5 border-l border-slate-200 dark:border-slate-700 pl-3">
+          <button id="radarPlayBtn" class="p-1 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition-colors" title="Toggle radar animation">
+            <svg id="radarPlayIcon" class="w-4 h-4 text-slate-600 dark:text-slate-300" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
+            </svg>
+            <svg id="radarPauseIcon" class="w-4 h-4 text-slate-600 dark:text-slate-300 hidden" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M10 9v6m4-6v6" />
+            </svg>
+          </button>
+          <span id="radarTimeLabel" class="text-[10px] font-semibold text-slate-500 dark:text-slate-400 min-w-[50px] text-center bg-slate-100 dark:bg-slate-800 px-1.5 py-0.5 rounded">--:--</span>
+        </div>
+      </div>
+
+      <!-- Radar extras: opacity slider + legend (visible when active) -->
+      <div id="radarExtras" class="hidden flex items-center gap-3 pt-1.5 border-t border-slate-200/40 dark:border-slate-700/30">
+        <!-- Opacity slider -->
+        <div class="flex items-center gap-1.5 flex-1">
+          <span class="text-[9px] font-semibold text-slate-400">Opacity</span>
+          <input id="radarOpacitySlider" type="range" min="10" max="100" value="55"
+            class="flex-1 h-1 rounded-lg appearance-none bg-slate-300 dark:bg-slate-700 accent-primary cursor-pointer" />
+        </div>
+        <!-- Precipitation legend -->
+        <div id="legendPrecip" class="flex items-center gap-1 text-[8px] font-semibold text-slate-400">
+          <span>Light</span>
+          <div class="w-12 h-2 rounded-sm" style="background:linear-gradient(90deg,#00ff80,#00e5ff,#ffcc00,#ff6600,#ff0000,#cc00ff)"></div>
+          <span>Heavy</span>
+        </div>
+        <!-- Temperature legend -->
+        <div id="legendTemp" class="hidden flex items-center gap-1 text-[8px] font-semibold text-slate-400">
+          <span>Cold</span>
+          <div class="w-12 h-2 rounded-sm" style="background:linear-gradient(90deg,#0000ff,#00bfff,#00ff00,#ffff00,#ff8800,#ff0000)"></div>
+          <span>Hot</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============================================================ -->
+  <!-- KEYBOARD SHORTCUTS MODAL                                     -->
+  <!-- ============================================================ -->
+  <div id="shortcutsModal" class="fixed inset-0 z-[9999] hidden items-center justify-center bg-black/40 backdrop-blur-sm pointer-events-auto" style="display:none">
+    <div class="glass rounded-2xl p-6 max-w-sm w-full mx-4 shadow-2xl border border-slate-200/30 dark:border-slate-600/30">
+      <div class="flex items-center justify-between mb-4">
+        <h3 class="text-sm font-bold text-slate-800 dark:text-slate-100">⌨️ Keyboard Shortcuts</h3>
+        <button id="shortcutsCloseBtn" class="p-1 hover:bg-slate-200/60 dark:hover:bg-slate-600/40 rounded-lg transition-colors">
+          <svg class="w-4 h-4 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
+        </button>
+      </div>
+      <div class="space-y-2 text-xs">
+        <div class="flex justify-between"><kbd class="bg-slate-200 dark:bg-slate-700 px-1.5 py-0.5 rounded text-[10px] font-bold">?</kbd><span class="text-slate-600 dark:text-slate-300">Toggle this panel</span></div>
+        <div class="flex justify-between"><kbd class="bg-slate-200 dark:bg-slate-700 px-1.5 py-0.5 rounded text-[10px] font-bold">Esc</kbd><span class="text-slate-600 dark:text-slate-300">Close panel / search</span></div>
+        <div class="flex justify-between"><kbd class="bg-slate-200 dark:bg-slate-700 px-1.5 py-0.5 rounded text-[10px] font-bold">D</kbd><span class="text-slate-600 dark:text-slate-300">Toggle dark mode</span></div>
+        <div class="flex justify-between"><kbd class="bg-slate-200 dark:bg-slate-700 px-1.5 py-0.5 rounded text-[10px] font-bold">R</kbd><span class="text-slate-600 dark:text-slate-300">Toggle radar overlay</span></div>
+        <div class="flex justify-between"><kbd class="bg-slate-200 dark:bg-slate-700 px-1.5 py-0.5 rounded text-[10px] font-bold">M</kbd><span class="text-slate-600 dark:text-slate-300">Toggle minimal/compact mode</span></div>
+        <div class="flex justify-between"><kbd class="bg-slate-200 dark:bg-slate-700 px-1.5 py-0.5 rounded text-[10px] font-bold">/</kbd><span class="text-slate-600 dark:text-slate-300">Focus search</span></div>
+        <div class="flex justify-between"><kbd class="bg-slate-200 dark:bg-slate-700 px-1.5 py-0.5 rounded text-[10px] font-bold">G</kbd><span class="text-slate-600 dark:text-slate-300">Go to my location</span></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============================================================ -->
+  <!-- TOAST CONTAINER                                              -->
+  <!-- ============================================================ -->
+  <div id="toastContainer" aria-live="polite" aria-atomic="true" class="fixed top-20 right-4 z-[9998] flex flex-col gap-2 pointer-events-none"></div>
+
+  <!-- ============================================================ -->
+  <!-- LOADING OVERLAY                                              -->
+  <!-- ============================================================ -->
+  <div id="loadingOverlay" class="fixed inset-0 z-[9990] bg-surface-light dark:bg-surface-dark flex items-center justify-center transition-opacity duration-500">
+    <div class="text-center">
+      <div class="w-12 h-12 border-4 border-primary/20 border-t-primary rounded-full animate-spin mx-auto mb-4"></div>
+      <p class="text-sm text-slate-500 dark:text-slate-400">Loading Aurafisky...</p>
+    </div>
+  </div>
+
+  <!-- ============================================================ -->
+  <!-- SCRIPTS                                                      -->
+  <!-- ============================================================ -->
+  <script src="weather.js"></script>
+  <script src="app.js"></script>
+
+</body>
+</html>

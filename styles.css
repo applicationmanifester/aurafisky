@@ -1,0 +1,833 @@
+/**
+ * ============================================================
+ * Custom Styles — styles.css
+ * ============================================================
+ * Supplements Tailwind CSS with effects and component styles
+ * that require custom CSS (glassmorphism, range sliders,
+ * weather animations, and cross-browser fixes).
+ * ============================================================
+ */
+
+/* ── CSS Custom Properties ──────────────────────────────────── */
+:root {
+  --glass-bg: rgba(255, 255, 255, 0.72);
+  --glass-border: rgba(255, 255, 255, 0.35);
+  --glass-shadow: 0 8px 32px rgba(0, 0, 0, 0.08);
+  --glass-blur: 16px;
+
+  --primary: #6366f1;
+  --primary-light: #818cf8;
+  --accent: #f59e0b;
+
+  --temp-freezing: #60a5fa;
+  --temp-cold: #67e8f9;
+  --temp-mild: #a3e635;
+  --temp-warm: #fbbf24;
+  --temp-hot: #ef4444;
+}
+
+.dark {
+  --glass-bg: rgba(15, 23, 42, 0.78);
+  --glass-border: rgba(255, 255, 255, 0.08);
+  --glass-shadow: 0 8px 32px rgba(0, 0, 0, 0.32);
+}
+
+/* ── Base & Resets ──────────────────────────────────────────── */
+* { box-sizing: border-box; }
+
+html, body {
+  margin: 0;
+  padding: 0;
+  height: 100%;
+  overflow: hidden;
+  font-family: 'Inter', system-ui, -apple-system, sans-serif;
+}
+
+/* ── Glassmorphism Utility ──────────────────────────────────── */
+.glass {
+  background: var(--glass-bg);
+  backdrop-filter: blur(var(--glass-blur));
+  -webkit-backdrop-filter: blur(var(--glass-blur));
+  border: 1px solid var(--glass-border);
+  box-shadow: var(--glass-shadow);
+}
+
+/* ── Map Container ──────────────────────────────────────────── */
+#map {
+  width: 100%;
+  height: 100vh;
+}
+
+/* ── Search Dropdown ────────────────────────────────────────── */
+.search-dropdown {
+  max-height: 0;
+  overflow: hidden;
+  transition: max-height 0.3s ease, opacity 0.3s ease;
+  opacity: 0;
+}
+.search-dropdown.open {
+  max-height: 280px;
+  opacity: 1;
+}
+.search-result-item {
+  transition: background-color 0.15s ease;
+}
+.search-result-item:hover {
+  background-color: rgba(99, 102, 241, 0.08);
+}
+.dark .search-result-item:hover {
+  background-color: rgba(129, 140, 248, 0.12);
+}
+
+/* ── Weather Panel ──────────────────────────────────────────── */
+.weather-panel {
+  transform: translateX(-110%);
+  transition: transform 0.4s cubic-bezier(0.22, 1, 0.36, 1);
+  will-change: transform;
+}
+.weather-panel.open {
+  transform: translateX(0);
+}
+
+/* Mobile: slide up from bottom */
+@media (max-width: 639px) {
+  .weather-panel {
+    transform: translateY(110%);
+    bottom: 0;
+    left: 0;
+    right: 0;
+    top: auto !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    max-height: 65vh;
+    border-radius: 1.25rem 1.25rem 0 0 !important;
+  }
+  .weather-panel.open {
+    transform: translateY(0);
+  }
+}
+
+/* ── Leaflet Reset ──────────────────────────────────────────── */
+.custom-weather-marker-icon {
+  background: transparent !important;
+  border: none !important;
+}
+
+/* ── Weather Marker (on-map widget) ─────────────────────────── */
+.weather-marker {
+  cursor: pointer;
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+  animation: markerAppear 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+.weather-marker:hover {
+  transform: scale(1.08);
+  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.18);
+}
+
+@keyframes markerAppear {
+  from {
+    opacity: 0;
+    transform: scale(0.5) translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
+/* Marker tail / pointer */
+.weather-marker::after {
+  content: '';
+  position: absolute;
+  bottom: -8px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 0;
+  height: 0;
+  border-left: 8px solid transparent;
+  border-right: 8px solid transparent;
+  border-top: 8px solid white;
+}
+.dark .weather-marker::after {
+  border-top-color: #1e293b;
+}
+
+/* ── Timeline / Slider ──────────────────────────────────────── */
+.timeline-container {
+  transition: transform 0.3s ease;
+}
+
+/* Custom range slider styling */
+input[type='range'].timeline-slider {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 100%;
+  height: 6px;
+  border-radius: 3px;
+  background: linear-gradient(to right,
+    rgba(99, 102, 241, 0.2) 0%,
+    rgba(99, 102, 241, 0.5) var(--now-position, 50%),
+    rgba(99, 102, 241, 0.2) 100%
+  );
+  outline: none;
+  cursor: pointer;
+}
+
+input[type='range'].timeline-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #6366f1, #8b5cf6);
+  border: 3px solid white;
+  box-shadow: 0 2px 8px rgba(99, 102, 241, 0.4);
+  cursor: grab;
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+input[type='range'].timeline-slider::-webkit-slider-thumb:hover {
+  transform: scale(1.15);
+  box-shadow: 0 3px 12px rgba(99, 102, 241, 0.5);
+}
+input[type='range'].timeline-slider::-webkit-slider-thumb:active {
+  cursor: grabbing;
+  transform: scale(1.05);
+}
+
+input[type='range'].timeline-slider::-moz-range-thumb {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #6366f1, #8b5cf6);
+  border: 3px solid white;
+  box-shadow: 0 2px 8px rgba(99, 102, 241, 0.4);
+  cursor: grab;
+}
+
+.dark input[type='range'].timeline-slider {
+  background: linear-gradient(to right,
+    rgba(129, 140, 248, 0.15) 0%,
+    rgba(129, 140, 248, 0.4) var(--now-position, 50%),
+    rgba(129, 140, 248, 0.15) 100%
+  );
+}
+.dark input[type='range'].timeline-slider::-webkit-slider-thumb {
+  border-color: #1e293b;
+}
+.dark input[type='range'].timeline-slider::-moz-range-thumb {
+  border-color: #1e293b;
+}
+
+/* Now indicator line on the slider track */
+.now-indicator {
+  position: absolute;
+  top: -4px;
+  width: 2px;
+  height: 14px;
+  background: #ef4444;
+  border-radius: 1px;
+  pointer-events: none;
+  z-index: 2;
+}
+.now-indicator::before {
+  content: 'Now';
+  position: absolute;
+  top: -18px;
+  left: 50%;
+  transform: translateX(-50%);
+  font-size: 10px;
+  font-weight: 600;
+  color: #ef4444;
+  white-space: nowrap;
+}
+
+/* ── Temperature Color Classes ──────────────────────────────── */
+.temp-freezing { color: var(--temp-freezing); }
+.temp-cold     { color: var(--temp-cold); }
+.temp-mild     { color: var(--temp-mild); }
+.temp-warm     { color: var(--temp-warm); }
+.temp-hot      { color: var(--temp-hot); }
+
+/* ── Loading Shimmer ────────────────────────────────────────── */
+.shimmer {
+  background: linear-gradient(
+    90deg,
+    rgba(148, 163, 184, 0.1) 25%,
+    rgba(148, 163, 184, 0.2) 50%,
+    rgba(148, 163, 184, 0.1) 75%
+  );
+  background-size: 200% 100%;
+  animation: shimmer 1.5s ease-in-out infinite;
+}
+@keyframes shimmer {
+  0%   { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+
+/* ── Toast Notifications ────────────────────────────────────── */
+.toast {
+  animation: toastIn 0.4s cubic-bezier(0.22, 1, 0.36, 1);
+}
+.toast.hiding {
+  animation: toastOut 0.3s ease forwards;
+}
+@keyframes toastIn {
+  from { opacity: 0; transform: translateY(-12px) scale(0.95); }
+  to   { opacity: 1; transform: translateY(0) scale(1); }
+}
+@keyframes toastOut {
+  from { opacity: 1; transform: translateY(0) scale(1); }
+  to   { opacity: 0; transform: translateY(-12px) scale(0.95); }
+}
+
+/* ── Pulse animation for loading indicator on marker ────────── */
+@keyframes pulse-ring {
+  0%   { transform: scale(0.8); opacity: 1; }
+  100% { transform: scale(2);   opacity: 0; }
+}
+.pulse-ring {
+  animation: pulse-ring 1.2s cubic-bezier(0.215, 0.61, 0.355, 1) infinite;
+}
+
+/* ── Scrollbar Styling ──────────────────────────────────────── */
+.custom-scrollbar::-webkit-scrollbar {
+  width: 5px;
+}
+.custom-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
+}
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  background: rgba(148, 163, 184, 0.3);
+  border-radius: 10px;
+}
+.custom-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: rgba(148, 163, 184, 0.5);
+}
+
+/* ── Daily Forecast Strip ───────────────────────────────────── */
+.daily-item {
+  transition: background-color 0.15s ease;
+}
+.daily-item:hover {
+  background-color: rgba(99, 102, 241, 0.06);
+}
+.dark .daily-item:hover {
+  background-color: rgba(129, 140, 248, 0.08);
+}
+
+/* ── Metric Grid ────────────────────────────────────────────── */
+.metric-card {
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+.metric-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.06);
+}
+
+/* ── Responsive helpers ─────────────────────────────────────── */
+@media (max-width: 639px) {
+  .timeline-day-labels {
+    font-size: 10px;
+  }
+}
+
+/* ── Panel Dynamic Weather Gradients ────────────────────────── */
+.weather-panel.theme-sunny {
+  background: linear-gradient(135deg, rgba(253, 244, 215, 0.8) 0%, var(--glass-bg) 100%);
+}
+.weather-panel.theme-rainy {
+  background: linear-gradient(135deg, rgba(219, 234, 254, 0.8) 0%, var(--glass-bg) 100%);
+}
+.weather-panel.theme-cloudy {
+  background: linear-gradient(135deg, rgba(241, 245, 249, 0.85) 0%, var(--glass-bg) 100%);
+}
+.weather-panel.theme-stormy {
+  background: linear-gradient(135deg, rgba(233, 213, 255, 0.8) 0%, var(--glass-bg) 100%);
+}
+.weather-panel.theme-snowy {
+  background: linear-gradient(135deg, rgba(224, 242, 254, 0.8) 0%, var(--glass-bg) 100%);
+}
+
+.dark .weather-panel.theme-sunny {
+  background: linear-gradient(135deg, rgba(45, 38, 22, 0.85) 0%, var(--glass-bg) 100%);
+}
+.dark .weather-panel.theme-rainy {
+  background: linear-gradient(135deg, rgba(23, 37, 59, 0.85) 0%, var(--glass-bg) 100%);
+}
+.dark .weather-panel.theme-cloudy {
+  background: linear-gradient(135deg, rgba(30, 41, 59, 0.85) 0%, var(--glass-bg) 100%);
+}
+.dark .weather-panel.theme-stormy {
+  background: linear-gradient(135deg, rgba(46, 22, 90, 0.8) 0%, var(--glass-bg) 100%);
+}
+.dark .weather-panel.theme-snowy {
+  background: linear-gradient(135deg, rgba(12, 60, 90, 0.8) 0%, var(--glass-bg) 100%);
+}
+
+/* ── SVG Trend Chart Elements ───────────────────────────────── */
+#trendSvg {
+  display: block;
+}
+.chart-grid-line {
+  stroke: rgba(148, 163, 184, 0.15);
+  stroke-width: 1;
+}
+.dark .chart-grid-line {
+  stroke: rgba(255, 255, 255, 0.08);
+}
+.chart-point {
+  transition: r 0.15s ease, fill-opacity 0.15s ease;
+  cursor: pointer;
+}
+.chart-point:hover {
+  r: 5px;
+  fill-opacity: 1;
+}
+.chart-text {
+  font-size: 8px;
+  font-weight: 600;
+  fill: #64748b;
+  text-anchor: middle;
+}
+.dark .chart-text {
+  fill: #94a3b8;
+}
+
+/* ── Radar Blinking Status ──────────────────────────────────── */
+#radarDot.active {
+  background-color: #ef4444;
+  box-shadow: 0 0 8px #ef4444;
+  animation: pulse-dot 1.5s infinite;
+}
+@keyframes pulse-dot {
+  0% { opacity: 0.5; }
+  50% { opacity: 1; }
+  100% { opacity: 0.5; }
+}
+
+/* ── Leaflet Controls Positioning ────────────────────────────── */
+.leaflet-bottom.leaflet-right {
+  margin-bottom: 96px; /* Shift zoom control up to clear timeline slider */
+  margin-right: 12px;
+}
+@media (max-width: 639px) {
+  .leaflet-bottom.leaflet-right {
+    margin-bottom: 110px;
+  }
+}
+
+/* ── Dual-Axis SVG Chart Bars ───────────────────────────────── */
+.chart-bar {
+  fill: rgba(99, 102, 241, 0.15);
+  transition: fill 0.15s ease, fill-opacity 0.15s ease;
+  cursor: pointer;
+}
+.chart-bar:hover {
+  fill: rgba(99, 102, 241, 0.35);
+}
+.dark .chart-bar {
+  fill: rgba(129, 140, 248, 0.12);
+}
+.dark .chart-bar:hover {
+  fill: rgba(129, 140, 248, 0.28);
+}
+
+/* ── Air Quality Color States ────────────────────────────────── */
+.aqi-good {
+  color: #10b981 !important;
+  background-color: rgba(16, 185, 129, 0.12) !important;
+  border: 1px solid rgba(16, 185, 129, 0.2);
+}
+.aqi-moderate {
+  color: #d97706 !important;
+  background-color: rgba(217, 119, 6, 0.12) !important;
+  border: 1px solid rgba(217, 119, 6, 0.2);
+}
+.aqi-sensitive {
+  color: #ea580c !important;
+  background-color: rgba(234, 88, 12, 0.12) !important;
+  border: 1px solid rgba(234, 88, 12, 0.2);
+}
+.aqi-unhealthy {
+  color: #dc2626 !important;
+  background-color: rgba(220, 38, 38, 0.12) !important;
+  border: 1px solid rgba(220, 38, 38, 0.2);
+}
+.aqi-very-unhealthy {
+  color: #9333ea !important;
+  background-color: rgba(147, 51, 234, 0.12) !important;
+  border: 1px solid rgba(147, 51, 234, 0.2);
+}
+.aqi-hazardous {
+  color: #be123c !important;
+  background-color: rgba(190, 18, 60, 0.18) !important;
+  border: 1px solid rgba(190, 18, 60, 0.25);
+}
+
+/* ── Compare Cities Split Panel ─────────────────────────────── */
+#comparePanel {
+  transform: translateX(110%);
+  transition: transform 0.4s cubic-bezier(0.22, 1, 0.36, 1);
+  will-change: transform;
+}
+#comparePanel.open {
+  transform: translateX(0);
+}
+
+@media (max-width: 639px) {
+  #comparePanel {
+    transform: translateY(110%);
+    bottom: 0;
+    left: 0;
+    right: 0;
+    top: auto !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    max-height: 65vh;
+    border-radius: 1.25rem 1.25rem 0 0 !important;
+  }
+  #comparePanel.open {
+    transform: translateY(0);
+  }
+}
+
+/* ── Map Canvas Particle Overlay ────────────────────────────── */
+#weatherCanvas {
+  pointer-events: none;
+  mix-blend-mode: multiply;
+  opacity: 0.85;
+}
+.dark #weatherCanvas {
+  mix-blend-mode: screen;
+  opacity: 0.65;
+}
+
+/* ── Smart Weather Advisories ────────────────────────────────── */
+@keyframes pulse-alert-glow {
+  0% { box-shadow: 0 0 4px rgba(239, 68, 68, 0.2); }
+  50% { box-shadow: 0 0 10px rgba(239, 68, 68, 0.45); }
+  100% { box-shadow: 0 0 4px rgba(239, 68, 68, 0.2); }
+}
+
+.alert-advisory {
+  background-color: rgba(245, 158, 11, 0.08);
+  border-color: rgba(245, 158, 11, 0.25);
+  color: #d97706;
+}
+.alert-warning {
+  background-color: rgba(239, 68, 68, 0.08);
+  border-color: rgba(239, 68, 68, 0.25);
+  color: #dc2626;
+  animation: pulse-alert-glow 2s infinite;
+}
+.alert-severe {
+  background-color: rgba(147, 51, 234, 0.08);
+  border-color: rgba(147, 51, 234, 0.3);
+  color: #9333ea;
+  animation: pulse-alert-glow 2s infinite;
+}
+.alert-extreme {
+  background-color: rgba(225, 29, 72, 0.1);
+  border-color: rgba(225, 29, 72, 0.35);
+  color: #e11d48;
+  animation: pulse-alert-glow 1.5s infinite;
+}
+
+.dark .alert-advisory {
+  background-color: rgba(245, 158, 11, 0.05);
+  color: #fbbf24;
+}
+.dark .alert-warning {
+  background-color: rgba(239, 68, 68, 0.05);
+  color: #f87171;
+}
+.dark .alert-severe {
+  background-color: rgba(147, 51, 234, 0.05);
+  color: #c084fc;
+}
+.dark .alert-extreme {
+  background-color: rgba(225, 29, 72, 0.06);
+  color: #fb7185;
+}
+
+/* ── Astronomy Solar Arc ────────────────────────────────────── */
+#sunArcSvg {
+  overflow: visible;
+}
+#sunArcDot {
+  transition: cx 0.5s cubic-bezier(0.25, 1, 0.5, 1), cy 0.5s cubic-bezier(0.25, 1, 0.5, 1);
+}
+#sunArcPassed {
+  transition: stroke-dasharray 0.5s cubic-bezier(0.25, 1, 0.5, 1);
+}
+
+/* ── Climate Time-Machine SVG ───────────────────────────────── */
+#timeMachineSvg {
+  overflow: visible;
+}
+.tm-point {
+  fill: #f59e0b;
+  stroke: #ffffff;
+  stroke-width: 1.5;
+  transition: r 0.2s ease;
+  cursor: pointer;
+}
+.dark .tm-point {
+  stroke: #1e293b;
+}
+.tm-point:hover {
+  r: 5px;
+}
+.tm-text {
+  font-size: 8px;
+  font-weight: 600;
+  fill: #64748b;
+  text-anchor: middle;
+}
+.dark .tm-text {
+  fill: #94a3b8;
+}
+
+/* ── Volume Range Slider Customization ────────────────────────── */
+input[type='range']#volumeSlider {
+  -webkit-appearance: none;
+  appearance: none;
+  outline: none;
+}
+input[type='range']#volumeSlider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: #6366f1;
+  border: 1.5px solid white;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.15);
+  cursor: pointer;
+  transition: transform 0.1s ease;
+}
+.dark input[type='range']#volumeSlider::-webkit-slider-thumb {
+  border-color: #1e293b;
+  background: #818cf8;
+}
+input[type='range']#volumeSlider::-webkit-slider-thumb:hover {
+  transform: scale(1.2);
+}
+input[type='range']#volumeSlider::-moz-range-thumb {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: #6366f1;
+  border: 1.5px solid white;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.15);
+  cursor: pointer;
+}
+
+
+/* ── Hourly Forecast Strip ──────────────────────────────────── */
+.hourly-strip {
+  scroll-snap-type: x mandatory;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: thin;
+}
+
+.hourly-strip::-webkit-scrollbar {
+  height: 3px;
+}
+.hourly-strip::-webkit-scrollbar-track {
+  background: transparent;
+}
+.hourly-strip::-webkit-scrollbar-thumb {
+  background: rgba(100, 116, 139, 0.2);
+  border-radius: 10px;
+}
+
+.hourly-pill {
+  scroll-snap-align: center;
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 8px 10px;
+  border-radius: 14px;
+  background: rgba(241, 245, 249, 0.6);
+  border: 1px solid rgba(226, 232, 240, 0.4);
+  transition: all 0.2s ease;
+  min-width: 60px;
+}
+.dark .hourly-pill {
+  background: rgba(30, 41, 59, 0.5);
+  border-color: rgba(51, 65, 85, 0.3);
+}
+.hourly-pill.now-pill {
+  background: linear-gradient(135deg, rgba(99, 102, 241, 0.12), rgba(129, 140, 248, 0.08));
+  border-color: rgba(99, 102, 241, 0.35);
+}
+.dark .hourly-pill.now-pill {
+  background: linear-gradient(135deg, rgba(99, 102, 241, 0.2), rgba(129, 140, 248, 0.15));
+  border-color: rgba(129, 140, 248, 0.3);
+}
+.hourly-pill .pill-time {
+  font-size: 9px;
+  font-weight: 600;
+  text-transform: uppercase;
+  color: #64748b;
+}
+.dark .hourly-pill .pill-time { color: #94a3b8; }
+
+.hourly-pill .pill-icon { font-size: 16px; }
+
+.hourly-pill .pill-temp {
+  font-size: 11px;
+  font-weight: 700;
+  color: #1e293b;
+}
+.dark .hourly-pill .pill-temp { color: #e2e8f0; }
+
+.hourly-pill .pill-precip {
+  font-size: 8px;
+  color: #60a5fa;
+  font-weight: 600;
+}
+
+/* ── Temperature Range Bar (Daily Forecast) ─────────────────── */
+.temp-range-bar {
+  position: relative;
+  height: 4px;
+  border-radius: 2px;
+  background: linear-gradient(90deg, #60a5fa, #a3e635, #fbbf24, #ef4444);
+  overflow: hidden;
+  min-width: 50px;
+}
+.temp-range-dot {
+  position: absolute;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: white;
+  border: 1.5px solid #334155;
+  top: -1px;
+  transform: translateX(-50%);
+}
+.dark .temp-range-dot {
+  border-color: #e2e8f0;
+}
+
+/* ── Search History Items ────────────────────────────────────── */
+.search-history-label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: #94a3b8;
+  border-bottom: 1px solid rgba(226, 232, 240, 0.3);
+}
+.dark .search-history-label {
+  border-bottom-color: rgba(51, 65, 85, 0.4);
+}
+
+/* ── Temporal Compression Grid ─────────────────────────────── */
+.temporal-grid {
+  display: grid;
+  grid-template-columns: repeat(8, 1fr);
+  gap: 2px;
+}
+.temporal-block {
+  aspect-ratio: 1;
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+  cursor: pointer;
+  transition: transform 0.15s ease;
+}
+.temporal-block:hover {
+  transform: scale(1.15);
+}
+.temporal-day-label {
+  font-size: 8px;
+  font-weight: 600;
+  color: #94a3b8;
+  text-align: center;
+  padding-top: 4px;
+}
+.dark .temporal-day-label {
+  color: #64748b;
+}
+
+/* ── Cumulative Precip Curve ───────────────────────────────── */
+#cumulativeCurve svg {
+  display: block;
+}
+
+/* ── Time Machine Chevron Rotation ──────────────────────────── */
+.rotate-180 {
+  transform: rotate(180deg);
+}
+
+/* ── Active Toggle Indicators ──────────────────────────────── */
+.toggle-active {
+  background: rgba(99, 102, 241, 0.15);
+  border-color: #6366f1;
+}
+
+/* ── Temperature Tooltip ──────────────────────────────────── */
+.temp-tooltip {
+  background: transparent !important;
+  border: none !important;
+  box-shadow: none !important;
+  font-size: 11px !important;
+  font-weight: 700 !important;
+  color: #1e293b !important;
+}
+.dark .temp-tooltip {
+  color: #f1f5f9 !important;
+}
+.leaflet-tooltip-top.temp-tooltip::before {
+  display: none !important;
+}
+
+/* ── Compact Mode ─────────────────────────────────────────── */
+.compact #dailyForecast,
+.compact #hourlyStrip,
+.compact #bestWindowCard,
+.compact #sunArcSvg,
+.compact .moon-card,
+.compact #timeMachineDrawer,
+.compact #timeMachineTrigger,
+.compact #temporalGrid,
+.compact #predictiveArrival,
+.compact #anomalyLabel,
+.compact #patternLabel,
+.compact #momentumLabel,
+.compact #briefingBtn,
+.compact #briefingContent,
+.compact #paramImportance,
+.compact #spatialGradLabel,
+.compact #regimeLabel,
+.compact #analogLabel,
+.compact #freshnessLabel,
+.compact #confidenceToggle,
+.compact #signalNoiseBtn,
+.compact #cumulativeCurve,
+.compact #comparePanel {
+  display: none !important;
+}
+
+/* ── Reduced Motion ────────────────────────────────────────── */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+

@@ -19,8 +19,27 @@
  * ============================================================
  */
 
+import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js';
+import { getAuth, signInWithPopup, GoogleAuthProvider, signOut, onAuthStateChanged } from 'https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js';
+import { getFirestore, doc, setDoc, getDoc, deleteDoc } from 'https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js';
+
 class AurafiskyApp {
   constructor() {
+    // ── Firebase Configuration & State ────────────────────────
+    this.firebaseConfig = {
+      projectId: "aurafisky",
+      appId: "1:206842187982:web:994268ad1fa6290b45409f",
+      storageBucket: "aurafisky.firebasestorage.app",
+      apiKey: "AIzaSyCF0fSv5OUy05AnYZot4Y9Y07TnJjjNl1I",
+      authDomain: "aurafisky.firebaseapp.com",
+      messagingSenderId: "206842187982"
+    };
+    this.firebaseApp = null;
+    this.auth = null;
+    this.db = null;
+    this.user = null;
+    this.syncHistory = true;
+
     // ── State ──────────────────────────────────────────────────
     this.map = null;                    // Leaflet map instance
     this.lightTiles = null;             // Light tile layer
@@ -291,6 +310,30 @@ class AurafiskyApp {
       regimeLabel:      document.getElementById('regimeLabel'),
       spatialGradLabel: document.getElementById('spatialGradLabel'),
       analogLabel:      document.getElementById('analogLabel'),
+      
+      // Auth & Settings Dialogs
+      profileBtn:        document.getElementById('profileBtn'),
+      profileIconGeneric:document.getElementById('profileIconGeneric'),
+      profileAvatarImg:  document.getElementById('profileAvatarImg'),
+      accountDialog:     document.getElementById('accountDialog'),
+      accountCloseBtn:   document.getElementById('accountCloseBtn'),
+      accountLoggedOut:  document.getElementById('accountLoggedOut'),
+      googleSignInBtn:   document.getElementById('googleSignInBtn'),
+      accountLoggedIn:   document.getElementById('accountLoggedIn'),
+      accountAvatarImg:  document.getElementById('accountAvatarImg'),
+      accountName:       document.getElementById('accountName'),
+      accountEmail:      document.getElementById('accountEmail'),
+      syncStatusTime:    document.getElementById('syncStatusTime'),
+      accountSettingsBtn:document.getElementById('accountSettingsBtn'),
+      googleSignOutBtn:  document.getElementById('googleSignOutBtn'),
+      settingsPanel:     document.getElementById('settingsPanel'),
+      settingsCloseBtn:  document.getElementById('settingsCloseBtn'),
+      settingsUnitsToggle:document.getElementById('settingsUnitsToggle'),
+      settingsThemeToggle:document.getElementById('settingsThemeToggle'),
+      settingsCompactToggle:document.getElementById('settingsCompactToggle'),
+      settingsSyncHistoryToggle:document.getElementById('settingsSyncHistoryToggle'),
+      settingsClearCacheBtn:document.getElementById('settingsClearCacheBtn'),
+      settingsDeleteDataBtn:document.getElementById('settingsDeleteDataBtn'),
     };
 
     // ── Initialize ────────────────────────────────────────────
@@ -345,6 +388,9 @@ class AurafiskyApp {
 
     // Read shareable URL params (?lat=...&lng=...&name=...)
     this.readShareableUrl();
+
+    // Initialize Firebase Auth & Firestore
+    this.initFirebase();
   }
 
   // ================================================================
@@ -1597,6 +1643,7 @@ class AurafiskyApp {
     this.renderBookmarksList();
     this.updateStarUI();
     this.refreshBookmarkPins();
+    this.saveUserDataToCloud();
   }
 
   toggleFavoriteCurrentLocation() {
@@ -1783,6 +1830,8 @@ class AurafiskyApp {
     }
 
     this.showToast(`Switched to ${next === 'imperial' ? '°F / mph' : '°C / km/h'}`, 'success');
+    this.updateSettingsUIFromLocal();
+    this.saveUserDataToCloud();
   }
 
   syncUnitLabel() {
@@ -2212,6 +2261,8 @@ class AurafiskyApp {
       this.$.minimalModeBtn.innerHTML = '🗕';
       this.rebindPanelEvents();
     }
+    this.updateSettingsUIFromLocal();
+    this.saveUserDataToCloud();
   }
 
   rebindPanelEvents() {
@@ -2982,6 +3033,8 @@ class AurafiskyApp {
     const moonIcon = document.getElementById('darkModeIconMoon');
     if (sunIcon) sunIcon.classList.toggle('hidden', this.isDark);
     if (moonIcon) moonIcon.classList.toggle('hidden', !this.isDark);
+    this.updateSettingsUIFromLocal();
+    this.saveUserDataToCloud();
   }
 
   // ================================================================
@@ -3876,6 +3929,293 @@ class AurafiskyApp {
     if (!overlay) return;
     overlay.style.opacity = '0';
     setTimeout(() => overlay.remove(), 500);
+  }
+
+  // ================================================================
+  //  FIREBASE INTEGRATION & SECURITY
+  // ================================================================
+
+  initFirebase() {
+    try {
+      this.firebaseApp = initializeApp(this.firebaseConfig);
+      this.auth = getAuth(this.firebaseApp);
+      this.db = getFirestore(this.firebaseApp);
+
+      // Bind UI auth triggers
+      if (this.$.googleSignInBtn) {
+        this.$.googleSignInBtn.addEventListener('click', () => this.signInWithGoogle());
+      }
+      if (this.$.googleSignOutBtn) {
+        this.$.googleSignOutBtn.addEventListener('click', () => this.signOutUser());
+      }
+      if (this.$.profileBtn) {
+        this.$.profileBtn.addEventListener('click', () => this.toggleAccountDialog());
+      }
+      if (this.$.accountCloseBtn) {
+        this.$.accountCloseBtn.addEventListener('click', () => this.toggleAccountDialog(false));
+      }
+      if (this.$.accountSettingsBtn) {
+        this.$.accountSettingsBtn.addEventListener('click', () => {
+          this.toggleAccountDialog(false);
+          this.toggleSettingsPanel(true);
+        });
+      }
+      if (this.$.settingsCloseBtn) {
+        this.$.settingsCloseBtn.addEventListener('click', () => this.toggleSettingsPanel(false));
+      }
+      
+      // Settings triggers
+      if (this.$.settingsUnitsToggle) {
+        this.$.settingsUnitsToggle.addEventListener('change', (e) => {
+          const useFahrenheit = e.target.checked;
+          WeatherService.setUnits(useFahrenheit ? 'imperial' : 'metric');
+          this.syncUnitLabel();
+          // Force display update
+          if (this.weatherData) this.updateWeatherDisplay(this.currentHourIndex);
+          this.saveUserDataToCloud();
+        });
+      }
+      if (this.$.settingsThemeToggle) {
+        this.$.settingsThemeToggle.addEventListener('change', () => {
+          this.toggleDarkMode();
+          this.saveUserDataToCloud();
+        });
+      }
+      if (this.$.settingsCompactToggle) {
+        this.$.settingsCompactToggle.addEventListener('change', () => {
+          this.toggleMinimalMode();
+          this.saveUserDataToCloud();
+        });
+      }
+      if (this.$.settingsSyncHistoryToggle) {
+        this.$.settingsSyncHistoryToggle.addEventListener('change', (e) => {
+          this.syncHistory = e.target.checked;
+          this.saveUserDataToCloud();
+        });
+      }
+      if (this.$.settingsClearCacheBtn) {
+        this.$.settingsClearCacheBtn.addEventListener('click', () => {
+          localStorage.clear();
+          this.showToast('Local cache cleared. Reloading...', 'success');
+          setTimeout(() => window.location.reload(), 1500);
+        });
+      }
+      if (this.$.settingsDeleteDataBtn) {
+        this.$.settingsDeleteDataBtn.addEventListener('click', () => this.deleteCloudUserData());
+      }
+
+      // Track auth state shifts
+      onAuthStateChanged(this.auth, (user) => {
+        if (user) {
+          this.user = user;
+          this.onUserSignIn();
+        } else {
+          this.user = null;
+          this.onUserSignOut();
+        }
+      });
+    } catch (e) {
+      console.error('Firebase initialization failed:', e);
+      this.showToast('Firebase connection failed.', 'error');
+    }
+  }
+
+  async signInWithGoogle() {
+    const provider = new GoogleAuthProvider();
+    try {
+      await signInWithPopup(this.auth, provider);
+      this.showToast('Logged in successfully.', 'success');
+    } catch (e) {
+      console.error('Google Sign-In failed:', e);
+      this.showToast('Google Sign-In failed.', 'error');
+    }
+  }
+
+  async signOutUser() {
+    try {
+      await signOut(this.auth);
+      this.showToast('Logged out successfully.', 'success');
+      this.toggleAccountDialog(false);
+    } catch (e) {
+      console.error('Sign out failed:', e);
+      this.showToast('Sign out failed.', 'error');
+    }
+  }
+
+  async onUserSignIn() {
+    if (this.$.profileIconGeneric) this.$.profileIconGeneric.classList.add('hidden');
+    if (this.$.profileAvatarImg) {
+      this.$.profileAvatarImg.src = this.user.photoURL || '';
+      this.$.profileAvatarImg.classList.remove('hidden');
+    }
+
+    if (this.$.accountLoggedOut) this.$.accountLoggedOut.classList.add('hidden');
+    if (this.$.accountLoggedIn) this.$.accountLoggedIn.classList.remove('hidden');
+    if (this.$.googleSignOutBtn) this.$.googleSignOutBtn.classList.remove('hidden');
+    if (this.$.accountAvatarImg) this.$.accountAvatarImg.src = this.user.photoURL || '';
+    if (this.$.accountName) this.$.accountName.textContent = this.user.displayName || 'Google User';
+    if (this.$.accountEmail) this.$.accountEmail.textContent = this.user.email || '';
+
+    await this.loadUserDataFromCloud();
+  }
+
+  onUserSignOut() {
+    if (this.$.profileIconGeneric) this.$.profileIconGeneric.classList.remove('hidden');
+    if (this.$.profileAvatarImg) {
+      this.$.profileAvatarImg.src = '';
+      this.$.profileAvatarImg.classList.add('hidden');
+    }
+
+    if (this.$.accountLoggedOut) this.$.accountLoggedOut.classList.remove('hidden');
+    if (this.$.accountLoggedIn) this.$.accountLoggedIn.classList.add('hidden');
+    if (this.$.googleSignOutBtn) this.$.googleSignOutBtn.classList.add('hidden');
+
+    this.loadBookmarks();
+    this.updateSettingsUIFromLocal();
+  }
+
+  async loadUserDataFromCloud() {
+    if (!this.user) return;
+    try {
+      const userDocRef = doc(this.db, 'users', this.user.uid);
+      const userDoc = await getDoc(userDocRef);
+      
+      if (userDoc.exists()) {
+        const data = userDoc.data();
+        
+        if (data.bookmarks) {
+          this.bookmarks = data.bookmarks;
+          WeatherService.safeSetItem('weathermap_bookmarks', JSON.stringify(this.bookmarks));
+          this.renderBookmarksList();
+          this.updateStarUI();
+          this.refreshBookmarkPins();
+        }
+
+        if (data.searchHistory) {
+          WeatherService.safeSetItem(this.searchHistoryKey, JSON.stringify(data.searchHistory));
+        }
+
+        if (data.preferences) {
+          const prefs = data.preferences;
+          
+          if (prefs.units) {
+            WeatherService.setUnits(prefs.units);
+            this.syncUnitLabel();
+          }
+          
+          if (prefs.theme != null) {
+            const wantDark = prefs.theme === 'dark';
+            if (wantDark !== this.isDark) {
+              this.toggleDarkMode();
+            }
+          }
+          
+          if (prefs.compact != null) {
+            const wantCompact = prefs.compact;
+            if (wantCompact !== this.minimalMode) {
+              this.toggleMinimalMode();
+            }
+          }
+
+          if (prefs.syncHistory != null) {
+            this.syncHistory = prefs.syncHistory;
+          }
+        }
+        
+        this.updateSettingsUIFromLocal();
+        
+        if (this.$.syncStatusTime) {
+          this.$.syncStatusTime.textContent = 'Last synced: ' + new Date().toLocaleTimeString();
+        }
+        this.showToast('Cloud settings synchronized.', 'success');
+      } else {
+        await this.saveUserDataToCloud();
+      }
+    } catch (e) {
+      console.error('Error loading data from Firestore:', e);
+      this.showToast('Could not load cloud settings.', 'error');
+    }
+  }
+
+  async saveUserDataToCloud() {
+    if (!this.user) return;
+    try {
+      const userDocRef = doc(this.db, 'users', this.user.uid);
+      
+      const units = WeatherService.getUnits();
+      const theme = this.isDark ? 'dark' : 'light';
+      const compact = this.minimalMode || false;
+      const searchHist = this.syncHistory ? (JSON.parse(localStorage.getItem(this.searchHistoryKey)) || []) : [];
+
+      const dataToSave = {
+        preferences: {
+          units,
+          theme,
+          compact,
+          syncHistory: this.syncHistory
+        },
+        bookmarks: this.bookmarks,
+        searchHistory: searchHist,
+        updatedAt: new Date().toISOString()
+      };
+
+      await setDoc(userDocRef, dataToSave, { merge: true });
+      if (this.$.syncStatusTime) {
+        this.$.syncStatusTime.textContent = 'Last synced: ' + new Date().toLocaleTimeString();
+      }
+    } catch (e) {
+      console.error('Error writing settings to cloud:', e);
+    }
+  }
+
+  async deleteCloudUserData() {
+    if (!this.user) return;
+    if (!confirm('Are you sure you want to delete all your cloud data? This cannot be undone.')) return;
+    try {
+      const userDocRef = doc(this.db, 'users', this.user.uid);
+      await deleteDoc(userDocRef);
+      this.showToast('Cloud data deleted successfully.', 'success');
+      this.toggleSettingsPanel(false);
+      await this.signOutUser();
+    } catch (e) {
+      console.error('Error deleting cloud data:', e);
+      this.showToast('Could not delete cloud data.', 'error');
+    }
+  }
+
+  toggleAccountDialog(force) {
+    if (!this.$.accountDialog) return;
+    const isHidden = this.$.accountDialog.classList.contains('hidden');
+    const show = force !== undefined ? force : isHidden;
+    this.$.accountDialog.classList.toggle('hidden', !show);
+  }
+
+  toggleSettingsPanel(force) {
+    if (!this.$.settingsPanel) return;
+    const isHidden = this.$.settingsPanel.classList.contains('hidden');
+    const show = force !== undefined ? force : isHidden;
+    if (show) {
+      this.$.settingsPanel.classList.remove('hidden');
+      setTimeout(() => this.$.settingsPanel.classList.add('open'), 10);
+    } else {
+      this.$.settingsPanel.classList.remove('open');
+      setTimeout(() => this.$.settingsPanel.classList.add('hidden'), 400);
+    }
+  }
+
+  updateSettingsUIFromLocal() {
+    if (this.$.settingsUnitsToggle) {
+      this.$.settingsUnitsToggle.checked = WeatherService.getUnits() === 'imperial';
+    }
+    if (this.$.settingsThemeToggle) {
+      this.$.settingsThemeToggle.checked = this.isDark;
+    }
+    if (this.$.settingsCompactToggle) {
+      this.$.settingsCompactToggle.checked = this.minimalMode || false;
+    }
+    if (this.$.settingsSyncHistoryToggle) {
+      this.$.settingsSyncHistoryToggle.checked = this.syncHistory;
+    }
   }
 }
 

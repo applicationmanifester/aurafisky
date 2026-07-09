@@ -1897,6 +1897,13 @@ class AurafiskyApp {
       return;
     }
 
+    const latDiff = Math.abs(this.selectedLat - favLocation.lat);
+    const lngDiff = Math.abs(this.selectedLng - favLocation.lng);
+    if (latDiff < 0.01 && lngDiff < 0.01) {
+      this.showToast('You cannot compare a location with itself. Select a different location on the map first.', 'warning');
+      return;
+    }
+
     this.showToast(`Comparing with ${favLocation.name}...`, 'info');
 
     try {

@@ -230,7 +230,7 @@ class AurafiskyApp {
       shortcutsCloseBtn: document.getElementById('shortcutsCloseBtn'),
       appInfoModal:      document.getElementById('appInfoModal'),
       appInfoCloseBtn:   document.getElementById('appInfoCloseBtn'),
-      appInfoBtn:        document.getElementById('appInfoBtn'),
+      logoBtn:           document.getElementById('logoBtn'),
 
       // Advisory Alert Elements
       advisoryBanner:    document.getElementById('advisoryBanner'),
@@ -3972,8 +3972,8 @@ Wind: ${WeatherService.formatWind(weather.windSpeed)} ${WeatherService.getWindDi
         if (e.target === this.$.appInfoModal) this.toggleAppInfoModal();
       });
     }
-    if (this.$.appInfoBtn) {
-      this.$.appInfoBtn.addEventListener('click', () => this.toggleAppInfoModal());
+    if (this.$.logoBtn) {
+      this.$.logoBtn.addEventListener('click', () => this.toggleAppInfoModal());
     }
   }
 

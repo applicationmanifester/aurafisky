@@ -127,7 +127,7 @@
       </div>
 
       <!-- Search Card -->
-      <div class="flex-1 pointer-events-auto glass rounded-2xl overflow-hidden h-11 shadow-sm">
+      <div class="relative flex-1 pointer-events-auto glass rounded-2xl h-11 shadow-sm">
         <div class="flex items-center px-4 h-full">
           <!-- Search Icon -->
           <svg class="w-5 h-5 text-slate-400 dark:text-slate-500 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
@@ -152,13 +152,13 @@
         </div>
 
         <!-- Search Results Dropdown -->
-        <div id="searchDropdown" class="search-dropdown border-t border-slate-200/60 dark:border-slate-600/30">
+        <div id="searchDropdown" class="absolute top-14 left-0 right-0 z-[1002] glass rounded-2xl search-dropdown border border-slate-200/60 dark:border-slate-600/30 p-2 mt-1">
           <div id="searchResults" class="py-1"></div>
         </div>
       </div>
 
       <!-- Control Buttons -->
-      <div class="flex gap-1.5 pointer-events-auto overflow-x-auto hide-scrollbar flex-nowrap">
+      <div class="flex gap-1.5 pointer-events-auto flex-nowrap">
         <!-- My Location -->
         <button
           id="myLocationBtn"

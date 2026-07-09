@@ -1,4 +1,4 @@
-const CACHE_NAME = 'aurafisky-v8';
+const CACHE_NAME = 'aurafisky-v15';
 const ASSETS = [
   './',
   './index.html',

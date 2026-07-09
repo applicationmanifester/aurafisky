@@ -181,6 +181,9 @@ class AurafiskyApp {
       radarOpacitySlider:document.getElementById('radarOpacitySlider'),
       legendPrecip:     document.getElementById('legendPrecip'),
       legendTemp:       document.getElementById('legendTemp'),
+      radarMinimizeBtn:  document.getElementById('radarMinimizeBtn'),
+      radarCollapsedBtn: document.getElementById('radarCollapsedBtn'),
+      radarExpandedPanel:document.getElementById('radarExpandedPanel'),
       zoomInBtn:        document.getElementById('zoomInBtn'),
       zoomOutBtn:       document.getElementById('zoomOutBtn'),
 
@@ -513,6 +516,17 @@ class AurafiskyApp {
     this.$.zoomInBtn?.addEventListener('click', () => this.map?.zoomIn());
     this.$.zoomOutBtn?.addEventListener('click', () => this.map?.zoomOut());
     this.$.radarToggleBtn.addEventListener('click', () => this.toggleRadar());
+
+    if (this.$.radarMinimizeBtn && this.$.radarCollapsedBtn && this.$.radarExpandedPanel) {
+      this.$.radarMinimizeBtn.addEventListener('click', () => {
+        this.$.radarExpandedPanel.classList.add('hidden');
+        this.$.radarCollapsedBtn.classList.remove('hidden');
+      });
+      this.$.radarCollapsedBtn.addEventListener('click', () => {
+        this.$.radarCollapsedBtn.classList.add('hidden');
+        this.$.radarExpandedPanel.classList.remove('hidden');
+      });
+    }
     this.$.layerTypeSelect.addEventListener('change', (e) => {
       this.overlayType = e.target.value;
       if (this.radarActive) {

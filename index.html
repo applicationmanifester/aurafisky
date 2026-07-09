@@ -39,12 +39,14 @@
   <link rel="dns-prefetch" href="https://www.gstatic.com" />
   <link rel="preconnect" href="https://api.open-meteo.com" />
   <link rel="preconnect" href="https://geocoding-api.open-meteo.com" />
+  <link rel="preconnect" href="https://cdn.tailwindcss.com" />
+  <link rel="preconnect" href="https://unpkg.com" crossorigin />
 
   <!-- Leaflet.js (open-source map library) -->
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
         integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
-          integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+          integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin="" defer></script>
 
   <!-- Tailwind CSS (CDN) -->
   <script src="https://cdn.tailwindcss.com"></script>
@@ -1105,9 +1107,9 @@
   <!-- ============================================================ -->
   <!-- SCRIPTS                                                      -->
   <!-- ============================================================ -->
-  <script src="weather.js"></script>
-  <script src="modules/dom-utils.js"></script>
-  <script src="modules/toast.js"></script>
+  <script src="weather.js" defer></script>
+  <script src="modules/dom-utils.js" defer></script>
+  <script src="modules/toast.js" defer></script>
   <script type="module" src="app.js"></script>
 
 </body>

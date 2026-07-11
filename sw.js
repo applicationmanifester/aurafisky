@@ -78,21 +78,23 @@ async function cacheTile(request) {
   }
 }
 
-function respondWithFetch(request, fallbackResponse) {
-  return fetch(request)
-    .then((res) => res)
-    .catch(() => fallbackResponse);
-}
-
 self.addEventListener("fetch", (e) => {
   const url = e.request.url;
 
-  // Bypass completely for CDN/third-party assets — let browser handle natively
+  // CDN/third-party libs — let the browser handle natively.
   if (url.includes("unpkg.com") || url.includes("cdn.jsdelivr.net")) {
     return;
   }
 
-  // Cache bypass for live API calls, Firebase, and Google Auth
+  // Map tiles (CartoDB) — bounded LRU cache for instant repeat visits.
+  if (url.includes("basemaps.cartocdn.com")) {
+    e.respondWith(cacheTile(e.request));
+    return;
+  }
+
+  // Live API / Firebase / Auth — go DIRECT. Previously we synthesized a
+  // 503 here; that fabricated error confused the console and the SDKs.
+  // Let the browser surface real network errors instead.
   if (
     url.includes("api.open-meteo.com") ||
     url.includes("rainviewer.com") ||
@@ -102,54 +104,29 @@ self.addEventListener("fetch", (e) => {
     url.includes("googleapis.com") ||
     url.includes("gstatic.com")
   ) {
+    return;
+  }
+
+  // Same-origin assets only: stale-while-revalidate. On failure fall back
+  // to cache; never return a synthetic 503 — propagate the real error.
+  if (e.request.method === "GET" && url.startsWith(self.location.origin)) {
     e.respondWith(
-      fetch(e.request)
-        .then((res) => res)
-        .catch(() =>
-          new Response(JSON.stringify({ error: "offline" }), {
-            status: 503,
-            statusText: "Offline",
-            headers: { "Content-Type": "application/json" },
-          })
-        )
-    );
-    return;
-  }
-
-  // Cache map tiles (CartoDB) so repeat visits render instantly. Bounded LRU.
-  if (url.includes("basemaps.cartocdn.com")) {
-    e.respondWith(cacheTile(e.request));
-    return;
-  }
-
-  // Stale-While-Revalidate for local assets
-  e.respondWith(
-    (async () => {
-      try {
+      (async () => {
         const cached = await caches.match(e.request);
-        const networkResponse = await fetch(e.request);
-        if (
-          networkResponse &&
-          networkResponse.status === 200 &&
-          e.request.method === "GET" &&
-          e.request.url.startsWith(self.location.origin)
-        ) {
-          const responseToCache = networkResponse.clone();
-          const cache = await caches.open(CACHE_NAME);
-          await cache.put(e.request, responseToCache);
+        try {
+          const networkResponse = await fetch(e.request);
+          if (networkResponse && networkResponse.status === 200) {
+            const cache = await caches.open(CACHE_NAME);
+            cache.put(e.request, networkResponse.clone());
+          }
+          return networkResponse;
+        } catch (err) {
+          if (cached) return cached;
+          throw err; // let the browser surface the genuine network error
         }
-        return networkResponse;
-      } catch (err) {
-        const cached = await caches.match(e.request);
-        const fallback = new Response("", {
-          status: 503,
-          statusText: "Offline",
-          headers: { "Content-Type": "text/plain" },
-        });
-        return cached || fallback;
-      }
-    })()
-  );
+      })()
+    );
+  }
 });
 
 // Handle notification clicks (focus or open PWA)

@@ -387,6 +387,14 @@ class AurafiskyApp {
       notifyIntervalSelect: document.getElementById("notifyIntervalSelect"),
     };
 
+    // ── Loading-overlay watchdog ──────────────────────────────
+    // Guarantee the overlay never permanently blocks the UI, even if init()
+    // throws before hideLoadingOverlay() runs. Force it gone after 8s.
+    setTimeout(() => {
+      const ov = this.$.loadingOverlay;
+      if (ov && ov.isConnected) this.hideLoadingOverlay();
+    }, 8000);
+
     // ── Initialize ────────────────────────────────────────────
     this.init();
   }
@@ -5374,6 +5382,9 @@ ${precipProb > 0 ? `<span class="text-[9px] sm:text-[10px] text-blue-500 font-se
   hideLoadingOverlay() {
     const overlay = this.$.loadingOverlay;
     if (!overlay) return;
+    // Drop pointer events immediately so the fading overlay never eats
+    // clicks on the UI underneath it.
+    overlay.style.pointerEvents = "none";
     overlay.style.opacity = "0";
     setTimeout(() => overlay.remove(), 500);
   }

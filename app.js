@@ -788,6 +788,21 @@ class AurafiskyApp {
     window.addEventListener("online", this._boundOnline);
     window.addEventListener("offline", this._boundOffline);
 
+    // ── Self-refresh on return (so users never rely on the 5-min toggle) ──
+    // Re-fetch only when the data is stale (≥5 min) after the tab is hidden
+    // and refocused. Silent: no toast, no timer — just keeps data honest.
+    this._boundRefocus = () => {
+      if (document.visibilityState === "hidden") return;
+      const stale =
+        !this.freshnessTimestamp ||
+        Date.now() - this.freshnessTimestamp > 300000;
+      if (stale && this.selectedLat != null && !this._isFetching && !this.isOffline) {
+        this.selectLocation(this.selectedLat, this.selectedLng, this.selectedName);
+      }
+    };
+    document.addEventListener("visibilitychange", this._boundRefocus);
+    window.addEventListener("focus", this._boundRefocus);
+
     // ── PWA Install Prompt ──────────────────────────────────
     this._isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) ||
       (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
@@ -4344,6 +4359,8 @@ ${precipProb > 0 ? `<span class="text-[9px] sm:text-[10px] text-blue-500 font-se
     window.removeEventListener("online", this._boundOnline);
     window.removeEventListener("offline", this._boundOffline);
     window.removeEventListener("resize", this._boundResize);
+    document.removeEventListener("visibilitychange", this._boundRefocus);
+    window.removeEventListener("focus", this._boundRefocus);
     this.$.searchInput?.removeEventListener("focus", this._boundSearchFocus);
     this.audioContext?.close().catch(() => {});
     if (this.animationFrameId) {

@@ -1039,6 +1039,7 @@ class AurafiskyApp {
       this._persistSession(lat, lng, name);
 
       const wasMinimal = this.minimalMode;
+      let weatherPopulated = false;
       if (wasMinimal) {
         const panel = this.$.weatherPanel;
         this.setSafeHTML(panel, panel.dataset.fullContent || "");
@@ -1107,6 +1108,7 @@ class AurafiskyApp {
         this.freshnessTimestamp = Date.now();
 
         this.updateOfflineBadge(false);
+        weatherPopulated = true;
 
         // Populate slider timeline tick boundaries
         this.initTimeline();
@@ -1161,6 +1163,7 @@ class AurafiskyApp {
 
           this.updateOfflineBadge(true);
           this.showToast("Loaded cached offline weather details.", "info");
+          weatherPopulated = true;
 
           this.initTimeline();
           this.$.timelineSlider.value = this.currentHourIndex;
@@ -1195,8 +1198,8 @@ class AurafiskyApp {
       this.updateHomeButton();
       this.updateHomeMarker();
 
-      // Re-enter minimal mode if it was active
-      if (wasMinimal) {
+      // Re-enter minimal mode if it was active AND we have valid weather to show
+      if (wasMinimal && weatherPopulated) {
         document.documentElement.classList.add("compact");
         const panel = this.$.weatherPanel;
         // Preserve current HTML safely before switching to minimal view.
@@ -2202,7 +2205,6 @@ class AurafiskyApp {
     this._timelineRAF = requestAnimationFrame(() => {
       // Invalidate cached decomposition on hour change
       this._cachedDecomposition = null;
-      this._isFetching = false;
       this.updateWeatherDisplay(hourIndex);
       // Keep the minimised card in sync with the selected hour
       if (this.minimalMode) this.enterMinimalMode();
@@ -3282,6 +3284,11 @@ ${precipProb > 0 ? `<span class="text-[9px] sm:text-[10px] text-blue-500 font-se
     if (!panel.dataset.fullContent || panel.querySelector("#weatherPanelContent")) {
       panel.dataset.fullContent = panel.innerHTML;
     }
+    const minimalWeather =
+      WeatherService.getHourlyAtIndex(
+        this.weatherData,
+        parseInt(this.$.timelineSlider.value, 10),
+      ) || {};
     const minimalHTML = `
       <div class="flex items-center justify-between px-5 pt-5 pb-3">
         <div class="min-w-0 flex-1">
@@ -3295,9 +3302,9 @@ ${precipProb > 0 ? `<span class="text-[9px] sm:text-[10px] text-blue-500 font-se
       </div>
       <div class="flex-1 flex items-center justify-center px-5 pb-5">
         <div class="text-center">
-          <div class="text-7xl mb-3">${this.$.panelIcon.textContent}</div>
-          <div class="text-6xl font-extrabold text-slate-900 dark:text-white mb-2">${this.$.panelTemp.textContent}</div>
-          <div class="text-lg text-slate-500 dark:text-slate-400 mb-1">${this.$.panelDescription.textContent}</div>
+          <div class="text-7xl mb-3">${minimalWeather.icon || this.$.panelIcon.textContent}</div>
+          <div class="text-6xl font-extrabold text-slate-900 dark:text-white mb-2">${minimalWeather.temperature != null ? WeatherService.formatTemp(minimalWeather.temperature) : this.$.panelTemp.textContent}</div>
+          <div class="text-lg text-slate-500 dark:text-slate-400 mb-1">${minimalWeather.description || this.$.panelDescription.textContent}</div>
           <div class="text-sm text-slate-400">${WeatherService.formatDateTime(this.weatherData?.hourly?.time[parseInt(this.$.timelineSlider.value)], this.weatherData?.timezone, this.weatherData?.utc_offset_seconds)}</div>
         </div>
       </div>

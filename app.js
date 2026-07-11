@@ -554,6 +554,13 @@ class AurafiskyApp {
       setTimeout(() => this.map && this.map.invalidateSize(), 100);
       setTimeout(() => this.map && this.map.invalidateSize(), 500);
       setTimeout(() => this.map && this.map.invalidateSize(), 1500);
+
+      // Re-fit Leaflet tiles when the mobile URL bar shows/hides (visual viewport)
+      if (window.visualViewport) {
+        const onVV = () => this.map && this.map.invalidateSize();
+        window.visualViewport.addEventListener("resize", onVV);
+        window.visualViewport.addEventListener("scroll", onVV);
+      }
     } catch (error) {
       console.error("Leaflet initialization failed:", error);
       this.hideLoadingOverlay();

@@ -18,6 +18,21 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <script>
+    // Set --app-height to the *visual* viewport height so fixed full-screen
+    // layouts (map) never extend behind the mobile browser URL bar.
+    function setAppHeight() {
+      document.documentElement.style.setProperty('--app-height', window.innerHeight + 'px');
+    }
+    setAppHeight();
+    window.addEventListener('resize', setAppHeight);
+    if (window.visualViewport) {
+      window.visualViewport.addEventListener('resize', setAppHeight);
+      window.visualViewport.addEventListener('scroll', setAppHeight);
+    }
+  </script>
   <title>Aurafisky — Live Weather Explorer</title>
   <meta name="description" content="Interactive weather map with real-time conditions, hourly forecasts, and a time-travel slider. No API keys needed." />
   <link rel="icon" type="image/png" href="icon-192.png" />

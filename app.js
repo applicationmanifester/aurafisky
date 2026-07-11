@@ -475,6 +475,7 @@ class AurafiskyApp {
           updateWhenIdle: false,
           updateWhenZooming: false,
           keepBuffer: 2,
+          noWrap: true,
         },
       );
 
@@ -488,6 +489,7 @@ class AurafiskyApp {
           updateWhenIdle: false,
           updateWhenZooming: false,
           keepBuffer: 2,
+          noWrap: true,
         },
       );
 
@@ -497,6 +499,17 @@ class AurafiskyApp {
       } else {
         this.lightTiles.addTo(this.map);
       }
+
+      // Hard-enforce map bounds so panning can never escape the map area
+      // (esp. on mobile where inertia can outrun maxBoundsViscosity)
+      const MAP_BOUNDS = [[-90, -180], [90, 180]];
+      this.map.setMaxBounds(MAP_BOUNDS);
+      this.map.on("moveend", () => {
+        const c = this.map.getCenter();
+        if (c.lat < -90 || c.lat > 90 || c.lng < -180 || c.lng > 180) {
+          this.map.setView([20.0, 0.0], Math.max(this.map.getZoom(), 3));
+        }
+      });
 
       // Zoom controls are integrated into radar controls panel instead
 
@@ -2257,6 +2270,7 @@ class AurafiskyApp {
         zIndex: 500,
         maxZoom: 18,
         maxNativeZoom: 7,
+        noWrap: true,
       },
     );
     this.radarLayers[index] = newLayer;
@@ -2404,7 +2418,7 @@ class AurafiskyApp {
   }
 
   toggleFavoriteCurrentLocation() {
-    if (!this.selectedLat || !this.selectedLng) return;
+    if (this.selectedLat == null || this.selectedLng == null) return;
 
     if (!this.user) {
       this.toggleAccountDialog(true);
@@ -2432,7 +2446,7 @@ class AurafiskyApp {
   }
 
   isCurrentLocationFavorited() {
-    if (!this.selectedLat || !this.selectedLng) return false;
+    if (this.selectedLat == null || this.selectedLng == null) return false;
     return this.bookmarks.some(
       (b) =>
         Math.abs(b.lat - this.selectedLat) < 0.0001 &&
@@ -6108,10 +6122,17 @@ ${precipProb > 0 ? `<span class="text-[9px] sm:text-[10px] text-blue-500 font-se
 }
 
 // ── Instantiate App ─────────────────────────────────────────────
-document.addEventListener("DOMContentLoaded", () => {
+// app.js is an ES module (deferred), so DOMContentLoaded may have
+// already fired by the time this evaluates. Instantiate immediately
+// if the DOM is ready, otherwise wait for it.
+function bootAurafisky() {
   window.app = new AurafiskyApp();
-  // Cleanup on page unload
   window.addEventListener("beforeunload", () => {
     if (window.app?.destroy) window.app.destroy();
   });
-});
+}
+if (document.readyState === "loading") {
+  document.addEventListener("DOMContentLoaded", bootAurafisky);
+} else {
+  bootAurafisky();
+}

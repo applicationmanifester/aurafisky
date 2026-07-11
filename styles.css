@@ -898,5 +898,43 @@ button, a, input, select, textarea, [role="button"] {
   touch-action: manipulation;
 }
 
+/* Home location marker on the map */
+.home-marker {
+  background: transparent;
+  border: none;
+}
+.home-marker-pin {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 50% 50% 50% 0;
+  transform: rotate(-45deg);
+  background: linear-gradient(135deg, #f59e0b, #d97706);
+  color: #fff;
+  font-size: 18px;
+  line-height: 1;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.35);
+  border: 2px solid #fff;
+}
+.home-marker-pin::before {
+  content: "\2302"; /* ⌂ house symbol */
+  transform: rotate(45deg);
+}
+.home-tooltip {
+  background: #1f2937;
+  color: #fff;
+  border: none;
+  border-radius: 8px;
+  font-size: 11px;
+  font-weight: 600;
+  padding: 3px 8px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+}
+.home-tooltip::before {
+  border-top-color: #1f2937;
+}
+
 
 

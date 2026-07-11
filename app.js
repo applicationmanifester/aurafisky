@@ -2590,9 +2590,9 @@ class AurafiskyApp {
     if (this.defaultLocation) {
       const icon = L.divIcon({
         className: "home-marker",
-        html: '<div style="font-size:22px;line-height:1;text-align:center;filter:drop-shadow(0 1px 3px rgba(0,0,0,0.4))">🏠</div>',
-        iconSize: [28, 28],
-        iconAnchor: [14, 14],
+        html: '<span class="home-marker-pin" aria-hidden="true">⌂</span>',
+        iconSize: [34, 34],
+        iconAnchor: [17, 17],
       });
       this._homeMarker = L.marker(
         [this.defaultLocation.lat, this.defaultLocation.lng],

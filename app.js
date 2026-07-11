@@ -353,7 +353,7 @@ class AurafiskyApp {
       accountEmail: document.getElementById("accountEmail"),
       syncStatusTime: document.getElementById("syncStatusTime"),
       accountSettingsBtn: document.getElementById("accountSettingsBtn"),
-      topSettingsBtn: document.getElementById("topSettingsBtn"),
+      profileBtn: document.getElementById("profileBtn"),
       googleSignOutBtn: document.getElementById("googleSignOutBtn"),
       settingsPanel: document.getElementById("settingsPanel"),
       settingsCloseBtn: document.getElementById("settingsCloseBtn"),
@@ -5416,11 +5416,6 @@ ${precipProb > 0 ? `<span class="text-[9px] sm:text-[10px] text-blue-500 font-se
           this.toggleAccountDialog(false);
           this.toggleSettingsPanel(true);
         });
-      }
-      if (this.$.topSettingsBtn) {
-        this.$.topSettingsBtn.addEventListener("click", () =>
-          this.toggleSettingsPanel(true),
-        );
       }
       if (this.$.settingsCloseBtn) {
         this.$.settingsCloseBtn.addEventListener("click", () =>

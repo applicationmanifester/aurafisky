@@ -250,6 +250,7 @@ const WeatherService = (() => {
    * @returns {Object} Weather snapshot for that hour
    */
   function getHourlyAtIndex(data, index) {
+    if (!data?.hourly?.time) return null;
     const h = data.hourly;
     if (index < 0 || index >= h.time.length) return null;
 
@@ -285,6 +286,7 @@ const WeatherService = (() => {
    * @returns {number} Index of the current hour
    */
   function getCurrentHourIndex(data) {
+    if (!data?.hourly?.time) return 0;
     const now = new Date();
     const times = data.hourly.time;
     let closest = 0;
@@ -307,6 +309,7 @@ const WeatherService = (() => {
    * @returns {Array<Object>} Array of daily forecast objects
    */
   function getDailyForecast(data) {
+    if (!data?.daily?.time) return [];
     const d = data.daily;
     return d.time.map((date, i) => {
       const code = d.weather_code[i] ?? 0;

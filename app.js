@@ -1684,10 +1684,10 @@ class AurafiskyApp {
     }
 
     const h = this.airQualityData.hourly;
-    const aqiVal = h.us_aqi[hourIndex];
-    const pm25 = h.pm2_5[hourIndex];
-    const pm10 = h.pm10[hourIndex];
-    const ozone = h.ozone[hourIndex];
+    const aqiVal = h.us_aqi?.[hourIndex];
+    const pm25 = h.pm2_5?.[hourIndex];
+    const pm10 = h.pm10?.[hourIndex];
+    const ozone = h.ozone?.[hourIndex];
 
     const info = WeatherService.getAQIInfo(aqiVal);
 
@@ -1769,7 +1769,7 @@ class AurafiskyApp {
    * Supports confidence bands, signal/noise decomposition, and probabilistic precip curves.
    */
   drawHourlySparkline(selectedHourIndex) {
-    if (!this.weatherData) return;
+    if (!this.weatherData?.hourly?.time) return;
 
     const totalHours = this.weatherData.hourly.time.length;
     let startIdx = Math.max(0, selectedHourIndex - 12);
@@ -2162,7 +2162,8 @@ class AurafiskyApp {
 
   updateTrackColors() {
     if (!this.weatherData?.hourly?.weather_code) return;
-    const totalHours = this.weatherData.hourly.time.length;
+    const totalHours = this.weatherData?.hourly?.time?.length;
+    if (!totalHours) return;
     const colors = [];
     for (let i = 0; i < totalHours; i++) {
       const code = this.weatherData.hourly.weather_code[i];
@@ -4499,6 +4500,7 @@ ${precipProb > 0 ? `<span class="text-[9px] sm:text-[10px] text-blue-500 font-se
 
   hideWeatherPanel() {
     this.$.weatherPanel.classList.remove("open", "minimized");
+    document.documentElement.classList.remove("compact");
     if (this.$.panelMinimizeBtn) {
       this.$.panelMinimizeBtn.classList.remove("chevron-flipped");
     }

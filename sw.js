@@ -3,7 +3,7 @@ importScripts(
 );
 importScripts("weather.js");
 importScripts("src/icons.js");
-const CACHE_NAME = "aurafisky-v28";
+const CACHE_NAME = "aurafisky-v29";
 const ASSETS = [
   "./",
   "./index.html",
@@ -17,11 +17,12 @@ const ASSETS = [
   "./modules/dom-utils.js",
   "./modules/toast.js",
   "./manifest.json",
+  "./styles.css",
   "./css/tailwind.css",
   "https://unpkg.com/leaflet@1.9.4/dist/leaflet.css",
   "https://unpkg.com/leaflet@1.9.4/dist/leaflet.js",
   "https://cdn.jsdelivr.net/npm/localforage@1.10.0/dist/localforage.min.js",
-  "https://cdn.jsdelivr.net/npm/dompurify@3.1.6/dist/purify.min.js",
+  "https://cdn.jsdelivr.net/npm/dompurify@3.0.6/dist/purify.min.js",
 ];
 
 // Minimal offline page served when a navigation fails and nothing is cached.
@@ -100,8 +101,29 @@ async function cacheTile(request) {
 self.addEventListener("fetch", (e) => {
   const url = e.request.url;
 
-  // CDN/third-party libs — let the browser handle natively.
+  // CDN/third-party libs — serve cache-first so the app works offline.
+  // The assets are precached at install; this avoids the dead-cache bug
+  // where Leaflet/localforage/DOMPurify were never served from the Cache API.
   if (url.includes("unpkg.com") || url.includes("cdn.jsdelivr.net")) {
+    e.respondWith(
+      (async () => {
+        const cache = await caches.open(CACHE_NAME);
+        const cached = await cache.match(e.request);
+        if (cached) return cached;
+        try {
+          const networkResponse = await fetch(e.request);
+          if (networkResponse && networkResponse.status === 200) {
+            cache.put(e.request, networkResponse.clone());
+          }
+          return networkResponse;
+        } catch (err) {
+          // Fall back to any cached copy regardless of URL match strictness.
+          const anyMatch = await caches.match(e.request, { ignoreVary: true });
+          if (anyMatch) return anyMatch;
+          throw err;
+        }
+      })(),
+    );
     return;
   }
 

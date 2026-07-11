@@ -2430,7 +2430,7 @@ class AurafiskyApp {
 
     // Remove all radar layers from map
     this.radarLayers.forEach((layer) => {
-      if (this.map.hasLayer(layer)) {
+      if (layer && this.map.hasLayer(layer)) {
         this.map.removeLayer(layer);
       }
     });

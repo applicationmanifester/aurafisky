@@ -2596,7 +2596,7 @@ class AurafiskyApp {
       });
       this._homeMarker = L.marker(
         [this.defaultLocation.lat, this.defaultLocation.lng],
-        { icon, zIndexOffset: 1000 },
+        { icon, zIndexOffset: 1000, draggable: true },
       ).addTo(this.map);
       this._homeMarker.bindTooltip(this.defaultLocation.name, {
         direction: "top",
@@ -2609,6 +2609,17 @@ class AurafiskyApp {
           this.defaultLocation.lng,
           this.defaultLocation.name,
         );
+      });
+      this._homeMarker.on("dragend", () => {
+        const ll = this._homeMarker.getLatLng();
+        this.defaultLocation = {
+          lat: ll.lat,
+          lng: ll.lng,
+          name: this.defaultLocation.name,
+        };
+        this.updateHomeButton();
+        this.saveUserDataToCloud();
+        this.showToast("Home location updated", "success");
       });
     }
   }

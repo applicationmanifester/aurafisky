@@ -922,6 +922,17 @@ button, a, input, select, textarea, [role="button"] {
   content: "\2302"; /* ⌂ house symbol */
   transform: rotate(45deg);
 }
+.home-marker-pin {
+  animation: homePulse 2.4s ease-out infinite;
+}
+@keyframes homePulse {
+  0%   { box-shadow: 0 2px 6px rgba(0, 0, 0, 0.35), 0 0 0 0 rgba(245, 158, 11, 0.55); }
+  70%  { box-shadow: 0 2px 6px rgba(0, 0, 0, 0.35), 0 0 0 12px rgba(245, 158, 11, 0); }
+  100% { box-shadow: 0 2px 6px rgba(0, 0, 0, 0.35), 0 0 0 0 rgba(245, 158, 11, 0); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .home-marker-pin { animation: none; }
+}
 .home-tooltip {
   background: #1f2937;
   color: #fff;

@@ -52,7 +52,11 @@ self.addEventListener("activate", (e) => {
   );
 });
 
-// ── Bounded map-tile cache ───────────────────────────────────
+// Allow the page to force-activate a waiting SW (postMessage "skipWaiting")
+self.addEventListener("message", (event) => {
+  if (event.data === "skipWaiting") self.skipWaiting();
+});
+
 const TILE_CACHE = "aurafisky-tiles-v1";
 const TILE_CACHE_MAX = 350;
 

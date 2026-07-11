@@ -4961,10 +4961,22 @@ ${precipProb > 0 ? `<span class="text-[9px] sm:text-[10px] text-blue-500 font-se
 
   registerServiceWorker() {
     if ("serviceWorker" in navigator) {
+      let reloading = false;
+      // When a new SW takes control, reload once so the new app shell /
+      // assets (and fixes like the navigation fallback) actually run.
+      navigator.serviceWorker.addEventListener("controllerchange", () => {
+        if (reloading || sessionStorage.getItem("sw_reload")) return;
+        reloading = true;
+        sessionStorage.setItem("sw_reload", "1");
+        location.reload();
+      });
       window.addEventListener("load", () => {
         navigator.serviceWorker
           .register("./sw.js")
           .then((reg) => {
+            // Force an immediate activation check so an installed-but-waiting
+            // SW (e.g. after a deploy) takes over without a manual unregister.
+            if (reg.waiting) reg.waiting.postMessage("skipWaiting");
             reg.addEventListener("updatefound", () => {
               const newSW = reg.installing || reg.waiting;
               if (newSW) {

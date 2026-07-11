@@ -3263,9 +3263,13 @@ ${precipProb > 0 ? `<span class="text-[9px] sm:text-[10px] text-blue-500 font-se
   enterMinimalMode() {
     document.documentElement.classList.add("compact");
     const panel = this.$.weatherPanel;
-    // Snapshot the full panel only once (first minimize), so re-entering
-    // minimal mode never overwrites the full content with the minified card.
-    if (!panel.dataset.fullContent) panel.dataset.fullContent = panel.innerHTML;
+    // Snapshot the full panel only from the real full content. If the
+    // panel already holds the minified card (no #weatherPanelContent),
+    // keep the previously captured full content so expanding always
+    // restores the complete card — not a skeleton/empty snapshot.
+    if (!panel.dataset.fullContent || panel.querySelector("#weatherPanelContent")) {
+      panel.dataset.fullContent = panel.innerHTML;
+    }
     const minimalHTML = `
       <div class="flex items-center justify-between px-5 pt-5 pb-3">
         <div class="min-w-0 flex-1">
@@ -3298,7 +3302,14 @@ ${precipProb > 0 ? `<span class="text-[9px] sm:text-[10px] text-blue-500 font-se
       this.enterMinimalMode();
     } else {
       const panel = this.$.weatherPanel;
-      panel.innerHTML = panel.dataset.fullContent || "";
+      // Restore the full card. If the snapshot is missing/stale (e.g. the
+      // panel was minimized before weather finished loading), re-render
+      // from the current data instead of leaving the card blank.
+      if (panel.dataset.fullContent && panel.dataset.fullContent.length > 200) {
+        panel.innerHTML = panel.dataset.fullContent;
+      } else if (this.weatherData) {
+        this.updateWeatherDisplay(this.currentHourIndex);
+      }
       this.rebindPanelEvents();
       // Ensure the full panel is shown (re-entry from minimal mode may have
       // left the original .open class, but re-add to be safe so the card is visible)

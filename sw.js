@@ -3,7 +3,7 @@ importScripts(
 );
 importScripts("weather.js");
 importScripts("src/icons.js");
-const CACHE_NAME = "aurafisky-v25";
+const CACHE_NAME = "aurafisky-v26";
 const ASSETS = [
   "./",
   "./index.html",
@@ -22,6 +22,20 @@ const ASSETS = [
   "https://cdn.jsdelivr.net/npm/localforage@1.10.0/dist/localforage.min.js",
   "https://cdn.jsdelivr.net/npm/dompurify@3.1.6/dist/purify.min.js",
 ];
+
+// Minimal offline page served when a navigation fails and nothing is cached.
+// Lets the app's own offline banner take over instead of a browser error.
+const OFFLINE_HTML = `<!DOCTYPE html><html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Aurafisky — Offline</title><style>
+html,body{margin:0;height:100%;background:#0b1220;color:#e2e8f0;
+font-family:system-ui,sans-serif;display:flex;align-items:center;justify-content:center;text-align:center}
+div{padding:24px;max-width:360px}h1{font-size:1.25rem;margin:0 0 8px}
+p{opacity:.7;line-height:1.5;margin:0}
+</style></head><body><div>
+<h1>Aurafisky is offline</h1>
+<p>Check your connection and reload. Recent weather data may still be available.</p>
+</div></body></html>`;
 
 self.addEventListener("install", (e) => {
   self.skipWaiting();
@@ -131,7 +145,12 @@ self.addEventListener("fetch", (e) => {
           // Last resort: any cached same-origin doc
           const anyDoc = await caches.match(e.request, { ignoreSearch: true });
           if (anyDoc) return anyDoc;
-          throw err;
+          // Nothing cached at all: show a minimal offline page instead of
+          // throwing (which would surface as an unhandled rejection).
+          return new Response(OFFLINE_HTML, {
+            headers: { "Content-Type": "text/html; charset=utf-8" },
+            status: 200,
+          });
         }
       })()
     );
@@ -153,7 +172,19 @@ self.addEventListener("fetch", (e) => {
           return networkResponse;
         } catch (err) {
           if (cached) return cached;
-          throw err; // let the browser surface the genuine network error
+          // Network failed and nothing cached. Never re-throw: that surfaces
+          // as an unhandled rejection + a blank "network error" response.
+          // For a navigation, serve the cached shell or a minimal offline
+          // page so the app (and its offline banner) can still run.
+          if (e.request.mode === "navigate") {
+            const shell = await caches.match("./index.html");
+            if (shell) return shell;
+            return new Response(OFFLINE_HTML, {
+              headers: { "Content-Type": "text/html; charset=utf-8" },
+              status: 200,
+            });
+          }
+          return new Response("", { status: 504, statusText: "Offline" });
         }
       })()
     );

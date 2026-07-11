@@ -65,29 +65,11 @@
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
           integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
 
-  <!-- Tailwind CSS (CDN) -->
-    <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Tailwind CSS (built static file — see package.json "build:css") -->
+  <link rel="stylesheet" href="css/tailwind.css" />
 
-    <!-- localforage for IndexedDB storage -->
-    <script src="https://cdn.jsdelivr.net/npm/localforage@1.10.0/dist/localforage.min.js"></script>
-    <script>
-    tailwind.config = {
-      darkMode: 'class',
-      theme: {
-        extend: {
-          fontFamily: {
-            sans: ['Inter', 'system-ui', '-apple-system', 'sans-serif'],
-          },
-          colors: {
-            primary: { DEFAULT: '#6366f1', light: '#818cf8', dark: '#4f46e5' },
-            surface: { light: '#f8fafc', dark: '#0f172a' },
-          },
-        },
-      },
-    };
-  </script>
-
-  <!-- Custom Styles -->
+  <!-- localforage for IndexedDB storage -->
+  <script src="https://cdn.jsdelivr.net/npm/localforage@1.10.0/dist/localforage.min.js"></script>
   <link rel="stylesheet" href="styles.css" />
 </head>
 

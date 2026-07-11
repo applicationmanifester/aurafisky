@@ -174,7 +174,6 @@ class AurafiskyApp {
       starFilledIcon: document.getElementById("starFilledIcon"),
       homeToggleBtn: document.getElementById("homeToggleBtn"),
       homeOutlineIcon: document.getElementById("homeOutlineIcon"),
-      homeFilledIcon: document.getElementById("homeFilledIcon"),
       timelineSlider: document.getElementById("timelineSlider"),
       timelineLabel: document.getElementById("timelineLabel"),
       timelineBadge: document.getElementById("timelineBadge"),
@@ -2559,9 +2558,9 @@ class AurafiskyApp {
       this.selectedLat &&
       Math.abs(this.defaultLocation.lat - this.selectedLat) < 0.0001 &&
       Math.abs(this.defaultLocation.lng - this.selectedLng) < 0.0001;
-    if (this.$.homeOutlineIcon && this.$.homeFilledIcon) {
-      this.$.homeOutlineIcon.classList.toggle("hidden", isHome);
-      this.$.homeFilledIcon.classList.toggle("hidden", !isHome);
+    if (this.$.homeOutlineIcon) {
+      this.$.homeOutlineIcon.classList.toggle("text-amber-500", isHome);
+      this.$.homeOutlineIcon.classList.toggle("text-slate-400", !isHome);
     }
     if (this.$.homeToggleBtn) {
       this.$.homeToggleBtn.title = isHome
@@ -3308,7 +3307,6 @@ ${precipProb > 0 ? `<span class="text-[9px] sm:text-[10px] text-blue-500 font-se
       "panelMinimizeBtn",
       "homeToggleBtn",
       "homeOutlineIcon",
-      "homeFilledIcon",
       "favoriteToggleBtn",
       "starOutlineIcon",
       "starFilledIcon",

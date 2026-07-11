@@ -394,6 +394,12 @@ class AurafiskyApp {
 
   /** Initialize application settings, maps, bookmarks, and UI triggers. */
   async init() {
+    // Capture a pristine copy of the weather panel markup before anything
+    // mutates it. Used to rebuild the full card if compact mode is restored
+    // from saved prefs before a weather render has produced a snapshot.
+    const panelEl = document.getElementById("weatherPanel");
+    if (panelEl) this._weatherPanelTemplate = panelEl.outerHTML;
+
     // Global error boundary — surface unexpected errors without killing the app.
     window.addEventListener("error", (e) => {
       console.error("Unhandled error:", e.error || e.message);
@@ -3306,14 +3312,36 @@ ${precipProb > 0 ? `<span class="text-[9px] sm:text-[10px] text-blue-500 font-se
     if (this.minimalMode) {
       this.enterMinimalMode();
     } else {
-      const panel = this.$.weatherPanel;
-      // Restore the full card. If the snapshot is missing/stale (e.g. the
-      // panel was minimized before weather finished loading), re-render
-      // from the current data instead of leaving the card blank.
+      let panel = this.$.weatherPanel;
+      // Restore the full card. Preferred path: a real snapshot was taken
+      // when the panel held the full content (#weatherPanelContent present).
       if (panel.dataset.fullContent && panel.dataset.fullContent.length > 200) {
         panel.innerHTML = panel.dataset.fullContent;
-      } else if (this.weatherData) {
-        this.updateWeatherDisplay(this.currentHourIndex);
+      } else {
+        // No usable snapshot (e.g. compact was restored from cloud prefs
+        // before any weather render, or a fetch 504 left nothing to
+        // snapshot). Rebuild the pristine panel skeleton from the captured
+        // template, then populate it with the current data. This avoids the
+        // old fallback that called updateWeatherDisplay() on a destroyed DOM
+        // (which threw on incomplete weatherData or wrote to detached nodes,
+        // leaving the card stuck in minimal form).
+        if (!this._weatherPanelTemplate) {
+          this._weatherPanelTemplate = document.getElementById(
+            "weatherPanel",
+          )?.outerHTML || "";
+        }
+        if (this._weatherPanelTemplate) {
+          panel.outerHTML = this._weatherPanelTemplate;
+          this.$.weatherPanel = document.getElementById("weatherPanel");
+          panel = this.$.weatherPanel;
+        }
+        if (this.weatherData) {
+          try {
+            this.updateWeatherDisplay(this.currentHourIndex);
+          } catch (err) {
+            console.warn("expand repopulate failed:", err);
+          }
+        }
       }
       this.rebindPanelEvents();
       // Ensure the full panel is shown (re-entry from minimal mode may have

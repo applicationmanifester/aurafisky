@@ -3,7 +3,7 @@ importScripts(
 );
 importScripts("weather.js");
 importScripts("src/icons.js");
-const CACHE_NAME = "aurafisky-v27";
+const CACHE_NAME = "aurafisky-v28";
 const ASSETS = [
   "./",
   "./index.html",

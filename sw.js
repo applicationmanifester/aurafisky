@@ -3,7 +3,7 @@ importScripts(
 );
 importScripts("weather.js");
 importScripts("src/icons.js");
-const CACHE_NAME = "aurafisky-v24";
+const CACHE_NAME = "aurafisky-v25";
 const ASSETS = [
   "./",
   "./index.html",
@@ -104,6 +104,33 @@ self.addEventListener("fetch", (e) => {
     url.includes("googleapis.com") ||
     url.includes("gstatic.com")
   ) {
+    return;
+  }
+
+  // Navigation requests (the app shell): try network, fall back to the
+  // cached index.html so the PWA still opens offline. Never reject a
+  // navigation — that yields a blank "network error" page.
+  if (e.request.mode === "navigate") {
+    e.respondWith(
+      (async () => {
+        try {
+          const net = await fetch(e.request);
+          if (net && net.status === 200) {
+            const cache = await caches.open(CACHE_NAME);
+            cache.put("./index.html", net.clone());
+            return net;
+          }
+          throw new Error("bad nav response");
+        } catch (err) {
+          const cached = await caches.match("./index.html");
+          if (cached) return cached;
+          // Last resort: any cached same-origin doc
+          const anyDoc = await caches.match(e.request, { ignoreSearch: true });
+          if (anyDoc) return anyDoc;
+          throw err;
+        }
+      })()
+    );
     return;
   }
 

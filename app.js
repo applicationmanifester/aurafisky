@@ -3189,10 +3189,9 @@ ${precipProb > 0 ? `<span class="text-[9px] sm:text-[10px] text-blue-500 font-se
   enterMinimalMode() {
     document.documentElement.classList.add("compact");
     const panel = this.$.weatherPanel;
-    // Only snapshot the full panel the first time we minimise (not on
-    // every timeline refresh), so we never overwrite fullContent with
-    // the already-minified card.
-    if (!this.minimalMode) panel.dataset.fullContent = panel.innerHTML;
+    // Snapshot the full panel only once (first minimize), so re-entering
+    // minimal mode never overwrites the full content with the minified card.
+    if (!panel.dataset.fullContent) panel.dataset.fullContent = panel.innerHTML;
     const minimalHTML = `
       <div class="flex items-center justify-between px-5 pt-5 pb-3">
         <div class="min-w-0 flex-1">
@@ -3227,6 +3226,10 @@ ${precipProb > 0 ? `<span class="text-[9px] sm:text-[10px] text-blue-500 font-se
       const panel = this.$.weatherPanel;
       panel.innerHTML = panel.dataset.fullContent || "";
       this.rebindPanelEvents();
+      // Ensure the full panel is shown (re-entry from minimal mode may have
+      // left the original .open class, but re-add to be safe so the card is visible)
+      panel.classList.add("open");
+      panel.classList.remove("minimized");
       document.documentElement.classList.remove("compact");
       this.updateHomeButton();
       this.updateHomeMarker();

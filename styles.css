@@ -63,7 +63,7 @@ html, body {
 
 /* ── Top bar paint containment ────────────────────────────── */
 .fixed.top-0.left-0.right-0 {
-  contain: layout style;
+  /* no contain paint — allows search dropdown + wrapped rows to escape */
 }
 
 /* ── Map Container ──────────────────────────────────────────── */
@@ -79,11 +79,22 @@ html, body {
 
 /* ── Search Dropdown ────────────────────────────────────────── */
 .search-dropdown {
+  position: absolute;
+  top: calc(100% + 0.5rem);
+  left: 0;
+  right: 0;
+  z-index: 50;
   max-height: 0;
   overflow: hidden;
   transition: max-height 0.3s ease, opacity 0.3s ease;
   opacity: 0;
   will-change: max-height, opacity;
+  background: var(--glass-bg);
+  -webkit-backdrop-filter: blur(var(--glass-blur));
+  backdrop-filter: blur(var(--glass-blur));
+  border: 1px solid var(--glass-border);
+  border-radius: 0 0 1rem 1rem;
+  box-shadow: var(--glass-shadow);
 }
 .search-dropdown.open {
   max-height: 280px;

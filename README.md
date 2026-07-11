@@ -8,16 +8,16 @@ A premium single-page web application that combines **Leaflet.js** and **OpenStr
 
 ## ✨ Features
 
-| Feature | Description |
-|---------|-------------|
-| 🗺️ **Interactive Map** | Full-screen Leaflet map using CartoDB tile layers (light/dark adaptive) |
-| 🔍 **City Search** | Fast, free search using the Open-Meteo Geocoding API |
+| Feature                  | Description                                                                  |
+| ------------------------ | ---------------------------------------------------------------------------- |
+| 🗺️ **Interactive Map**   | Full-screen Leaflet map using CartoDB tile layers (light/dark adaptive)      |
+| 🔍 **City Search**       | Fast, free search using the Open-Meteo Geocoding API                         |
 | 🌡️ **Real-Time Weather** | Current conditions (temp, humidity, wind, pressure, UV, cloud cover, precip) |
-| ⏱️ **Time Slider** | Slide through 3 days of history + 7 days of forecast, hour by hour |
-| 📊 **7-Day Forecast** | Daily weather summary showing min/max temps, conditions, and icons |
-| 🌙 **Dark Mode** | Responsive dark theme matching dark map tiles, with persistent preference |
-| 📍 **My Location** | Jump directly to your coordinates using the browser's Geolocation API |
-| 📱 **Responsive** | Optimized for desktop, tablet, and mobile screens |
+| ⏱️ **Time Slider**       | Slide through 3 days of history + 7 days of forecast, hour by hour           |
+| 📊 **7-Day Forecast**    | Daily weather summary showing min/max temps, conditions, and icons           |
+| 🌙 **Dark Mode**         | Responsive dark theme matching dark map tiles, with persistent preference    |
+| 📍 **My Location**       | Jump directly to your coordinates using the browser's Geolocation API        |
+| 📱 **Responsive**        | Optimized for desktop, tablet, and mobile screens                            |
 
 ---
 

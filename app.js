@@ -139,9 +139,6 @@ class AurafiskyApp {
     // Cached signal/noise decomposition (perf #6)
     this._cachedDecomposition = null;
 
-    // Auto-refresh state
-    this.autoRefreshTimer = null;
-    this.autoRefreshActive = false;
 
     // Temperature overlay state
     this.tempOverlayLayers = [];
@@ -368,9 +365,6 @@ class AurafiskyApp {
       ),
       settingsClearCacheBtn: document.getElementById("settingsClearCacheBtn"),
       settingsDeleteDataBtn: document.getElementById("settingsDeleteDataBtn"),
-      settingsAutoRefreshToggle: document.getElementById(
-        "settingsAutoRefreshToggle",
-      ),
       settingsTermsBtn: document.getElementById("settingsTermsBtn"),
       termsModal: document.getElementById("termsModal"),
       termsAcceptBtn: document.getElementById("termsAcceptBtn"),
@@ -658,11 +652,10 @@ class AurafiskyApp {
         this.saveUserDataToCloud();
       });
     }
-    if (this.$.settingsAutoRefreshToggle) {
-      this.$.settingsAutoRefreshToggle.addEventListener("change", () => {
-        this.toggleAutoRefresh();
-        this.saveUserDataToCloud();
-      });
+    if (this.$.settingsDeleteDataBtn) {
+      this.$.settingsDeleteDataBtn.addEventListener("click", () =>
+        this.deleteCloudUserData(),
+      );
     }
 
     // ── Time Slider ───────────────────────────────────────────
@@ -852,12 +845,6 @@ class AurafiskyApp {
     window.addEventListener("appinstalled", () => {
       this.deferredPrompt = null;
       this.$.installBtn.classList.add("hidden");
-      if (this.autoRefreshActive) {
-        this.showToast(
-          "Aurafisky installed! Auto-refresh paused. Pull to refresh manually.",
-          "success",
-        );
-      }
     });
 
     // ── Document click (close overlays) ─────────────────────
@@ -4431,7 +4418,6 @@ ${precipProb > 0 ? `<span class="text-[9px] sm:text-[10px] text-blue-500 font-se
     this._historicalResults = null;
     this.biasMap = null;
     if (this._alertPollTimer) clearInterval(this._alertPollTimer);
-    if (this.autoRefreshTimer) clearTimeout(this.autoRefreshTimer);
     if (this.tempOverlayTimer) clearInterval(this.tempOverlayTimer);
     if (this._resizeRAF) {
       cancelAnimationFrame(this._resizeRAF);
@@ -5006,38 +4992,6 @@ ${precipProb > 0 ? `<span class="text-[9px] sm:text-[10px] text-blue-500 font-se
     params.set("name", this.selectedName);
     const url = `${window.location.origin}${window.location.pathname}?${params.toString()}`;
     window.history.replaceState({}, "", url);
-  }
-
-  toggleAutoRefresh() {
-    this.autoRefreshActive = !this.autoRefreshActive;
-    if (this.autoRefreshTimer) {
-      clearTimeout(this.autoRefreshTimer);
-      this.autoRefreshTimer = null;
-    }
-    if (this.autoRefreshActive) {
-      const scheduleNext = () => {
-        this.autoRefreshTimer = setTimeout(async () => {
-          if (this.selectedLat && this.selectedLng) {
-            await this.selectLocation(
-              this.selectedLat,
-              this.selectedLng,
-              this.selectedName,
-            );
-            this.showToast("Auto-refreshed weather data", "info");
-          }
-          scheduleNext();
-        }, 300000);
-      };
-      scheduleNext();
-      this.showToast("Auto-refresh enabled (every 5 min)", "success");
-    } else {
-      if (this.autoRefreshTimer) {
-        clearTimeout(this.autoRefreshTimer);
-        this.autoRefreshTimer = null;
-      }
-      this.showToast("Auto-refresh disabled", "info");
-    }
-    this.updateSettingsUIFromLocal();
   }
 
   installPWA() {
@@ -5771,13 +5725,6 @@ ${precipProb > 0 ? `<span class="text-[9px] sm:text-[10px] text-blue-500 font-se
             this.syncHistory = prefs.syncHistory;
           }
 
-          if (prefs.autoRefresh != null) {
-            this.autoRefreshActive = prefs.autoRefresh;
-            if (this.$.settingsAutoRefreshToggle) {
-              this.$.settingsAutoRefreshToggle.checked = prefs.autoRefresh;
-            }
-          }
-
           if (prefs.soundscapes != null) {
             this.audioActive = prefs.soundscapes;
             if (this.$.settingsSoundToggle) {
@@ -5857,7 +5804,6 @@ ${precipProb > 0 ? `<span class="text-[9px] sm:text-[10px] text-blue-500 font-se
         theme,
         compact,
         syncHistory: this.syncHistory,
-        autoRefresh: this.autoRefreshActive || false,
         soundscapes: this.audioActive || false,
         volume: this.volumeLevel || 0.5,
       },
@@ -5880,7 +5826,6 @@ ${precipProb > 0 ? `<span class="text-[9px] sm:text-[10px] text-blue-500 font-se
         ),
         localforage.setItem("notifyIntervalMin", this.notifyIntervalMin || 60),
         localforage.setItem("units", units),
-        localforage.setItem("autoRefresh", this.autoRefreshActive || false),
         localforage.setItem("soundscapes", this.audioActive || false),
         localforage.setItem("volume", this.volumeLevel || 0.5),
       ]);
@@ -5955,10 +5900,6 @@ ${precipProb > 0 ? `<span class="text-[9px] sm:text-[10px] text-blue-500 font-se
     }
     if (this.$.settingsSyncHistoryToggle) {
       this.$.settingsSyncHistoryToggle.checked = this.syncHistory;
-    }
-    if (this.$.settingsAutoRefreshToggle) {
-      this.$.settingsAutoRefreshToggle.checked =
-        this.autoRefreshActive || false;
     }
     if (this.$.settingsSoundToggle) {
       this.$.settingsSoundToggle.checked = this.audioActive || false;

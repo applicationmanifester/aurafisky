@@ -849,7 +849,6 @@
             <li><strong>Time Machine</strong> &mdash; Scroll through historical weather data for any location to see past conditions.</li>
             <li><strong>Climate Briefing</strong> &mdash; Generate an AI-powered summary of recent weather trends and anomalies.</li>
             <li><strong>Compare</strong> &mdash; Open a second panel (via the Settings menu) to compare weather between two locations.</li>
-            <li><strong>Auto-Refresh</strong> &mdash; Keep weather data up to date automatically (configurable in Settings).</li>
             <li><strong>Dark Mode</strong> &mdash; Switch between light and dark themes in Settings.</li>
             <li><strong>Compact Mode</strong> &mdash; Reduce the weather panel to a minimal view showing only essentials.</li>
             <li><strong>Soundscapes</strong> &mdash; Ambient audio that reflects current weather conditions.</li>
@@ -1026,14 +1025,6 @@
       <!-- Privacy & Sync Section -->
       <div class="space-y-2">
         <h4 class="text-[10px] font-bold text-slate-400 uppercase tracking-wider">General & App Installation</h4>
-        <div class="bg-slate-100/40 dark:bg-slate-800/40 rounded-xl p-3 flex justify-between items-center">
-          <span class="text-xs font-semibold text-slate-700 dark:text-slate-200">Extra Auto-Refresh</span>
-          <label class="relative inline-flex items-center cursor-pointer select-none">
-            <input id="settingsAutoRefreshToggle" type="checkbox" class="sr-only peer" aria-label="Toggle extra auto refresh" />
-            <div class="w-8 h-4 bg-slate-300 dark:bg-slate-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-3 after:w-3 after:transition-all peer-checked:bg-primary"></div>
-          </label>
-        </div>
-        <p class="text-[10px] text-slate-400 leading-tight -mt-1">Data also refreshes automatically each time you return to the app — this toggle just adds continuous 5-min polling.</p>
         </div>
         <!-- App & Location actions (compact, side-by-side) -->
         <div id="appLocationActions" class="grid grid-cols-2 gap-2">

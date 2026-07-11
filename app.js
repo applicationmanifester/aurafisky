@@ -439,6 +439,10 @@ class AurafiskyApp {
       }
     });
 
+    // Silent sweep of legacy per-location weather caches (capped to 30d).
+    // Keeps localStorage tidy with zero user action.
+    this._sweepStaleCache();
+
     // Initialize Firebase Auth & Firestore
     this.initFirebase();
 
@@ -1266,6 +1270,48 @@ class AurafiskyApp {
 
   _addCacheKey(key) {
     // No-op: caching removed
+  }
+
+  // Wipe everything the app persists locally: legacy localStorage weather
+  // caches, localforage settings/session, and Service Worker caches. Keeps
+  // the "Clear Cache" button honest — it actually clears, then reloads fresh.
+  async clearLocalCaches() {
+    this.showToast("Clearing local cache…", "info");
+    try {
+      for (let i = localStorage.length - 1; i >= 0; i--) {
+        const key = localStorage.key(i);
+        if (key && key.startsWith("weathermap_cache_")) localStorage.removeItem(key);
+      }
+      localStorage.removeItem("last_weather_notification_time");
+    } catch (_) { /* localStorage may be unavailable; ignore */ }
+
+    try { await localforage.clear(); } catch (_) {}
+
+    if (navigator.serviceWorker && "caches" in window) {
+      try {
+        const names = await caches.keys();
+        await Promise.all(names.map((n) => caches.delete(n)));
+      } catch (_) {}
+    }
+    setTimeout(() => window.location.reload(), 1200);
+  }
+
+  // Drop legacy weathermap_cache_* keys older than 30d (or unparseable).
+  // Pure hygiene — runs silently at startup, no toast.
+  _sweepStaleCache() {
+    try {
+      const cutoff = Date.now() - 30 * 24 * 60 * 60 * 1000;
+      for (let i = localStorage.length - 1; i >= 0; i--) {
+        const key = localStorage.key(i);
+        if (!key || !key.startsWith("weathermap_cache_")) continue;
+        try {
+          const data = JSON.parse(localStorage.getItem(key) || "{}");
+          if (data.ts == null || data.ts < cutoff) localStorage.removeItem(key);
+        } catch {
+          localStorage.removeItem(key);
+        }
+      }
+    } catch (_) {}
   }
 
   updateOfflineBadge(isCachedDisplay) {
@@ -5505,8 +5551,7 @@ ${precipProb > 0 ? `<span class="text-[9px] sm:text-[10px] text-blue-500 font-se
       }
       if (this.$.settingsClearCacheBtn) {
         this.$.settingsClearCacheBtn.addEventListener("click", () => {
-          this.showToast("Reloading...", "success");
-          setTimeout(() => window.location.reload(), 1500);
+          this.clearLocalCaches();
         });
       }
       if (this.$.settingsDeleteDataBtn) {

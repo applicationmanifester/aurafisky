@@ -1193,8 +1193,13 @@ class AurafiskyApp {
       if (wasMinimal) {
         document.documentElement.classList.add("compact");
         const panel = this.$.weatherPanel;
-        // Preserve current HTML safely before switching to minimal view
-        panel.dataset.fullContent = panel.innerHTML;
+        // Preserve current HTML safely before switching to minimal view.
+        // Only snapshot if the panel currently holds the FULL content
+        // (has #weatherPanelContent) — if it's already minimal, don't
+        // overwrite the stored full card with the minified version.
+        if (panel.querySelector("#weatherPanelContent")) {
+          panel.dataset.fullContent = panel.innerHTML;
+        }
         const minimalHTML = `
          <div class="flex items-center justify-between px-5 pt-5 pb-3">
            <div class="min-w-0 flex-1">

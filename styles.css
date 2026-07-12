@@ -42,9 +42,6 @@ html, body {
   height: 100%;
   /* Use the JS-provided visual-viewport height (avoids URL-bar overflow on mobile) */
   height: var(--app-height, 100vh);
-  /* Lock the viewport on mobile so the map can't scroll beyond itself */
-  position: fixed;
-  inset: 0;
   overflow: hidden;
   overscroll-behavior: none;
   -webkit-text-size-adjust: 100%;
@@ -69,8 +66,18 @@ html, body {
   opacity: 0.85;
 }
 
-/* ── Top bar paint containment ────────────────────────────── */
+/* ── Top bar paint containment & z-index ─────────────────── */
+/*
+ * The top bar relies on the Tailwind arbitrary-value class z-[1002] to stay
+ * above the Leaflet map (which sets z-index:1000 on its internal panes).
+ * If the compiled Tailwind build does not emit the z-[1002] rule, the bar
+ * falls back to z-index:auto and gets painted UNDER #map (which comes later
+ * in the DOM with position:relative). That hides the logo, search box and
+ * all control buttons. This rule guarantees the z-index regardless of the
+ * Tailwind build output.
+ */
 .fixed.top-0.left-0.right-0 {
+  z-index: 1002;
   /* no contain paint — allows search dropdown + wrapped rows to escape */
 }
 

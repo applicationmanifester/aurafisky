@@ -488,6 +488,9 @@ class AurafiskyApp {
           updateWhenZooming: false,
           keepBuffer: 2,
           noWrap: true,
+          // Clip tile requests to the valid Web-Mercator range so Leaflet
+          // never asks CartoDB for y=-1 (lat > 85°) tiles it rejects with 400.
+          bounds: [[-85, -180], [85, 180]],
         },
       );
 
@@ -502,6 +505,7 @@ class AurafiskyApp {
           updateWhenZooming: false,
           keepBuffer: 2,
           noWrap: true,
+          bounds: [[-85, -180], [85, 180]],
         },
       );
 
@@ -512,9 +516,10 @@ class AurafiskyApp {
         this.lightTiles.addTo(this.map);
       }
 
-      // Hard-enforce map bounds so panning can never escape the map area
-      // (esp. on mobile where inertia can outrun maxBoundsViscosity)
-      const MAP_BOUNDS = [[-90, -180], [90, 180]];
+      // Hard-enforce map bounds to the valid Web-Mercator range so panning
+      // can never request invalid tiles (esp. on mobile where inertia can
+      // outrun maxBoundsViscosity).
+      const MAP_BOUNDS = [[-85, -180], [85, 180]];
       this.map.setMaxBounds(MAP_BOUNDS);
       this.map.on("moveend", () => {
         const c = this.map.getCenter();
@@ -6155,11 +6160,16 @@ ${precipProb > 0 ? `<span class="text-[9px] sm:text-[10px] text-blue-500 font-se
       try {
         const registration = await navigator.serviceWorker.ready;
         if ("periodicSync" in registration) {
-          await registration.periodicSync.unregister("hourly-weather-update");
-          console.log("Periodic sync unregistered");
+          // Only log if a sync was actually registered (avoids noise on every
+          // load when notifications/default-location aren't enabled).
+          const tags = await registration.periodicSync.getTags();
+          if (tags.includes("hourly-weather-update")) {
+            await registration.periodicSync.unregister("hourly-weather-update");
+            console.log("Periodic sync unregistered");
+          }
         }
       } catch (error) {
-        console.warn("Periodic sync unregistration failed:", error);
+        console.warn("Periodic sync unregister failed:", error);
       }
     }
   }

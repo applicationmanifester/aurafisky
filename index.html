@@ -78,7 +78,7 @@
   <!-- ============================================================ -->
   <!-- TOP BAR — Logo + Search + Controls                           -->
   <!-- ============================================================ -->
-  <div class="fixed top-0 left-0 right-0 z-[1000] p-3 sm:p-4 pointer-events-none">
+  <div class="fixed top-0 left-0 right-0 z-[1002] p-3 sm:p-4 pointer-events-none">
     <div class="max-w-2xl mx-auto flex flex-wrap items-center gap-2 sm:gap-3">
 
       <!-- Brand Logo -->
@@ -157,11 +157,11 @@
       </div>
 
       <!-- Control Buttons -->
-      <div class="flex gap-1.5 pointer-events-auto overflow-x-auto hide-scrollbar flex-nowrap w-full sm:w-auto sm:flex-none sm:overflow-visible justify-start sm:justify-end">
+      <div class="flex flex-wrap gap-1.5 pointer-events-auto overflow-x-auto hide-scrollbar w-full sm:w-auto sm:flex-none sm:overflow-visible justify-start sm:justify-end">
         <!-- Home Location -->
         <button
           id="homeToggleBtn"
-          class="glass w-11 h-11 rounded-xl flex items-center justify-center hover:bg-white/80 dark:hover:bg-slate-700/50 transition-all active:scale-95"
+          class="glass w-10 h-10 sm:w-11 sm:h-11 rounded-xl flex items-center justify-center hover:bg-white/80 dark:hover:bg-slate-700/50 transition-all active:scale-95"
           title="Set as home location"
           aria-label="Set as home location"
         >
@@ -176,7 +176,7 @@
           id="myLocationBtn"
           title="Go to my location"
           aria-label="Go to my location"
-          class="glass w-11 h-11 rounded-xl flex items-center justify-center hover:bg-white/80 dark:hover:bg-slate-700/50 transition-all active:scale-95"
+          class="glass w-10 h-10 sm:w-11 sm:h-11 rounded-xl flex items-center justify-center hover:bg-white/80 dark:hover:bg-slate-700/50 transition-all active:scale-95"
         >
           <svg class="w-5 h-5 text-primary" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
             <path stroke-linecap="round" stroke-linejoin="round" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
@@ -190,7 +190,7 @@
             id="bookmarksBtn"
             title="Saved locations"
             aria-label="Saved locations"
-            class="glass w-11 h-11 rounded-xl flex items-center justify-center hover:bg-white/80 dark:hover:bg-slate-700/50 transition-all active:scale-95"
+            class="glass w-10 h-10 sm:w-11 sm:h-11 rounded-xl flex items-center justify-center hover:bg-white/80 dark:hover:bg-slate-700/50 transition-all active:scale-95"
           >
             <svg class="w-5 h-5 text-amber-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
               <path stroke-linecap="round" stroke-linejoin="round" d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.197-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.784-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z" />
@@ -676,7 +676,7 @@
   </div>
 
   <!-- Zoom +/- Controls + Radar (minimized below zoom-out) -->
-  <div id="zoomControls" class="fixed top-1/2 -translate-y-1/2 right-3 sm:right-4 z-[1000] pointer-events-auto flex flex-col gap-1 items-center">
+  <div id="zoomControls" class="fixed top-1/2 -translate-y-1/2 right-3 sm:right-4 z-[1001] pointer-events-auto flex flex-col gap-1 items-center">
     <button id="zoomInBtn" class="w-10 h-10 flex items-center justify-center rounded-xl glass bg-white/80 dark:bg-slate-800/80 hover:bg-white dark:hover:bg-slate-700 transition-all text-slate-600 dark:text-slate-300 text-lg font-bold shadow-lg border border-slate-200/60 dark:border-slate-600/30 active:scale-95" title="Zoom in" aria-label="Zoom in">+</button>
     <button id="zoomOutBtn" class="w-10 h-10 flex items-center justify-center rounded-xl glass bg-white/80 dark:bg-slate-800/80 hover:bg-white dark:hover:bg-slate-700 transition-all text-slate-600 dark:text-slate-300 text-lg font-bold shadow-lg border border-slate-200/60 dark:border-slate-600/30 active:scale-95" title="Zoom out" aria-label="Zoom out">−</button>
 

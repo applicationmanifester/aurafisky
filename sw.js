@@ -3,7 +3,7 @@ importScripts(
 );
 importScripts("weather.js");
 importScripts("src/icons.js");
-const CACHE_NAME = "aurafisky-v29";
+const CACHE_NAME = "aurafisky-v31";
 const ASSETS = [
   "./",
   "./index.html",
@@ -70,7 +70,14 @@ self.addEventListener("activate", (e) => {
 
 // Allow the page to force-activate a waiting SW (postMessage "skipWaiting")
 self.addEventListener("message", (event) => {
-  if (event.data === "skipWaiting") self.skipWaiting();
+  if (event.data === "skipWaiting") {
+    // Acknowledge so the page's postMessage promise resolves and the
+    // message channel doesn't close mid-flight ("channel closed" error).
+    if (event.ports && event.ports[0]) {
+      event.ports[0].postMessage("activated");
+    }
+    self.skipWaiting();
+  }
 });
 
 const TILE_CACHE = "aurafisky-tiles-v1";

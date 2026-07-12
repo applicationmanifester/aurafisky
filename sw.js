@@ -3,7 +3,10 @@ importScripts(
 );
 importScripts("weather.js");
 importScripts("src/icons.js");
-const CACHE_NAME = "aurafisky-v31";
+// Bump this on every deploy. The activate handler wipes any aurafisky-v*
+// cache whose version differs, so browsers can never keep serving a stale
+// older build of the app shell.
+const CACHE_NAME = "aurafisky-v32";
 const ASSETS = [
   "./",
   "./index.html",
@@ -58,10 +61,20 @@ self.addEventListener("activate", (e) => {
     caches
       .keys()
       .then((keys) => {
+        // Whitelist caches we want to KEEP across updates:
+        //   - CACHE_NAME        : the current app shell build
+        //   - TILE_CACHE        : map tiles (self-evicting via LRU, see cacheTile)
+        // Everything else — including stale aurafisky-vNN builds from prior
+        // deploys and any orphan/orphaned-name caches — is deleted so a
+        // browser can never resurrect an older version of the app.
+        const keep = new Set([CACHE_NAME, TILE_CACHE]);
         return Promise.all(
           keys
-            .filter((key) => key !== CACHE_NAME)
-            .map((key) => caches.delete(key)),
+            .filter((key) => !keep.has(key))
+            .map((key) => {
+              console.log("SW: removing stale cache", key);
+              return caches.delete(key);
+            }),
         );
       })
       .then(() => self.clients.claim()),

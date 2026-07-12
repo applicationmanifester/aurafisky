@@ -5015,30 +5015,44 @@ ${precipProb > 0 ? `<span class="text-[9px] sm:text-[10px] text-blue-500 font-se
         if (reloading || sessionStorage.getItem("sw_reload")) return;
         reloading = true;
         sessionStorage.setItem("sw_reload", "1");
-        location.reload();
+        // Small delay to let clients.claim() finish before reloading
+        setTimeout(() => location.reload(), 500);
       });
       window.addEventListener("load", () => {
         navigator.serviceWorker
-          .register("./sw.js")
+          // updateViaCache: 'none' makes the browser fetch sw.js from the
+          // network on every navigation instead of serving a stale copy from
+          // the HTTP cache. Without this, Chrome/Edge can keep an old SW for
+          // up to 24h — the #1 cause of "browser persists older version".
+          .register("./sw.js", { updateViaCache: "none" })
           .then((reg) => {
-            // Force an immediate activation check so an installed-but-waiting
-            // SW (e.g. after a deploy) takes over without a manual unregister.
-            if (reg.waiting) reg.waiting.postMessage("skipWaiting");
+            // If a newer SW is already waiting, activate it immediately.
+            if (reg.waiting) {
+              reg.waiting.postMessage("skipWaiting");
+            }
             reg.addEventListener("updatefound", () => {
               const newSW = reg.installing || reg.waiting;
-              if (newSW) {
-                newSW.addEventListener("statechange", () => {
-                  if (
-                    newSW.state === "installed" &&
-                    navigator.serviceWorker.controller
-                  ) {
-                    this.showToast(
-                      "New version available — refresh for the latest features",
-                      "info",
-                    );
-                  }
-                });
-              }
+              if (!newSW) return;
+              newSW.addEventListener("statechange", () => {
+                // Once the new SW is installed (and a previous controller
+                // exists, meaning this is an update not a first install),
+                // tell it to take control. This triggers controllerchange
+                // below, which reloads the page with fresh assets.
+                if (
+                  newSW.state === "installed" &&
+                  navigator.serviceWorker.controller
+                ) {
+                  // Post to waiting — it may have moved from installing→waiting
+                  (reg.waiting || newSW).postMessage("skipWaiting");
+                  // The controllerchange listener above will reload once.
+                  // Show a toast so users on browsers that are slow to fire
+                  // the reload know an update is in progress.
+                  this.showToast(
+                    "Updating Aurafisky…",
+                    "info",
+                  );
+                }
+              });
             });
           })
           .catch((err) => {

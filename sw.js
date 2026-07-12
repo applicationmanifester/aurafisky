@@ -6,27 +6,33 @@ importScripts("src/icons.js");
 // Bump this on every deploy. The activate handler wipes any aurafisky-v*
 // cache whose version differs, so browsers can never keep serving a stale
 // older build of the app shell.
-const CACHE_NAME = "aurafisky-v33";
-const ASSETS = [
+const CACHE_NAME = "aurafisky-v34";
+// Critical app-shell files: if any of these fail to precache, the install
+// must fail loudly so a half-cached SW never goes live and 504s on boot.
+const CRITICAL_ASSETS = [
   "./",
   "./index.html",
   "./app.js",
   "./weather.js",
+  "./styles.css",
+  "./src/icons.js",
+  "./modules/dom-utils.js",
+  "./modules/toast.js",
+];
+// Best-effort extras (icons, css, CDN libs) — failure is tolerated.
+const OPTIONAL_ASSETS = [
   "./favicon.svg",
   "./logo.svg",
   "./icon-192.png",
   "./icon-512.png",
-  "./src/icons.js",
-  "./modules/dom-utils.js",
-  "./modules/toast.js",
   "./manifest.json",
-  "./styles.css",
   "./css/tailwind.css",
   "https://unpkg.com/leaflet@1.9.4/dist/leaflet.css",
   "https://unpkg.com/leaflet@1.9.4/dist/leaflet.js",
   "https://cdn.jsdelivr.net/npm/localforage@1.10.0/dist/localforage.min.js",
   "https://cdn.jsdelivr.net/npm/dompurify@3.0.6/dist/purify.min.js",
 ];
+const ASSETS = [...CRITICAL_ASSETS, ...OPTIONAL_ASSETS];
 
 // Minimal offline page served when a navigation fails and nothing is cached.
 // Lets the app's own offline banner take over instead of a browser error.
@@ -45,9 +51,14 @@ p{opacity:.7;line-height:1.5;margin:0}
 self.addEventListener("install", (e) => {
   self.skipWaiting();
   e.waitUntil(
-    caches.open(CACHE_NAME).then((cache) => {
-      return Promise.allSettled(
-        ASSETS.map((url) =>
+    caches.open(CACHE_NAME).then(async (cache) => {
+      // Critical shell must all succeed or the install fails loudly.
+      await Promise.all(
+        CRITICAL_ASSETS.map((url) => cache.add(url)),
+      );
+      // Optional extras: tolerate individual failures.
+      await Promise.allSettled(
+        OPTIONAL_ASSETS.map((url) =>
           cache.add(url).catch(() => console.warn("SW: failed to cache", url)),
         ),
       );
@@ -220,6 +231,19 @@ self.addEventListener("fetch", (e) => {
           // For a navigation, serve the cached shell or a minimal offline
           // page so the app (and its offline banner) can still run.
           if (e.request.mode === "navigate") {
+            const shell = await caches.match("./index.html");
+            if (shell) return shell;
+            return new Response(OFFLINE_HTML, {
+              headers: { "Content-Type": "text/html; charset=utf-8" },
+              status: 200,
+            });
+          }
+          // Non-navigation same-origin asset (app.js, weather.js, styles.css)
+          // failed both network and cache. A dead 504 with an empty body would
+          // leave the page loaded but the script never executed (blank card).
+          // Fall back to the cached app shell so the PWA still boots and can
+          // show its offline banner; only images/tiles get the silent 504.
+          if (/\.(js|css|html?)$/.test(url)) {
             const shell = await caches.match("./index.html");
             if (shell) return shell;
             return new Response(OFFLINE_HTML, {

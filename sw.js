@@ -6,7 +6,7 @@ importScripts("src/icons.js");
 // Bump this on every deploy. The activate handler wipes any aurafisky-v*
 // cache whose version differs, so browsers can never keep serving a stale
 // older build of the app shell.
-const CACHE_NAME = "aurafisky-v32";
+const CACHE_NAME = "aurafisky-v33";
 const ASSETS = [
   "./",
   "./index.html",

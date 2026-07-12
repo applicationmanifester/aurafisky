@@ -2609,9 +2609,16 @@ class AurafiskyApp {
     if (this.defaultLocation) {
       const icon = L.divIcon({
         className: "home-marker",
-        html: '<span class="home-marker-pin" aria-hidden="true">⌂</span>',
-        iconSize: [34, 34],
-        iconAnchor: [17, 17],
+        html: `
+          <span class="home-marker-shell" aria-hidden="true">
+            <span class="home-marker-ring"></span>
+            <span class="home-marker-pin">
+              <span class="home-marker-core"></span>
+            </span>
+          </span>
+        `,
+        iconSize: [40, 56],
+        iconAnchor: [20, 50],
       });
       this._homeMarker = L.marker(
         [this.defaultLocation.lat, this.defaultLocation.lng],
@@ -2619,7 +2626,7 @@ class AurafiskyApp {
       ).addTo(this.map);
       this._homeMarker.bindTooltip(this.defaultLocation.name, {
         direction: "top",
-        offset: L.point(0, -14),
+        offset: L.point(0, -24),
         className: "home-tooltip",
       });
       this._homeMarker.on("click", () => {
@@ -5054,6 +5061,22 @@ ${precipProb > 0 ? `<span class="text-[9px] sm:text-[10px] text-blue-500 font-se
                 }
               });
             });
+
+            // ── Force SW update checks ──────────────────────────
+            // Even with updateViaCache:'none', the browser only checks for a
+            // new SW on navigation (or a 24h timer). A user who opens the app
+            // from the home screen and keeps it open never navigates, so an
+            // already-installed new version would never get picked up.
+            // These listeners force an immediate update() check:
+            //   1. On initial load (right after registration)
+            //   2. When the tab becomes visible again (background -> foreground)
+            //   3. When the window regains focus
+            const forceCheck = () => reg.update().catch(() => {});
+            document.addEventListener("visibilitychange", () => {
+              if (document.visibilityState === "visible") forceCheck();
+            });
+            window.addEventListener("focus", forceCheck);
+            forceCheck();
           })
           .catch((err) => {
             console.warn("Service Worker registration failed:", err);
@@ -6164,7 +6187,16 @@ ${precipProb > 0 ? `<span class="text-[9px] sm:text-[10px] text-blue-500 font-se
           console.log("Periodic sync registered successfully");
         }
       } catch (error) {
-        console.warn("Periodic sync registration failed:", error);
+        const name = error?.name || "";
+        const msg = String(error?.message || "");
+        const ignorable =
+          name === "UnknownError" ||
+          name === "NotAllowedError" ||
+          name === "InvalidStateError" ||
+          /periodic sync/i.test(msg);
+        if (!ignorable) {
+          console.warn("Periodic sync registration failed:", error);
+        }
       }
     }
   }
@@ -6183,7 +6215,16 @@ ${precipProb > 0 ? `<span class="text-[9px] sm:text-[10px] text-blue-500 font-se
           }
         }
       } catch (error) {
-        console.warn("Periodic sync unregister failed:", error);
+        const name = error?.name || "";
+        const msg = String(error?.message || "");
+        const ignorable =
+          name === "UnknownError" ||
+          name === "NotAllowedError" ||
+          name === "InvalidStateError" ||
+          /periodic sync/i.test(msg);
+        if (!ignorable) {
+          console.warn("Periodic sync unregister failed:", error);
+        }
       }
     }
   }

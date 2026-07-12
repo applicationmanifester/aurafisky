@@ -138,14 +138,6 @@ html, body {
   transition: transform 0.4s cubic-bezier(0.22, 1, 0.36, 1);
   contain: paint;
 }
-/* Keep the weather card above the floating zoom/radar controls (which sit
-   at z-[1001]) so its close (X) button stays tappable on mobile, where the
-   panel slides up from the bottom and would otherwise be covered. The
-   Tailwind arbitrary z-[…] class is not compiled in this no-build setup,
-   so this explicit rule is what actually applies. */
-#weatherPanel {
-  z-index: 1003;
-}
 .weather-panel.open {
   transform: translateX(0);
 }

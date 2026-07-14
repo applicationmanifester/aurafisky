@@ -133,6 +133,26 @@ html, body {
 }
 
 /* ── Weather Panel ──────────────────────────────────────────── */
+/* Position/size are set here in plain CSS (not via Tailwind utility
+   classes, which are not compiled in this no-build setup) so the card
+   is reliably clamped inside the map/viewport and its border can never
+   exceed the visible area. */
+#weatherPanel {
+  position: fixed;
+  top: 5rem; /* ~80px: clears the top bar on desktop */
+  left: 1rem;
+  right: auto;
+  bottom: 1rem; /* anchor bottom so it can't run past the map */
+  width: 340px;
+  max-width: calc(100vw - 2rem);
+  max-height: calc(100vh - 6rem);
+  z-index: 1000;
+}
+@media (min-width: 768px) {
+  #weatherPanel {
+    width: 380px;
+  }
+}
 .weather-panel {
   transform: translateX(-110%);
   transition: transform 0.4s cubic-bezier(0.22, 1, 0.36, 1);

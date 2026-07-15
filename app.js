@@ -438,6 +438,17 @@ class AurafiskyApp {
     // Only explicit share URLs should override the default view.
     setTimeout(() => this.readShareableUrl(), 0);
 
+    // Real visible viewport height (mobile browser chrome safe).
+    // --app-height is consumed by #map / panel max-height so content is
+    // never clipped behind the address bar (the classic 100vh bug).
+    this._updateAppHeight();
+    window.addEventListener("resize", () => this._updateAppHeight());
+    if (window.visualViewport) {
+      window.visualViewport.addEventListener("resize", () =>
+        this._updateAppHeight(),
+      );
+    }
+
     // Load localforage cache first (settings, default location, last session)
     this._loadLocalCache().then(() => {
       this.updateSettingsUIFromLocal();
@@ -455,6 +466,15 @@ class AurafiskyApp {
     this.initFirebase();
 
     // Terms shown only on sign-in or via settings button / corner link
+  }
+
+  // Set --app-height to the true visible viewport height so layout using
+  // var(--app-height, 100vh) is never clipped behind mobile browser chrome.
+  _updateAppHeight() {
+    const h = window.visualViewport
+      ? window.visualViewport.height
+      : window.innerHeight;
+    document.documentElement.style.setProperty("--app-height", `${h}px`);
   }
 
   // ================================================================

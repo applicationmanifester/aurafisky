@@ -10,8 +10,8 @@
 
 /* ── CSS Custom Properties ──────────────────────────────────── */
 :root {
-  --glass-bg: rgba(255, 255, 255, 0.72);
-  --glass-border: rgba(255, 255, 255, 0.35);
+  --glass-bg: rgba(255, 255, 255, 0.9);
+  --glass-border: rgba(255, 255, 255, 0.5);
   --glass-shadow: 0 8px 32px rgba(0, 0, 0, 0.08);
   --glass-blur: 16px;
 
@@ -27,8 +27,8 @@
 }
 
 .dark {
-  --glass-bg: rgba(15, 23, 42, 0.78);
-  --glass-border: rgba(255, 255, 255, 0.08);
+  --glass-bg: rgba(15, 23, 42, 0.9);
+  --glass-border: rgba(255, 255, 255, 0.15);
   --glass-shadow: 0 8px 32px rgba(0, 0, 0, 0.32);
 }
 
@@ -113,7 +113,7 @@ html, body {
   top: calc(100% + 0.5rem);
   left: 0;
   right: 0;
-  z-index: 50;
+  z-index: 100;
   max-height: 0;
   overflow: hidden;
   transition: max-height 0.3s ease, opacity 0.3s ease;
@@ -129,6 +129,19 @@ html, body {
 .search-dropdown.open {
   max-height: 280px;
   opacity: 1;
+}
+/* On mobile (<640px), the search box is only ~60% wide. Make the
+   dropdown span the full viewport so result text doesn't cramp. */
+@media (max-width: 639px) {
+  .search-dropdown {
+    position: fixed;
+    left: 0.75rem;
+    right: 0.75rem;
+    top: 3.5rem;
+  }
+  .search-dropdown.open {
+    max-height: 50vh;
+  }
 }
 .search-result-item {
   transition: background-color 0.15s ease;

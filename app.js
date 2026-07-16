@@ -1124,10 +1124,14 @@ class AurafiskyApp {
         this.airQualityData = airQuality;
         this.currentHourIndex = WeatherService.getCurrentHourIndex(
           this.weatherData,
+          this.weatherData?.utc_offset_seconds || 0,
         );
 
         // Compute diurnal bias from past days
-        this.biasMap = WeatherService.computeDiurnalBias(forecast);
+        this.biasMap = WeatherService.computeDiurnalBias(
+          forecast,
+          forecast?.utc_offset_seconds || 0,
+        );
 
         // Store freshness timestamp
         this.freshnessTimestamp = Date.now();
@@ -1184,6 +1188,7 @@ class AurafiskyApp {
           this.airQualityData = cached.airQuality;
           this.currentHourIndex = WeatherService.getCurrentHourIndex(
             this.weatherData,
+            this.weatherData?.utc_offset_seconds || 0,
           );
 
           this.updateOfflineBadge(true);
@@ -1674,7 +1679,10 @@ class AurafiskyApp {
     this.renderUVChart();
 
     // Update bottom slider indicators
-    const nowIdx = WeatherService.getCurrentHourIndex(this.weatherData);
+    const nowIdx = WeatherService.getCurrentHourIndex(
+      this.weatherData,
+      this.weatherData?.utc_offset_seconds || 0,
+    );
     const isNow = Math.abs(hourIndex - nowIdx) <= 1;
     this.$.timelineBadge.classList.toggle("hidden", !isNow);
     this.$.timelineLabel.textContent = WeatherService.formatDateTime(
@@ -2035,7 +2043,10 @@ class AurafiskyApp {
     labelIndices.forEach((idx) => {
       if (points[idx]) {
         const span = document.createElement("span");
-        span.textContent = WeatherService.formatHourLabel(points[idx].time);
+        span.textContent = WeatherService.formatHourLabel(
+        points[idx].time,
+        this.weatherData?.utc_offset_seconds || 0,
+      );
         this.$.chartHours.appendChild(span);
       }
     });
@@ -2149,7 +2160,10 @@ class AurafiskyApp {
       }
     }
 
-    const nowIdx = WeatherService.getCurrentHourIndex(this.weatherData);
+    const nowIdx = WeatherService.getCurrentHourIndex(
+      this.weatherData,
+      this.weatherData?.utc_offset_seconds || 0,
+    );
     const nowPct = (nowIdx / (totalHours - 1)) * 100;
 
     this.$.nowIndicator.style.left = `${nowPct}%`;
@@ -2779,7 +2793,10 @@ class AurafiskyApp {
       ]);
 
       const idxA = parseInt(this.$.timelineSlider.value, 10);
-      const idxB = WeatherService.getCurrentHourIndex(forecastB);
+      const idxB = WeatherService.getCurrentHourIndex(
+      forecastB,
+      forecastB?.utc_offset_seconds || 0,
+    );
 
       const wA = WeatherService.getHourlyAtIndex(this.weatherData, idxA);
       const wB = WeatherService.getHourlyAtIndex(forecastB, idxB);
@@ -2944,7 +2961,10 @@ Wind: ${WeatherService.formatWind(weather.windSpeed)} ${WeatherService.getWindDi
     if (!this.weatherData || !this.weatherData.hourly) return;
 
     const h = this.weatherData.hourly;
-    const nowIdx = WeatherService.getCurrentHourIndex(this.weatherData);
+    const nowIdx = WeatherService.getCurrentHourIndex(
+      this.weatherData,
+      this.weatherData?.utc_offset_seconds || 0,
+    );
     const limit = Math.min(h.time.length, nowIdx + 48);
 
     const allHours = [];
@@ -3285,7 +3305,10 @@ ${precipProb > 0 ? `<span class="text-[9px] sm:text-[10px] text-blue-500 font-se
       lng: upwind.lng,
     };
 
-    const nowIdx = WeatherService.getCurrentHourIndex(upwindData);
+    const nowIdx = WeatherService.getCurrentHourIndex(
+      upwindData,
+      upwindData?.utc_offset_seconds || 0,
+    );
     const upwindWeather = WeatherService.getHourlyAtIndex(upwindData, nowIdx);
     if (!upwindWeather) {
       this.$.predictiveArrival.classList.add("hidden");
@@ -3706,7 +3729,10 @@ ${precipProb > 0 ? `<span class="text-[9px] sm:text-[10px] text-blue-500 font-se
       for (const b of needsFetch) {
         try {
           const forecast = await WeatherService.fetchForecast(b.lat, b.lng);
-          const idx = WeatherService.getCurrentHourIndex(forecast);
+          const idx = WeatherService.getCurrentHourIndex(
+          forecast,
+          forecast?.utc_offset_seconds || 0,
+        );
           const w = WeatherService.getHourlyAtIndex(forecast, idx);
           pinCache[b.lat + "_" + b.lng] = { weather: w, ts: Date.now() };
           // 150ms delay between bookmark fetches

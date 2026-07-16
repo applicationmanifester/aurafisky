@@ -283,17 +283,24 @@ const WeatherService = (() => {
    * Finds the hourly index closest to the current time.
    *
    * @param {Object} data - Full API response
+   * @param {number} [utcOffsetSeconds=0] - Timezone offset in seconds
    * @returns {number} Index of the current hour
    */
-  function getCurrentHourIndex(data) {
+  function getCurrentHourIndex(data, utcOffsetSeconds = 0) {
     if (!data?.hourly?.time) return 0;
+    // The API returns times in the location's local timezone without offset.
+    // We need to compare against "now" in that same timezone.
     const now = new Date();
+    // Adjust browser time to location timezone: now_in_location = now - utcOffsetSeconds
+    const nowInLocation = now.getTime() - (utcOffsetSeconds || 0) * 1000;
     const times = data.hourly.time;
     let closest = 0;
     let minDiff = Infinity;
 
     for (let i = 0; i < times.length; i++) {
-      const diff = Math.abs(new Date(times[i]).getTime() - now.getTime());
+      // Parse location-local time string as UTC, then it matches the adjusted now
+      const t = new Date(times[i] + "Z").getTime();
+      const diff = Math.abs(t - nowInLocation);
       if (diff < minDiff) {
         minDiff = diff;
         closest = i;
@@ -506,8 +513,8 @@ const WeatherService = (() => {
    * @param {string} timeStr - ISO datetime string
    * @returns {string} Formatted time (e.g., "2 PM")
    */
-  function formatHourLabel(timeStr) {
-    const date = new Date(timeStr);
+  function formatHourLabel(timeStr, utcOffsetSeconds = 0) {
+    const date = new Date(new Date(timeStr + "Z").getTime() - (utcOffsetSeconds || 0) * 1000);
     const hours = date.getHours();
     if (hours === 0) return "12 AM";
     if (hours === 12) return "12 PM";
@@ -1314,22 +1321,21 @@ const WeatherService = (() => {
   //  2. DIURNAL BIAS CORRECTION
   //  ================================================================
 
-  function computeDiurnalBias(data) {
+  function computeDiurnalBias(data, utcOffsetSeconds = 0) {
     if (!data?.hourly?.temperature_2m) return null;
     const h = data.hourly;
     const biasByHour = {};
     for (let i = 0; i < h.time.length; i++) {
       if (h.temperature_2m[i] == null) continue;
-      const hour = new Date(h.time[i]).getHours();
+      const date = new Date(new Date(h.time[i] + "Z").getTime() - (utcOffsetSeconds || 0) * 1000);
+      const hour = date.getHours();
       if (!biasByHour[hour]) biasByHour[hour] = [];
       biasByHour[hour].push(h.temperature_2m[i]);
     }
     const result = {};
     for (const [hour, vals] of Object.entries(biasByHour)) {
       if (vals.length >= 3) {
-        // Use the average over past days as the expected norm, compute deviation
         const avg = vals.reduce((a, b) => a + b, 0) / vals.length;
-        // The bias is relative to the overall mean
         result[hour] = avg;
       }
     }

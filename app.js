@@ -558,11 +558,7 @@ class AurafiskyApp {
       this.map.on("click", async (e) => {
         if (this._mapClickDebounce) return;
         
-        // If weather panel is open, clicking map should just close it
-        if (this.$.weatherPanel && this.$.weatherPanel.classList.contains("open") && !this.$.weatherPanel.classList.contains("minimized")) {
-          this.hideWeatherPanel();
-          return;
-        }
+
 
         // Check if click is near home pin (pixel distance)
         if (this._homeMarker && this.defaultLocation) {
@@ -1305,15 +1301,7 @@ class AurafiskyApp {
     try {
       this._persistSession(lat, lng, name);
 
-      const wasMinimal = this.minimalMode;
       let weatherPopulated = false;
-      if (wasMinimal) {
-        const panel = this.$.weatherPanel;
-        this.setSafeHTML(panel, panel.dataset.fullContent || "");
-        this.rebindPanelEvents();
-        document.documentElement.classList.remove("compact");
-        this.minimalMode = false;
-      }
 
       this.selectedLat = lat;
       this.selectedLng = lng;
@@ -2628,7 +2616,6 @@ class AurafiskyApp {
       this._cachedDecomposition = null;
       this.updateWeatherDisplay(hourIndex);
       // Keep the minimised card in sync with the selected hour
-      if (this.minimalMode) this.enterMinimalMode();
       this.updateTimelineTooltip(hourIndex);
       this.updateTrackColors();
     });
@@ -3722,92 +3709,16 @@ ${precipProb > 0 ? `<span class="text-[9px] sm:text-[10px] text-blue-500 font-se
   //  EXTREME MINIMAL MODE
   // ================================================================
 
-  enterMinimalMode() {
-    document.documentElement.classList.add("compact");
-    const panel = this.$.weatherPanel;
-    // Snapshot the full panel only from the real full content. If the
-    // panel already holds the minified card (no #weatherPanelContent),
-    // keep the previously captured full content so expanding always
-    // restores the complete card — not a skeleton/empty snapshot.
-    if (!panel.dataset.fullContent || panel.querySelector("#weatherPanelContent")) {
-      panel.dataset.fullContent = panel.innerHTML;
-    }
-    const minimalWeather =
-      WeatherService.getHourlyAtIndex(
-        this.weatherData,
-        parseInt(this.$.timelineSlider.value, 10),
-      ) || {};
-    const minimalHTML = `
-      <div class="flex items-center justify-between px-5 pt-5 pb-3">
-        <div class="min-w-0 flex-1">
-          <h3 class="text-lg font-bold truncate text-slate-900 dark:text-white">${this.selectedName || "Weather"}</h3>
-        </div>
-        <button id="minimalExitBtn" class="p-1.5 rounded-lg hover:bg-slate-200/60 dark:hover:bg-slate-600/40 transition-colors flex-shrink-0" aria-label="Exit minimal mode">
-          <svg class="w-5 h-5 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-            <path stroke-linecap="round" stroke-linejoin="round" d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4" />
-          </svg>
-        </button>
-      </div>
-      <div class="flex-1 flex items-center justify-center px-5 pb-5">
-        <div class="text-center">
-          <div class="text-7xl mb-3">${minimalWeather.icon || this.$.panelIcon.textContent}</div>
-          <div class="text-6xl font-extrabold text-slate-900 dark:text-white mb-2">${minimalWeather.temperature != null ? WeatherService.formatTemp(minimalWeather.temperature) : this.$.panelTemp.textContent}</div>
-          <div class="text-lg text-slate-500 dark:text-slate-400 mb-1">${minimalWeather.description || this.$.panelDescription.textContent}</div>
-          <div class="text-sm text-slate-400">${WeatherService.formatDateTime(this.weatherData?.hourly?.time[parseInt(this.$.timelineSlider.value)], this.weatherData?.timezone, this.weatherData?.utc_offset_seconds)}</div>
-        </div>
-      </div>
-    `;
-    this.setSafeHTML(panel, minimalHTML);
-    panel
-      .querySelector("#minimalExitBtn")
-      .addEventListener("click", () => this.toggleMinimalMode());
-  }
-
   toggleMinimalMode() {
     this.minimalMode = !this.minimalMode;
-    if (this.minimalMode) {
-      this.enterMinimalMode();
-    } else {
-      let panel = this.$.weatherPanel;
-      // Restore the full card. Preferred path: a real snapshot was taken
-      // when the panel held the full content (#weatherPanelContent present).
-      if (panel.dataset.fullContent && panel.dataset.fullContent.length > 200) {
-        panel.innerHTML = panel.dataset.fullContent;
-      } else {
-        // No usable snapshot (e.g. compact was restored from cloud prefs
-        // before any weather render, or a fetch 504 left nothing to
-        // snapshot). Rebuild the pristine panel skeleton from the captured
-        // template, then populate it with the current data. This avoids the
-        // old fallback that called updateWeatherDisplay() on a destroyed DOM
-        // (which threw on incomplete weatherData or wrote to detached nodes,
-        // leaving the card stuck in minimal form).
-        if (!this._weatherPanelTemplate) {
-          this._weatherPanelTemplate = document.getElementById(
-            "weatherPanel",
-          )?.outerHTML || "";
-        }
-        if (this._weatherPanelTemplate) {
-          panel.outerHTML = this._weatherPanelTemplate;
-          this.$.weatherPanel = document.getElementById("weatherPanel");
-          panel = this.$.weatherPanel;
-        }
-        if (this.weatherData) {
-          try {
-            this.updateWeatherDisplay(this.currentHourIndex);
-          } catch (err) {
-            console.warn("expand repopulate failed:", err);
-          }
-        }
-      }
-      this.rebindPanelEvents();
-      // Ensure the full panel is shown (re-entry from minimal mode may have
-      // left the original .open class, but re-add to be safe so the card is visible)
-      panel.classList.add("open");
-      panel.classList.remove("minimized");
-      document.documentElement.classList.remove("compact");
-      this.updateHomeButton();
-      this.updateHomeMarker();
+    document.documentElement.classList.toggle("compact", this.minimalMode);
+    
+    const panel = this.$.weatherPanel;
+    if (this.currentLocation || this.selectedLat != null) {
+        panel.classList.add("open");
     }
+    panel.classList.remove("minimized");
+    
     this.updateSettingsUIFromLocal();
     this.saveUserDataToCloud();
   }

@@ -508,8 +508,6 @@ class AurafiskyApp {
           attribution: "&copy; OpenStreetMap contributors &copy; CARTO",
           subdomains: "abcd",
           maxZoom: 20,
-          updateWhenIdle: false,
-          updateWhenZooming: false,
           keepBuffer: 2,
           noWrap: false,
           // Clip tile requests to the valid Web-Mercator range so Leaflet
@@ -525,8 +523,6 @@ class AurafiskyApp {
           attribution: "&copy; OpenStreetMap contributors &copy; CARTO",
           subdomains: "abcd",
           maxZoom: 20,
-          updateWhenIdle: false,
-          updateWhenZooming: false,
           keepBuffer: 2,
           noWrap: false,
           bounds: [[-85, -180], [85, 180]],
@@ -585,7 +581,7 @@ class AurafiskyApp {
         } catch (err) {
           console.error("Map click handler error:", err);
         } finally {
-          setTimeout(() => (this._mapClickDebounce = false), 1000);
+          setTimeout(() => (this._mapClickDebounce = false), 300);
         }
       });
 
@@ -1451,54 +1447,26 @@ class AurafiskyApp {
           this.showToast(
             this.isOffline
               ? "You are offline and no cached data is available for this city."
-              : "Could not fetch weather metrics.",
+              : "Could not fetch weather metrics. Please try again.",
             "error",
           );
-          this.hideWeatherPanel();
+
+          if (this.weatherData) {
+            // Restore previous content view instead of leaving it stuck in skeleton
+            if (this.$.weatherPanelSkeleton && this.$.weatherPanelContent) {
+              this.$.weatherPanelContent.classList.remove("hidden");
+              this.$.weatherPanelSkeleton.classList.add("hidden");
+            }
+          } else {
+            this.hideWeatherPanel();
+          }
         }
       }
 
       this.updateHomeButton();
       this.updateHomeMarker();
 
-      // Re-enter minimal mode if it was active AND we have valid weather to show
-      if (wasMinimal && weatherPopulated) {
-        document.documentElement.classList.add("compact");
-        const panel = this.$.weatherPanel;
-        // Preserve current HTML safely before switching to minimal view.
-        // Only snapshot if the panel currently holds the FULL content
-        // (has #weatherPanelContent) — if it's already minimal, don't
-        // overwrite the stored full card with the minified version.
-        if (panel.querySelector("#weatherPanelContent")) {
-          panel.dataset.fullContent = panel.innerHTML;
-        }
-        const minimalHTML = `
-         <div class="flex items-center justify-between px-5 pt-5 pb-3">
-           <div class="min-w-0 flex-1">
-             <h3 class="text-lg font-bold truncate text-slate-900 dark:text-white">${this.selectedName || "Weather"}</h3>
-           </div>
-           <button id="minimalExitBtn" class="p-1.5 rounded-lg hover:bg-slate-200/60 dark:hover:bg-slate-600/40 transition-colors flex-shrink-0" aria-label="Exit minimal mode">
-             <svg class="w-5 h-5 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-               <path stroke-linecap="round" stroke-linejoin="round" d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4" />
-             </svg>
-           </button>
-         </div>
-         <div class="flex-1 flex items-center justify-center px-5 pb-5">
-           <div class="text-center">
-             <div class="text-7xl mb-3">${this.$.panelIcon.textContent}</div>
-             <div class="text-6xl font-extrabold text-slate-900 dark:text-white mb-2">${this.$.panelTemp.textContent}</div>
-             <div class="text-lg text-slate-500 dark:text-slate-400 mb-1">${this.$.panelDescription.textContent}</div>
-             <div class="text-sm text-slate-400">${WeatherService.formatDateTime(this.weatherData?.hourly?.time[parseInt(this.$.timelineSlider.value)], this.weatherData?.timezone, this.weatherData?.utc_offset_seconds)}</div>
-           </div>
-         </div>
-       `;
-        this.setSafeHTML(panel, minimalHTML);
-        panel
-          .querySelector("#minimalExitBtn")
-          .addEventListener("click", () => this.toggleMinimalMode());
-        this.minimalMode = true;
-        this.updateSettingsUIFromLocal();
-      }
+
     } finally {
       this._isFetching = false;
     }

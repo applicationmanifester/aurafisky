@@ -1,12 +1,17 @@
 // Lazy-loaded feature registry. Each module exposes init(app) and attaches
 // itself to the running AurafiskyApp instance. Keeps app.js lean and lets
 // features load on demand (code-splitting / Phase-1 modularization).
+const featureModules = {
+  ensemble: () => import('./ensemble.js'),
+  routes: () => import('./routes.js'),
+  copilot: () => import('./copilot.js')
+};
+
 export async function initFeatures(app) {
-  const mods = ["ensemble", "routes", "copilot"];
-  for (const name of mods) {
+  for (const [name, loader] of Object.entries(featureModules)) {
     try {
-      const mod = await import(`./${name}.js`);
-      if (typeof mod.init === "function") mod.init(app);
+      const mod = await loader();
+      if (typeof mod.init === 'function') mod.init(app);
     } catch (e) {
       console.warn(`Feature "${name}" failed to initialize:`, e);
     }

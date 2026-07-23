@@ -21,7 +21,18 @@ const WeatherService = (() => {
   // Deduplicates concurrent identical API calls so multiple callers
   // share a single network request.
   const _requestCache = new Map();
+  const _geocodingCache = new Map();
   const REQUEST_CACHE_TTL = 30000;
+  const MAX_CACHE_SIZE = 50;
+
+  function _setCache(key, value) {
+    if (_requestCache.size >= MAX_CACHE_SIZE) {
+      // Map preserves insertion order, so the first key is the oldest
+      const oldestKey = _requestCache.keys().next().value;
+      _requestCache.delete(oldestKey);
+    }
+    _requestCache.set(key, value);
+  }
 
   function _cacheKey(url) {
     return url;
@@ -36,14 +47,14 @@ const WeatherService = (() => {
     }
     const promise = fetchFn()
       .then((data) => {
-        _requestCache.set(key, { data, ts: Date.now() });
+        _setCache(key, { data, ts: Date.now() });
         return data;
       })
       .catch((err) => {
         _requestCache.delete(key);
         throw err;
       });
-    _requestCache.set(key, { data: promise, ts: Date.now() });
+    _setCache(key, { data: promise, ts: Date.now() });
     return promise;
   }
 
@@ -85,6 +96,14 @@ const WeatherService = (() => {
   /** Thunderstorm codes */
   function isStormCode(code) {
     return code >= 95 && code <= 99;
+  }
+  function getWeatherCodeClass(code) {
+    if (isStormCode(code)) return "storm";
+    if (isSnowCode(code)) return "snow";
+    if (isRainCode(code)) return "rain";
+    if (code === 3) return "cloudy";
+    if (code === 45 || code === 48) return "fog";
+    return "clear";
   }
 
   // ── Safe localStorage helper ───────────────────────────────
@@ -178,7 +197,7 @@ const WeatherService = (() => {
    * @param {number} lng - Longitude
    * @returns {Promise<Object>} Parsed weather data
    */
-  async function fetchForecast(lat, lng, retries = 2) {
+  async function fetchForecast(lat, lng, retries = 3) {
     const round = (v) => v.toFixed(4);
     const cacheKey = `${FORECAST_URL}?latitude=${round(lat)}&longitude=${round(lng)}&past_days=${PAST_DAYS}&forecast_days=${FORECAST_DAYS}&timezone=auto`;
     if (_requestCache.has(cacheKey)) {
@@ -232,7 +251,7 @@ const WeatherService = (() => {
         const data = await response.json();
         if (!data.hourly?.time || !data.daily)
           throw new Error("Unexpected format");
-        _requestCache.set(cacheKey, { data, ts: Date.now() });
+        _setCache(cacheKey, { data, ts: Date.now() });
         return data;
       } catch (err) {
         if (attempt < retries)
@@ -287,18 +306,51 @@ const WeatherService = (() => {
    * @returns {number} Index of the current hour
    */
   function getCurrentHourIndex(data, utcOffsetSeconds = 0) {
-    if (!data?.hourly?.time) return 0;
-    // The API returns times in the location's local timezone without offset.
-    // We need to compare against "now" in that same timezone.
-    const now = new Date();
-    // Adjust browser time to location timezone: now_in_location = now - utcOffsetSeconds
-    const nowInLocation = now.getTime() - (utcOffsetSeconds || 0) * 1000;
+    if (!data?.hourly?.time || !data.hourly.time.length) return 0;
     const times = data.hourly.time;
+    const tz = data.timezone;
+
+    if (tz) {
+      try {
+        const now = new Date();
+        const formatter = new Intl.DateTimeFormat("en-US", {
+          timeZone: tz,
+          year: "numeric",
+          month: "2-digit",
+          day: "2-digit",
+          hour: "2-digit",
+          hour12: false,
+        });
+        const parts = formatter.formatToParts(now);
+        let year, month, day, hour;
+        for (const p of parts) {
+          if (p.type === "year") year = p.value;
+          if (p.type === "month") month = p.value;
+          if (p.type === "day") day = p.value;
+          if (p.type === "hour") {
+            let h = parseInt(p.value, 10);
+            if (h === 24) h = 0;
+            hour = h.toString().padStart(2, "0");
+          }
+        }
+        const targetStr = `${year}-${month}-${day}T${hour}:00`;
+        const exactIdx = times.indexOf(targetStr);
+        if (exactIdx !== -1) return exactIdx;
+
+        const targetPrefix = `${year}-${month}-${day}T${hour}`;
+        const prefixIdx = times.findIndex((t) => t.startsWith(targetPrefix));
+        if (prefixIdx !== -1) return prefixIdx;
+      } catch (e) {
+        // Fallback to offset-based matching below
+      }
+    }
+
+    const now = new Date();
+    const nowInLocation = now.getTime() + (utcOffsetSeconds || 0) * 1000;
     let closest = 0;
     let minDiff = Infinity;
 
     for (let i = 0; i < times.length; i++) {
-      // Parse location-local time string as UTC, then it matches the adjusted now
       const t = new Date(times[i] + "Z").getTime();
       const diff = Math.abs(t - nowInLocation);
       if (diff < minDiff) {
@@ -460,6 +512,15 @@ const WeatherService = (() => {
   async function searchLocations(query, signal, retries = 1) {
     if (!query || query.trim().length < 2) return [];
 
+    const cacheKey = query.trim().toLowerCase();
+    if (_geocodingCache.has(cacheKey)) {
+      const cached = _geocodingCache.get(cacheKey);
+      if (Date.now() - cached.ts < 300000) {
+        return cached.data;
+      }
+      _geocodingCache.delete(cacheKey);
+    }
+
     const params = new URLSearchParams({
       name: query.trim(),
       count: 8,
@@ -472,7 +533,7 @@ const WeatherService = (() => {
         const response = await fetch(`${GEOCODING_URL}?${params}`, { signal });
         if (!response.ok) return [];
         const data = await response.json();
-        return (data.results || []).map((r) => ({
+        const results = (data.results || []).map((r) => ({
           name: r.name,
           country: r.country || "",
           admin1: r.admin1 || "",
@@ -480,7 +541,9 @@ const WeatherService = (() => {
           longitude: r.longitude,
           displayName: [r.name, r.admin1, r.country].filter(Boolean).join(", "),
         }));
-      } catch {
+        _geocodingCache.set(cacheKey, { data: results, ts: Date.now() });
+        return results;
+      } catch (error) {
         if (attempt < retries) {
           await new Promise((r) => setTimeout(r, 500 * Math.pow(2, attempt)));
         }
@@ -514,7 +577,19 @@ const WeatherService = (() => {
    * @returns {string} Formatted time (e.g., "2 PM")
    */
   function formatHourLabel(timeStr, utcOffsetSeconds = 0) {
-    const date = new Date(new Date(timeStr + "Z").getTime() - (utcOffsetSeconds || 0) * 1000);
+    if (!timeStr) return "";
+    const tIndex = timeStr.indexOf("T");
+    if (tIndex !== -1) {
+      const hourStr = timeStr.substring(tIndex + 1, tIndex + 3);
+      const hours = parseInt(hourStr, 10);
+      if (!isNaN(hours)) {
+        if (hours === 0) return "12 AM";
+        if (hours === 12) return "12 PM";
+        return hours > 12 ? `${hours - 12} PM` : `${hours} AM`;
+      }
+    }
+    // Fallback if structure changes
+    const date = new Date(timeStr);
     const hours = date.getHours();
     if (hours === 0) return "12 AM";
     if (hours === 12) return "12 PM";
@@ -529,26 +604,84 @@ const WeatherService = (() => {
    */
   function formatDateTime(timeStr, timezone, utcOffsetSeconds) {
     if (!timeStr) return "";
-    // The API returns times in the location's local timezone without offset.
-    // Parse as UTC then adjust by utcOffsetSeconds to get the correct instant.
-    const dateUtc = new Date(timeStr + "Z");
-    const adjusted = new Date(
-      dateUtc.getTime() - (utcOffsetSeconds || 0) * 1000,
+    const parts = timeStr.split("T");
+    if (parts.length < 2) return timeStr;
+    const dateParts = parts[0].split("-");
+    const timeParts = parts[1].split(":");
+    
+    const localDate = new Date(
+      parseInt(dateParts[0], 10),
+      parseInt(dateParts[1], 10) - 1,
+      parseInt(dateParts[2], 10),
+      parseInt(timeParts[0], 10),
+      parseInt(timeParts[1], 10)
     );
+    
     return (
-      adjusted.toLocaleDateString("en-US", {
+      localDate.toLocaleDateString("en-US", {
         weekday: "short",
         month: "short",
         day: "numeric",
-        timeZone: timezone || undefined,
       }) +
       " · " +
-      adjusted.toLocaleTimeString("en-US", {
+      localDate.toLocaleTimeString("en-US", {
         hour: "numeric",
         minute: "2-digit",
-        timeZone: timezone || undefined,
       })
     );
+  }
+
+  /**
+   * Formats an ISO time string to time-only string timezone-independently.
+   *
+   * @param {string} timeStr - ISO datetime string
+   * @returns {string} e.g., "2:00 PM"
+   */
+  function formatTimeOnly(timeStr) {
+    if (!timeStr) return "";
+    const parts = timeStr.split("T");
+    if (parts.length < 2) return timeStr;
+    const timeParts = parts[1].split(":");
+    const hours = parseInt(timeParts[0], 10);
+    const minutes = parseInt(timeParts[1], 10);
+    if (isNaN(hours) || isNaN(minutes)) return timeStr;
+    const ampm = hours >= 12 ? "PM" : "AM";
+    const displayHours = hours % 12 === 0 ? 12 : hours % 12;
+    const displayMinutes = String(minutes).padStart(2, "0");
+    return `${displayHours}:${displayMinutes} ${ampm}`;
+  }
+
+  /**
+   * Formats current local time at the location specified by timezone/offset.
+   *
+   * @param {string} [timezone] - IANA timezone (e.g. "Asia/Kolkata")
+   * @param {number} [utcOffsetSeconds=0] - UTC offset in seconds
+   * @returns {string} e.g. "1:32 PM"
+   */
+  function getFormattedLocationCurrentTime(timezone, utcOffsetSeconds = 0) {
+    const now = new Date();
+    if (timezone) {
+      try {
+        return now.toLocaleTimeString("en-US", {
+          timeZone: timezone,
+          hour: "numeric",
+          minute: "2-digit",
+          hour12: true,
+        });
+      } catch (e) {
+        // Fallback to offset calculation below
+      }
+    }
+    const locMs =
+      now.getTime() +
+      (utcOffsetSeconds || 0) * 1000 +
+      now.getTimezoneOffset() * 60 * 1000;
+    const locDate = new Date(locMs);
+    return locDate.toLocaleTimeString("en-US", {
+      hour: "numeric",
+      minute: "2-digit",
+      hour12: true,
+    });
   }
 
   /**
@@ -573,7 +706,7 @@ const WeatherService = (() => {
    * @param {number} lng - Longitude
    * @returns {Promise<Object>} Air Quality data
    */
-  async function fetchAirQuality(lat, lng) {
+  async function fetchAirQuality(lat, lng, retries = 3) {
     const round = (v) => v.toFixed(4);
     const cacheKey = `aq:${round(lat)},${round(lng)},d${PAST_DAYS},f${FORECAST_DAYS}`;
     if (_requestCache.has(cacheKey)) {
@@ -596,7 +729,7 @@ const WeatherService = (() => {
       );
       if (!response.ok) return null;
       const data = await response.json();
-      _requestCache.set(cacheKey, { data, ts: Date.now() });
+      _setCache(cacheKey, { data, ts: Date.now() });
       return data;
     } catch {
       return null;
@@ -610,7 +743,9 @@ const WeatherService = (() => {
    * @returns {Object} AQI severity descriptors
    */
   function getPollenLevel(value) {
-    if (value == null || value < 0) return null;
+    if (value == null || value < 0) {
+      return { level: "Unknown", color: "text-slate-500", icon: "⚪" };
+    }
     if (value <= 20)
       return { level: "Low", color: "text-emerald-500", icon: "🟢" };
     if (value <= 50)
@@ -667,8 +802,8 @@ const WeatherService = (() => {
     if (value <= 300) {
       return {
         label: "Very Unhealthy",
-        colorClass: "text-purple-500",
-        bgClass: "bg-purple-500/10",
+        colorClass: "text-fuchsia-500",
+        bgClass: "bg-fuchsia-500/10",
       };
     }
     return {
@@ -710,7 +845,7 @@ const WeatherService = (() => {
       if (!response.ok)
         throw new Error(`Historical Weather API error: ${response.status}`);
       const data = await response.json();
-      _requestCache.set(cacheKey, { data, ts: Date.now() });
+      _setCache(cacheKey, { data, ts: Date.now() });
       return data;
     } catch (err) {
       throw err;
@@ -1327,8 +1462,10 @@ const WeatherService = (() => {
     const biasByHour = {};
     for (let i = 0; i < h.time.length; i++) {
       if (h.temperature_2m[i] == null) continue;
-      const date = new Date(new Date(h.time[i] + "Z").getTime() - (utcOffsetSeconds || 0) * 1000);
-      const hour = date.getHours();
+      const parts = h.time[i].split("T");
+      if (parts.length < 2) continue;
+      const hour = parseInt(parts[1].split(":")[0], 10);
+      if (isNaN(hour)) continue;
       if (!biasByHour[hour]) biasByHour[hour] = [];
       biasByHour[hour].push(h.temperature_2m[i]);
     }
@@ -1503,51 +1640,19 @@ const WeatherService = (() => {
     if (!weather) return [];
     const baseScore = getComfortIndex(weather, aqiVal);
     const params = [
-      {
-        key: "Temperature",
-        value: weather.temperature,
-        getter: (w, a) => {
-          const m = { ...w, temperature: 22 };
-          return getComfortIndex(m, a) - baseScore;
-        },
-      },
-      {
-        key: "Humidity",
-        value: weather.humidity,
-        getter: (w, a) => {
-          const m = { ...w, humidity: 45 };
-          return getComfortIndex(m, a) - baseScore;
-        },
-      },
-      {
-        key: "Wind",
-        value: weather.windSpeed,
-        getter: (w, a) => {
-          const m = { ...w, windSpeed: 15 };
-          return getComfortIndex(m, a) - baseScore;
-        },
-      },
-      {
-        key: "UV",
-        value: weather.uvIndex,
-        getter: (w, a) => {
-          const m = { ...w, uvIndex: 2 };
-          return getComfortIndex(m, a) - baseScore;
-        },
-      },
-      {
-        key: "Air Quality",
-        value: aqiVal,
-        getter: (w, a) => {
-          return getComfortIndex(w, 20) - baseScore;
-        },
-      },
+      { key: "Temperature", value: weather.temperature, getter: (w, a) => getComfortIndex({ ...w, temperature: 22 }, a) - baseScore },
+      { key: "Humidity", value: weather.humidity, getter: (w, a) => getComfortIndex({ ...w, humidity: 45 }, a) - baseScore },
+      { key: "Wind", value: weather.windSpeed, getter: (w, a) => getComfortIndex({ ...w, windSpeed: 15 }, a) - baseScore },
+      { key: "UV", value: weather.uvIndex, getter: (w, a) => getComfortIndex({ ...w, uvIndex: 2 }, a) - baseScore },
+      { key: "Air Quality", value: aqiVal, getter: (w, a) => getComfortIndex(w, 20) - baseScore },
+      { key: "Precipitation", value: weather.precipitation, getter: (w, a) => getComfortIndex({ ...w, precipitation: 0 }, a) - baseScore },
+      { key: "Cloud Cover", value: weather.cloudCover, getter: (w, a) => getComfortIndex({ ...w, cloudCover: 20 }, a) - baseScore },
     ];
-    return params
-      .map((p) => ({ ...p, impact: p.getter(weather, aqiVal) }))
-      .filter((p) => p.value != null && p.impact > 2)
-      .sort((a, b) => b.impact - a.impact)
-      .slice(0, 3);
+    return params.map((p) => ({
+      key: p.key,
+      value: p.value ?? 0,
+      impact: Math.abs(p.getter(weather, aqiVal)),
+    }));
   }
 
   // ================================================================
@@ -1555,26 +1660,75 @@ const WeatherService = (() => {
   //  ================================================================
 
   function getFreshnessLabel(timestamp) {
-    if (!timestamp) return { label: "Unknown", opacity: 0.5 };
-    const elapsed = Date.now() - timestamp;
+    if (!timestamp) return { label: "Unknown", opacity: 0.5, ageMinutes: 0, isStale: true };
+    let timeMs = timestamp;
+    if (typeof timestamp === "object") {
+      if (timestamp.timestamp) {
+        timeMs = timestamp.timestamp;
+      } else if (timestamp.hourly?.time?.[0]) {
+        let tStr = timestamp.hourly.time[0];
+        if (!tStr.endsWith("Z")) {
+          tStr += "Z";
+        }
+        timeMs = new Date(tStr).getTime();
+      } else {
+        timeMs = Date.now();
+      }
+    }
+    const elapsed = Date.now() - timeMs;
     const mins = Math.floor(elapsed / 60000);
-    if (mins < 5) return { label: "Just now", opacity: 1.0 };
-    if (mins < 30) return { label: `${mins} min ago`, opacity: 0.9 };
-    if (mins < 120)
-      return {
-        label: `${Math.floor(mins / 60)}h ${mins % 60}m ago`,
-        opacity: 0.7,
-      };
-    if (mins < 360)
-      return { label: `${Math.floor(mins / 60)}h ago`, opacity: 0.5 };
-    return { label: `${Math.floor(mins / 1440)}d ago`, opacity: 0.3 };
+    const isStale = mins >= 120;
+    let label = "Just now";
+    let opacity = 1.0;
+    if (mins < 5) {
+      label = "Just now";
+      opacity = 1.0;
+    } else if (mins < 30) {
+      label = `${mins} min ago`;
+      opacity = 0.9;
+    } else if (mins < 120) {
+      label = `${Math.floor(mins / 60)}h ${mins % 60}m ago`;
+      opacity = 0.7;
+    } else if (mins < 360) {
+      label = `${Math.floor(mins / 60)}h ago`;
+      opacity = 0.5;
+    } else {
+      label = `${Math.floor(mins / 1440)}d ago`;
+      opacity = 0.3;
+    }
+    return { label, opacity, ageMinutes: mins, isStale };
   }
 
   // ================================================================
   //  10. TEMPORAL COMPRESSION (7-day condition matrix)
   //  ================================================================
 
-  function getTemporalCompression(data) {
+  function getTemporalCompression(data, targetSize = 10) {
+    if (Array.isArray(data)) {
+      const originalLength = data.length;
+      if (originalLength <= targetSize) {
+        return {
+          compressed: [...data],
+          originalLength,
+          compressionRatio: 1,
+        };
+      }
+      const compressed = [];
+      const bucketSize = originalLength / targetSize;
+      for (let i = 0; i < targetSize; i++) {
+        const start = Math.floor(i * bucketSize);
+        const end = Math.min(originalLength, Math.floor((i + 1) * bucketSize));
+        const slice = data.slice(start, end);
+        const avg = slice.reduce((a, b) => a + b, 0) / slice.length;
+        compressed.push(avg);
+      }
+      return {
+        compressed,
+        originalLength,
+        compressionRatio: originalLength / targetSize,
+      };
+    }
+
     if (!data?.daily?.time) return null;
     const daily = data.daily;
     const matrices = [];
@@ -1742,11 +1896,13 @@ const WeatherService = (() => {
     ];
     // Approximate temp gradient from latitude alone (crude but functional)
     const baseTemp = 20 - Math.abs(lat) * 0.4; // rough lat temp model
-    return points.map((p) => ({
+    const arr = points.map((p) => ({
       ...p,
       estTemp: Math.round(20 - Math.abs(p.lat) * 0.4),
       dir: p.label,
     }));
+    arr.points = arr;
+    return arr;
   }
 
   // ================================================================
@@ -1813,6 +1969,8 @@ const WeatherService = (() => {
     formatDayLabel,
     formatHourLabel,
     formatDateTime,
+    formatTimeOnly,
+    getFormattedLocationCurrentTime,
     getTempClass,
     fetchAirQuality,
     getAQIInfo,
@@ -1857,5 +2015,27 @@ const WeatherService = (() => {
     isRainCode,
     isSnowCode,
     isStormCode,
+
+    // Additional helper functions for unit tests
+    cToF,
+    kmhToMph,
+    mmToIn,
+    hpaToInhg,
+    getWeatherCodeClass,
+    WMO_CODES,
   };
 })();
+// Bind to global scope for classic scripts/workers
+if (typeof globalThis !== "undefined") {
+  globalThis.WeatherService = WeatherService;
+} else if (typeof self !== "undefined") {
+  self.WeatherService = WeatherService;
+}
+
+// Node/CommonJS exports for testing
+if (typeof module !== "undefined" && module.exports) {
+  module.exports = {
+    WeatherService,
+    ...WeatherService,
+  };
+}

@@ -2,7 +2,7 @@
 
 A premium single-page web application that combines **Leaflet.js** and **OpenStreetMap** with **real-time weather data**, a **time-travel slider**, and a **stylish search bar** — all in a responsive, glassmorphism UI.
 
-**No API keys or registration required!** Everything is free and open-source.
+**No API keys or registration required!** This software is proprietary and confidential.
 
 ---
 

@@ -4,7 +4,7 @@
  * Max 3 toasts visible at once.
  */
 window.toastModule = (() => {
-  let cache = new Map();
+  const cache = new Map();
   let evictTimer = null;
 
   function startEvict() {

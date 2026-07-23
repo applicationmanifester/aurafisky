@@ -10,16 +10,16 @@
       <stop offset="100%" stop-color="#ff8a00"/>
     </linearGradient>
     <linearGradient id="ic-cloud-pink" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" stop-color="#e84c88"/>
-      <stop offset="100%" stop-color="#c23365"/>
+      <stop offset="0%" stop-color="#ffffff"/>
+      <stop offset="100%" stop-color="#e0f2fe"/>
     </linearGradient>
     <linearGradient id="ic-cloud-purple" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" stop-color="#8b5cf6"/>
-      <stop offset="100%" stop-color="#6a3c91"/>
+      <stop offset="0%" stop-color="#f8fafc"/>
+      <stop offset="100%" stop-color="#bae6fd"/>
     </linearGradient>
     <linearGradient id="ic-wind" x1="0%" y1="0%" x2="100%" y2="0%">
-      <stop offset="0%" stop-color="#593c7d"/>
-      <stop offset="100%" stop-color="#8b5cf6"/>
+      <stop offset="0%" stop-color="#64748b"/>
+      <stop offset="100%" stop-color="#94a3b8"/>
     </linearGradient>
     <!-- Glow filter -->
     <filter id="ic-glow" x="-50%" y="-50%" width="200%" height="200%">
@@ -69,9 +69,8 @@
           fill="url(#ic-cloud-purple)" stroke="#fff" stroke-width="2.5" stroke-linejoin="round" />
   </g>
 
-  <!-- Wind lines (bottom) -->
-  <line x1="33" y1="72" x2="37" y2="72" stroke="url(#ic-wind)" stroke-width="2.5" stroke-linecap="round" opacity="0.85"/>
-  <path d="M 40,72 h 15 C 57,72 59,74 59,76 C 59,78 57,80 55,80 C 53,80 52,78 53,76"
-        stroke="url(#ic-wind)" stroke-width="2.5" stroke-linecap="round" fill="none" opacity="0.7"/>
-  <line x1="62" y1="72" x2="67" y2="72" stroke="url(#ic-wind)" stroke-width="2.5" stroke-linecap="round" opacity="0.85"/>
+  <!-- Rain drops (bottom) -->
+  <line x1="44" y1="72" x2="42" y2="78" stroke="#3b82f6" stroke-width="2.5" stroke-linecap="round"/>
+  <line x1="54" y1="72" x2="52" y2="78" stroke="#3b82f6" stroke-width="2.5" stroke-linecap="round"/>
+  <line x1="64" y1="72" x2="62" y2="78" stroke="#3b82f6" stroke-width="2.5" stroke-linecap="round"/>
 </svg>

@@ -1,9 +1,10 @@
 // Feature: Model Ensemble — fetches several Open-Meteo forecast models
 // (ECMWF / GFS / ICON) for the selected location and shows model agreement
 // plus probabilistic rain. Compute runs in a Web Worker.
-let appRef = null;
 let worker = null;
 let reqId = 0;
+const _ensembleCache = new Map();
+const ENSEMBLE_CACHE_TTL = 300000; // 5 minutes
 
 // Correct model names for Open-Meteo API
 const ENSEMBLE_MODELS = [
@@ -13,7 +14,6 @@ const ENSEMBLE_MODELS = [
 ];
 
 export function init(app) {
-  appRef = app;
   app.renderEnsemble = renderEnsemble;
   app._ensembleReady = true;
   ensureSection();
@@ -44,6 +44,16 @@ function ensureSection() {
 }
 
 async function fetchModelSnapshot(lat, lng, modelId) {
+  const round = (v) => v.toFixed(4);
+  const cacheKey = `${round(lat)},${round(lng)},${modelId || "auto"}`;
+  if (_ensembleCache.has(cacheKey)) {
+    const entry = _ensembleCache.get(cacheKey);
+    if (Date.now() - entry.ts < ENSEMBLE_CACHE_TTL) {
+      return entry.data;
+    }
+    _ensembleCache.delete(cacheKey);
+  }
+
   const base = "https://api.open-meteo.com/v1/forecast";
   const params = new URLSearchParams({
     latitude: lat,
@@ -65,7 +75,7 @@ async function fetchModelSnapshot(lat, lng, modelId) {
       return null; // 429/503/offline
     }
     const j = await res.json();
-    return {
+    const result = {
       model: modelId || "auto",
       temp: j.current && j.current.temperature_2m,
       precip: j.current && j.current.precipitation,
@@ -75,6 +85,8 @@ async function fetchModelSnapshot(lat, lng, modelId) {
           ? j.hourly.precipitation_probability.slice(0, 6)
           : [],
     };
+    _ensembleCache.set(cacheKey, { data: result, ts: Date.now() });
+    return result;
   } catch {
     return null; // network error / offline
   }
@@ -82,7 +94,7 @@ async function fetchModelSnapshot(lat, lng, modelId) {
 
 async function renderEnsemble(lat, lng) {
   const body = document.getElementById("ensembleBody");
-  if (!body || lat == null || lng == null) return;
+  if (!body || lat === null || lat === undefined || lng === null || lng === undefined) return;
   body.textContent = "Comparing ECMWF · GFS · ICON…";
   try {
     const snapshots = await Promise.all(
@@ -137,7 +149,7 @@ async function renderEnsemble(lat, lng) {
       "–" +
       result.max.toFixed(0) +
       "°)</span></span>" +
-      '<span class="text-[10px] font-bold px-2 py-0.5 rounded-full bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 whitespace-nowrap">' +
+      '<span class="text-[10px] font-bold px-2 py-0.5 rounded-full bg-teal-500/10 text-teal-600 dark:text-teal-400 whitespace-nowrap">' +
       result.agreement +
       " agreement</span>" +
       "</div>" +

@@ -1,0 +1,30 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "strict": true,
+    "noEmit": true,
+    "esModuleInterop": true,
+    "allowSyntheticDefaultImports": true,
+    "forceConsistentCasingInFileNames": true,
+    "skipLibCheck": true,
+    "resolveJsonModule": true,
+    "isolatedModules": true,
+    "baseUrl": ".",
+    "paths": {
+      "@/*": ["*"]
+    },
+    "types": ["leaflet", "localforage"]
+  },
+  "include": [
+    "app.ts",
+    "weather.ts",
+    "features/**/*.ts",
+    "modules/**/*.ts",
+    "src/**/*.ts",
+    "workers/**/*.ts"
+  ],
+  "exclude": ["node_modules", "dist", "build", "tests"]
+}

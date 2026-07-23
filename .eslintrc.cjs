@@ -9,10 +9,37 @@ module.exports = {
     sourceType: "module",
   },
   plugins: ["html"],
+  globals: {
+    WeatherService: "readonly",
+    localforage: "readonly",
+    L: "readonly",
+    DOMPurify: "readonly",
+    firebase: "readonly",
+    module: "readonly",
+    exports: "readonly",
+    IconSystem: "readonly",
+    WeatherIcons: "readonly",
+  },
   overrides: [
     {
-      files: ["*.html"],
-      processor: "html/html",
+      files: ["sw.js"],
+      env: {
+        serviceworker: true,
+      },
+      globals: {
+        localforage: "readonly",
+        WeatherService: "readonly",
+      },
+    },
+    {
+      files: [
+        "tailwind.config.js",
+        ".eslintrc.cjs",
+        "push-sender/functions/**/*.js",
+      ],
+      env: {
+        node: true,
+      },
     },
   ],
   rules: {

@@ -1,24 +1,18 @@
 importScripts(
   "https://cdn.jsdelivr.net/npm/localforage@1.10.0/dist/localforage.min.js",
 );
-importScripts("weather.js");
-importScripts("src/icons.js");
 // Bump this on every deploy. The activate handler wipes any aurafisky-v*
 // cache whose version differs, so browsers can never keep serving a stale
 // older build of the app shell.
-const CACHE_NAME = "aurafisky-v33";
+const CACHE_NAME = "aurafisky-v67";
 const ASSETS = [
   "./",
   "./index.html",
   "./app.js",
-  "./weather.js",
   "./favicon.svg",
   "./logo.svg",
   "./icon-192.png",
   "./icon-512.png",
-  "./src/icons.js",
-  "./modules/dom-utils.js",
-  "./modules/toast.js",
   "./manifest.json",
   "./styles.css",
   "./css/tailwind.css",
@@ -168,10 +162,15 @@ self.addEventListener("fetch", (e) => {
     return;
   }
 
-  // Navigation requests (the app shell): try network, fall back to the
-  // cached index.html so the PWA still opens offline. Never reject a
-  // navigation — that yields a blank "network error" page.
-  if (e.request.mode === "navigate") {
+  // Detect navigation requests (the app shell) robustly, including cases where the browser
+  // might not set request mode to "navigate" (e.g., inside iframe, redirects, or older engines).
+  const isNav = e.request.mode === "navigate" ||
+                (e.request.method === "GET" &&
+                 (url === self.location.origin ||
+                  url.startsWith(self.location.origin + "/?") ||
+                  url.startsWith(self.location.origin + "/index.html")));
+
+  if (isNav) {
     e.respondWith(
       (async () => {
         try {
@@ -205,22 +204,33 @@ self.addEventListener("fetch", (e) => {
   if (e.request.method === "GET" && url.startsWith(self.location.origin)) {
     e.respondWith(
       (async () => {
-        const cached = await caches.match(e.request);
+        const cache = await caches.open(CACHE_NAME);
+        const cached = await cache.match(e.request);
+
+        // Kick off the network fetch in the background to update the cache
+        const fetchPromise = fetch(e.request)
+          .then(async (networkResponse) => {
+            if (networkResponse && networkResponse.status === 200) {
+              await cache.put(e.request, networkResponse.clone());
+            }
+            return networkResponse;
+          })
+          .catch((err) => {
+            console.warn("Background fetch failed for:", url, err);
+            return cached;
+          });
+
+        // Return cached response instantly if available
+        if (cached) {
+          return cached;
+        }
+
+        // Otherwise, wait for the network request
         try {
-          const networkResponse = await fetch(e.request);
-          if (networkResponse && networkResponse.status === 200) {
-            const cache = await caches.open(CACHE_NAME);
-            cache.put(e.request, networkResponse.clone());
-          }
-          return networkResponse;
+          return await fetchPromise;
         } catch (err) {
-          if (cached) return cached;
-          // Network failed and nothing cached. Never re-throw: that surfaces
-          // as an unhandled rejection + a blank "network error" response.
-          // For a navigation, serve the cached shell or a minimal offline
-          // page so the app (and its offline banner) can still run.
-          if (e.request.mode === "navigate") {
-            const shell = await caches.match("./index.html");
+          if (isNav) {
+            const shell = await cache.match("./index.html");
             if (shell) return shell;
             return new Response(OFFLINE_HTML, {
               headers: { "Content-Type": "text/html; charset=utf-8" },
@@ -243,7 +253,7 @@ self.addEventListener("notificationclick", (event) => {
       .then((clientList) => {
         if (clientList.length > 0) {
           let client = clientList[0];
-          for (let c of clientList) {
+          for (const c of clientList) {
             if (c.focused) {
               client = c;
               break;
@@ -309,7 +319,7 @@ async function checkAndSendBackgroundWeatherNotification() {
 
     const title = `Weather Update: ${defaultLocation.name}`;
     const options = {
-      body: `${emoji} ${desc} | Temperature: ${tempStr} | Humidity: ${hourWeather.humidity}%`,
+      body: `${emoji} ${desc} | Temperature: ${tempStr} | Humidity: ${hourWeather.humidity}% | Wind: ${hourWeather.windSpeed} | UV: ${hourWeather.uvIndex} | Precip: ${hourWeather.precipProb}%`,
       icon: "favicon.svg",
       badge: "favicon.svg",
       tag: "aurafisky-hourly-weather",

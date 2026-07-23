@@ -1,0 +1,65 @@
+{
+  "type": "AdaptiveCard",
+  "version": "1.6",
+  "body": [
+    {
+      "type": "Container",
+      "style": "emphasis",
+      "items": [
+        {
+          "type": "ColumnSet",
+          "columns": [
+            {
+              "type": "Column",
+              "width": "stretch",
+              "items": [
+                {
+                  "type": "TextBlock",
+                  "text": "${locationName}",
+                  "weight": "Bolder",
+                  "size": "Medium",
+                  "isSubtle": false,
+                  "wrap": true
+                },
+                {
+                  "type": "TextBlock",
+                  "text": "${condition}",
+                  "size": "Small",
+                  "isSubtle": true,
+                  "spacing": "None"
+                }
+              ]
+            },
+            {
+              "type": "Column",
+              "width": "auto",
+              "items": [
+                {
+                  "type": "TextBlock",
+                  "text": "${temperature}°",
+                  "weight": "Bolder",
+                  "size": "ExtraLarge",
+                  "color": "Accent"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "Image",
+          "url": "${iconUrl}",
+          "size": "Medium",
+          "horizontalAlignment": "Center",
+          "spacing": "Medium"
+        }
+      ]
+    }
+  ],
+  "actions": [
+    {
+      "type": "Action.OpenUrl",
+      "title": "Open Aurafisky",
+      "url": "https://aurafisky.com/"
+    }
+  ]
+}

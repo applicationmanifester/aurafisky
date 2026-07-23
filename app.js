@@ -1,4 +1,4 @@
-/**
+/*
  * ============================================================
  * Aurafisky Application — app.js (Leaflet + Immersive Features)
  * ============================================================
@@ -19,7 +19,10 @@
  * ============================================================
  */
 
-import { initFeatures } from "./features/registry.js";
+import './weather.js';
+import './modules/dom-utils.js';
+import './modules/toast.js';
+import './src/icons.js';
 
 class AurafiskyApp {
   // Helper to set innerHTML safely using DOMPurify
@@ -97,6 +100,7 @@ class AurafiskyApp {
     this.audioNodes = {}; // Active synthesizer nodes
     this.volumeLevel = 0.5; // Sound volume level (0.0 to 1.0)
     this.activeSoundType = null; // Active sound type
+    this.timeline24hMode = localStorage.getItem("aurafisky_timeline_24h") === "true"; // 24h timeline mode
 
     // Canvas Particles Overlay State
     this.canvas = null; // Overlay canvas element
@@ -115,9 +119,12 @@ class AurafiskyApp {
 
     // Bookmark map markers
     this.bookmarkMarkers = []; // Leaflet markers for bookmarked locations
+    this.showBookmarksOnMap = localStorage.getItem("aurafisky_show_bookmarks_map") !== "false";
 
     // Sunrise countdown timer
     this.sunCountdownTimer = null;
+    this.thunderInterval = null;
+    this.birdsInterval = null;
 
     // Minimal mode
     this.minimalMode = false;
@@ -164,9 +171,12 @@ class AurafiskyApp {
       myLocationBtn: document.getElementById("myLocationBtn"),
       settingsSoundToggle: document.getElementById("settingsSoundToggle"),
       settingsVolumeSlider: document.getElementById("settingsVolumeSlider"),
+      settingsTimeline24hToggle: document.getElementById("settingsTimeline24hToggle"),
       bookmarksBtn: document.getElementById("bookmarksBtn"),
       bookmarksDropdown: document.getElementById("bookmarksDropdown"),
       bookmarksList: document.getElementById("bookmarksList"),
+      toggleBookmarksMapBtn: document.getElementById("toggleBookmarksMapBtn"),
+      closeBookmarksBtn: document.getElementById("closeBookmarksBtn"),
       weatherPanel: document.getElementById("weatherPanel"),
       panelCloseBtn: document.getElementById("panelCloseBtn"),
       favoriteToggleBtn: document.getElementById("favoriteToggleBtn"),
@@ -179,8 +189,15 @@ class AurafiskyApp {
       timelineBadge: document.getElementById("timelineBadge"),
       timelineDays: document.getElementById("timelineDays"),
       nowIndicator: document.getElementById("nowIndicator"),
+      nowTimeLabel: document.getElementById("nowTimeLabel"),
       timelineTooltip: document.getElementById("timelineTooltip"),
       timelineTicks: document.getElementById("timelineTicks"),
+      timelineTrackFill: document.getElementById("timelineTrackFill"),
+      timelineTrackBg: document.getElementById("timelineTrackBg"),
+      timelineMinimiseBtn: document.getElementById("timelineMinimiseBtn"),
+      timelineMinimizedTrigger: document.getElementById("timelineMinimizedTrigger"),
+      timelineMinimizedLabel: document.getElementById("timelineMinimizedLabel"),
+      timelineFullContent: document.getElementById("timelineFullContent"),
       loadingOverlay: document.getElementById("loadingOverlay"),
       toastContainer: document.getElementById("toastContainer"),
       offlineBanner: document.getElementById("offlineBanner"),
@@ -250,6 +267,7 @@ class AurafiskyApp {
       shortcutsCloseBtn: document.getElementById("shortcutsCloseBtn"),
       appInfoModal: document.getElementById("appInfoModal"),
       appInfoCloseBtn: document.getElementById("appInfoCloseBtn"),
+      appInfoCloseBtn2: document.getElementById("appInfoCloseBtn2"),
       logoBtn: document.getElementById("logoBtn"),
 
       // Advisory Alert Elements
@@ -352,7 +370,6 @@ class AurafiskyApp {
       accountEmail: document.getElementById("accountEmail"),
       syncStatusTime: document.getElementById("syncStatusTime"),
       accountSettingsBtn: document.getElementById("accountSettingsBtn"),
-      profileBtn: document.getElementById("profileBtn"),
       googleSignOutBtn: document.getElementById("googleSignOutBtn"),
       settingsPanel: document.getElementById("settingsPanel"),
       settingsCloseBtn: document.getElementById("settingsCloseBtn"),
@@ -367,6 +384,7 @@ class AurafiskyApp {
       settingsTermsBtn: document.getElementById("settingsTermsBtn"),
       termsModal: document.getElementById("termsModal"),
       termsAcceptBtn: document.getElementById("termsAcceptBtn"),
+      termsCloseBtn: document.getElementById("termsCloseBtn"),
       copyContactEmailBtn: document.getElementById("copyContactEmailBtn"),
       termsCornerLink: document.getElementById("termsCornerLink"),
       setDefaultLocationBtn: document.getElementById("setDefaultLocationBtn"),
@@ -405,11 +423,20 @@ class AurafiskyApp {
       console.error("Unhandled error:", e.error || e.message);
     });
     window.addEventListener("unhandledrejection", (e) => {
+      const msg = e.reason?.message || String(e.reason || "");
+      if (
+        msg.includes("message channel closed") ||
+        msg.includes("listener indicated an asynchronous response")
+      ) {
+        e.preventDefault();
+        return;
+      }
       console.error("Unhandled promise rejection:", e.reason);
     });
 
-    // Theme defaults to light (user sign-in will restore cloud preference)
-    this.isDark = false;
+    // Theme defaults to system preference (user sign-in will restore cloud preference)
+    this.isDark = window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches;
+    document.documentElement.classList.toggle("dark", this.isDark);
 
     // Load bookmarks (in-memory until cloud sync)
     this.loadBookmarks();
@@ -426,46 +453,20 @@ class AurafiskyApp {
     this.initKeyboardShortcuts();
 
     // Lazy-load advanced feature modules (ensemble, routes, copilot)
-    initFeatures(this).catch(() => {});
+    this._initFeaturesLazy();
 
-    // Register Service Worker for PWA
-    this.registerServiceWorker();
-
-    // Sync unit toggle label
-    this.syncUnitLabel();
-
-    // Keep the app consistent across browsers/users.
-    // Only explicit share URLs should override the default view.
-    setTimeout(() => this.readShareableUrl(), 0);
-
-    // Real visible viewport height (mobile browser chrome safe).
-    // --app-height is consumed by #map / panel max-height so content is
-    // never clipped behind the address bar (the classic 100vh bug).
-    this._updateAppHeight();
-    window.addEventListener("resize", () => this._updateAppHeight());
-    if (window.visualViewport) {
-      window.visualViewport.addEventListener("resize", () =>
-        this._updateAppHeight(),
-      );
-    }
-
-    // Load localforage cache first (settings, default location, last session)
-    this._loadLocalCache().then(() => {
-      this.updateSettingsUIFromLocal();
-      this.updateHomeMarker();
-      if (this._restoreSession()) {
-        this.updateHomeButton();
-      }
-    });
-
-    // Silent sweep of legacy per-location weather caches (capped to 30d).
-    // Keeps localStorage tidy with zero user action.
-    this._sweepStaleCache();
-
-    // Initialize Firebase Auth & Firestore
+    // Initialize Firebase integrations & bind user profile / settings triggers
     this.initFirebase();
+  }
 
-    // Terms shown only on sign-in or via settings button / corner link
+  // Dynamically load feature modules on demand
+  async _initFeaturesLazy() {
+    try {
+      const { initFeatures } = await import("./features/registry.js");
+      await initFeatures(this);
+    } catch (e) {
+      console.warn("Features failed to load:", e);
+    }
   }
 
   // Set --app-height to the true visible viewport height so layout using
@@ -475,6 +476,9 @@ class AurafiskyApp {
       ? window.visualViewport.height
       : window.innerHeight;
     document.documentElement.style.setProperty("--app-height", `${h}px`);
+    // Also set visual viewport height for search dropdown
+    document.documentElement.style.setProperty("--visual-viewport-height", `${h}px`);
+    this.map?.invalidateSize();
   }
 
   // ================================================================
@@ -489,10 +493,10 @@ class AurafiskyApp {
         minZoom: 2,
         zoomControl: false,
         attributionControl: true,
-        worldCopyJump: false,
+        worldCopyJump: true,
         maxBounds: [
-          [-90, -180],
-          [90, 180],
+          [-85, -10000],
+          [85, 10000],
         ],
         maxBoundsViscosity: 1.0,
       });
@@ -507,7 +511,7 @@ class AurafiskyApp {
           updateWhenIdle: false,
           updateWhenZooming: false,
           keepBuffer: 2,
-          noWrap: true,
+          noWrap: false,
           // Clip tile requests to the valid Web-Mercator range so Leaflet
           // never asks CartoDB for y=-1 (lat > 85°) tiles it rejects with 400.
           bounds: [[-85, -180], [85, 180]],
@@ -524,7 +528,7 @@ class AurafiskyApp {
           updateWhenIdle: false,
           updateWhenZooming: false,
           keepBuffer: 2,
-          noWrap: true,
+          noWrap: false,
           bounds: [[-85, -180], [85, 180]],
         },
       );
@@ -539,12 +543,12 @@ class AurafiskyApp {
       // Hard-enforce map bounds to the valid Web-Mercator range so panning
       // can never request invalid tiles (esp. on mobile where inertia can
       // outrun maxBoundsViscosity).
-      const MAP_BOUNDS = [[-85, -180], [85, 180]];
+      const MAP_BOUNDS = [[-85, -10000], [85, 10000]];
       this.map.setMaxBounds(MAP_BOUNDS);
       this.map.on("moveend", () => {
         const c = this.map.getCenter();
-        if (c.lat < -90 || c.lat > 90 || c.lng < -180 || c.lng > 180) {
-          this.map.setView([20.0, 0.0], Math.max(this.map.getZoom(), 3));
+        if (c.lat < -85 || c.lat > 85) {
+          this.map.setView([Math.max(Math.min(c.lat, 85), -85), c.lng], this.map.getZoom());
         }
       });
 
@@ -553,6 +557,13 @@ class AurafiskyApp {
       // Bind map click handler with debounce
       this.map.on("click", async (e) => {
         if (this._mapClickDebounce) return;
+        
+        // If weather panel is open, clicking map should just close it
+        if (this.$.weatherPanel && this.$.weatherPanel.classList.contains("open") && !this.$.weatherPanel.classList.contains("minimized")) {
+          this.hideWeatherPanel();
+          return;
+        }
+
         // Check if click is near home pin (pixel distance)
         if (this._homeMarker && this.defaultLocation) {
           const markerPx = this.map.latLngToContainerPoint([
@@ -594,9 +605,15 @@ class AurafiskyApp {
 
       // Re-fit Leaflet tiles when the mobile URL bar shows/hides (visual viewport)
       if (window.visualViewport) {
-        const onVV = () => this.map && this.map.invalidateSize();
+        const onVV = () => {
+          this.map && this.map.invalidateSize();
+          // Update CSS variable for search dropdown positioning
+          document.documentElement.style.setProperty('--visual-viewport-height', `${window.visualViewport.height}px`);
+        };
         window.visualViewport.addEventListener("resize", onVV);
         window.visualViewport.addEventListener("scroll", onVV);
+        // Initial set
+        onVV();
       }
     } catch (error) {
       console.error("Leaflet initialization failed:", error);
@@ -620,28 +637,106 @@ class AurafiskyApp {
     this.$.bookmarksBtn.addEventListener("click", (e) => {
       e.stopPropagation();
       this.$.bookmarksDropdown.classList.toggle("hidden");
+      this._haptic('selection');
     });
+    this.$.closeBookmarksBtn?.addEventListener("click", (e) => {
+      e.stopPropagation();
+      this.$.bookmarksDropdown.classList.add("hidden");
+      this._haptic('selection');
+    });
+    if (this.$.toggleBookmarksMapBtn) {
+      this.$.toggleBookmarksMapBtn.addEventListener("click", (e) => {
+        e.stopPropagation();
+        this.showBookmarksOnMap = !this.showBookmarksOnMap;
+        localStorage.setItem("aurafisky_show_bookmarks_map", String(this.showBookmarksOnMap));
+        this.updateBookmarksMapToggleUI();
+        this.refreshBookmarkPins();
+        this._haptic('selection');
+      });
+      this.updateBookmarksMapToggleUI();
+    }
     this.$.homeToggleBtn.addEventListener("click", () => {
       // Set/move/remove home to the currently selected location.
       // (Navigating to home uses the home marker click.)
       this.toggleHomeLocation();
+      this._haptic('light');
     });
-    this.$.favoriteToggleBtn.addEventListener("click", () =>
-      this.toggleFavoriteCurrentLocation(),
-    );
+    this.$.favoriteToggleBtn.addEventListener("click", () => {
+      this.toggleFavoriteCurrentLocation();
+      this._haptic('light');
+    });
 
     // ── Map Controls ──────────────────────────────────────────
     // Dark mode toggle is in settings panel only
-    this.$.myLocationBtn.addEventListener("click", () => this.getMyLocation());
-    this.$.panelCloseBtn.addEventListener("click", () =>
-      this.hideWeatherPanel(),
-    );
-    this.$.panelMinimizeBtn?.addEventListener("click", () =>
-      this.toggleMinimizeWeatherPanel(),
-    );
-    this.$.compareCloseBtn.addEventListener("click", () =>
-      this.hideComparePanel(),
-    );
+    this.$.myLocationBtn.addEventListener("click", () => {
+      this.getMyLocation();
+      this._haptic('light');
+    });
+    this.$.panelCloseBtn.addEventListener("click", () => {
+      this.hideWeatherPanel();
+      this._haptic('selection');
+    });
+    this.$.panelMinimizeBtn?.addEventListener("click", () => {
+      this.toggleMinimizeWeatherPanel();
+      this._haptic('selection');
+    });
+    this.$.compareCloseBtn.addEventListener("click", () => {
+      this.hideComparePanel();
+      this._haptic('selection');
+    });
+
+    // ── Account & Settings Dialogs Toggles ────────────────────
+    if (this.$.googleSignInBtn) {
+      this.$.googleSignInBtn.addEventListener("click", () =>
+        this.signInWithGoogle(),
+      );
+    }
+    if (this.$.googleSignOutBtn) {
+      this.$.googleSignOutBtn.addEventListener("click", () =>
+        this.signOutUser(),
+      );
+    }
+    if (this.$.profileBtn) {
+      this.$.profileBtn.addEventListener("click", () => {
+        this.toggleAccountDialog();
+        this._haptic('selection');
+      });
+    }
+    if (this.$.accountDialog) {
+      this.$.accountDialog.addEventListener("click", (e) => {
+        // If they click on the backdrop itself (not the inner modal)
+        if (e.target === this.$.accountDialog) {
+          this.toggleAccountDialog(false);
+        }
+      });
+    }
+    if (this.$.accountCloseBtn) {
+      this.$.accountCloseBtn.addEventListener("click", () => {
+        this.toggleAccountDialog(false);
+        this._haptic('selection');
+      });
+    }
+    if (this.$.accountSettingsBtn) {
+      this.$.accountSettingsBtn.addEventListener("click", () => {
+        this.toggleAccountDialog(false);
+        this.toggleSettingsPanel(true);
+        this._haptic('selection');
+      });
+    }
+    if (this.$.settingsCloseBtn) {
+      this.$.settingsCloseBtn.addEventListener("click", () => {
+        this.toggleSettingsPanel(false);
+        this._haptic('selection');
+      });
+    }
+    if (this.$.settingsPanel) {
+      this.$.settingsPanel.addEventListener("click", (e) => {
+        const content = this.$.settingsPanel.children[1];
+        if (content && !content.contains(e.target)) {
+          this.toggleSettingsPanel(false);
+        }
+      });
+    }
 
     // ── Volume Control (now in settings panel) ────────────────
     if (this.$.settingsVolumeSlider) {
@@ -662,38 +757,63 @@ class AurafiskyApp {
         if (this.weatherData)
           this.updateWeatherDisplay(parseInt(this.$.timelineSlider.value, 10));
         this.saveUserDataToCloud();
+        this._haptic('selection');
       });
     }
     if (this.$.settingsThemeToggle) {
       this.$.settingsThemeToggle.addEventListener("change", () => {
         this.toggleDarkMode();
         this.saveUserDataToCloud();
+        this._haptic('selection');
       });
     }
     if (this.$.settingsCompactToggle) {
       this.$.settingsCompactToggle.addEventListener("change", () => {
         this.toggleMinimalMode();
         this.saveUserDataToCloud();
+        this._haptic('selection');
       });
     }
     if (this.$.settingsSoundToggle) {
       this.$.settingsSoundToggle.addEventListener("change", (e) => {
         this.toggleAmbientSoundscape(e.target.checked);
         this.saveUserDataToCloud();
+        this._haptic('selection');
+      });
+    }
+    if (this.$.settingsTimeline24hToggle) {
+      this.$.settingsTimeline24hToggle.addEventListener("change", (e) => {
+        this.timeline24hMode = e.target.checked;
+        localStorage.setItem("aurafisky_timeline_24h", this.timeline24hMode);
+        if (this.weatherData) this.initTimeline();
+        this.saveUserDataToCloud();
+        this._haptic('selection');
       });
     }
     if (this.$.settingsDeleteDataBtn) {
-      this.$.settingsDeleteDataBtn.addEventListener("click", () =>
-        this.deleteCloudUserData(),
-      );
+      this.$.settingsDeleteDataBtn.addEventListener("click", () => {
+        this.deleteCloudUserData();
+        this._haptic('warning');
+      });
     }
 
     // ── Time Slider ───────────────────────────────────────────
+    let _lastSliderVal = -1;
     this.$.timelineSlider.addEventListener("input", (e) => {
-      this.handleTimelineChange(parseInt(e.target.value, 10));
-      this.updateTimelineTooltip(parseInt(e.target.value, 10));
+      const val = parseInt(e.target.value, 10);
+      const timeOffset = this.timeline24hMode ? this._getTimelineOffset() : 0;
+      const hourIndex = val + timeOffset;
+      this.handleTimelineChange(val);
+      this.updateTimelineTooltip(hourIndex);
+      this._updateTrackFill(val);
+      // Light haptic on slider snap points (every 6 hours)
+      if (Math.abs(val - _lastSliderVal) >= 6) {
+        this._haptic('selection');
+        _lastSliderVal = val;
+      }
     });
     this.$.timelineSlider.addEventListener("change", () => {
+      _lastSliderVal = -1; // reset on release
       if (this._tooltipHideTimer) clearTimeout(this._tooltipHideTimer);
       this._tooltipHideTimer = setTimeout(() => {
         if (this.$.timelineTooltip)
@@ -701,11 +821,41 @@ class AurafiskyApp {
       }, 2500);
     });
 
+    if (this.$.nowIndicator) {
+      this.$.nowIndicator.addEventListener("click", () => this.jumpToNow());
+    }
+    if (this.$.timelineBadge) {
+      this.$.timelineBadge.addEventListener("click", () => this.jumpToNow());
+    }
+
+    // ── Timeline Minimise/Expand controls ─────────────────────
+    if (this.$.timelineMinimiseBtn) {
+      this.$.timelineMinimiseBtn.addEventListener("click", () => {
+        this.toggleTimelineMinimized(true);
+        this._haptic('selection');
+      });
+    }
+    if (this.$.timelineMinimizedTrigger) {
+      this.$.timelineMinimizedTrigger.addEventListener("click", () => {
+        this.toggleTimelineMinimized(false);
+        this._haptic('selection');
+      });
+    }
+
     // ── Weather Overlay controls ────────────────────────────────
-    this.$.zoomInBtn?.addEventListener("click", () => this.map?.zoomIn());
-    this.$.zoomOutBtn?.addEventListener("click", () => this.map?.zoomOut());
+    this.$.zoomInBtn?.addEventListener("click", () => {
+      this.map?.zoomIn();
+      this._haptic('selection');
+    });
+    this.$.zoomOutBtn?.addEventListener("click", () => {
+      this.map?.zoomOut();
+      this._haptic('selection');
+    });
     this.$.resetViewBtn?.addEventListener("click", () => this.resetView());
-    this.$.radarToggleBtn.addEventListener("click", () => this.toggleRadar());
+    this.$.radarToggleBtn.addEventListener("click", () => {
+      this.toggleRadar();
+      this._haptic('light');
+    });
 
     if (
       this.$.radarMinimizeBtn &&
@@ -715,13 +865,16 @@ class AurafiskyApp {
       this.$.radarMinimizeBtn.addEventListener("click", () => {
         this.$.radarExpandedPanel.classList.add("hidden");
         this.$.radarCollapsedBtn.classList.remove("hidden");
+        this._haptic('selection');
       });
       this.$.radarCollapsedBtn.addEventListener("click", () => {
         this.$.radarCollapsedBtn.classList.add("hidden");
         this.$.radarExpandedPanel.classList.remove("hidden");
+        this._haptic('selection');
       });
     }
     this.$.layerTypeSelect.addEventListener("change", (e) => {
+      this._haptic('selection');
       this.overlayType = e.target.value;
       if (this.radarActive) {
         if (this.overlayType === "temperature") {
@@ -755,31 +908,46 @@ class AurafiskyApp {
         }
       }
     });
-    this.$.radarPlayBtn.addEventListener("click", () =>
-      this.toggleRadarPlayback(),
-    );
+    this.$.radarPlayBtn.addEventListener("click", () => {
+      this.toggleRadarPlayback();
+      this._haptic('selection');
+    });
 
     // ── Climate Time Machine trigger ─────────────────────────
-    this.$.timeMachineTrigger.addEventListener("click", () =>
-      this.toggleClimateTimeMachine(),
-    );
+    this.$.timeMachineTrigger.addEventListener("click", () => {
+      this.toggleClimateTimeMachine();
+      this._haptic('light');
+    });
 
     // ── Share Weather ────────────────────────────────────────
-    this.$.shareWeatherBtn.addEventListener("click", () => this.shareWeather());
+    this.$.shareWeatherBtn.addEventListener("click", () => {
+      this.shareWeather();
+      this._haptic('light');
+    });
 
     // ── PWA Install Button ───────────────────────────────────
-    this.$.installBtn.addEventListener("click", () => this.installPWA());
+    this.$.installBtn?.addEventListener("click", () => {
+      this.installPWA();
+      this._haptic('medium');
+    });
 
     // ── Next Rain Button ────────────────────────────────────
-    this.$.nextRainBtn.addEventListener("click", () => this.jumpToNextRain());
+    this.$.nextRainBtn.addEventListener("click", () => {
+      this.jumpToNextRain();
+      this._haptic('selection');
+    });
 
     // ── Signal/Noise Toggle ─────────────────────────────────
-    this.$.signalNoiseBtn.addEventListener("click", () =>
-      this.toggleSignalNoiseView(),
-    );
+    this.$.signalNoiseBtn.addEventListener("click", () => {
+      this.toggleSignalNoiseView();
+      this._haptic('selection');
+    });
 
     // ── Briefing Button ─────────────────────────────────────
-    this.$.briefingBtn.addEventListener("click", () => this.generateBriefing());
+    this.$.briefingBtn.addEventListener("click", () => {
+      this.generateBriefing();
+      this._haptic('selection');
+    });
 
     // ── Confidence Bands Toggle ─────────────────────────────
     this.$.confidenceToggle.addEventListener("click", () => {
@@ -791,6 +959,7 @@ class AurafiskyApp {
       if (this.weatherData) {
         this.drawHourlySparkline(parseInt(this.$.timelineSlider.value, 10));
       }
+      this._haptic('selection');
     });
 
     // ── Keyboard Shortcuts ───────────────────────────────────
@@ -846,20 +1015,10 @@ class AurafiskyApp {
       window.matchMedia &&
       window.matchMedia("(display-mode: standalone)").matches;
     this._boundBeforeInstall = (e) => {
-      e.preventDefault();
+      e.preventDefault(); // store prompt for manual trigger from Settings
       this.deferredPrompt = e;
-      this.$.installBtn.classList.remove("hidden");
-      this._installBtnLabel && (this._installBtnLabel.textContent = "Install Aurafisky App");
-      // If the user already trusts us after a successful interaction,
-      // surface the install prompt immediately as a banner. Otherwise we
-      // keep waiting for them to use the in-Settings install button.
-      if (this._installPromptShown) {
-        try {
-          this.deferredPrompt.prompt();
-        } catch (_) {
-          /* prompt may not be available in this browser; Settings button still works */
-        }
-      }
+      this.$.installBtn?.classList.remove("hidden");
+      if (this.$.installBtnLabel) this.$.installBtnLabel.textContent = "Install Aurafisky App";
     };
     window.addEventListener("beforeinstallprompt", this._boundBeforeInstall);
 
@@ -868,13 +1027,12 @@ class AurafiskyApp {
     // can still install the app.
     if (this._isIOS && !this._isInStandalone && this.$.installBtn) {
       this.$.installBtn.classList.remove("hidden");
-      this._installBtnLabel &&
-        (this._installBtnLabel.textContent = "Add to Home Screen");
+      if (this.$.installBtnLabel) this.$.installBtnLabel.textContent = "Add to Home Screen";
     }
 
     window.addEventListener("appinstalled", () => {
       this.deferredPrompt = null;
-      this.$.installBtn.classList.add("hidden");
+      this.$.installBtn?.classList.add("hidden");
     });
 
     // ── Document click (close overlays) ─────────────────────
@@ -898,6 +1056,7 @@ class AurafiskyApp {
     this._pullStartY = 0;
     this._pullActive = false;
     this._pullNotified = false;
+    this._pullIndicator = document.getElementById("pullToRefreshIndicator");
     document.addEventListener(
       "touchstart",
       (e) => {
@@ -913,9 +1072,14 @@ class AurafiskyApp {
       (e) => {
         if (!this._pullActive || e.touches.length !== 1) return;
         const dy = e.touches[0].clientY - this._pullStartY;
+        if (dy > 10 && dy < 100 && window.scrollY === 0 && this._pullIndicator) {
+          this._pullIndicator.classList.remove("hidden");
+          this._pullIndicator.style.opacity = Math.min(dy / 100, 1);
+        }
         if (dy > 100 && !this._pullNotified && window.scrollY === 0) {
           this._pullNotified = true;
           this._pullActive = false;
+          if (this._pullIndicator) this._pullIndicator.classList.add("hidden");
           this.showToast("Refreshing weather...", "info");
           if (this.selectedLat && this.selectedLng && this.selectedName) {
             this.selectLocation(
@@ -934,9 +1098,79 @@ class AurafiskyApp {
       "touchend",
       () => {
         this._pullActive = false;
+        if (this._pullIndicator) this._pullIndicator.classList.add("hidden");
       },
       { passive: true },
     );
+
+    // ── Swipe-down to dismiss weather panel (mobile) ─────────────
+    this._panelTouchStartY = 0;
+    this._panelTouchActive = false;
+    const panel = this.$.weatherPanel;
+    if (panel) {
+      panel.addEventListener(
+        "touchstart",
+        (e) => {
+          if (e.touches.length !== 1) return;
+          this._panelTouchStartY = e.touches[0].clientY;
+          this._panelTouchActive = true;
+        },
+        { passive: true },
+      );
+      panel.addEventListener(
+        "touchmove",
+        (e) => {
+          if (!this._panelTouchActive || e.touches.length !== 1) return;
+          const dy = e.touches[0].clientY - this._panelTouchStartY;
+          // Only handle if panel is open and at top of scroll
+          if (
+            this.$.weatherPanel.classList.contains("open") &&
+            this.$.weatherPanelContent.scrollTop === 0 &&
+            dy > 0
+          ) {
+            e.preventDefault();
+            this.$.weatherPanel.style.transform = `translateY(${dy}px)`;
+            this.$.weatherPanel.style.transition = "none";
+            // Add dragging class for visual feedback
+            if (dy > 20) {
+              this.$.weatherPanel.classList.add("dragging");
+            }
+          }
+        },
+        { passive: false },
+      );
+      panel.addEventListener(
+        "touchend",
+        (e) => {
+          if (!this._panelTouchActive) return;
+          const dy = e.changedTouches[0].clientY - this._panelTouchStartY;
+          this._panelTouchActive = false;
+          this.$.weatherPanel.style.transition = "";
+          this.$.weatherPanel.classList.remove("dragging");
+          if (dy > 100) {
+            this.hideWeatherPanel();
+          } else {
+            this.$.weatherPanel.style.transform = "";
+          }
+        },
+        { passive: true },
+      );
+    }
+
+    // ── Haptic feedback helper ─────────────────────────────────────
+    this._haptic = (type = 'light') => {
+      if (!navigator.vibrate) return;
+      const patterns = {
+        light: [5],
+        medium: [10],
+        heavy: [20],
+        selection: [2],
+        success: [10, 50, 10],
+        warning: [20, 50, 20],
+        error: [30, 30, 30, 30, 50],
+      };
+      navigator.vibrate(patterns[type] || patterns.light);
+    };
 
     // ── Resize for canvas (RAF-throttled) ────────────────────
     this._resizeRAF = null;
@@ -981,6 +1215,8 @@ class AurafiskyApp {
         "defaultLocation",
         "defaultLocationNotify",
         "units",
+        "termsAccepted",
+        "timeline24h",
       ];
       const results = await Promise.all(
         keys.map((k) => localforage.getItem(k)),
@@ -1002,6 +1238,12 @@ class AurafiskyApp {
       if (this._localCache.units && !this._cloudUnitsLoaded) {
         WeatherService.setUnits(this._localCache.units);
         this.syncUnitLabel();
+      }
+      if (this._localCache.termsAccepted != null) {
+        this.termsAccepted = this._localCache.termsAccepted;
+      }
+      if (this._localCache.timeline24h != null) {
+        this.timeline24hMode = this._localCache.timeline24h;
       }
     } catch (e) {
       console.warn("Local cache load error:", e);
@@ -1142,8 +1384,9 @@ class AurafiskyApp {
         // Populate slider timeline tick boundaries
         this.initTimeline();
 
-        // Sync slider thumb
-        this.$.timelineSlider.value = this.currentHourIndex;
+        // Sync slider thumb - account for 24h mode offset
+        const timeOffset = this.timeline24hMode ? this._getTimelineOffset() : 0;
+        this.$.timelineSlider.value = this.currentHourIndex - timeOffset;
         this.$.timelineSlider.disabled = false;
 
         // Update weather dashboard text, AQI, soundscapes, and SVG charts
@@ -1196,7 +1439,9 @@ class AurafiskyApp {
           weatherPopulated = true;
 
           this.initTimeline();
-          this.$.timelineSlider.value = this.currentHourIndex;
+          // Sync slider thumb - account for 24h mode offset
+          const timeOffset = this.timeline24hMode ? this._getTimelineOffset() : 0;
+          this.$.timelineSlider.value = this.currentHourIndex - timeOffset;
           this.$.timelineSlider.disabled = false;
 
           this.updateWeatherDisplay(this.currentHourIndex);
@@ -1264,6 +1509,7 @@ class AurafiskyApp {
           .querySelector("#minimalExitBtn")
           .addEventListener("click", () => this.toggleMinimalMode());
         this.minimalMode = true;
+        this.updateSettingsUIFromLocal();
       }
     } finally {
       this._isFetching = false;
@@ -1427,6 +1673,16 @@ class AurafiskyApp {
     this.marker = L.marker([lat, lng], {
       icon: this._buildMarkerIcon(weather),
     }).addTo(this.map);
+
+    if (this.selectedName) {
+      this.marker.bindTooltip(this.selectedName, {
+        permanent: false,
+        direction: "top",
+        offset: [0, -68],
+        className: "location-tooltip",
+      });
+    }
+
     this.marker.on("click", () => this.showWeatherPanel());
   }
 
@@ -1443,22 +1699,12 @@ class AurafiskyApp {
 
     // Header labels
     this.$.panelLocationName.textContent = this.selectedName;
-    const timezone = this.weatherData?.timezone;
     // Use the weather data's time for the selected hour, not current time
-    const hourDate = new Date(weather.time);
-    this.$.panelTimeLabel.textContent =
-      hourDate.toLocaleDateString("en-US", {
-        weekday: "short",
-        month: "short",
-        day: "numeric",
-        timeZone: timezone,
-      }) +
-      " · " +
-      hourDate.toLocaleTimeString("en-US", {
-        hour: "numeric",
-        minute: "2-digit",
-        timeZone: timezone,
-      });
+    this.$.panelTimeLabel.textContent = WeatherService.formatDateTime(
+      weather.time,
+      this.weatherData?.timezone,
+      this.weatherData?.utc_offset_seconds
+    );
 
     // Weather type display (emoji — consistent with share/hourly/bookmark surfaces)
     this.$.panelIcon.textContent = weather.icon;
@@ -1619,7 +1865,7 @@ class AurafiskyApp {
     if (regime && this.$.regimeLabel) {
       this.$.regimeLabel.textContent = `${regime.icon} ${regime.label}`;
       this.$.regimeLabel.className =
-        "text-[10px] font-bold text-indigo-500 dark:text-indigo-400";
+        "text-[10px] font-bold text-teal-500 dark:text-teal-400";
     }
 
     // 14. Spatial gradient
@@ -1678,18 +1924,43 @@ class AurafiskyApp {
     // UV Index Forecast Chart
     this.renderUVChart();
 
-    // Update bottom slider indicators
+    // Update bottom slider indicators — sync knob to hourIndex
     const nowIdx = WeatherService.getCurrentHourIndex(
       this.weatherData,
       this.weatherData?.utc_offset_seconds || 0,
     );
+    const timeOffset = this.timeline24hMode ? this._getTimelineOffset() : 0;
+    const targetSliderVal = hourIndex - timeOffset;
+    if (this.$.timelineSlider && parseInt(this.$.timelineSlider.value, 10) !== targetSliderVal) {
+      this.$.timelineSlider.value = targetSliderVal;
+      this._updateTrackFill(targetSliderVal);
+    }
+
+    // Now-indicator bar stays fixed at the real current time (set by initTimeline).
+    // Only refresh the badge text so it shows the current clock time.
+    if (this.$.nowTimeLabel) {
+      this.$.nowTimeLabel.textContent = WeatherService.getFormattedLocationCurrentTime(
+        this.weatherData?.timezone,
+        this.weatherData?.utc_offset_seconds || 0,
+      );
+    }
+
+    // Now button: always visible. Shows 'Now' at current time, 'Go to Now' when scrubbed away.
     const isNow = Math.abs(hourIndex - nowIdx) <= 1;
-    this.$.timelineBadge.classList.toggle("hidden", !isNow);
-    this.$.timelineLabel.textContent = WeatherService.formatDateTime(
+    if (this.$.timelineBadge) {
+      this.$.timelineBadge.classList.remove("hidden");
+      this.$.timelineBadge.textContent = isNow ? "Now" : "Go to Now";
+    }
+    const timeStr = WeatherService.formatDateTime(
       weather.time,
       this.weatherData?.timezone,
       this.weatherData?.utc_offset_seconds,
     );
+    this.$.timelineLabel.textContent = timeStr;
+    if (this.$.timelineMinimizedLabel) {
+      this.$.timelineMinimizedLabel.textContent = timeStr;
+    }
+
 
     // Synchronize marker bubble (uses shared template #4/#9)
     if (this.marker) {
@@ -1809,7 +2080,7 @@ class AurafiskyApp {
 
     const totalHours = this.weatherData.hourly.time.length;
     let startIdx = Math.max(0, selectedHourIndex - 12);
-    let endIdx = Math.min(totalHours - 1, startIdx + 23);
+    const endIdx = Math.min(totalHours - 1, startIdx + 23);
     if (endIdx - startIdx < 23) startIdx = Math.max(0, endIdx - 23);
 
     if (
@@ -1942,8 +2213,10 @@ class AurafiskyApp {
         rect.setAttribute("title", `Precipitation: ${p.precip}%`);
 
         rect.addEventListener("click", () => {
-          this.$.timelineSlider.value = p.idx;
-          this.handleTimelineChange(p.idx);
+          const timeOffset = this.timeline24hMode ? this._getTimelineOffset() : 0;
+          const sliderVal = p.idx - timeOffset;
+          this.$.timelineSlider.value = sliderVal;
+          this.handleTimelineChange(sliderVal);
         });
 
         this.$.chartPoints.appendChild(rect);
@@ -2015,8 +2288,10 @@ class AurafiskyApp {
       circle.setAttribute("class", "chart-point");
 
       circle.addEventListener("click", () => {
-        this.$.timelineSlider.value = p.idx;
-        this.handleTimelineChange(p.idx);
+        const timeOffset = this.timeline24hMode ? this._getTimelineOffset() : 0;
+        const sliderVal = p.idx - timeOffset;
+        this.$.timelineSlider.value = sliderVal;
+        this.handleTimelineChange(sliderVal);
       });
 
       this.$.chartPoints.appendChild(circle);
@@ -2117,45 +2392,67 @@ class AurafiskyApp {
     if (!this.weatherData) return;
 
     const hourlyTimes = this.weatherData.hourly.time;
-    const totalHours = hourlyTimes.length;
+    let totalHours = hourlyTimes.length;
+    let timeOffset = 0;
+
+    // 24h mode: filter to ±12 hours (25 hours total) from current hour
+    if (this.timeline24hMode) {
+      timeOffset = this._getTimelineOffset();
+      totalHours = Math.min(25, hourlyTimes.length - timeOffset);
+    }
 
     this.$.timelineSlider.min = 0;
     this.$.timelineSlider.max = totalHours - 1;
 
     // Day boundaries mapping
     const dayMap = new Map();
-    hourlyTimes.forEach((t, i) => {
-      const dateStr = t.split("T")[0];
+    for (let i = 0; i < totalHours; i++) {
+      const actualIdx = i + timeOffset;
+      const dateStr = hourlyTimes[actualIdx].split("T")[0];
       if (!dayMap.has(dateStr)) {
         dayMap.set(dateStr, i);
       }
-    });
+    }
 
     this.$.timelineDays.innerHTML = "";
     dayMap.forEach((startIdx, dateStr) => {
       const pct = (startIdx / (totalHours - 1)) * 100;
       const label = document.createElement("span");
-      label.className = "absolute whitespace-nowrap";
+      const dayText = WeatherService.formatDayLabel(dateStr);
+      const isToday = dayText === "Today";
+      label.className = isToday
+        ? "absolute whitespace-nowrap px-2 py-0.5 rounded-full bg-primary/10 text-primary dark:bg-primary-light/15 dark:text-primary-light font-bold"
+        : "absolute whitespace-nowrap px-1.5 py-0.5 rounded-full bg-slate-200/60 dark:bg-slate-700/60";
       label.style.left = `${pct}%`;
       label.style.transform = "translateX(-50%)";
-      label.textContent = WeatherService.formatDayLabel(dateStr);
+      label.textContent = dayText;
       this.$.timelineDays.appendChild(label);
     });
     this.$.timelineDays.style.position = "relative";
-    this.$.timelineDays.style.height = "16px";
+    this.$.timelineDays.style.height = "22px";
 
-    // Tick marks at 6-hour intervals
+    // Tick marks formatting
     this.$.timelineTicks.innerHTML = "";
     for (let i = 0; i < totalHours; i++) {
-      const h = new Date(hourlyTimes[i] + "Z").getUTCHours();
-      if (h % 6 === 0) {
+      const actualIdx = i + timeOffset;
+      const timePart = hourlyTimes[actualIdx]?.split("T")[1];
+      if (!timePart) continue;
+      const h = parseInt(timePart.split(":")[0], 10);
+
+      // Weekly: 00, 06, 12, 18. 24h mode: 00, 01, 02... 24
+      const isTickHour = this.timeline24hMode ? true : (h % 6 === 0);
+
+      if (isTickHour) {
         const tick = document.createElement("span");
-        tick.className =
-          "absolute text-[8px] text-slate-400 dark:text-slate-500 font-medium";
+        tick.className = this.timeline24hMode
+          ? "absolute text-[8px] sm:text-[10px] text-slate-400 dark:text-slate-500 font-semibold select-none"
+          : "absolute text-[10px] text-slate-400 dark:text-slate-500 font-semibold select-none";
         tick.style.left = `${(i / (totalHours - 1)) * 100}%`;
         tick.style.transform = "translateX(-50%)";
-        tick.style.top = "0";
-        tick.textContent = `${h.toString().padStart(2, "0")}`;
+        tick.style.top = "2px";
+
+        const displayH = h === 0 ? "00" : h.toString().padStart(2, "0");
+        tick.textContent = displayH;
         this.$.timelineTicks.appendChild(tick);
       }
     }
@@ -2164,12 +2461,57 @@ class AurafiskyApp {
       this.weatherData,
       this.weatherData?.utc_offset_seconds || 0,
     );
-    const nowPct = (nowIdx / (totalHours - 1)) * 100;
+    this.currentHourIndex = nowIdx;
+    const displayNowIdx = Math.max(0, Math.min(totalHours - 1, nowIdx - timeOffset));
+    const nowPct = (displayNowIdx / (totalHours - 1)) * 100;
+
+    // Set slider knob position initially to current hour (Now) by default
+    this.$.timelineSlider.value = displayNowIdx;
+    this._updateTrackFill(displayNowIdx);
 
     this.$.nowIndicator.style.left = `${nowPct}%`;
     this.$.nowIndicator.classList.remove("hidden");
     this.$.timelineSlider.style.setProperty("--now-position", `${nowPct}%`);
+
+    const nowCode = this.weatherData.hourly.weather_code[nowIdx];
+    if (nowCode !== undefined) {
+      this.$.timelineSlider.style.setProperty('--knob-color', this._getWeatherColorForCode(nowCode));
+    }
+
+    if (this.$.nowTimeLabel) {
+      this.$.nowTimeLabel.textContent = WeatherService.getFormattedLocationCurrentTime(
+        this.weatherData?.timezone,
+        this.weatherData?.utc_offset_seconds || 0
+      );
+    }
     this.updateTrackColors();
+  }
+
+  jumpToNow() {
+    if (!this.weatherData) return;
+    const nowIdx = WeatherService.getCurrentHourIndex(
+      this.weatherData,
+      this.weatherData?.utc_offset_seconds || 0
+    );
+    const timeOffset = this.timeline24hMode ? this._getTimelineOffset() : 0;
+    const totalHours = this.weatherData.hourly?.time?.length || 240;
+    const sliderVal = Math.max(
+      0,
+      Math.min(totalHours - 1, nowIdx - timeOffset)
+    );
+    this.$.timelineSlider.value = sliderVal;
+    this._updateTrackFill(sliderVal);
+    this.handleTimelineChange(sliderVal);
+  }
+
+  /** Updates the custom track fill bar width to match the current slider position */
+  _updateTrackFill(sliderVal) {
+    const fill = this.$.timelineTrackFill;
+    if (!fill || !this.$.timelineSlider) return;
+    const min = parseFloat(this.$.timelineSlider.min) || 0;
+    const max = parseFloat(this.$.timelineSlider.max) || 239;
+    const pct = ((sliderVal - min) / (max - min)) * 100;
+    fill.style.width = `${pct.toFixed(2)}%`;
   }
 
   updateTimelineTooltip(hourIndex) {
@@ -2181,19 +2523,35 @@ class AurafiskyApp {
       tip.classList.add("hidden");
       return;
     }
-    const date = new Date(timeStr + "Z");
-    const timeLabel = date.toLocaleString("en-US", {
-      weekday: "short",
-      hour: "numeric",
-      minute: "2-digit",
-    });
+
+    // Parse location-local ISO time string (e.g. "2026-07-24T02:00")
+    const parts = timeStr.split("T");
+    const dateParts = parts[0].split("-");
+    const timeParts = parts[1].split(":");
+    const localDate = new Date(
+      parseInt(dateParts[0], 10),
+      parseInt(dateParts[1], 10) - 1,
+      parseInt(dateParts[2], 10),
+      parseInt(timeParts[0], 10),
+      parseInt(timeParts[1], 10)
+    );
+    const dayName = localDate.toLocaleDateString("en-US", { weekday: "short" });
+    const timeFormatted = WeatherService.formatTimeOnly(timeStr);
     const tempLabel = temp != null ? `${Math.round(temp)}°` : "--°";
-    tip.textContent = `${timeLabel} • ${tempLabel}`;
+
+    tip.textContent = `${dayName} ${timeFormatted} • ${tempLabel}`;
+
+    // Calculate position based on slider index for 24h mode / weekly mode
     const slider = this.$.timelineSlider;
-    const pct = hourIndex / (slider.max - slider.min);
+    const timeOffset = this.timeline24hMode ? this._getTimelineOffset() : 0;
+    const sliderIndex = hourIndex - timeOffset;
+    const min = parseInt(slider.min, 10) || 0;
+    const max = parseInt(slider.max, 10) || 1;
+    const pct = Math.max(0, Math.min(1, (sliderIndex - min) / (max - min)));
     tip.style.left = `${pct * 100}%`;
     tip.classList.remove("hidden");
   }
+
 
   resetView() {
     if (!this.map) return;
@@ -2202,46 +2560,70 @@ class AurafiskyApp {
     this.showToast("Map view reset", "info");
   }
 
-  updateTrackColors() {
-    if (!this.weatherData?.hourly?.weather_code) return;
-    const totalHours = this.weatherData?.hourly?.time?.length;
-    if (!totalHours) return;
-    const colors = [];
-    for (let i = 0; i < totalHours; i++) {
-      const code = this.weatherData.hourly.weather_code[i];
-      let color;
-      if (code >= 95) color = "#dc2626";
-      else if (code >= 71 && code <= 77) color = "#e0e7ff";
-      else if (code >= 51 && code <= 67) color = "#60a5fa";
-      else if (code >= 80 && code <= 86) color = "#3b82f6";
-      else if (code >= 61 && code <= 66) color = "#2563eb";
-      else if (code >= 45 && code <= 48) color = "#94a3b8";
-      else if (code >= 3 && code <= 4) color = "#94a3b8";
-      else if (code === 2) color = "#cbd5e1";
-      else color = "#fbbf24";
-      colors.push(color);
-    }
-    const stops = colors
-      .map((c, i) => `${c} ${(i / (totalHours - 1)) * 100}%`)
-      .join(", ");
-    this.$.timelineSlider.style.setProperty(
-      "--track-colors",
-      `linear-gradient(to right, ${stops})`,
-    );
-    this.$.timelineSlider.style.background = `linear-gradient(to right, ${stops})`;
+  _getWeatherColorForCode(code) {
+    if (code >= 95) return "#dc2626";
+    if (code >= 71 && code <= 77) return "#e0e7ff";
+    if (code >= 51 && code <= 67) return "#60a5fa";
+    if (code >= 80 && code <= 86) return "#3b82f6";
+    if (code >= 61 && code <= 66) return "#2563eb";
+    if (code >= 45 && code <= 48) return "#94a3b8";
+    if (code >= 3 && code <= 4) return "#94a3b8";
+    if (code === 2) return "#cbd5e1";
+    return "#fbbf24";
   }
 
-  handleTimelineChange(hourIndex) {
-    if (!this.weatherData || this._timelinePending) return;
+  updateTrackColors() {
+    if (!this.weatherData?.hourly?.weather_code) return;
+    const hourlyTimes = this.weatherData.hourly.time;
+    if (!hourlyTimes || !hourlyTimes.length) return;
 
-    this._timelinePending = true;
+    let totalHours = hourlyTimes.length;
+    let timeOffset = 0;
+
+    if (this.timeline24hMode) {
+      timeOffset = this._getTimelineOffset();
+      totalHours = Math.min(25, hourlyTimes.length - timeOffset);
+    }
+
+    const colors = [];
+    for (let i = 0; i < totalHours; i++) {
+      const actualIdx = i + timeOffset;
+      const code = this.weatherData.hourly.weather_code[actualIdx];
+      colors.push(this._getWeatherColorForCode(code));
+    }
+    const stops = colors
+      .map((c, i) => `${c} ${((i / (totalHours - 1)) * 100).toFixed(2)}%`)
+      .join(", ");
+    const gradient = `linear-gradient(to right, ${stops})`;
+
+    if (this.$.timelineTrackBg) {
+      this.$.timelineTrackBg.style.background = gradient;
+    }
+    if (this.$.timelineSlider?.parentElement) {
+      this.$.timelineSlider.parentElement.style.setProperty('--track-colors', gradient);
+    }
+  }
+
+  handleTimelineChange(sliderIndex) {
+    if (!this.weatherData) return;
 
     // Cancel any existing animation frame to prevent queue buildup
     if (this._timelineRAF) {
       cancelAnimationFrame(this._timelineRAF);
+      this._timelineRAF = null;
+    }
+
+    // Convert slider index to actual data index when in 24h mode
+    const timeOffset = this.timeline24hMode ? this._getTimelineOffset() : 0;
+    const hourIndex = sliderIndex + timeOffset;
+
+    const code = this.weatherData.hourly.weather_code[hourIndex];
+    if (code !== undefined && this.$.timelineSlider) {
+      this.$.timelineSlider.style.setProperty('--knob-color', this._getWeatherColorForCode(code));
     }
 
     this._timelineRAF = requestAnimationFrame(() => {
+      this._timelineRAF = null;
       // Invalidate cached decomposition on hour change
       this._cachedDecomposition = null;
       this.updateWeatherDisplay(hourIndex);
@@ -2249,9 +2631,20 @@ class AurafiskyApp {
       if (this.minimalMode) this.enterMinimalMode();
       this.updateTimelineTooltip(hourIndex);
       this.updateTrackColors();
-      this._timelinePending = false;
-      this._timelineRAF = null;
     });
+  }
+
+  // Get the time offset for 24h mode (centered on current hour)
+  _getTimelineOffset() {
+    if (!this.weatherData) return 0;
+    const nowIdx = WeatherService.getCurrentHourIndex(
+      this.weatherData,
+      this.weatherData?.utc_offset_seconds || 0,
+    );
+    const totalHours = this.weatherData.hourly.time.length;
+    // Center 24-hour window around current hour (12 before, 12 after)
+    const startIdx = Math.max(0, Math.min(nowIdx - 12, totalHours - 25));
+    return startIdx;
   }
 
   // ================================================================
@@ -2386,7 +2779,7 @@ class AurafiskyApp {
         zIndex: 500,
         maxZoom: 18,
         maxNativeZoom: 7,
-        noWrap: true,
+        noWrap: false,
       },
     );
     this.radarLayers[index] = newLayer;
@@ -2879,7 +3272,15 @@ class AurafiskyApp {
   }
 
   syncUnitLabel() {
-    // Unit label was in the top bar (removed — now only in settings)
+    const label = document.getElementById("settingsUnitsLabel");
+    const sub = document.getElementById("settingsUnitsSub");
+    if (label) {
+      const units = WeatherService.getUnits();
+      label.textContent = `Units (${units === "imperial" ? "Imperial" : "Metric"})`;
+      if (sub) {
+        sub.textContent = units === "imperial" ? "°F, mph, inch" : "°C, km/h, mm";
+      }
+    }
   }
 
   // ================================================================
@@ -2990,10 +3391,7 @@ Wind: ${WeatherService.formatWind(weather.windSpeed)} ${WeatherService.getWindDi
         const wind = h.wind_speed_10m?.[i];
         const humidity = h.relative_humidity_2m?.[i];
         const isNow = i === nowIdx;
-        const timeStr = new Date(h.time[i]).toLocaleTimeString([], {
-          hour: "numeric",
-          hour12: true,
-        });
+        const timeStr = WeatherService.formatHourLabel(h.time[i], this.weatherData?.utc_offset_seconds);
 
         return `<button class="hourly-row w-full flex items-center gap-1.5 sm:gap-2 px-2 sm:px-3 py-1.5 sm:py-2 rounded-xl text-left transition-colors ${isNow ? "bg-primary/10 border border-primary/20" : "hover:bg-slate-100/60 dark:hover:bg-slate-800/40 border border-transparent"}" data-idx="${i}" aria-label="${isNow ? "Now" : timeStr}: ${info.description}">
 <span class="w-7 sm:w-10 text-[9px] sm:text-[10px] font-semibold text-slate-500 dark:text-slate-400 flex-shrink-0">${isNow ? "Now" : timeStr}</span>
@@ -3030,16 +3428,8 @@ ${precipProb > 0 ? `<span class="text-[9px] sm:text-[10px] text-blue-500 font-se
       return;
     }
 
-    const startTime = new Date(bestWindow.startTime).toLocaleTimeString([], {
-      hour: "numeric",
-      minute: "2-digit",
-      hour12: true,
-    });
-    const endTime = new Date(bestWindow.endTime).toLocaleTimeString([], {
-      hour: "numeric",
-      minute: "2-digit",
-      hour12: true,
-    });
+    const startTime = WeatherService.formatTimeOnly(bestWindow.startTime);
+    const endTime = WeatherService.formatTimeOnly(bestWindow.endTime);
 
     this.$.bestWindowText.textContent = `${startTime} – ${endTime} (${bestWindow.hours}h, avg ${WeatherService.formatTemp(bestWindow.avgTemp)}, no rain)`;
     this.$.bestWindowCard.classList.remove("hidden");
@@ -3176,12 +3566,13 @@ ${precipProb > 0 ? `<span class="text-[9px] sm:text-[10px] text-blue-500 font-se
   // ================================================================
 
   renderTimelineDeltas(deltas) {
-    if (!deltas) {
-      this.$.timelineDelta.textContent = "";
+    if (!deltas || !this.$.timelineDelta) {
+      if (this.$.timelineDelta) this.$.timelineDelta.textContent = "";
       return;
     }
     const parts = [];
-    if (deltas.tempDiff != null) {
+    const hasMomentum = this.$.momentumLabel && this.$.momentumLabel.innerHTML.trim() !== "";
+    if (deltas.tempDiff != null && !hasMomentum) {
       const sign = deltas.tempDiff > 0 ? "+" : "";
       const cls =
         deltas.tempDiff > 0
@@ -3193,13 +3584,13 @@ ${precipProb > 0 ? `<span class="text-[9px] sm:text-[10px] text-blue-500 font-se
         `<span class="${cls}">${sign}${deltas.tempDiff.toFixed(1)}°C/h</span>`,
       );
     }
-    if (deltas.windDiff != null) {
+    if (deltas.windDiff != null && Math.abs(deltas.windDiff) >= 1) {
       const sign = deltas.windDiff > 0 ? "+" : "";
       parts.push(
         `<span class="text-slate-400">${sign}${deltas.windDiff.toFixed(0)} km/h wind</span>`,
       );
     }
-    if (deltas.pressureDiff != null) {
+    if (deltas.pressureDiff != null && Math.abs(deltas.pressureDiff) >= 0.2) {
       const sign = deltas.pressureDiff > 0 ? "+" : "";
       const cls =
         deltas.pressureDiff > 0.3
@@ -3211,8 +3602,8 @@ ${precipProb > 0 ? `<span class="text-[9px] sm:text-[10px] text-blue-500 font-se
         `<span class="${cls}">${sign}${deltas.pressureDiff.toFixed(1)} hPa</span>`,
       );
     }
-    this.$.timelineDelta.innerHTML = parts.join(" · ");
-    this.$.timelineDelta.className = "text-[10px] font-medium flex gap-2";
+    this.setSafeHTML(this.$.timelineDelta, parts.join(" · "));
+    this.$.timelineDelta.className = "text-[10px] font-medium hidden md:inline-block text-slate-500 dark:text-slate-400 truncate";
   }
 
   // ================================================================
@@ -3226,9 +3617,9 @@ ${precipProb > 0 ? `<span class="text-[9px] sm:text-[10px] text-blue-500 font-se
     );
     if (nextRain != null) {
       this.$.nextRainBtn.classList.remove("hidden");
-      const timeStr = new Date(
-        this.weatherData.hourly.time[nextRain],
-      ).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+      const timeStr = WeatherService.formatTimeOnly(
+        this.weatherData.hourly.time[nextRain]
+      );
       // Use textContent to avoid innerHTML injection
       this.$.nextRainBtn.textContent = `🌧️ Next rain ${timeStr}`;
       // Store the target index for the click handler (#2)
@@ -3242,8 +3633,10 @@ ${precipProb > 0 ? `<span class="text-[9px] sm:text-[10px] text-blue-500 font-se
   jumpToNextRain() {
     const idx = parseInt(this.$.nextRainBtn.dataset.rainIdx, 10);
     if (!isNaN(idx)) {
-      this.$.timelineSlider.value = idx;
-      this.handleTimelineChange(idx);
+      const timeOffset = this.timeline24hMode ? this._getTimelineOffset() : 0;
+      const sliderVal = idx - timeOffset;
+      this.$.timelineSlider.value = sliderVal;
+      this.handleTimelineChange(sliderVal);
     }
   }
 
@@ -3283,7 +3676,7 @@ ${precipProb > 0 ? `<span class="text-[9px] sm:text-[10px] text-blue-500 font-se
         );
         if (upwindWeather) {
           const travelHours = 2;
-          const predHTML = `<span class="text-[10px] font-bold text-indigo-400 uppercase tracking-wider">🌬️ Coming your way</span><span class="text-xs text-slate-600 dark:text-slate-300">${upwindWeather.icon} ${upwindWeather.description}, ${WeatherService.formatTemp(upwindWeather.temperature)} arriving in ~${travelHours}h from the ${WeatherService.getWindDirection(windDir)}</span>`;
+          const predHTML = `<span class="text-[10px] font-bold text-teal-500 uppercase tracking-wider">🌬️ Coming your way</span><span class="text-xs text-slate-600 dark:text-slate-300">${upwindWeather.icon} ${upwindWeather.description}, ${WeatherService.formatTemp(upwindWeather.temperature)} arriving in ~${travelHours}h from the ${WeatherService.getWindDirection(windDir)}</span>`;
           this.setSafeHTML(this.$.predictiveArrival, predHTML);
           this.$.predictiveArrival.classList.remove("hidden");
           return;
@@ -3316,7 +3709,7 @@ ${precipProb > 0 ? `<span class="text-[9px] sm:text-[10px] text-blue-500 font-se
     }
 
     const travelHours = 2;
-    const predHTML = `<span class="text-[10px] font-bold text-indigo-400 uppercase tracking-wider">🌬️ Coming your way</span><span class="text-xs text-slate-600 dark:text-slate-300">${upwindWeather.icon} ${upwindWeather.description}, ${WeatherService.formatTemp(upwindWeather.temperature)} arriving in ~${travelHours}h from the ${WeatherService.getWindDirection(windDir)}</span>`;
+    const predHTML = `<span class="text-[10px] font-bold text-teal-500 uppercase tracking-wider">🌬️ Coming your way</span><span class="text-xs text-slate-600 dark:text-slate-300">${upwindWeather.icon} ${upwindWeather.description}, ${WeatherService.formatTemp(upwindWeather.temperature)} arriving in ~${travelHours}h from the ${WeatherService.getWindDirection(windDir)}</span>`;
     this.setSafeHTML(this.$.predictiveArrival, predHTML);
     this.$.predictiveArrival.classList.remove("hidden");
   }
@@ -3650,14 +4043,22 @@ ${precipProb > 0 ? `<span class="text-[9px] sm:text-[10px] text-blue-500 font-se
     const container = this.$.searchResults;
     clearElement(container);
 
+    const svgEl = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+    svgEl.setAttribute("class", "w-3 h-3");
+    svgEl.setAttribute("viewBox", "0 0 24 24");
+    svgEl.setAttribute("fill", "none");
+    svgEl.setAttribute("stroke", "currentColor");
+    svgEl.setAttribute("stroke-width", "2");
+    const pathEl = document.createElementNS("http://www.w3.org/2000/svg", "path");
+    pathEl.setAttribute("stroke-linecap", "round");
+    pathEl.setAttribute("stroke-linejoin", "round");
+    pathEl.setAttribute("d", "M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z");
+    svgEl.appendChild(pathEl);
+
     const header = createElement(
       "div",
       { className: "search-history-label" },
-      createElement("svg", {
-        className: "w-3 h-3",
-        innerHTML:
-          '<path stroke-linecap="round" stroke-linejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/>',
-      }),
+      svgEl,
       createElement("span", { textContent: "Recent" }),
       createElement("button", {
         className:
@@ -3709,12 +4110,23 @@ ${precipProb > 0 ? `<span class="text-[9px] sm:text-[10px] text-blue-500 font-se
   //  BOOKMARK MAP PINS
   // ================================================================
 
+  updateBookmarksMapToggleUI() {
+    const btn = this.$.toggleBookmarksMapBtn;
+    if (!btn) return;
+    if (this.showBookmarksOnMap) {
+      btn.innerHTML = "🚫 Hide on Map";
+    } else {
+      btn.innerHTML = "👁️ Show on Map";
+    }
+  }
+
   async refreshBookmarkPins() {
     // Clear existing bookmark markers
     this.bookmarkMarkers.forEach((m) => m.remove());
     this.bookmarkMarkers = [];
 
     if (!this.map || this.bookmarks.length === 0) return;
+    if (!this.showBookmarksOnMap) return;
 
     // Use cached data if recent (< 5 min)
     const pinCache = this._getBookmarkPinCache();
@@ -3725,23 +4137,22 @@ ${precipProb > 0 ? `<span class="text-[9px] sm:text-[10px] text-blue-500 font-se
     });
 
     if (needsFetch.length > 0) {
-      // Stagger fetches to prevent API rate-limiting (#8)
-      for (const b of needsFetch) {
-        try {
-          const forecast = await WeatherService.fetchForecast(b.lat, b.lng);
-          const idx = WeatherService.getCurrentHourIndex(
-          forecast,
-          forecast?.utc_offset_seconds || 0,
-        );
-          const w = WeatherService.getHourlyAtIndex(forecast, idx);
-          pinCache[b.lat + "_" + b.lng] = { weather: w, ts: Date.now() };
-          // 150ms delay between bookmark fetches
-          await new Promise((resolve) => setTimeout(resolve, 150));
-        } catch {
-          // Briefly cache failure to avoid aggressive re-tries
-          pinCache[b.lat + "_" + b.lng] = { weather: null, ts: Date.now() };
-        }
-      }
+      await Promise.all(
+        needsFetch.map(async (b) => {
+          try {
+            const forecast = await WeatherService.fetchForecast(b.lat, b.lng);
+            const idx = WeatherService.getCurrentHourIndex(
+              forecast,
+              forecast?.utc_offset_seconds || 0,
+            );
+            const w = WeatherService.getHourlyAtIndex(forecast, idx);
+            pinCache[b.lat + "_" + b.lng] = { weather: w, ts: Date.now() };
+          } catch {
+            // Briefly cache failure to avoid aggressive re-tries
+            pinCache[b.lat + "_" + b.lng] = { weather: null, ts: Date.now() };
+          }
+        })
+      );
       this._saveBookmarkPinCache(pinCache);
     }
 
@@ -3763,6 +4174,12 @@ ${precipProb > 0 ? `<span class="text-[9px] sm:text-[10px] text-blue-500 font-se
       });
 
       const marker = L.marker([b.lat, b.lng], { icon }).addTo(this.map);
+      marker.bindTooltip(b.name, {
+        permanent: false,
+        direction: "top",
+        offset: [0, -18],
+        className: "location-tooltip",
+      });
       marker.on("click", () => this.selectLocation(b.lat, b.lng, b.name));
       this.bookmarkMarkers.push(marker);
     });
@@ -4544,11 +4961,13 @@ ${precipProb > 0 ? `<span class="text-[9px] sm:text-[10px] text-blue-500 font-se
     }
     if (this.searchDebounceTimer) clearTimeout(this.searchDebounceTimer);
     if (this._tooltipHideTimer) clearTimeout(this._tooltipHideTimer);
+    if (this.sunCountdownTimer) clearInterval(this.sunCountdownTimer);
   }
 
   showWeatherPanel() {
     this.$.weatherPanel.classList.add("open");
     this.$.weatherPanel.classList.remove("minimized");
+    this.$.weatherPanel.removeAttribute("inert");
     if (this.$.panelMinimizeBtn) {
       this.$.panelMinimizeBtn.classList.remove("chevron-flipped");
     }
@@ -4565,6 +4984,7 @@ ${precipProb > 0 ? `<span class="text-[9px] sm:text-[10px] text-blue-500 font-se
 
   hideWeatherPanel() {
     this.$.weatherPanel.classList.remove("open", "minimized");
+    this.$.weatherPanel.setAttribute("inert", "");
     document.documentElement.classList.remove("compact");
     if (this.$.panelMinimizeBtn) {
       this.$.panelMinimizeBtn.classList.remove("chevron-flipped");
@@ -4640,10 +5060,12 @@ ${precipProb > 0 ? `<span class="text-[9px] sm:text-[10px] text-blue-500 font-se
     );
     if (!weather) return;
 
-    const currentDate = new Date(weather.time);
-    const year = currentDate.getFullYear();
-    const month = String(currentDate.getMonth() + 1).padStart(2, "0");
-    const day = String(currentDate.getDate()).padStart(2, "0");
+    const parts = weather.time.split("T");
+    if (parts.length < 2) return;
+    const dateParts = parts[0].split("-");
+    const year = parseInt(dateParts[0], 10);
+    const month = dateParts[1];
+    const day = dateParts[2];
 
     const yearsPast = [5, 10, 20];
     const dates = yearsPast.map((y) => `${year - y}-${month}-${day}`);
@@ -4855,7 +5277,7 @@ ${precipProb > 0 ? `<span class="text-[9px] sm:text-[10px] text-blue-500 font-se
     if (pattern && this.$.patternLabel) {
       this.$.patternLabel.textContent = `📊 ${pattern.label}`;
       this.$.patternLabel.className =
-        "text-[10px] font-semibold text-indigo-500 dark:text-indigo-400 mt-1";
+        "text-[10px] font-semibold text-teal-500 dark:text-teal-400 mt-1";
       this.$.patternLabel.classList.remove("hidden");
     }
   }
@@ -4864,7 +5286,7 @@ ${precipProb > 0 ? `<span class="text-[9px] sm:text-[10px] text-blue-500 font-se
   //  ASTRONOMY & DAY CYCLES
   // ================================================================
 
-  updateAstronomyWidget(weather, hourIndex) {
+  updateAstronomyWidget(weather, _hourIndex) {
     if (!this.weatherData) return;
 
     try {
@@ -4898,10 +5320,10 @@ ${precipProb > 0 ? `<span class="text-[9px] sm:text-[10px] text-blue-500 font-se
         minute: "2-digit",
       });
 
-      // Live sunrise/sunset countdown timer
+      // Live sunrise/sunset countdown timer — ticks every minute
       if (this.$.sunCountdown) {
         const updateCountdown = () => {
-          const tTime = new Date(weather.time);
+          const tTime = new Date();
           if (tTime >= sunriseTime && tTime <= sunsetTime) {
             const diff = sunsetTime - tTime;
             const h = Math.floor(diff / 3600000);
@@ -4925,6 +5347,9 @@ ${precipProb > 0 ? `<span class="text-[9px] sm:text-[10px] text-blue-500 font-se
           }
         };
         updateCountdown();
+        // Clear any previous timer before starting a new one
+        if (this.sunCountdownTimer) clearInterval(this.sunCountdownTimer);
+        this.sunCountdownTimer = setInterval(updateCountdown, 60000);
       }
 
       // Calculate Sun Arc Dot position
@@ -4974,7 +5399,6 @@ ${precipProb > 0 ? `<span class="text-[9px] sm:text-[10px] text-blue-500 font-se
 
   getMoonSvgPath(p) {
     const r = 18;
-    const cx = 20;
 
     if (p <= 0.03 || p >= 0.97) {
       return ""; // New Moon - completely dark
@@ -5061,6 +5485,14 @@ ${precipProb > 0 ? `<span class="text-[9px] sm:text-[10px] text-blue-500 font-se
 
   registerServiceWorker() {
     if ("serviceWorker" in navigator) {
+      if (location.hostname === "localhost" || location.hostname === "127.0.0.1") {
+        navigator.serviceWorker.getRegistrations().then((registrations) => {
+          for (let registration of registrations) {
+            registration.unregister();
+          }
+        });
+        return;
+      }
       let reloading = false;
       // When a new SW takes control, reload once so the new app shell /
       // assets (and fixes like the navigation fallback) actually run.
@@ -5173,7 +5605,7 @@ ${precipProb > 0 ? `<span class="text-[9px] sm:text-[10px] text-blue-500 font-se
         this.showToast("Aurafisky installed!", "success");
       }
       this.deferredPrompt = null;
-      this.$.installBtn.classList.add("hidden");
+      this.$.installBtn?.classList.add("hidden");
     });
   }
 
@@ -5306,7 +5738,7 @@ ${precipProb > 0 ? `<span class="text-[9px] sm:text-[10px] text-blue-500 font-se
     }));
     svg.innerHTML = bars
       .map(
-        (b, i) =>
+        (b) =>
           `<rect x="${b.x}" y="${h - pad - b.h}" width="${Math.max(4, cw - 4)}" height="${b.h}" rx="2" fill="${b.uv >= 6 ? "#f59e0b" : b.uv >= 3 ? "#fbbf24" : "#10b981"}" opacity="0.8"/>
        <text x="${b.x + cw / 2}" y="${h - 2}" font-size="7" fill="#94a3b8" text-anchor="middle" font-weight="600">${b.label}</text>
        <text x="${b.x + cw / 2}" y="${h - pad - b.h - 3}" font-size="7" fill="#64748b" text-anchor="middle" font-weight="700">${b.uv.toFixed(1)}</text>`,
@@ -5417,6 +5849,11 @@ ${precipProb > 0 ? `<span class="text-[9px] sm:text-[10px] text-blue-500 font-se
     // ── App Info Modal ──────────────────────────────────────
     if (this.$.appInfoCloseBtn) {
       this.$.appInfoCloseBtn.addEventListener("click", () =>
+        this.toggleAppInfoModal(),
+      );
+    }
+    if (this.$.appInfoCloseBtn2) {
+      this.$.appInfoCloseBtn2.addEventListener("click", () =>
         this.toggleAppInfoModal(),
       );
     }
@@ -5552,39 +5989,6 @@ ${precipProb > 0 ? `<span class="text-[9px] sm:text-[10px] text-blue-500 font-se
         ...fbMessaging,
       };
 
-      // Bind UI auth triggers
-      if (this.$.googleSignInBtn) {
-        this.$.googleSignInBtn.addEventListener("click", () =>
-          this.signInWithGoogle(),
-        );
-      }
-      if (this.$.googleSignOutBtn) {
-        this.$.googleSignOutBtn.addEventListener("click", () =>
-          this.signOutUser(),
-        );
-      }
-      if (this.$.profileBtn) {
-        this.$.profileBtn.addEventListener("click", () =>
-          this.toggleAccountDialog(),
-        );
-      }
-      if (this.$.accountCloseBtn) {
-        this.$.accountCloseBtn.addEventListener("click", () =>
-          this.toggleAccountDialog(false),
-        );
-      }
-      if (this.$.accountSettingsBtn) {
-        this.$.accountSettingsBtn.addEventListener("click", () => {
-          this.toggleAccountDialog(false);
-          this.toggleSettingsPanel(true);
-        });
-      }
-      if (this.$.settingsCloseBtn) {
-        this.$.settingsCloseBtn.addEventListener("click", () =>
-          this.toggleSettingsPanel(false),
-        );
-      }
-
       // Settings triggers (Firestore-dependent only)
       if (this.$.settingsSyncHistoryToggle) {
         this.$.settingsSyncHistoryToggle.addEventListener("change", (e) => {
@@ -5599,6 +6003,7 @@ ${precipProb > 0 ? `<span class="text-[9px] sm:text-[10px] text-blue-500 font-se
               "Please select a location on the map first.",
               "info",
             );
+            alert("Please select a location on the map first.");
             return;
           }
           this.defaultLocation = {
@@ -5625,6 +6030,7 @@ ${precipProb > 0 ? `<span class="text-[9px] sm:text-[10px] text-blue-500 font-se
           async (e) => {
             if (!this.defaultLocation) {
               this.showToast("Please set a default location first.", "info");
+              alert("Please set a default location first.");
               e.target.checked = false;
               return;
             }
@@ -5633,6 +6039,7 @@ ${precipProb > 0 ? `<span class="text-[9px] sm:text-[10px] text-blue-500 font-se
                 const permission = await Notification.requestPermission();
                 if (permission !== "granted") {
                   this.showToast("Notification permission denied.", "error");
+                  alert("Notification permission denied.");
                   e.target.checked = false;
                   this.defaultLocationNotify = false;
                   await this.saveUserDataToCloud();
@@ -5707,9 +6114,14 @@ ${precipProb > 0 ? `<span class="text-[9px] sm:text-[10px] text-blue-500 font-se
       }
       if (this.$.termsModal) {
         this.$.termsModal.addEventListener("click", (e) => {
-          if (e.target === this.$.termsModal && this.termsAccepted) {
+          if (e.target === this.$.termsModal) {
             this.hideTermsModal();
           }
+        });
+      }
+      if (this.$.termsCloseBtn) {
+        this.$.termsCloseBtn.addEventListener("click", () => {
+          this.hideTermsModal();
         });
       }
       if (this.$.copyContactEmailBtn) {
@@ -5718,6 +6130,14 @@ ${precipProb > 0 ? `<span class="text-[9px] sm:text-[10px] text-blue-500 font-se
             .writeText("applicationmanifester@gmail.com")
             .then(() => {
               this.showToast("Email copied to clipboard!", "success");
+              const btn = this.$.copyContactEmailBtn;
+              const originalText = btn.textContent;
+              btn.textContent = "Email copied!";
+              btn.disabled = true;
+              setTimeout(() => {
+                btn.textContent = originalText;
+                btn.disabled = false;
+              }, 2000);
             })
             .catch(() => {
               this.showToast("Could not copy email.", "error");
@@ -5745,9 +6165,22 @@ ${precipProb > 0 ? `<span class="text-[9px] sm:text-[10px] text-blue-500 font-se
           this.onUserSignOut();
         }
       });
+
+      // Handle redirect result if user returning from Google sign-in redirect
+      this._fb.getRedirectResult(this._fb.auth)
+        .then((result) => {
+          if (result && result.user) {
+            this.showToast("Logged in successfully.", "success");
+          }
+        })
+        .catch((error) => {
+          console.error("Redirect sign-in error:", error);
+          this.showToast("Sign-in failed: " + error.message, "error");
+        });
     } catch (e) {
       console.error("Firebase initialization failed:", e);
       this.showToast("Firebase connection failed.", "error");
+      alert("Firebase connection failed: " + e.message);
     }
   }
 
@@ -5757,7 +6190,13 @@ ${precipProb > 0 ? `<span class="text-[9px] sm:text-[10px] text-blue-500 font-se
       this.showTermsModal();
       return;
     }
-    if (!this._fb) return;
+    if (!this._fb) {
+      await this.initFirebase();
+    }
+    if (!this._fb) {
+      this.showToast("Sign-in service is currently offline or loading.", "info");
+      return;
+    }
     const provider = new this._fb.GoogleAuthProvider();
     try {
       await this._fb.signInWithPopup(this._fb.auth, provider);
@@ -5765,10 +6204,14 @@ ${precipProb > 0 ? `<span class="text-[9px] sm:text-[10px] text-blue-500 font-se
     } catch (e) {
       console.error("Google Sign-In failed:", e);
       this.showToast("Google Sign-In failed.", "error");
+      alert("Google Sign-In failed: " + e.message);
     }
   }
 
   async signOutUser() {
+    if (!this._fb) {
+      await this.initFirebase();
+    }
     if (!this._fb) return;
     try {
       await this._fb.signOut(this._fb.auth);
@@ -5777,6 +6220,7 @@ ${precipProb > 0 ? `<span class="text-[9px] sm:text-[10px] text-blue-500 font-se
     } catch (e) {
       console.error("Sign out failed:", e);
       this.showToast("Sign out failed.", "error");
+      alert("Sign out failed: " + e.message);
     }
   }
 
@@ -5897,6 +6341,13 @@ ${precipProb > 0 ? `<span class="text-[9px] sm:text-[10px] text-blue-500 font-se
               );
             }
           }
+
+          if (prefs.timeline24h != null) {
+            this.timeline24hMode = prefs.timeline24h;
+            if (this.$.settingsTimeline24hToggle) {
+              this.$.settingsTimeline24hToggle.checked = prefs.timeline24h;
+            }
+          }
         }
 
         if (data.defaultLocation) {
@@ -5946,6 +6397,7 @@ ${precipProb > 0 ? `<span class="text-[9px] sm:text-[10px] text-blue-500 font-se
     } catch (e) {
       console.error("Error loading data from Firestore:", e);
       this.showToast("Could not load cloud settings.", "error");
+      alert("Could not load cloud settings: " + e.message);
     }
   }
 
@@ -5963,6 +6415,7 @@ ${precipProb > 0 ? `<span class="text-[9px] sm:text-[10px] text-blue-500 font-se
         syncHistory: this.syncHistory,
         soundscapes: this.audioActive || false,
         volume: this.volumeLevel || 0.5,
+        timeline24h: this.timeline24hMode,
       },
       bookmarks: this.bookmarks,
       searchHistory: searchHist,
@@ -5985,6 +6438,8 @@ ${precipProb > 0 ? `<span class="text-[9px] sm:text-[10px] text-blue-500 font-se
         localforage.setItem("units", units),
         localforage.setItem("soundscapes", this.audioActive || false),
         localforage.setItem("volume", this.volumeLevel || 0.5),
+        localforage.setItem("termsAccepted", this.termsAccepted),
+        localforage.setItem("timeline24h", this.timeline24hMode),
       ]);
     } catch (e) {
       console.warn("Local settings save failed:", e);
@@ -6001,6 +6456,7 @@ ${precipProb > 0 ? `<span class="text-[9px] sm:text-[10px] text-blue-500 font-se
     } catch (e) {
       console.error("Error writing settings to cloud:", e);
       this.showToast("Failed to save settings to cloud.", "error");
+      alert("Failed to save settings to cloud: " + e.message);
     }
   }
 
@@ -6021,6 +6477,7 @@ ${precipProb > 0 ? `<span class="text-[9px] sm:text-[10px] text-blue-500 font-se
     } catch (e) {
       console.error("Error deleting cloud data:", e);
       this.showToast("Could not delete cloud data.", "error");
+      alert("Could not delete cloud data: " + e.message);
     }
   }
 
@@ -6041,6 +6498,16 @@ ${precipProb > 0 ? `<span class="text-[9px] sm:text-[10px] text-blue-500 font-se
     } else {
       this.$.settingsPanel.classList.remove("open");
       setTimeout(() => this.$.settingsPanel.classList.add("hidden"), 400);
+    }
+  }
+
+  toggleTimelineMinimized(minimize) {
+    if (minimize) {
+      this.$.timelineFullContent?.classList.add("hidden");
+      this.$.timelineMinimizedTrigger?.classList.remove("hidden");
+    } else {
+      this.$.timelineFullContent?.classList.remove("hidden");
+      this.$.timelineMinimizedTrigger?.classList.add("hidden");
     }
   }
 
@@ -6065,6 +6532,9 @@ ${precipProb > 0 ? `<span class="text-[9px] sm:text-[10px] text-blue-500 font-se
       this.$.settingsVolumeSlider.value = Math.round(
         (this.volumeLevel || 0.5) * 100,
       );
+    }
+    if (this.$.settingsTimeline24hToggle) {
+      this.$.settingsTimeline24hToggle.checked = this.timeline24hMode;
     }
 
     const hasUser = !!this.user;
@@ -6197,7 +6667,7 @@ ${precipProb > 0 ? `<span class="text-[9px] sm:text-[10px] text-blue-500 font-se
 
       const title = `Weather Update: ${this.defaultLocation.name}`;
       const options = {
-        body: `${emoji} ${desc} | ${tempStr} (H:${todayHigh}° L:${todayLow}°) | Humidity: ${hourWeather.humidity}%`,
+        body: `${emoji} ${desc} | ${tempStr} (H:${todayHigh}° L:${todayLow}°) | Humidity: ${hourWeather.humidity}% | Wind: ${hourWeather.windSpeed} | UV: ${hourWeather.uvIndex} | Precip: ${hourWeather.precipProb}%`,
         icon: "favicon.svg",
         badge: "favicon.svg",
         tag: "aurafisky-hourly-weather",
@@ -6281,8 +6751,8 @@ ${precipProb > 0 ? `<span class="text-[9px] sm:text-[10px] text-blue-500 font-se
   async initPushNotifications() {
     if (!this._fb?.messaging) return;
     if (!this.firebaseConfig.vapidKey) {
-      console.warn(
-        "FCM VAPID key not set — web push disabled. Set window.FCM_VAPID_KEY.",
+      console.info(
+        "FCM VAPID key not set — web push disabled. (This is normal for local development)",
       );
       return;
     }

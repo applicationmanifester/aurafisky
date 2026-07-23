@@ -15,8 +15,8 @@
   --glass-shadow: 0 8px 32px rgba(0, 0, 0, 0.08);
   --glass-blur: 16px;
 
-  --primary: #6366f1;
-  --primary-light: #818cf8;
+  --primary: #14b8a6;
+  --primary-light: #2dd4bf;
   --accent: #f59e0b;
 
   --temp-freezing: #60a5fa;
@@ -147,10 +147,10 @@ html, body {
   transition: background-color 0.15s ease;
 }
 .search-result-item:hover {
-  background-color: rgba(99, 102, 241, 0.08);
+  background-color: rgba(20, 184, 166, 0.08);
 }
 .dark .search-result-item:hover {
-  background-color: rgba(129, 140, 248, 0.12);
+  background-color: rgba(45, 212, 191, 0.12);
 }
 
 /* ── Weather Panel ──────────────────────────────────────────── */
@@ -268,13 +268,9 @@ input[type='range'].timeline-slider {
   -webkit-appearance: none;
   appearance: none;
   width: 100%;
-  height: 6px;
-  border-radius: 3px;
-  background: linear-gradient(to right,
-    rgba(99, 102, 241, 0.2) 0%,
-    rgba(99, 102, 241, 0.5) var(--now-position, 50%),
-    rgba(99, 102, 241, 0.2) 100%
-  );
+  height: 24px;
+  border-radius: 999px;
+  background: transparent;
   outline: none;
   cursor: pointer;
 }
@@ -285,15 +281,15 @@ input[type='range'].timeline-slider::-webkit-slider-thumb {
   width: 22px;
   height: 22px;
   border-radius: 50%;
-  background: linear-gradient(135deg, #6366f1, #8b5cf6);
+  background: var(--knob-color, linear-gradient(135deg, #14b8a6, #2dd4bf));
   border: 3px solid white;
-  box-shadow: 0 2px 8px rgba(99, 102, 241, 0.4);
+  box-shadow: 0 2px 8px rgba(20, 184, 166, 0.4);
   cursor: grab;
-  transition: transform 0.15s ease, box-shadow 0.15s ease;
+  transition: transform 0.15s ease, box-shadow 0.15s ease, background-color 0.2s ease;
 }
 input[type='range'].timeline-slider::-webkit-slider-thumb:hover {
   transform: scale(1.15);
-  box-shadow: 0 3px 12px rgba(99, 102, 241, 0.5);
+  box-shadow: 0 3px 12px rgba(20, 184, 166, 0.5);
 }
 input[type='range'].timeline-slider::-webkit-slider-thumb:active {
   cursor: grabbing;
@@ -304,18 +300,15 @@ input[type='range'].timeline-slider::-moz-range-thumb {
   width: 22px;
   height: 22px;
   border-radius: 50%;
-  background: linear-gradient(135deg, #6366f1, #8b5cf6);
+  background: var(--knob-color, linear-gradient(135deg, #14b8a6, #2dd4bf));
   border: 3px solid white;
-  box-shadow: 0 2px 8px rgba(99, 102, 241, 0.4);
+  box-shadow: 0 2px 8px rgba(20, 184, 166, 0.4);
   cursor: grab;
+  transition: background-color 0.2s ease;
 }
 
 .dark input[type='range'].timeline-slider {
-  background: linear-gradient(to right,
-    rgba(129, 140, 248, 0.15) 0%,
-    rgba(129, 140, 248, 0.4) var(--now-position, 50%),
-    rgba(129, 140, 248, 0.15) 100%
-  );
+  background: transparent;
 }
 .dark input[type='range'].timeline-slider::-webkit-slider-thumb {
   border-color: #1e293b;
@@ -324,17 +317,42 @@ input[type='range'].timeline-slider::-moz-range-thumb {
   border-color: #1e293b;
 }
 
-/* Now indicator line on the slider track */
+/* Timeline Track Wrapper */
+.timeline-track-wrapper {
+  width: 100%;
+}
+
+/* The colored segmented track bar — uses weather gradient set by JS updateTrackColors() */
+.timeline-track-bg {
+  position: relative;
+  width: 100%;
+  height: 8px;
+  border-radius: 999px;
+  background: var(--track-colors, linear-gradient(to right, #e2e8f0 0%, #e2e8f0 100%));
+  box-shadow: inset 0 1px 3px rgba(0,0,0,0.12);
+  pointer-events: none;
+  z-index: 1;
+}
+
+.dark .timeline-track-bg {
+  background: var(--track-colors, #1e293b);
+  box-shadow: inset 0 1px 3px rgba(0,0,0,0.4);
+}
+
+/* Vertical Orange Bar & Timing Badge for "NOW" on Timeline */
 .now-indicator {
   position: absolute;
-  top: -4px;
+  top: 50%;
   width: 2px;
   height: 14px;
   background: #ef4444;
   border-radius: 1px;
   pointer-events: none;
-  z-index: 2;
+  z-index: 10;
+  transform: translate(-50%, -50%);
+  transition: left 0.2s ease;
 }
+
 .now-indicator::before {
   content: 'Now';
   position: absolute;
@@ -346,6 +364,7 @@ input[type='range'].timeline-slider::-moz-range-thumb {
   color: #ef4444;
   white-space: nowrap;
 }
+
 
 /* ── Temperature Color Classes ──────────────────────────────── */
 .temp-freezing { color: var(--temp-freezing); }
@@ -415,10 +434,10 @@ input[type='range'].timeline-slider::-moz-range-thumb {
   transition: background-color 0.15s ease;
 }
 .daily-item:hover {
-  background-color: rgba(99, 102, 241, 0.06);
+  background-color: rgba(20, 184, 166, 0.06);
 }
 .dark .daily-item:hover {
-  background-color: rgba(129, 140, 248, 0.08);
+  background-color: rgba(45, 212, 191, 0.08);
 }
 
 /* ── Metric Grid ────────────────────────────────────────────── */
@@ -524,18 +543,18 @@ input[type='range'].timeline-slider::-moz-range-thumb {
 
 /* ── Dual-Axis SVG Chart Bars ───────────────────────────────── */
 .chart-bar {
-  fill: rgba(99, 102, 241, 0.15);
+  fill: rgba(20, 184, 166, 0.15);
   transition: fill 0.15s ease, fill-opacity 0.15s ease;
   cursor: pointer;
 }
 .chart-bar:hover {
-  fill: rgba(99, 102, 241, 0.35);
+  fill: rgba(20, 184, 166, 0.35);
 }
 .dark .chart-bar {
-  fill: rgba(129, 140, 248, 0.12);
+  fill: rgba(45, 212, 191, 0.12);
 }
 .dark .chart-bar:hover {
-  fill: rgba(129, 140, 248, 0.28);
+  fill: rgba(45, 212, 191, 0.28);
 }
 
 /* ── Air Quality Color States ────────────────────────────────── */
@@ -726,12 +745,12 @@ input[type='range'].timeline-slider::-moz-range-thumb {
   border-color: rgba(51, 65, 85, 0.3);
 }
 .hourly-pill.now-pill {
-  background: linear-gradient(135deg, rgba(99, 102, 241, 0.12), rgba(129, 140, 248, 0.08));
-  border-color: rgba(99, 102, 241, 0.35);
+  background: linear-gradient(135deg, rgba(20, 184, 166, 0.12), rgba(45, 212, 191, 0.08));
+  border-color: rgba(20, 184, 166, 0.35);
 }
 .dark .hourly-pill.now-pill {
-  background: linear-gradient(135deg, rgba(99, 102, 241, 0.2), rgba(129, 140, 248, 0.15));
-  border-color: rgba(129, 140, 248, 0.3);
+  background: linear-gradient(135deg, rgba(20, 184, 166, 0.2), rgba(45, 212, 191, 0.15));
+  border-color: rgba(45, 212, 191, 0.3);
 }
 .hourly-pill .pill-time {
   font-size: 9px;
@@ -842,8 +861,8 @@ input[type='range'].timeline-slider::-moz-range-thumb {
 
 /* ── Active Toggle Indicators ──────────────────────────────── */
 .toggle-active {
-  background: rgba(99, 102, 241, 0.15);
-  border-color: #6366f1;
+  background: rgba(20, 184, 166, 0.15);
+  border-color: #14b8a6;
 }
 
 /* ── Temperature Tooltip ──────────────────────────────────── */
@@ -1093,4 +1112,28 @@ button, a, input, select, textarea, [role="button"] {
   }
 }
 
+/* ── Toggle Switch Fixes (Missing Tailwind after: classes) ── */
+input[type="checkbox"].peer ~ div::after {
+  content: '';
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  background-color: white;
+  border-color: #cbd5e1;
+  border-width: 1px;
+  border-radius: 9999px;
+  height: 1.25rem;
+  width: 1.25rem;
+  transition-property: all;
+  transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+  transition-duration: 150ms;
+}
 
+.dark input[type="checkbox"].peer ~ div::after {
+  border-color: #475569;
+}
+
+input[type="checkbox"].peer:checked ~ div::after {
+  transform: translateX(100%);
+  border-color: white;
+}

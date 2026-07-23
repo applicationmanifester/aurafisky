@@ -3,7 +3,7 @@
     "source": "push-sender/functions"
   },
   "hosting": {
-    "public": ".",
+    "public": "dist",
     "ignore": [
       "firebase.json",
       ".firebaserc",

@@ -208,9 +208,20 @@ html, body {
 }
 .weather-panel.minimized {
   max-height: none !important;
+  height: auto !important;
+  bottom: auto !important;
 }
 .weather-panel.minimized .flex-shrink-0 {
   border-bottom: none;
+}
+
+/* Mobile minimized anchoring */
+@media (max-width: 639px) {
+  .weather-panel.minimized {
+    bottom: 0 !important;
+    top: auto !important;
+    transform: translateY(0) !important;
+  }
 }
 
 /* ── Leaflet Reset ──────────────────────────────────────────── */
@@ -881,29 +892,120 @@ input[type='range'].timeline-slider::-moz-range-thumb {
   display: none !important;
 }
 
-/* ── Compact Mode ─────────────────────────────────────────── */
-.compact #dailyForecast,
-.compact #hourlyStrip,
-.compact #bestWindowCard,
-.compact #sunArcSvg,
-.compact .moon-card,
-.compact #timeMachineDrawer,
-.compact #timeMachineTrigger,
-.compact #predictiveArrival,
-.compact #anomalyLabel,
-.compact #patternLabel,
-.compact #momentumLabel,
+/* ── Compact Mode (Fitted Card Compartment) ─────────────────── */
+/* Hides action buttons except expand icon */
+.compact #favoriteToggleBtn,
+.compact #shareWeatherBtn,
+.compact #panelMinimizeBtn,
+.compact #panelCloseBtn {
+  display: none !important;
+}
+
+.compact #compactExpandBtn {
+  display: flex !important;
+}
+
+.compact #panelTimeLabel,
+.compact #trustScore,
+.compact #freshnessLabel {
+  display: none !important;
+}
+
+.compact .flex-shrink-0 {
+  border-bottom: none !important;
+  background: transparent !important;
+}
+
+.compact #panelLocationName {
+  font-size: 1.1rem !important;
+  font-weight: 700 !important;
+}
+
+/* Outer compartment container - fitted compact width and height */
+.compact#weatherPanel {
+  max-height: none !important;
+  height: auto !important;
+  bottom: auto !important;
+  width: 280px !important;
+}
+
+/* Centered content with snug padding */
+.compact #weatherPanelContent {
+  display: flex !important;
+  flex-direction: column !important;
+  align-items: center !important;
+  justify-content: center !important;
+  padding: 1.25rem 1rem 1.75rem !important;
+  overflow: hidden !important;
+  text-align: center !important;
+}
+
+.compact #weatherPanelContent .flex.items-center.gap-4.mb-4 {
+  flex-direction: column !important;
+  align-items: center !important;
+  gap: 0.25rem !important;
+  margin-bottom: 0 !important;
+  text-align: center !important;
+}
+
+/* Rich readable Weather Icon */
+.compact #panelIcon {
+  font-size: 4.5rem !important;
+  line-height: 1 !important;
+  margin-bottom: 0.25rem !important;
+  filter: drop-shadow(0 4px 12px rgba(0, 0, 0, 0.15));
+}
+
+/* Clear bold Temperature Display */
+.compact #panelTemp {
+  font-size: 3.25rem !important;
+  font-weight: 800 !important;
+  letter-spacing: -0.03em !important;
+  line-height: 1 !important;
+}
+
+/* Readable Condition Description */
+.compact #panelDescription {
+  font-size: 1rem !important;
+  font-weight: 500 !important;
+  margin-top: 0.35rem !important;
+}
+
+/* Date & Time below description */
+.compact #compactDatetime {
+  display: block !important;
+  font-size: 0.8rem !important;
+  font-weight: 400 !important;
+  margin-top: 0.2rem !important;
+  opacity: 0.75;
+}
+
+/* Hide all extraneous elements and forecast sections */
+.compact #panelTempDelta,
+.compact #panelFeelsLike,
+.compact #percentileLabel,
+.compact #regimeLabel,
+.compact #advisoryBanner,
 .compact #briefingBtn,
 .compact #briefingContent,
 .compact #paramImportance,
 .compact #spatialGradLabel,
-.compact #regimeLabel,
-.compact #analogLabel,
-.compact #freshnessLabel,
-.compact #confidenceToggle,
-.compact #signalNoiseBtn,
+.compact #predictiveArrival,
+.compact #metricsGrid,
+.compact #astronomySection,
+.compact #timeMachineSection,
+.compact #trendSection,
+.compact #hourlySection,
+.compact #hourlyTabContent,
+.compact #hourlyStrip,
+.compact #dailySection,
+.compact #dailyForecast,
+.compact #uvSection,
+.compact #ensembleSection,
+.compact #bestWindowCard,
 .compact #cumulativeCurve,
-.compact #comparePanel {
+.compact #comparePanel,
+.compact #compactChips {
   display: none !important;
 }
 

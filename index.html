@@ -342,6 +342,12 @@
             <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
           </svg>
         </button>
+        <!-- Compact-mode expand button (hidden normally, shown by .compact CSS) -->
+        <button id="compactExpandBtn" class="hidden ml-2 p-2.5 rounded-lg hover:bg-slate-200/60 dark:hover:bg-slate-600/40 transition-colors flex-shrink-0" title="Exit compact mode" aria-label="Expand to full weather card">
+          <svg class="w-5 h-5 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" aria-hidden="true">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4" />
+          </svg>
+        </button>
       </div>
     </div>
 
@@ -365,6 +371,13 @@
           </div>
           <p id="panelDescription" class="text-sm text-slate-600 dark:text-slate-300 mt-0.5">--</p>
           <p id="panelFeelsLike" class="text-xs text-slate-400 dark:text-slate-500 mt-0.5">Feels like --°</p>
+          <!-- Compact-mode date/time shown below description -->
+          <p id="compactDatetime" class="hidden text-xs text-slate-400 dark:text-slate-500 mt-1"></p>
+          <!-- Compact-mode quick info chips (High/Low temp & Wind/Humidity) -->
+          <div id="compactChips" class="hidden flex-wrap items-center justify-center gap-1.5 mt-2">
+            <span id="compactHighLow" class="px-2.5 py-1 rounded-full text-[11px] font-semibold bg-slate-200/60 dark:bg-slate-700/60 text-slate-700 dark:text-slate-200 shadow-sm border border-slate-300/30 dark:border-slate-600/30"></span>
+            <span id="compactQuickStats" class="px-2.5 py-1 rounded-full text-[11px] font-medium bg-slate-200/60 dark:bg-slate-700/60 text-slate-600 dark:text-slate-300 shadow-sm border border-slate-300/30 dark:border-slate-600/30"></span>
+          </div>
           <div id="percentileLabel" class="text-[10px] font-semibold text-slate-400 mt-0.5"></div>
           <div id="regimeLabel" class="text-[10px] font-bold text-teal-500 dark:text-teal-400 mt-0.5"></div>
         </div>
@@ -399,7 +412,7 @@
       </div>
 
       <!-- Metrics Grid -->
-      <div class="grid grid-cols-1 sm:grid-cols-2 gap-2.5 mb-5">
+      <div id="metricsGrid" class="grid grid-cols-1 sm:grid-cols-2 gap-2.5 mb-5">
         <!-- AQI Card -->
         <div id="aqiCard" class="col-span-2 bg-slate-100/60 dark:bg-slate-700/40 rounded-xl px-3.5 py-3.5 flex items-center justify-between transition-all duration-300">
           <div class="min-w-0 flex-1 pr-2">
@@ -424,7 +437,7 @@
         </div>
 
         <!-- Comfort Index -->
-        <div class="col-span-2 bg-slate-100/60 dark:bg-slate-700/40 rounded-xl px-3.5 py-2.5 flex items-center justify-between">
+        <div id="comfortCard" class="col-span-2 bg-slate-100/60 dark:bg-slate-700/40 rounded-xl px-3.5 py-2.5 flex items-center justify-between">
           <div>
             <div class="text-[10px] text-slate-500 dark:text-slate-400 font-semibold flex items-center gap-1">🌡️ Comfort Index</div>
             <div id="comfortLabel" class="text-[10px] font-semibold text-slate-400"></div>
@@ -444,7 +457,7 @@
       </div>
 
       <!-- Astronomy & Sun/Moon Widget -->
-      <div class="mb-5">
+      <div id="astronomySection" class="mb-5">
         <h4 class="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-2">Astronomy & Cycles</h4>
         <div class="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
           <!-- Sun Arc Card -->
@@ -493,7 +506,7 @@
       </div>
 
       <!-- Climate Time-Machine Card -->
-      <div class="mb-5">
+      <div id="timeMachineSection" class="mb-5">
         <div class="flex items-center justify-between mb-2">
           <h4 class="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Climate Time-Machine</h4>
           <span id="offlineTimeMachineBadge" class="hidden text-[8px] font-bold px-1.5 py-0.5 rounded-md bg-amber-500/10 text-amber-500">Offline Only</span>
@@ -524,7 +537,7 @@
       </div>
 
       <!-- Hourly Trend SVG Sparkline -->
-      <div class="mb-5">
+      <div id="trendSection" class="mb-5">
         <div class="flex items-center justify-between mb-2">
           <h4 class="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">24h Temperature Trend</h4>
           <div class="flex items-center gap-1.5">
@@ -552,7 +565,7 @@
       </div>
 
       <!-- Hourly Forecast Scroll Strip -->
-      <div class="mb-5">
+      <div id="hourlySection" class="mb-5">
         <div class="flex items-center mb-3">
           <h4 class="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Hourly Forecast</h4>
         </div>
@@ -571,13 +584,13 @@
       </div>
 
       <!-- Daily Forecast -->
-      <div>
+      <div id="dailySection">
         <h4 class="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-2.5">7-Day Forecast</h4>
         <div id="dailyForecast" class="space-y-1"></div>
       </div>
 
       <!-- UV Forecast Chart -->
-      <div class="mt-4 mb-1">
+      <div id="uvSection" class="mt-4 mb-1">
         <h4 class="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-2">UV Index Forecast</h4>
         <div id="uvChartContainer" class="bg-slate-100/60 dark:bg-slate-700/40 rounded-xl p-3 h-[100px] relative">
           <svg id="uvChart" class="w-full h-full" viewBox="0 0 280 80" preserveAspectRatio="none" aria-hidden="true"></svg>

@@ -179,6 +179,7 @@ class AurafiskyApp {
       closeBookmarksBtn: document.getElementById("closeBookmarksBtn"),
       weatherPanel: document.getElementById("weatherPanel"),
       panelCloseBtn: document.getElementById("panelCloseBtn"),
+      compactExpandBtn: document.getElementById("compactExpandBtn"),
       favoriteToggleBtn: document.getElementById("favoriteToggleBtn"),
       starOutlineIcon: document.getElementById("starOutlineIcon"),
       starFilledIcon: document.getElementById("starFilledIcon"),
@@ -536,15 +537,26 @@ class AurafiskyApp {
         this.lightTiles.addTo(this.map);
       }
 
-      // Hard-enforce map bounds to the valid Web-Mercator range so panning
-      // can never request invalid tiles (esp. on mobile where inertia can
-      // outrun maxBoundsViscosity).
-      const MAP_BOUNDS = [[-85, -10000], [85, 10000]];
-      this.map.setMaxBounds(MAP_BOUNDS);
-      this.map.on("moveend", () => {
+      // Hard-enforce map bounds (already set in L.map options, but set again
+      // here for safety so inertia panning on mobile can't escape the valid range).
+      this.map.setMaxBounds([[-85, -10000], [85, 10000]]);
+      this.map.on("movestart zoomstart", () => {
+        if (this.radarPlaying) {
+          this._radarWasPlayingBeforeMove = true;
+          this.pauseRadarPlayback();
+        }
+      });
+      this.map.on("moveend zoomend", () => {
         const c = this.map.getCenter();
         if (c.lat < -85 || c.lat > 85) {
           this.map.setView([Math.max(Math.min(c.lat, 85), -85), c.lng], this.map.getZoom());
+        }
+        if (this._radarWasPlayingBeforeMove) {
+          this._radarWasPlayingBeforeMove = false;
+          clearTimeout(this._radarResumeTimer);
+          this._radarResumeTimer = setTimeout(() => {
+            if (this.radarActive) this.startRadarPlayback();
+          }, 500);
         }
       });
 
@@ -671,6 +683,11 @@ class AurafiskyApp {
     this.$.panelMinimizeBtn?.addEventListener("click", () => {
       this.toggleMinimizeWeatherPanel();
       this._haptic('selection');
+    });
+    // Compact expand button — exits compact mode
+    this.$.compactExpandBtn?.addEventListener("click", () => {
+      this.toggleMinimalMode();
+      this._haptic('light');
     });
     this.$.compareCloseBtn.addEventListener("click", () => {
       this.hideComparePanel();
@@ -1114,6 +1131,8 @@ class AurafiskyApp {
         (e) => {
           if (!this._panelTouchActive || e.touches.length !== 1) return;
           const dy = e.touches[0].clientY - this._panelTouchStartY;
+          // Don't drag if panel is minimized
+          if (this.$.weatherPanel.classList.contains("minimized")) return;
           // Only handle if panel is open and at top of scroll
           if (
             this.$.weatherPanel.classList.contains("open") &&
@@ -1139,6 +1158,8 @@ class AurafiskyApp {
           this._panelTouchActive = false;
           this.$.weatherPanel.style.transition = "";
           this.$.weatherPanel.classList.remove("dragging");
+          // If minimized, don't apply drag-to-dismiss
+          if (this.$.weatherPanel.classList.contains("minimized")) return;
           if (dy > 100) {
             this.hideWeatherPanel();
           } else {
@@ -1246,17 +1267,25 @@ class AurafiskyApp {
     if (lat == null || lng == null || isNaN(lat) || isNaN(lng)) {
       return;
     }
-    let locationName = `${lat.toFixed(4)}, ${lng.toFixed(4)}`;
+    const defaultName = `${lat.toFixed(4)}, ${lng.toFixed(4)}`;
 
+    // Call selectLocation IMMEDIATELY on click so weather card opens/updates instantly (1st click)
+    const selectPromise = this.selectLocation(lat, lng, defaultName);
+
+    // Perform reverse geocoding asynchronously in background
     try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 2000);
       const response = await fetch(
         `https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${lat}&lon=${lng}&accept-language=en`,
         {
+          signal: controller.signal,
           headers: {
             "User-Agent": "AurafiskyApp/2.0",
           },
         },
       );
+      clearTimeout(timeoutId);
       if (response.ok) {
         const data = await response.json();
         const addr = data.address;
@@ -1276,16 +1305,25 @@ class AurafiskyApp {
           );
           const state = sanitize(addr.state || addr.region || addr.county);
           const country = sanitize(addr.country);
-          locationName =
+          const locationName =
             [city, state, country].filter(Boolean).join(", ") ||
             sanitize(data.display_name);
+
+          if (locationName && this.selectedLat === lat && this.selectedLng === lng) {
+            this.selectedName = locationName;
+            if (this.$.panelLocationName) {
+              this.$.panelLocationName.textContent = locationName;
+              this.updateOfflineBadge(false);
+            }
+            this._persistSession(lat, lng, locationName);
+          }
         }
       }
     } catch (e) {
-      console.warn("Nominatim reverse geocode lookup failed:", e);
+      console.warn("Nominatim reverse geocode lookup failed or timed out:", e);
     }
 
-    await this.selectLocation(lat, lng, locationName);
+    await selectPromise;
   }
 
   async selectLocation(lat, lng, name) {
@@ -1661,6 +1699,9 @@ class AurafiskyApp {
       this.weatherData?.timezone,
       this.weatherData?.utc_offset_seconds
     );
+    // Sync compact widget date/time display
+    const compactDt = document.getElementById("compactDatetime");
+    if (compactDt) compactDt.textContent = this.$.panelTimeLabel.textContent;
 
     // Weather type display (emoji — consistent with share/hourly/bookmark surfaces)
     this.$.panelIcon.textContent = weather.icon;
@@ -1670,6 +1711,23 @@ class AurafiskyApp {
     this.$.panelTemp.className = `text-4xl font-extrabold ${WeatherService.getTempClass(weather.temperature)}`;
     this.$.panelDescription.textContent = weather.description;
     this.$.panelFeelsLike.textContent = `Feels like ${WeatherService.formatTemp(weather.feelsLike)}`;
+
+    // Sync compact mode stats chips
+    const highTemp = this.weatherData?.daily?.temperature_2m_max?.[0];
+    const lowTemp = this.weatherData?.daily?.temperature_2m_min?.[0];
+    const compactHighLow = document.getElementById("compactHighLow");
+    if (compactHighLow) {
+      if (highTemp != null && lowTemp != null) {
+        compactHighLow.textContent = `H: ${WeatherService.formatTemp(highTemp)} · L: ${WeatherService.formatTemp(lowTemp)}`;
+        compactHighLow.style.display = "";
+      } else {
+        compactHighLow.style.display = "none";
+      }
+    }
+    const compactQuickStats = document.getElementById("compactQuickStats");
+    if (compactQuickStats) {
+      compactQuickStats.textContent = `💧 ${weather.humidity ?? "--"}% · 💨 ${WeatherService.formatWind(weather.windSpeed)}`;
+    }
 
     // Grid panels (unit-aware)
     this.$.panelHumidity.textContent = `${weather.humidity ?? "--"}%`;
@@ -2695,9 +2753,9 @@ class AurafiskyApp {
       if (this.overlayType === "radar") {
         const pastFrames = data.radar.past || [];
         const nowcastFrames = data.radar.nowcast || [];
-        allFrames = [...pastFrames, ...nowcastFrames];
+        allFrames = [...pastFrames, ...nowcastFrames].slice(-6);
       } else {
-        allFrames = (data.satellite.infrared || []).slice(-8);
+        allFrames = (data.satellite.infrared || []).slice(-6);
       }
 
       this.clearRadarLayers();
@@ -2740,6 +2798,9 @@ class AurafiskyApp {
         keepBuffer: 1,
       },
     );
+    newLayer.on("tileerror", () => {
+      // Quietly swallow 429 / network errors for radar tiles without breaking app
+    });
     this.radarLayers[index] = newLayer;
     return newLayer;
   }
@@ -2765,18 +2826,9 @@ class AurafiskyApp {
       newActiveLayer.setOpacity(this.radarOpacity);
     }
 
-    // Lazy-create and pre-load next layer
-    const nextIndex =
-      (this.radarIndex + 1) % (this._radarFrameData?.length || 0);
-    const nextLayer = this._getOrCreateRadarLayer(nextIndex);
-    if (nextLayer) {
-      if (!this.map.hasLayer(nextLayer)) nextLayer.addTo(this.map);
-      nextLayer.setOpacity(0.0);
-    }
-
     // Prune: remove all other layers (free tile requests & memory)
     this.radarLayers.forEach((layer, idx) => {
-      if (layer && idx !== newIndex && idx !== nextIndex) {
+      if (layer && idx !== newIndex) {
         if (this.map.hasLayer(layer)) this.map.removeLayer(layer);
       }
     });
@@ -3686,7 +3738,7 @@ ${precipProb > 0 ? `<span class="text-[9px] sm:text-[10px] text-blue-500 font-se
     
     const panel = this.$.weatherPanel;
     if (this.currentLocation || this.selectedLat != null) {
-        panel.classList.add("open");
+      panel.classList.add("open");
     }
     panel.classList.remove("minimized");
     
@@ -4867,7 +4919,7 @@ ${precipProb > 0 ? `<span class="text-[9px] sm:text-[10px] text-blue-500 font-se
   hideWeatherPanel() {
     this.$.weatherPanel.classList.remove("open", "minimized");
     this.$.weatherPanel.setAttribute("inert", "");
-    document.documentElement.classList.remove("compact");
+    // NOTE: 'compact' class on <html> is a persistent user preference — do not remove it here.
     if (this.$.panelMinimizeBtn) {
       this.$.panelMinimizeBtn.classList.remove("chevron-flipped");
     }

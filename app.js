@@ -2735,6 +2735,9 @@ class AurafiskyApp {
         maxZoom: 18,
         maxNativeZoom: 7,
         noWrap: false,
+        updateWhenIdle: true,
+        updateWhenZooming: false,
+        keepBuffer: 1,
       },
     );
     this.radarLayers[index] = newLayer;

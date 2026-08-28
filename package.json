@@ -2,13 +2,52 @@
   "name": "aurafisky",
   "version": "2.0.0",
   "type": "module",
+  "description": "Aurafisky — Interactive Weather & Map Explorer",
+  "author": "Aurafisky",
+  "main": "electron/main.cjs",
   "scripts": {
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
     "test": "vitest run",
     "test:watch": "vitest",
-    "lint": "vitest run"
+    "lint": "vitest run",
+    "electron:start": "electron .",
+    "electron:build": "npm run build && electron-builder --win"
+  },
+  "build": {
+    "appId": "com.aurafisky.app",
+    "productName": "Aurafisky",
+    "directories": {
+      "output": "C:/Users/bharg_4mtuttl/Desktop/BGK_Applications/AI ChatBot/frontend/release-studio/aurafisky-desktop"
+    },
+    "files": [
+      "dist/**/*",
+      "electron/**/*",
+      "icon-512.png"
+    ],
+    "win": {
+      "target": [
+        {
+          "target": "dir",
+          "arch": [
+            "x64"
+          ]
+        },
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "icon": "icon-512.png"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "shortcutName": "Aurafisky"
+    }
   },
   "dependencies": {
     "@fontsource/inter": "^5.3.0",
@@ -21,6 +60,8 @@
     "@types/leaflet": "^1.9.21",
     "@types/localforage": "^0.0.34",
     "autoprefixer": "^10.5.4",
+    "electron": "^44.0.0",
+    "electron-builder": "^26.15.3",
     "jsdom": "^24.0.0",
     "postcss": "^8.5.22",
     "tailwindcss": "^4.3.3",

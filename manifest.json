@@ -4,20 +4,31 @@
   "description": "Interactive weather map with real-time conditions, forecasts, radar, and soundscapes.",
   "start_url": "./index.html",
   "display": "standalone",
+  "orientation": "any",
+  "categories": ["weather", "utilities"],
   "background_color": "#0f172a",
   "theme_color": "#14b8a6",
   "icons": [
     {
-      "src": "/icon-192.png",
+      "src": "./icon-192.png",
       "sizes": "192x192",
       "type": "image/png",
       "purpose": "any maskable"
     },
     {
-      "src": "/icon-512.png",
+      "src": "./icon-512.png",
       "sizes": "512x512",
       "type": "image/png",
       "purpose": "any maskable"
     }
+  ],
+  "shortcuts": [
+    {
+      "name": "Current Location Weather",
+      "short_name": "My Location",
+      "description": "View weather for current GPS position",
+      "url": "./index.html?action=locate"
+    }
   ]
 }
+

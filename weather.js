@@ -553,16 +553,34 @@ const WeatherService = (() => {
   }
 
   /**
+   * Parses an ISO date/time string safely into local date components without UTC offset shift.
+   * @param {string} str - ISO date/time string (e.g. YYYY-MM-DD or YYYY-MM-DDTHH:mm)
+   * @returns {Date}
+   */
+  function parseIsoLocal(str) {
+    if (!str) return new Date();
+    const parts = String(str).split("T");
+    const d = parts[0].split("-").map((n) => parseInt(n, 10));
+    if (d.length < 3 || d.some(isNaN)) return new Date(str);
+    const t = parts[1]
+      ? parts[1].split(":").map((n) => parseInt(n, 10))
+      : [0, 0, 0];
+    return new Date(d[0], d[1] - 1, d[2], t[0] || 0, t[1] || 0);
+  }
+
+  /**
    * Formats a date string into a short weekday label.
    *
    * @param {string} dateStr - ISO date string (YYYY-MM-DD)
    * @returns {string} Short weekday (e.g., "Mon")
    */
   function formatDayLabel(dateStr) {
-    const date = new Date(dateStr + "T00:00:00");
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    const diff = Math.round((date - today) / 86400000);
+    if (!dateStr) return "";
+    const date = parseIsoLocal(dateStr);
+    const now = new Date();
+    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const targetDay = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+    const diff = Math.round((targetDay - today) / 86400000);
 
     if (diff === 0) return "Today";
     if (diff === 1) return "Tomorrow";
@@ -723,17 +741,24 @@ const WeatherService = (() => {
       past_days: PAST_DAYS,
       forecast_days: FORECAST_DAYS,
     });
-    try {
-      const response = await fetch(
-        `https://air-quality-api.open-meteo.com/v1/air-quality?${params}`,
-      );
-      if (!response.ok) return null;
-      const data = await response.json();
-      _setCache(cacheKey, { data, ts: Date.now() });
-      return data;
-    } catch {
-      return null;
+    for (let attempt = 0; attempt <= retries; attempt++) {
+      try {
+        const response = await fetch(
+          `https://air-quality-api.open-meteo.com/v1/air-quality?${params}`,
+        );
+        if (!response.ok) return null;
+        const data = await response.json();
+        _setCache(cacheKey, { data, ts: Date.now() });
+        return data;
+      } catch (err) {
+        if (attempt < retries) {
+          await new Promise((r) => setTimeout(r, 1000 * Math.pow(2, attempt)));
+        } else {
+          return null;
+        }
+      }
     }
+    return null;
   }
 
   /**
@@ -1600,7 +1625,7 @@ const WeatherService = (() => {
   function getCumulativePrecipProb(data, startIdx, hours = 12) {
     if (!data?.hourly?.precipitation_probability) return null;
     const pp = data.hourly.precipitation_probability;
-    const limit = Math.min(startIdx + hours, pp.length);
+    const limit = Math.min(startIdx + hours, pp.length - 1);
     let noRainProb = 1;
     const curve = [];
     for (let i = startIdx; i <= limit; i++) {
@@ -1660,7 +1685,7 @@ const WeatherService = (() => {
   //  ================================================================
 
   function getFreshnessLabel(timestamp) {
-    if (!timestamp) return { label: "Unknown", opacity: 0.5, ageMinutes: 0, isStale: true };
+    if (!timestamp) return { label: "Unknown", opacity: 0.5, ageMinutes: 0, isStale: true, isExpired: true };
     let timeMs = timestamp;
     if (typeof timestamp === "object") {
       if (timestamp.timestamp) {
@@ -1678,6 +1703,7 @@ const WeatherService = (() => {
     const elapsed = Date.now() - timeMs;
     const mins = Math.floor(elapsed / 60000);
     const isStale = mins >= 120;
+    const isExpired = mins >= 1440; // 24 hours
     let label = "Just now";
     let opacity = 1.0;
     if (mins < 5) {
@@ -1689,14 +1715,14 @@ const WeatherService = (() => {
     } else if (mins < 120) {
       label = `${Math.floor(mins / 60)}h ${mins % 60}m ago`;
       opacity = 0.7;
-    } else if (mins < 360) {
+    } else if (mins < 1440) {
       label = `${Math.floor(mins / 60)}h ago`;
       opacity = 0.5;
     } else {
       label = `${Math.floor(mins / 1440)}d ago`;
       opacity = 0.3;
     }
-    return { label, opacity, ageMinutes: mins, isStale };
+    return { label, opacity, ageMinutes: mins, isStale, isExpired };
   }
 
   // ================================================================
@@ -1895,7 +1921,6 @@ const WeatherService = (() => {
       { label: "W", lat, lng: lng - offset },
     ];
     // Approximate temp gradient from latitude alone (crude but functional)
-    const baseTemp = 20 - Math.abs(lat) * 0.4; // rough lat temp model
     const arr = points.map((p) => ({
       ...p,
       estTemp: Math.round(20 - Math.abs(p.lat) * 0.4),
@@ -1966,6 +1991,7 @@ const WeatherService = (() => {
     calculateDewPoint,
     getWindDirection,
     searchLocations,
+    parseIsoLocal,
     formatDayLabel,
     formatHourLabel,
     formatDateTime,

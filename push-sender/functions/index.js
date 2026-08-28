@@ -35,13 +35,29 @@ exports.sendHourlyWeather = functions.pubsub
         /* keep fallback body */
       }
 
+      const locName = loc.name || "your location";
       try {
-        await admin.messaging().sendEachForMulticast({
+        const response = await admin.messaging().sendEachForMulticast({
           tokens,
-          notification: { title: `Weather Update: ${loc.name}`, body },
-          data: { lat: String(loc.lat), lng: String(loc.lng), name: loc.name },
+          notification: { title: `Weather Update: ${locName}`, body },
+          data: { lat: String(loc.lat || 0), lng: String(loc.lng || 0), name: String(locName) },
         });
-        await doc.ref.update({ lastWeatherPush: now });
+
+        // Prune invalid / unregistered tokens if any failed
+        if (response.failureCount > 0) {
+          const validTokens = [];
+          response.responses.forEach((resp, idx) => {
+            if (resp.success) {
+              validTokens.push(tokens[idx]);
+            }
+          });
+          await doc.ref.update({
+            fcmTokens: validTokens,
+            lastWeatherPush: now,
+          });
+        } else {
+          await doc.ref.update({ lastWeatherPush: now });
+        }
       } catch (e) {
         console.error("Push failed for", doc.id, e);
       }

@@ -71,3 +71,5 @@ window.toastModule = (() => {
     },
   };
 })();
+
+export const toastModule = window.toastModule;

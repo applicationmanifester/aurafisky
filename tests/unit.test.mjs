@@ -1,4 +1,6 @@
-import { test } from "node:test";
+// Runs under Vitest (see vitest.config.ts `include`). This file previously used
+// the node:test runner and matched no glob, so its 6 assertions never executed.
+import { test } from "vitest";
 import assert from "node:assert/strict";
 import {
   cToF,

@@ -3,8 +3,7 @@
 // features load on demand (code-splitting / Phase-1 modularization).
 const featureModules = {
   ensemble: () => import('./ensemble.js'),
-  routes: () => import('./routes.js'),
-  copilot: () => import('./copilot.js')
+  routes: () => import('./routes.js')
 };
 
 export async function initFeatures(app) {

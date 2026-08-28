@@ -1,5 +1,7 @@
 {
   "projects": {
     "default": "aurafisky"
-  }
+  },
+  "targets": {},
+  "etags": {}
 }

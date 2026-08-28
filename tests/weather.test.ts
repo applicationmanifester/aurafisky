@@ -458,37 +458,37 @@ it('formatPressure returns inHg', () => {
     it('getAdvisories returns heat warning for high temp', () => {
       const weather = createMockHourlyWeather({ temperature: 40 });
       const advisories = getAdvisories(weather, null);
-      expect(advisories.some((a) => a.type === 'heat')).toBe(true);
+      expect(advisories.some((a: any) => a.type === 'heat')).toBe(true);
     });
 
     it('getAdvisories returns frost advisory for low temp', () => {
       const weather = createMockHourlyWeather({ temperature: -5 });
       const advisories = getAdvisories(weather, null);
-      expect(advisories.some((a) => a.type === 'frost')).toBe(true);
+      expect(advisories.some((a: any) => a.type === 'frost')).toBe(true);
     });
 
     it('getAdvisories returns wind warning for high wind', () => {
       const weather = createMockHourlyWeather({ windSpeed: 50 });
       const advisories = getAdvisories(weather, null);
-      expect(advisories.some((a) => a.type === 'wind')).toBe(true);
+      expect(advisories.some((a: any) => a.type === 'wind')).toBe(true);
     });
 
     it('getAdvisories returns storm warning for storm code', () => {
       const weather = createMockHourlyWeather({ weatherCode: 95 });
       const advisories = getAdvisories(weather, null);
-      expect(advisories.some((a) => a.type === 'storm')).toBe(true);
+      expect(advisories.some((a: any) => a.type === 'storm')).toBe(true);
     });
 
     it('getAdvisories returns rain alert for heavy precipitation', () => {
       const weather = createMockHourlyWeather({ precipitation: 10 });
       const advisories = getAdvisories(weather, null);
-      expect(advisories.some((a) => a.type === 'rain')).toBe(true);
+      expect(advisories.some((a: any) => a.type === 'rain')).toBe(true);
     });
 
     it('getAdvisories returns AQI alert for poor air quality', () => {
       const weather = createMockHourlyWeather();
       const advisories = getAdvisories(weather, 150);
-      expect(advisories.some((a) => a.type === 'aqi')).toBe(true);
+      expect(advisories.some((a: any) => a.type === 'aqi')).toBe(true);
     });
 
     it('returns empty array for null weather', () => {
@@ -653,21 +653,21 @@ it('formatPressure returns inHg', () => {
     it('getDecisions returns painting advice', () => {
       const weather = createMockHourlyWeather({ temperature: 20, humidity: 50, windSpeed: 10, precipitation: 0, precipProb: 0 });
       const decisions = getDecisions(weather, 20, new Date());
-      const paint = decisions.find((d) => d.icon.includes('🖌️'));
+      const paint = decisions.find((d: any) => d.icon.includes('🖌️'));
       expect(paint).toBeDefined();
     });
 
     it('getDecisions returns kite flying advice', () => {
       const weather = createMockHourlyWeather({ windSpeed: 20, precipitation: 0, precipProb: 0, weatherCode: 0 });
       const decisions = getDecisions(weather, 20, new Date());
-      const kite = decisions.find((d) => d.icon.includes('🪁'));
+      const kite = decisions.find((d: any) => d.icon.includes('🪁'));
       expect(kite).toBeDefined();
     });
 
     it('getDecisions returns laundry advice', () => {
       const weather = createMockHourlyWeather({ humidity: 50, windSpeed: 10, temperature: 15, precipitation: 0, precipProb: 0 });
       const decisions = getDecisions(weather, 20, new Date());
-      const laundry = decisions.find((d) => d.icon.includes('👕'));
+      const laundry = decisions.find((d: any) => d.icon.includes('👕'));
       expect(laundry).toBeDefined();
     });
   });
@@ -930,7 +930,7 @@ it('formatPressure returns inHg', () => {
       const weather = createMockHourlyWeather({ temperature: 20, humidity: 60, windSpeed: 10 });
       const importance = getParameterImportance(weather, 20);
       expect(importance).toHaveLength(7);
-      importance.forEach((p) => {
+      importance.forEach((p: any) => {
         expect(p).toHaveProperty('key');
         expect(p).toHaveProperty('value');
         expect(p).toHaveProperty('impact');
@@ -983,7 +983,7 @@ it('formatPressure returns inHg', () => {
     it('getSpatialGradient returns temperature estimates', () => {
       const gradient = getSpatialGradient(40.7128, -74.006);
       expect(gradient.points).toHaveLength(4);
-      gradient.points.forEach((p) => {
+      gradient.points.forEach((p: any) => {
         expect(p).toHaveProperty('label');
         expect(p).toHaveProperty('lat');
         expect(p).toHaveProperty('lng');

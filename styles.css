@@ -8,6 +8,11 @@
  * ============================================================
  */
 
+/* ── Dark mode tile filter (open-source fallback) ─────────────── */
+.dark .dark-mode-tiles {
+  filter: invert(0.9) hue-rotate(180deg) contrast(1.5) brightness(0.6);
+}
+
 /* ── CSS Custom Properties ──────────────────────────────────── */
 :root {
   --glass-bg: rgba(255, 255, 255, 0.9);
@@ -34,6 +39,16 @@
 
 /* ── Base & Resets ──────────────────────────────────────────── */
 * { box-sizing: border-box; }
+
+/* Hide native browser search input clear button (prevents double close icon) */
+input[type="search"]::-webkit-search-decoration,
+input[type="search"]::-webkit-search-cancel-button,
+input[type="search"]::-webkit-search-results-button,
+input[type="search"]::-webkit-search-results-decoration {
+  -webkit-appearance: none;
+  appearance: none;
+  display: none;
+}
 
 html, body {
   margin: 0;
@@ -172,6 +187,10 @@ html, body {
 @media (min-width: 768px) {
   #weatherPanel {
     width: 380px;
+  }
+  #weatherPanel.dragging-desktop {
+    transition: none !important;
+    box-shadow: 0 20px 50px rgba(0, 0, 0, 0.3) !important;
   }
 }
 .weather-panel {
@@ -1214,3 +1233,47 @@ button, a, input, select, textarea, [role="button"] {
   }
 }
 
+
+/* ── Share Modal: forecast-type selector ────────────────────── */
+/* Selection state is a single `is-selected` class toggle. Previously app.js
+   reassigned a full hard-coded Tailwind className string on every click, which
+   silently clobbered any other class on the element and duplicated the styling
+   in three places (two JS strings + the markup). */
+.share-type-btn {
+  border-color: #e2e8f0;
+  color: #334155;
+}
+.share-type-btn:hover {
+  border-color: #cbd5e1;
+}
+.share-type-btn.is-selected {
+  background-color: color-mix(in srgb, var(--primary) 10%, transparent);
+  border-color: var(--primary);
+  color: var(--primary);
+}
+:is(.dark, [data-theme="dark"]) .share-type-btn {
+  border-color: #1e293b;
+  color: #cbd5e1;
+}
+:is(.dark, [data-theme="dark"]) .share-type-btn:hover {
+  border-color: #334155;
+}
+:is(.dark, [data-theme="dark"]) .share-type-btn.is-selected {
+  border-color: var(--primary);
+  color: var(--primary-light);
+}
+
+/* ── Map tile seams ─────────────────────────────────────────── */
+/* Basemap tiles are laid out on exact 256px integer boundaries, but each one
+   is composited as its own GPU layer, so the browser leaves a hairline gap at
+   every edge and .leaflet-container's background shows through as a faint
+   grid over the whole map. Growing each tile by half a pixel makes neighbours
+   overlap just enough to close the seam, with no visible effect otherwise.
+   Scoped to img tiles so Leaflet's own sizing of other panes is untouched, and
+   NOT applied via `transform` — Leaflet positions tiles with a transform
+   matrix, so overriding that would displace them. `!important` is required
+   because Leaflet writes `width:256px;height:256px` inline on every tile. */
+.leaflet-container img.leaflet-tile {
+  width: 256.5px !important;
+  height: 256.5px !important;
+}

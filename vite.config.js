@@ -18,7 +18,7 @@ export default defineConfig({
     rollupOptions: {
       output: {
         manualChunks: {
-          'features': ['./features/ensemble.js', './features/routes.js', './features/copilot.js'],
+          'features': ['./features/ensemble.js', './features/routes.js'],
           'app-core': ['./app.js']
         },
         chunkFileNames: 'assets/js/[name]-[hash].js',
@@ -37,6 +37,9 @@ export default defineConfig({
   plugins: [
     VitePWA({
       registerType: 'autoUpdate',
+      // app.js registers the worker itself (updateViaCache:'none' + forced
+      // update checks on focus/visibility). Don't inject a second registration.
+      injectRegister: null,
       includeAssets: ['favicon.svg', 'icon-192.png', 'icon-512.png', 'logo.svg'],
       manifest: {
         name: 'Aurafisky Live Explorer',
@@ -91,7 +94,7 @@ export default defineConfig({
         }
       },
       {
-        urlPattern: ({ url }) => url.hostname === 'basemaps.cartocdn.com',
+        urlPattern: ({ url }) => url.hostname === 'tiles.openfreemap.org',
         handler: 'CacheFirst',
         options: {
           cacheName: 'map-tiles',

@@ -1,10 +1,30 @@
+// ============================================================================
+//  ⚠️  DEPRECATED — THIS FILE IS NOT DEPLOYED. DO NOT MAINTAIN IT.
+// ============================================================================
+//  vite-plugin-pwa runs in `generateSW` mode (see vite.config.js), so the
+//  service worker that actually ships is the Workbox bundle written to
+//  dist/sw.js at build time. Firebase Hosting serves dist/, so nothing in this
+//  file has reached a browser since the project moved to Vite.
+//
+//  Every route implemented below is already covered by `workbox.runtimeCaching`
+//  in vite.config.js:
+//     Open-Meteo  → NetworkFirst  (2h, 20 entries)
+//     CartoDB     → CacheFirst    (30d, 200 entries)
+//     RainViewer  → CacheFirst    (7d, 150 entries)
+//     Nominatim   → NetworkFirst  (1h, 50 entries)
+//     app shell   → precache + navigateFallback
+//
+//  Change caching behaviour in vite.config.js, NOT here. This file is kept only
+//  so the history is easy to diff; it is safe to delete outright.
+// ============================================================================
+
 importScripts(
   "https://cdn.jsdelivr.net/npm/localforage@1.10.0/dist/localforage.min.js",
 );
 // Bump this on every deploy. The activate handler wipes any aurafisky-v*
 // cache whose version differs, so browsers can never keep serving a stale
 // older build of the app shell.
-const CACHE_NAME = "aurafisky-v77";
+const CACHE_NAME = "aurafisky-v96";
 const ASSETS = [
   "./",
   "./index.html",
@@ -61,7 +81,8 @@ self.addEventListener("activate", (e) => {
         // Everything else — including stale aurafisky-vNN builds from prior
         // deploys and any orphan/orphaned-name caches — is deleted so a
         // browser can never resurrect an older version of the app.
-        const keep = new Set([CACHE_NAME, TILE_CACHE]);
+        const API_CACHE = "aurafisky-api-v1";
+        const keep = new Set([CACHE_NAME, TILE_CACHE, API_CACHE]);
         return Promise.all(
           keys
             .filter((key) => !keep.has(key))
@@ -88,7 +109,7 @@ self.addEventListener("message", (event) => {
 });
 
 const TILE_CACHE = "aurafisky-tiles-v1";
-const TILE_CACHE_MAX = 350;
+const TILE_CACHE_MAX = 1000;
 
 async function cacheTile(request) {
   const cache = await caches.open(TILE_CACHE);
@@ -141,9 +162,30 @@ self.addEventListener("fetch", (e) => {
     return;
   }
 
-  // Map tiles (CartoDB) — bounded LRU cache for instant repeat visits.
-  if (url.includes("basemaps.cartocdn.com")) {
+  // Map tiles (OpenFreeMap) — bounded LRU cache for instant repeat visits.
+  if (url.includes("tiles.openfreemap.org")) {
     e.respondWith(cacheTile(e.request));
+    return;
+  }
+
+  // Weather API (Open-Meteo) — Network-First with Cache Fallback for offline resilience
+  if (url.includes("api.open-meteo.com")) {
+    e.respondWith(
+      (async () => {
+        const cache = await caches.open("aurafisky-api-v1");
+        try {
+          const networkResponse = await fetch(e.request);
+          if (networkResponse && networkResponse.status === 200) {
+            cache.put(e.request, networkResponse.clone());
+          }
+          return networkResponse;
+        } catch (err) {
+          const cached = await cache.match(e.request);
+          if (cached) return cached;
+          throw err;
+        }
+      })()
+    );
     return;
   }
 
@@ -151,7 +193,6 @@ self.addEventListener("fetch", (e) => {
   // 503 here; that fabricated error confused the console and the SDKs.
   // Let the browser surface real network errors instead.
   if (
-    url.includes("api.open-meteo.com") ||
     url.includes("rainviewer.com") ||
     url.includes("openstreetmap.org") ||
     url.includes("nominatim.openstreetmap.org") ||

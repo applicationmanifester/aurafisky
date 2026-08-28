@@ -7,7 +7,9 @@ export default defineConfig({
   test: {
     environment: 'jsdom',
     globals: true,
-    include: ['tests/**/*.test.ts'],
+    // Must cover .mjs/.js too — a `.test.ts`-only glob silently skipped
+    // tests/unit.test.mjs entirely.
+    include: ['tests/**/*.test.{ts,mts,mjs,js}'],
     coverage: {
       provider: 'v8',
       reporter: ['text', 'json', 'html'],

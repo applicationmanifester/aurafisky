@@ -19,6 +19,23 @@
  * ============================================================
  */
 
+import "@fontsource/inter/400.css";
+import "@fontsource/inter/500.css";
+import "@fontsource/inter/600.css";
+import "@fontsource/inter/700.css";
+import "@fontsource/inter/800.css";
+import "leaflet/dist/leaflet.css";
+
+import L from "leaflet";
+import localforage from "localforage";
+import DOMPurify from "dompurify";
+
+if (typeof window !== "undefined") {
+  if (!window.L) window.L = L;
+  if (!window.localforage) window.localforage = localforage;
+  if (!window.DOMPurify) window.DOMPurify = DOMPurify;
+}
+
 import './weather.js';
 import './modules/dom-utils.js';
 import './modules/toast.js';
@@ -41,7 +58,7 @@ class AurafiskyApp {
       appId: "1:206842187982:web:994268ad1fa6290b45409f",
       storageBucket: "aurafisky.firebasestorage.app",
       apiKey:
-        window.FIREBASE_API_KEY || "AIzaSyCF0fSv5OUy05AnYZot4Y9Y07TnJjjNl1I", // Fallback to placeholder in dev
+        window.FIREBASE_API_KEY || "AIzaSyCF0fSv5OUy05AnYZot4Y9Y07TnJjjNl1I",
       authDomain: "aurafisky.firebaseapp.com",
       messagingSenderId: "206842187982",
       // Web Push VAPID key from Firebase Console → Project Settings → Cloud Messaging.
@@ -234,6 +251,7 @@ class AurafiskyApp {
 
       // Panel details
       panelLocationName: document.getElementById("panelLocationName"),
+      panelCoordinates: document.getElementById("panelCoordinates"),
       panelTimeLabel: document.getElementById("panelTimeLabel"),
       panelIcon: document.getElementById("panelIcon"),
       panelTemp: document.getElementById("panelTemp"),
@@ -319,6 +337,17 @@ class AurafiskyApp {
       // New Feature Elements
 
       shareWeatherBtn: document.getElementById("shareWeatherBtn"),
+      shareModal: document.getElementById("shareModal"),
+      shareModalCloseBtn: document.getElementById("shareModalCloseBtn"),
+      shareOptCurrent: document.getElementById("shareOptCurrent"),
+      shareOptHourly: document.getElementById("shareOptHourly"),
+      shareOptWeekly: document.getElementById("shareOptWeekly"),
+      shareOptFull: document.getElementById("shareOptFull"),
+      shareTargetNative: document.getElementById("shareTargetNative"),
+      shareTargetWhatsApp: document.getElementById("shareTargetWhatsApp"),
+      shareTargetTelegram: document.getElementById("shareTargetTelegram"),
+      shareTargetX: document.getElementById("shareTargetX"),
+      shareTargetCopy: document.getElementById("shareTargetCopy"),
       panelMinimizeBtn: document.getElementById("panelMinimizeBtn"),
       hourlyTabContent: document.getElementById("hourlyTabContent"),
 
@@ -377,6 +406,7 @@ class AurafiskyApp {
       settingsUnitsToggle: document.getElementById("settingsUnitsToggle"),
       settingsThemeToggle: document.getElementById("settingsThemeToggle"),
       settingsCompactToggle: document.getElementById("settingsCompactToggle"),
+      settingsMapLanguageToggle: document.getElementById("settingsMapLanguageToggle"),
       settingsSyncHistoryToggle: document.getElementById(
         "settingsSyncHistoryToggle",
       ),
@@ -458,6 +488,56 @@ class AurafiskyApp {
 
     // Initialize Firebase integrations & bind user profile / settings triggers
     this.initFirebase();
+
+    // Register the Service Worker. This is the single registration path — the
+    // inline <script> in index.html and vite-plugin-pwa's injected registerSW.js
+    // were both removed in favour of this one, which additionally sets
+    // updateViaCache:'none' and forces update checks on focus/visibility.
+    this.registerServiceWorker();
+
+    // Load initial startup location (shared URL link first, then restored session, home, or geolocation)
+    this._loadInitialStartupLocation();
+  }
+
+  /**
+   * True when a click event was really the tail end of a pan/swipe gesture
+   * rather than a deliberate tap, so the caller should ignore it.
+   *
+   * Two signals, either of which is enough:
+   *   1. Leaflet fired movestart/dragstart since the last pointerdown.
+   *   2. The pointer travelled more than DRAG_SLOP_PX from where it went down —
+   *      catches short drags that never cross Leaflet's own drag threshold.
+   *
+   * Shared by the map click handler and the weather / home / bookmark marker
+   * click handlers, which previously each carried their own copy of this logic.
+   *
+   * @param {Object} e - Leaflet mouse event (may carry `originalEvent`)
+   * @returns {boolean} true if the event should be treated as a drag, not a tap
+   */
+  _isDragGesture(e) {
+    const DRAG_SLOP_PX = 8;
+
+    if (this._mapWasDragged) {
+      this._mapWasDragged = false;
+      return true;
+    }
+
+    const orig = e?.originalEvent;
+    if (!this._touchStartPos || !orig) return false;
+
+    const clientX =
+      orig.clientX ??
+      (orig.changedTouches?.[0]?.clientX || orig.touches?.[0]?.clientX);
+    const clientY =
+      orig.clientY ??
+      (orig.changedTouches?.[0]?.clientY || orig.touches?.[0]?.clientY);
+    if (clientX == null || clientY == null) return false;
+
+    const dist = Math.hypot(
+      clientX - this._touchStartPos.x,
+      clientY - this._touchStartPos.y,
+    );
+    return dist > DRAG_SLOP_PX;
   }
 
   // Dynamically load feature modules on demand
@@ -502,40 +582,94 @@ class AurafiskyApp {
         maxBoundsViscosity: 1.0,
       });
 
-      // CartoDB Voyager tile layer (fast CDN — replaces the slow/rate-limited OSM tile server)
-      this.lightTiles = L.tileLayer(
-        "https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}.png",
-        {
-          attribution: "&copy; OpenStreetMap contributors &copy; CARTO",
-          subdomains: "abcd",
-          maxZoom: 20,
-          keepBuffer: 2,
-          noWrap: false,
-          // Clip tile requests to the valid Web-Mercator range so Leaflet
-          // never asks CartoDB for y=-1 (lat > 85°) tiles it rejects with 400.
-          bounds: [[-85, -180], [85, 180]],
-        },
-      );
+      // Language preference: 'en' for English (OpenFreeMap), 'native' for local language (OSM)
+      this.mapLanguage = this.getSavedMapLanguage() || 'en';
 
-      // CartoDB Dark Matter tile layer
-      this.darkTiles = L.tileLayer(
-        "https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png",
+      // English tiles (OpenFreeMap) - renders labels in English
+      this.enLightTiles = L.tileLayer(
+        "https://tiles.openfreemap.org/styles/liberty/{z}/{x}/{y}.png?lang=en",
         {
-          attribution: "&copy; OpenStreetMap contributors &copy; CARTO",
-          subdomains: "abcd",
-          maxZoom: 20,
-          keepBuffer: 2,
+          attribution: "&copy; OpenStreetMap contributors &copy; OpenFreeMap",
+          maxZoom: 19,
+          keepBuffer: 3,
           noWrap: false,
           bounds: [[-85, -180], [85, 180]],
         },
       );
 
-      // Apply theme tile
-      if (this.isDark) {
-        this.darkTiles.addTo(this.map);
-      } else {
-        this.lightTiles.addTo(this.map);
-      }
+      this.enDarkTiles = L.tileLayer(
+        "https://tiles.openfreemap.org/styles/dark/{z}/{x}/{y}.png?lang=en",
+        {
+          attribution: "&copy; OpenStreetMap contributors &copy; OpenFreeMap",
+          maxZoom: 19,
+          keepBuffer: 3,
+          noWrap: false,
+          bounds: [[-85, -180], [85, 180]],
+        },
+      );
+
+      // Native language tiles (OpenStreetMap standard) - renders labels in local language
+      this.nativeLightTiles = L.tileLayer(
+        "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png?lang=native",
+        {
+          attribution: "&copy; OpenStreetMap contributors",
+          maxZoom: 19,
+          keepBuffer: 3,
+          noWrap: false,
+          bounds: [[-85, -180], [85, 180]],
+          subdomains: "abc",
+        },
+      );
+
+      this.nativeDarkTiles = L.tileLayer(
+        "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png?lang=native",
+        {
+          attribution: "&copy; OpenStreetMap contributors",
+          maxZoom: 19,
+          keepBuffer: 3,
+          noWrap: false,
+          bounds: [[-85, -180], [85, 180]],
+          subdomains: "abc",
+          className: "dark-mode-tiles",
+        },
+      );
+
+      // Apply theme + language tile
+      const applyThemeTiles = () => {
+        // Remove all existing tile layers
+        [this.enLightTiles, this.enDarkTiles, this.nativeLightTiles, this.nativeDarkTiles].forEach((layer) => {
+          if (this.map.hasLayer(layer)) {
+            this.map.removeLayer(layer);
+          }
+        });
+
+        const isEnglish = this.mapLanguage === 'en';
+        const lightTiles = isEnglish ? this.enLightTiles : this.nativeLightTiles;
+        const darkTiles = isEnglish ? this.enDarkTiles : this.nativeDarkTiles;
+
+        if (this.isDark) {
+          darkTiles.addTo(this.map);
+          darkTiles.once("tileerror", () => {
+            if (this.map.hasLayer(darkTiles)) {
+              this.map.removeLayer(darkTiles);
+              // Fallback to other language's dark tiles
+              const fallback = isEnglish ? this.nativeDarkTiles : this.enDarkTiles;
+              fallback.addTo(this.map);
+            }
+          });
+        } else {
+          lightTiles.addTo(this.map);
+          lightTiles.once("tileerror", () => {
+            if (this.map.hasLayer(lightTiles)) {
+              this.map.removeLayer(lightTiles);
+              // Fallback to other language's light tiles
+              const fallback = isEnglish ? this.nativeLightTiles : this.enLightTiles;
+              fallback.addTo(this.map);
+            }
+          });
+        }
+      };
+      applyThemeTiles();
 
       // Hard-enforce map bounds (already set in L.map options, but set again
       // here for safety so inertia panning on mobile can't escape the valid range).
@@ -546,6 +680,25 @@ class AurafiskyApp {
           this.pauseRadarPlayback();
         }
       });
+      
+      // Track touch/drag start position to prevent accidental location selection
+      // while panning on mobile. Consumed by _isDragGesture(), which every map
+      // and marker click handler shares.
+      this._touchStartPos = null;
+      this._mapWasDragged = false;
+
+      this.map.on("movestart dragstart", () => {
+        this._mapWasDragged = true;
+      });
+
+      const mapContainer = this.map.getContainer();
+      if (mapContainer) {
+        mapContainer.addEventListener("pointerdown", (e) => {
+          this._touchStartPos = { x: e.clientX, y: e.clientY };
+          this._mapWasDragged = false;
+        }, { passive: true });
+      }
+
       this.map.on("moveend zoomend", () => {
         const c = this.map.getCenter();
         if (c.lat < -85 || c.lat > 85) {
@@ -562,11 +715,12 @@ class AurafiskyApp {
 
       // Zoom controls are integrated into radar controls panel instead
 
-      // Bind map click handler with debounce
+      // Bind map click handler with drag & threshold validation
       this.map.on("click", async (e) => {
         if (this._mapClickDebounce) return;
-        
 
+        // Ignore clicks triggered by panning/swiping gestures on mobile/desktop
+        if (this._isDragGesture(e)) return;
 
         // Check if click is near home pin (pixel distance)
         if (this._homeMarker && this.defaultLocation) {
@@ -643,6 +797,14 @@ class AurafiskyApp {
       this.$.bookmarksDropdown.classList.toggle("hidden");
       this._haptic('selection');
     });
+
+    // Map Language Toggle
+    this.$.mapLanguageToggle?.addEventListener("click", () => {
+      const newLang = this.mapLanguage === 'en' ? 'native' : 'en';
+      this.setMapLanguage(newLang);
+      this._haptic('selection');
+    });
+
     this.$.closeBookmarksBtn?.addEventListener("click", (e) => {
       e.stopPropagation();
       this.$.bookmarksDropdown.classList.add("hidden");
@@ -671,7 +833,30 @@ class AurafiskyApp {
     });
 
     // ── Map Controls ──────────────────────────────────────────
-    // Dark mode toggle is in settings panel only
+    // Pre-warm GPS so the first click on "My Location" resolves instantly — but
+    // ONLY when permission has already been granted. Calling getCurrentPosition
+    // on hover would raise the permission prompt with no user action to explain
+    // it, and a reflexive "Block" poisons the origin permanently.
+    const prewarmGPS = () => {
+      if (!navigator.geolocation || this._gpsWarmed) return;
+      this._gpsWarmed = true;
+      navigator.geolocation.getCurrentPosition(
+        (pos) => {
+          this._lastKnownGpsCoords = pos.coords;
+        },
+        () => {},
+        { enableHighAccuracy: true, timeout: 5000, maximumAge: 300000 }
+      );
+    };
+    if (navigator.permissions?.query) {
+      navigator.permissions
+        .query({ name: "geolocation" })
+        .then((status) => {
+          if (status.state === "granted") prewarmGPS();
+        })
+        .catch(() => {});
+    }
+
     this.$.myLocationBtn.addEventListener("click", () => {
       this.getMyLocation();
       this._haptic('light');
@@ -796,6 +981,13 @@ class AurafiskyApp {
         localStorage.setItem("aurafisky_timeline_24h", this.timeline24hMode);
         if (this.weatherData) this.initTimeline();
         this.saveUserDataToCloud();
+        this._haptic('selection');
+      });
+    }
+    if (this.$.settingsMapLanguageToggle) {
+      this.$.settingsMapLanguageToggle.addEventListener("change", (e) => {
+        const newLang = e.target.checked ? 'native' : 'en';
+        this.setMapLanguage(newLang);
         this._haptic('selection');
       });
     }
@@ -928,10 +1120,52 @@ class AurafiskyApp {
       this._haptic('light');
     });
 
-    // ── Share Weather ────────────────────────────────────────
-    this.$.shareWeatherBtn.addEventListener("click", () => {
-      this.shareWeather();
+    // ── Share Weather Modal ──────────────────────────────────
+    this.selectedShareType = 'current';
+    this.$.shareWeatherBtn?.addEventListener("click", () => {
+      this.toggleShareModal(true);
       this._haptic('light');
+    });
+    this.$.shareModalCloseBtn?.addEventListener("click", () => {
+      this.toggleShareModal(false);
+      this._haptic('selection');
+    });
+    this.$.shareModal?.addEventListener("click", (e) => {
+      if (e.target === this.$.shareModal) this.toggleShareModal(false);
+    });
+
+    const shareTypeBtns = [this.$.shareOptCurrent, this.$.shareOptHourly, this.$.shareOptWeekly, this.$.shareOptFull];
+    shareTypeBtns.forEach((btn) => {
+      btn?.addEventListener("click", () => {
+        this.selectedShareType = btn.getAttribute("data-type") || "current";
+        // Styling lives in styles.css under .share-type-btn / .is-selected;
+        // toggling one class avoids clobbering the element's other classes.
+        shareTypeBtns.forEach((b) =>
+          b?.classList.toggle("is-selected", b === btn),
+        );
+        this._haptic('selection');
+      });
+    });
+
+    this.$.shareTargetNative?.addEventListener("click", () => {
+      this.shareWeather(this.selectedShareType || 'current', 'native');
+      this._haptic('medium');
+    });
+    this.$.shareTargetWhatsApp?.addEventListener("click", () => {
+      this.shareWeather(this.selectedShareType || 'current', 'whatsapp');
+      this._haptic('medium');
+    });
+    this.$.shareTargetTelegram?.addEventListener("click", () => {
+      this.shareWeather(this.selectedShareType || 'current', 'telegram');
+      this._haptic('medium');
+    });
+    this.$.shareTargetX?.addEventListener("click", () => {
+      this.shareWeather(this.selectedShareType || 'current', 'x');
+      this._haptic('medium');
+    });
+    this.$.shareTargetCopy?.addEventListener("click", () => {
+      this.shareWeather(this.selectedShareType || 'current', 'copy');
+      this._haptic('medium');
     });
 
     // ── PWA Install Button ───────────────────────────────────
@@ -1002,6 +1236,11 @@ class AurafiskyApp {
     window.addEventListener("online", this._boundOnline);
     window.addEventListener("offline", this._boundOffline);
 
+    // Initial status check
+    if (!navigator.onLine) {
+      this.updateOnlineStatus(false);
+    }
+
     // ── Self-refresh on return (so users never rely on the 5-min toggle) ──
     // Re-fetch only when the data is stale (≥5 min) after the tab is hidden
     // and refocused. Silent: no toast, no timer — just keeps data honest.
@@ -1061,7 +1300,7 @@ class AurafiskyApp {
     };
     document.addEventListener("click", this._boundDocClick);
 
-    // ── Pull-to-refresh: detect downward swipe on map ────────
+    // ── Pull-to-refresh: detect downward swipe on app header/body (not map) ──
     this._pullStartY = 0;
     this._pullActive = false;
     this._pullNotified = false;
@@ -1070,6 +1309,12 @@ class AurafiskyApp {
       "touchstart",
       (e) => {
         if (e.touches.length !== 1) return;
+        // Disable pull-to-refresh during map panning or panel interactions
+        const isMapTouch = e.target.closest("#map") || e.target.closest(".leaflet-container") || e.target.closest("#weatherPanel");
+        if (isMapTouch) {
+          this._pullActive = false;
+          return;
+        }
         this._pullStartY = e.touches[0].clientY;
         this._pullActive = true;
         this._pullNotified = false;
@@ -1170,6 +1415,9 @@ class AurafiskyApp {
       );
     }
 
+    // Initialize desktop panel dragging & position persistence
+    this.initDesktopPanelDragging();
+
     // ── Haptic feedback helper ─────────────────────────────────────
     this._haptic = (type = 'light') => {
       if (!navigator.vibrate) return;
@@ -1200,12 +1448,211 @@ class AurafiskyApp {
     window.addEventListener("resize", this._boundResize);
   }
 
+  // ── Desktop Panel Dragging & Position Persistence ──────────────
+  initDesktopPanelDragging() {
+    const panel = this.$.weatherPanel;
+    if (!panel) return;
+
+    this._restoreDesktopPanelPosition();
+
+    const dragHandle = document.getElementById("panelDragHandle") || panel.firstElementChild;
+    if (!dragHandle) return;
+
+    let isDragging = false;
+    let startX = 0;
+    let startY = 0;
+    let initialLeft = 0;
+    let initialTop = 0;
+
+    const onMouseDown = (e) => {
+      if (window.innerWidth < 768 || e.button !== 0) return;
+      if (e.target.closest("button, input, a, select")) return;
+
+      isDragging = true;
+      startX = e.clientX;
+      startY = e.clientY;
+
+      const rect = panel.getBoundingClientRect();
+      initialLeft = rect.left;
+      initialTop = rect.top;
+
+      panel.style.right = "auto";
+      panel.style.bottom = "auto";
+      panel.style.left = `${initialLeft}px`;
+      panel.style.top = `${initialTop}px`;
+      panel.classList.add("dragging-desktop");
+      document.body.style.userSelect = "none";
+
+      window.addEventListener("mousemove", onMouseMove);
+      window.addEventListener("mouseup", onMouseUp);
+    };
+
+    const onMouseMove = (e) => {
+      if (!isDragging) return;
+      const dx = e.clientX - startX;
+      const dy = e.clientY - startY;
+
+      let newLeft = initialLeft + dx;
+      let newTop = initialTop + dy;
+
+      const maxLeft = window.innerWidth - panel.offsetWidth - 10;
+      const maxTop = window.innerHeight - panel.offsetHeight - 10;
+
+      newLeft = Math.max(10, Math.min(newLeft, maxLeft));
+      newTop = Math.max(10, Math.min(newTop, maxTop));
+
+      panel.style.left = `${newLeft}px`;
+      panel.style.top = `${newTop}px`;
+    };
+
+    const onMouseUp = () => {
+      if (!isDragging) return;
+      isDragging = false;
+      panel.classList.remove("dragging-desktop");
+      document.body.style.userSelect = "";
+
+      window.removeEventListener("mousemove", onMouseMove);
+      window.removeEventListener("mouseup", onMouseUp);
+
+      const pos = { left: parseInt(panel.style.left, 10), top: parseInt(panel.style.top, 10) };
+      localStorage.setItem("aurafisky_desktop_panel_pos", JSON.stringify(pos));
+    };
+
+    dragHandle.addEventListener("mousedown", onMouseDown);
+
+    // Double-click drag handle to reset panel position to default
+    dragHandle.addEventListener("dblclick", (e) => {
+      if (window.innerWidth < 768) return;
+      if (e.target.closest("button, input, a, select")) return;
+      localStorage.removeItem("aurafisky_desktop_panel_pos");
+      panel.style.left = "";
+      panel.style.top = "";
+      panel.style.right = "";
+      panel.style.bottom = "";
+      this.showToast("Restored weather card to default position", "info");
+    });
+  }
+
+  _restoreDesktopPanelPosition() {
+    if (window.innerWidth < 768) return;
+    const panel = this.$.weatherPanel;
+    if (!panel) return;
+
+    try {
+      const saved = localStorage.getItem("aurafisky_desktop_panel_pos");
+      if (saved) {
+        const pos = JSON.parse(saved);
+        if (typeof pos.left === "number" && typeof pos.top === "number") {
+          const maxLeft = window.innerWidth - 380;
+          const maxTop = window.innerHeight - 300;
+          const left = Math.max(10, Math.min(pos.left, maxLeft));
+          const top = Math.max(10, Math.min(pos.top, maxTop));
+
+          panel.style.right = "auto";
+          panel.style.bottom = "auto";
+          panel.style.left = `${left}px`;
+          panel.style.top = `${top}px`;
+        }
+      }
+    } catch (e) {}
+  }
+
+  /**
+   * Updates network online/offline UI and triggers auto-sync upon reconnection.
+   */
+  updateOnlineStatus(isOnline) {
+    this.isOffline = !isOnline;
+    const banner = this.$.offlineBanner;
+    if (banner) {
+      if (isOnline) {
+        banner.classList.add("hidden");
+        banner.className = "hidden fixed top-20 left-0 right-0 z-[1004] bg-amber-600 text-white text-center py-2 px-4 text-sm font-medium shadow-lg";
+        if (this.selectedLat != null && !this._isFetching) {
+          this.showToast("⚡ Network reconnected — refreshing weather...", "info");
+          this.selectLocation(this.selectedLat, this.selectedLng, this.selectedName);
+        }
+      } else {
+        const freshness = WeatherService.getFreshnessLabel(this.freshnessTimestamp);
+        if (freshness.isExpired) {
+          banner.textContent = `🚨 Offline: Weather data expired (${freshness.label}). Reconnect to update.`;
+          banner.className = "fixed top-20 left-0 right-0 z-[1004] bg-rose-600 text-white text-center py-2 px-4 text-sm font-semibold shadow-lg";
+        } else {
+          banner.textContent = `⚠️ You are offline — showing cached data (${freshness.label})`;
+          banner.className = "fixed top-20 left-0 right-0 z-[1004] bg-amber-600 text-white text-center py-2 px-4 text-sm font-medium shadow-lg";
+        }
+        banner.classList.remove("hidden");
+      }
+    }
+  }
+
   // ================================================================
   //  GEOLOCATION & REVERSE SEARCH (Nominatim)
   // ================================================================
 
   _persistSession(lat, lng, name) {
     localforage.setItem("_lastSession", { lat, lng, name }).catch(() => {});
+    this._updateUrlParams(lat, lng, name);
+  }
+
+  _updateUrlParams(lat, lng, name) {
+    try {
+      if (lat != null && lng != null && !isNaN(lat) && !isNaN(lng)) {
+        const url = new URL(window.location.href);
+        url.searchParams.set("lat", lat.toFixed(4));
+        url.searchParams.set("lng", lng.toFixed(4));
+        if (name) {
+          url.searchParams.set("name", name);
+        }
+        window.history.replaceState(null, "", url.toString());
+      }
+    } catch (e) {
+      console.warn("Could not update URL search params:", e);
+    }
+  }
+
+  _checkUrlParamsOnStartup() {
+    try {
+      const params = new URLSearchParams(window.location.search);
+      const latStr = params.get("lat");
+      const lngStr = params.get("lng");
+      const nameStr = params.get("name");
+
+      if (latStr != null && lngStr != null) {
+        const lat = parseFloat(latStr);
+        const lng = parseFloat(lngStr);
+        if (!isNaN(lat) && !isNaN(lng) && lat >= -90 && lat <= 90 && lng >= -180 && lng <= 180) {
+          const name = nameStr ? decodeURIComponent(nameStr) : `${lat.toFixed(4)}, ${lng.toFixed(4)}`;
+          this.selectLocation(lat, lng, name);
+          return true;
+        }
+      }
+    } catch (e) {
+      console.warn("URL params startup check error:", e);
+    }
+    return false;
+  }
+
+  async _loadInitialStartupLocation() {
+    await this._loadLocalCache();
+
+    // 1. Priority 1: Check if page was opened via a shared link URL (?lat=...&lng=...&name=...)
+    if (this._checkUrlParamsOnStartup()) {
+      return;
+    }
+
+    // 2. Priority 2: Restored previous session
+    if (this._restoreSession()) {
+      return;
+    }
+
+    // 3. Priority 3: Default Home location
+    if (this.defaultLocation && this.defaultLocation.lat != null) {
+      this.selectLocation(this.defaultLocation.lat, this.defaultLocation.lng, this.defaultLocation.name);
+      return;
+    }
+
+    // 4. Priority 4: Geolocation fallback
+    this.getMyLocation();
   }
 
   _restoreSession() {
@@ -1264,66 +1711,86 @@ class AurafiskyApp {
   }
 
   async handleMapClick(lat, lng) {
-    if (lat == null || lng == null || isNaN(lat) || isNaN(lng)) {
-      return;
-    }
-    const defaultName = `${lat.toFixed(4)}, ${lng.toFixed(4)}`;
+      if (lat == null || lng == null || isNaN(lat) || isNaN(lng)) {
+        return;
+      }
+      const defaultName = `${lat.toFixed(4)}, ${lng.toFixed(4)}`;
 
-    // Call selectLocation IMMEDIATELY on click so weather card opens/updates instantly (1st click)
-    const selectPromise = this.selectLocation(lat, lng, defaultName);
+      // Call selectLocation IMMEDIATELY on click so weather card opens/updates instantly (1st click)
+      const selectPromise = this.selectLocation(lat, lng, defaultName);
 
-    // Perform reverse geocoding asynchronously in background
-    try {
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 2000);
-      const response = await fetch(
-        `https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${lat}&lon=${lng}&accept-language=en`,
-        {
-          signal: controller.signal,
-          headers: {
-            "User-Agent": "AurafiskyApp/2.0",
-          },
-        },
-      );
-      clearTimeout(timeoutId);
-      if (response.ok) {
-        const data = await response.json();
-        const addr = data.address;
-        if (addr) {
-          const sanitize = (str) => {
-            if (typeof DOMPurify !== "undefined" && DOMPurify.sanitize)
-              return DOMPurify.sanitize(String(str || ""));
-            return String(str || "").replace(/[<>&]/g, "");
-          };
-          const city = sanitize(
-            addr.city ||
-              addr.town ||
-              addr.village ||
-              addr.municipality ||
-              addr.suburb ||
-              addr.hamlet,
-          );
-          const state = sanitize(addr.state || addr.region || addr.county);
-          const country = sanitize(addr.country);
-          const locationName =
-            [city, state, country].filter(Boolean).join(", ") ||
-            sanitize(data.display_name);
+      // Perform reverse geocoding asynchronously in background
+      try {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 2000);
+        // Nominatim serves permissive CORS headers, so call it directly. Routing
+        // through a third-party proxy both violates our connect-src CSP and hands
+        // the user's coordinates to an unaffiliated service.
+        const response = await fetch(
+          `https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${lat}&lon=${lng}&accept-language=en`,
+          { signal: controller.signal },
+        );
+        clearTimeout(timeoutId);
+        if (response.ok) {
+          const data = await response.json();
+          const addr = data.address;
+          if (addr) {
+            const sanitize = (str) => {
+              if (typeof DOMPurify !== "undefined" && DOMPurify.sanitize)
+                return DOMPurify.sanitize(String(str || ""));
+              return String(str || "").replace(/[<>&]/g, "");
+            };
+            const city = sanitize(
+              addr.city ||
+                addr.town ||
+                addr.village ||
+                addr.municipality ||
+                addr.suburb ||
+                addr.hamlet,
+            );
+            const state = sanitize(addr.state || addr.region || addr.county);
+            const country = sanitize(addr.country);
+            const locationName =
+              [city, state, country].filter(Boolean).join(", ") ||
+              sanitize(data.display_name);
 
-          if (locationName && this.selectedLat === lat && this.selectedLng === lng) {
-            this.selectedName = locationName;
-            if (this.$.panelLocationName) {
-              this.$.panelLocationName.textContent = locationName;
+            if (locationName && this.selectedLat === lat && this.selectedLng === lng) {
+              this.selectedName = locationName;
+              this._updateHeaderLocationAndCoords(locationName, lat, lng);
               this.updateOfflineBadge(false);
+              this._persistSession(lat, lng, locationName);
             }
-            this._persistSession(lat, lng, locationName);
           }
         }
+      } catch (e) {
+        console.warn("Nominatim reverse geocode lookup failed or timed out:", e);
       }
-    } catch (e) {
-      console.warn("Nominatim reverse geocode lookup failed or timed out:", e);
+
+      await selectPromise;
     }
 
-    await selectPromise;
+  _updateHeaderLocationAndCoords(name, lat, lng) {
+    const targetName = name || this.selectedName || "Unknown Location";
+    const targetLat = lat ?? this.selectedLat;
+    const targetLng = lng ?? this.selectedLng;
+
+    if (this.$.panelLocationName) {
+      const existingBadge = this.$.panelLocationName.querySelector(".home-badge");
+      this.$.panelLocationName.textContent = targetName;
+      this.$.panelLocationName.title = targetName;
+      if (existingBadge) {
+        this.$.panelLocationName.appendChild(existingBadge);
+      }
+    }
+
+    if (this.$.panelCoordinates && targetLat != null && targetLng != null && !isNaN(targetLat) && !isNaN(targetLng)) {
+      const latDir = targetLat >= 0 ? "N" : "S";
+      const lngDir = targetLng >= 0 ? "E" : "W";
+      const latFormatted = Math.abs(targetLat).toFixed(4);
+      const lngFormatted = Math.abs(targetLng).toFixed(4);
+      this.$.panelCoordinates.textContent = `📍 ${latFormatted}° ${latDir}, ${lngFormatted}° ${lngDir}`;
+      this.$.panelCoordinates.title = `Latitude: ${targetLat}, Longitude: ${targetLng}`;
+    }
   }
 
   async selectLocation(lat, lng, name) {
@@ -1350,8 +1817,15 @@ class AurafiskyApp {
       this.map.setView([lat, lng], targetZoom);
 
       // Refresh UI panel state
-      this.$.panelLocationName.textContent = name;
+      this._updateHeaderLocationAndCoords(name, lat, lng);
       this.$.panelTimeLabel.textContent = "Fetching weather...";
+
+      // Clear the AI briefing — it describes the *previous* location, so leaving
+      // it on screen attributes one place's conditions to another.
+      if (this.$.briefingContent) {
+        this.$.briefingContent.textContent = "";
+        this.$.briefingContent.classList.add("hidden");
+      }
 
       // Reset AQI view
       this.$.panelAQILabel.textContent = "Loading AQI...";
@@ -1397,8 +1871,14 @@ class AurafiskyApp {
           forecast?.utc_offset_seconds || 0,
         );
 
-        // Store freshness timestamp
+        // Store freshness timestamp and persist cache for offline fallback
         this.freshnessTimestamp = Date.now();
+        this._persistWeatherCache(cacheKey, {
+          forecast,
+          airQuality,
+          ts: this.freshnessTimestamp,
+          name,
+        });
 
         this.updateOfflineBadge(false);
         weatherPopulated = true;
@@ -1426,7 +1906,7 @@ class AurafiskyApp {
         }
 
         // Place customized divIcon weather label
-        this.createWeatherMarker(lat, lng);
+        this.createWeatherMarker(lat, lng, this.currentHourIndex);
 
         // Refresh home badge and marker
         this.updateHomeButton();
@@ -1468,7 +1948,7 @@ class AurafiskyApp {
 
           this.updateWeatherDisplay(this.currentHourIndex);
           if (this._ensembleReady) this.renderEnsemble(lat, lng);
-          this.createWeatherMarker(lat, lng);
+          this.createWeatherMarker(lat, lng, this.currentHourIndex);
 
           this.updateHomeButton();
           this.updateHomeMarker();
@@ -1510,6 +1990,52 @@ class AurafiskyApp {
     }
   }
 
+  /**
+   * Writes one location's forecast to localStorage for offline fallback,
+   * evicting the oldest entries so the cache stays bounded.
+   *
+   * Each entry is a full 10-day hourly forecast — roughly 200-400 KB of JSON.
+   * Without eviction a user who browses a few dozen places fills the ~5 MB
+   * localStorage quota, at which point every subsequent write throws
+   * QuotaExceededError and offline fallback silently stops working for good.
+   *
+   * @param {string} key - `weathermap_cache_<lat>_<lng>`
+   * @param {Object} payload - { forecast, airQuality, ts, name }
+   */
+  _persistWeatherCache(key, payload) {
+    const MAX_CACHED_LOCATIONS = 12;
+    try {
+      const existing = this._getCacheKeyList().filter((k) => k !== key);
+      // Oldest-first by stored timestamp; unparseable entries sort first so
+      // they get evicted before healthy ones.
+      const withTs = existing.map((k) => {
+        let ts = 0;
+        try {
+          ts = JSON.parse(localStorage.getItem(k))?.ts || 0;
+        } catch (e) {
+          ts = 0;
+        }
+        return { key: k, ts };
+      });
+      withTs.sort((a, b) => a.ts - b.ts);
+      while (withTs.length >= MAX_CACHED_LOCATIONS) {
+        localStorage.removeItem(withTs.shift().key);
+      }
+
+      localStorage.setItem(key, JSON.stringify(payload));
+    } catch (e) {
+      // Quota still exceeded (or storage disabled): drop every weather cache
+      // entry and retry once, so one oversized payload can't wedge the cache.
+      console.warn("Weather cache write failed, purging and retrying:", e);
+      try {
+        this._getCacheKeyList().forEach((k) => localStorage.removeItem(k));
+        localStorage.setItem(key, JSON.stringify(payload));
+      } catch (e2) {
+        console.warn("Weather cache unavailable; offline fallback disabled:", e2);
+      }
+    }
+  }
+
   getNearestCachedLocation(lat, lng) {
     let nearestKey = null;
     let minDistance = 0.05;
@@ -1545,10 +2071,6 @@ class AurafiskyApp {
     } catch {
       return [];
     }
-  }
-
-  _addCacheKey(key) {
-    // No-op: caching removed
   }
 
   // Wipe everything the app persists locally: legacy localStorage weather
@@ -1652,32 +2174,68 @@ class AurafiskyApp {
     });
   }
 
-  createWeatherMarker(lat, lng) {
-    if (this.marker) {
-      this.marker.remove();
-      this.marker = null;
-    }
+  createWeatherMarker(lat, lng, hourIndex = null) {
+    const timeOffset = this.timeline24hMode ? this._getTimelineOffset() : 0;
+    const targetIdx = hourIndex ?? (parseInt(this.$.timelineSlider.value, 10) + timeOffset);
 
     const weather = WeatherService.getHourlyAtIndex(
       this.weatherData,
-      parseInt(this.$.timelineSlider.value, 10),
+      targetIdx,
     );
     if (!weather) return;
 
-    this.marker = L.marker([lat, lng], {
-      icon: this._buildMarkerIcon(weather),
-    }).addTo(this.map);
+    // The timeline calls this on every hour change. Tearing the marker down and
+    // re-adding it each time churns the DOM, drops the tooltip and click
+    // binding, and makes the marker flicker while the slider is dragged — so
+    // when the marker is already at this position, just swap its icon.
+    const samePosition =
+      this.marker &&
+      Math.abs(this.marker.getLatLng().lat - lat) < 1e-9 &&
+      Math.abs(this.marker.getLatLng().lng - lng) < 1e-9;
 
-    if (this.selectedName) {
-      this.marker.bindTooltip(this.selectedName, {
-        permanent: false,
-        direction: "top",
-        offset: [0, -68],
-        className: "location-tooltip",
+    if (samePosition) {
+      this.marker.setIcon(this._buildMarkerIcon(weather));
+    } else {
+      if (this.marker) {
+        this.marker.remove();
+        this.marker = null;
+      }
+
+      this.marker = L.marker([lat, lng], {
+        icon: this._buildMarkerIcon(weather),
+      }).addTo(this.map);
+
+      if (this.selectedName) {
+        this.marker.bindTooltip(this.selectedName, {
+          permanent: false,
+          direction: "top",
+          offset: [0, -68],
+          className: "location-tooltip",
+        });
+      }
+
+      this.marker.on("click", (e) => {
+        if (this._isDragGesture(e)) return;
+        this.showWeatherPanel();
       });
     }
 
-    this.marker.on("click", () => this.showWeatherPanel());
+    // Sync pinCache for a bookmarked location so its pin stays fresh — but only
+    // while the timeline is on the current hour. Caching a time-travelled hour
+    // here would stamp it with ts: Date.now(), and renderBookmarkPins treats
+    // anything under 5 minutes old as current, so a bookmark pin would display
+    // a future forecast as if it were the present conditions.
+    const isCurrentHour = targetIdx === this.currentHourIndex;
+    if (isCurrentHour && this.bookmarks && this.bookmarks.length > 0) {
+      const isBookmarked = this.bookmarks.some(
+        (b) => Math.abs(b.lat - lat) < 0.0001 && Math.abs(b.lng - lng) < 0.0001
+      );
+      if (isBookmarked) {
+        const pinCache = this._getBookmarkPinCache();
+        pinCache[lat + "_" + lng] = { weather, ts: Date.now() };
+        this._saveBookmarkPinCache(pinCache);
+      }
+    }
   }
 
   // ================================================================
@@ -1692,7 +2250,7 @@ class AurafiskyApp {
     if (!weather) return;
 
     // Header labels
-    this.$.panelLocationName.textContent = this.selectedName;
+    this._updateHeaderLocationAndCoords(this.selectedName, this.selectedLat, this.selectedLng);
     // Use the weather data's time for the selected hour, not current time
     this.$.panelTimeLabel.textContent = WeatherService.formatDateTime(
       weather.time,
@@ -1982,7 +2540,7 @@ class AurafiskyApp {
     }
 
     // Update shareable URL
-    this.updateShareableUrl();
+    this._updateUrlParams(this.selectedLat, this.selectedLng, this.selectedName);
 
     // Refresh temperature overlay if active
     if (this.radarActive && this.overlayType === "temperature") {
@@ -2641,6 +3199,9 @@ class AurafiskyApp {
       // Invalidate cached decomposition on hour change
       this._cachedDecomposition = null;
       this.updateWeatherDisplay(hourIndex);
+      if (this.selectedLat != null && this.selectedLng != null) {
+        this.createWeatherMarker(this.selectedLat, this.selectedLng, hourIndex);
+      }
       // Keep the minimised card in sync with the selected hour
       this.updateTimelineTooltip(hourIndex);
       this.updateTrackColors();
@@ -3057,32 +3618,26 @@ class AurafiskyApp {
         iconSize: [40, 56],
         iconAnchor: [20, 50],
       });
+      // Home is an anchor, not a scratch pin: once it is set it must stay put
+      // until it is explicitly removed. It used to be draggable, so a stray
+      // drag on the map silently relocated the user's home (and pushed the new
+      // coordinates to the cloud) with only a toast to say so.
       this._homeMarker = L.marker(
         [this.defaultLocation.lat, this.defaultLocation.lng],
-        { icon, zIndexOffset: 1000, draggable: true },
+        { icon, zIndexOffset: 1000, draggable: false, keyboard: false },
       ).addTo(this.map);
       this._homeMarker.bindTooltip(this.defaultLocation.name, {
         direction: "top",
         offset: L.point(0, -24),
         className: "home-tooltip",
       });
-      this._homeMarker.on("click", () => {
+      this._homeMarker.on("click", (e) => {
+        if (this._isDragGesture(e)) return;
         this.selectLocation(
           this.defaultLocation.lat,
           this.defaultLocation.lng,
           this.defaultLocation.name,
         );
-      });
-      this._homeMarker.on("dragend", () => {
-        const ll = this._homeMarker.getLatLng();
-        this.defaultLocation = {
-          lat: ll.lat,
-          lng: ll.lng,
-          name: this.defaultLocation.name,
-        };
-        this.updateHomeButton();
-        this.saveUserDataToCloud();
-        this.showToast("Home location updated", "success");
       });
     }
   }
@@ -3293,75 +3848,192 @@ class AurafiskyApp {
     }
   }
 
+  async copyToClipboard(text) {
+    if (navigator.clipboard && window.isSecureContext) {
+      try {
+        await navigator.clipboard.writeText(text);
+        return true;
+      } catch (err) {
+        console.warn("navigator.clipboard.writeText failed, trying execCommand fallback:", err);
+      }
+    }
+    try {
+      const textarea = document.createElement("textarea");
+      textarea.value = text;
+      textarea.style.position = "fixed";
+      textarea.style.left = "-999999px";
+      textarea.style.top = "-999999px";
+      document.body.appendChild(textarea);
+      textarea.focus();
+      textarea.select();
+      const successful = document.execCommand("copy");
+      document.body.removeChild(textarea);
+      return successful;
+    } catch (err) {
+      console.error("Clipboard copy fallback failed:", err);
+      return false;
+    }
+  }
+
+  toggleShareModal(show) {
+    if (!this.$.shareModal) return;
+    if (show) {
+      this.$.shareModal.classList.remove("hidden");
+      this.$.shareModal.classList.add("flex");
+    } else {
+      this.$.shareModal.classList.add("hidden");
+      this.$.shareModal.classList.remove("flex");
+    }
+  }
+
   // ================================================================
   //  SHARE WEATHER
   // ================================================================
 
-  async shareWeather() {
+  async shareWeather(type = 'current', target = 'native') {
     if (!this.weatherData) {
       this.showToast("No weather data to share.", "error");
       return;
     }
 
-    const weather = WeatherService.getHourlyAtIndex(
-      this.weatherData,
-      parseInt(this.$.timelineSlider.value, 10),
-    );
+    // The slider value is a *view* index; in 24h mode it must be shifted by the
+    // timeline offset to become a data index, exactly as updateTimeline does.
+    const timeOffset = this.timeline24hMode ? this._getTimelineOffset() : 0;
+    const currentIdx = parseInt(this.$.timelineSlider.value, 10) + timeOffset;
+    const weather = WeatherService.getHourlyAtIndex(this.weatherData, currentIdx);
     if (!weather) return;
 
-    const time = WeatherService.formatDateTime(
+    const timeStr = WeatherService.formatDateTime(
       weather.time,
       this.weatherData?.timezone,
       this.weatherData?.utc_offset_seconds,
     );
-    const aqiVal =
-      this.airQualityData?.hourly?.us_aqi[
-        parseInt(this.$.timelineSlider.value, 10)
-      ];
+    const aqiVal = this.airQualityData?.hourly?.us_aqi[currentIdx];
     const aqiText = aqiVal != null ? ` | AQI: ${Math.round(aqiVal)}` : "";
-    const gust =
-      weather.windGusts != null
-        ? ` | Gusts: ${WeatherService.formatWind(weather.windGusts)}`
-        : "";
-    const pressure =
-      weather.pressure != null
-        ? ` | Pressure: ${WeatherService.formatPressure(weather.pressure)}`
-        : "";
-    const uv =
-      weather.uvIndex != null ? ` | UV: ${weather.uvIndex.toFixed(1)}` : "";
-    const vis =
-      weather.visibility != null
-        ? ` | Visibility: ${WeatherService.formatVisibility(weather.visibility)}`
-        : "";
-    const clouds =
-      weather.cloudCover != null ? ` | Clouds: ${weather.cloudCover}%` : "";
-    const precip =
-      weather.precipProb != null && weather.precipProb > 0
-        ? ` | Precip: ${weather.precipProb}%`
-        : "";
+    const gust = weather.windGusts != null ? ` | Gusts: ${WeatherService.formatWind(weather.windGusts)}` : "";
+    const pressure = weather.pressure != null ? ` | Pressure: ${WeatherService.formatPressure(weather.pressure)}` : "";
+    const uv = weather.uvIndex != null ? ` | UV: ${weather.uvIndex.toFixed(1)}` : "";
+    const vis = weather.visibility != null ? ` | Visibility: ${WeatherService.formatVisibility(weather.visibility)}` : "";
+    const clouds = weather.cloudCover != null ? ` | Clouds: ${weather.cloudCover}%` : "";
+    const precip = weather.precipProb != null && weather.precipProb > 0 ? ` | Precip: ${weather.precipProb}%` : "";
 
-    const text = `${this.selectedName} — ${WeatherService.formatTemp(weather.temperature)} ${weather.icon} ${weather.description}
-${time}
-Feels like ${WeatherService.formatTemp(weather.feelsLike)} | Humidity: ${weather.humidity}%
+    const coordsStr = (this.selectedLat != null && this.selectedLng != null)
+      ? ` (${this.selectedLat.toFixed(4)}, ${this.selectedLng.toFixed(4)})`
+      : "";
+
+    // ── 1. Current Overview ──────────────────────────────────────────
+    let text = `🌤️ Weather Report for ${this.selectedName}${coordsStr}
+As of ${timeStr}
+
+Current: ${WeatherService.formatTemp(weather.temperature)} ${weather.icon} ${weather.description}
+Feels like: ${WeatherService.formatTemp(weather.feelsLike)} | Humidity: ${weather.humidity}%
 Wind: ${WeatherService.formatWind(weather.windSpeed)} ${WeatherService.getWindDirection(weather.windDirection)}${gust}${pressure}${uv}${vis}${clouds}${precip}${aqiText}`;
 
-    // Try native share API first (mobile)
-    if (navigator.share) {
-      try {
-        await navigator.share({ title: "Aurafisky", text: text });
-        return;
-      } catch (e) {
-        // User cancelled or API failed, fall through to clipboard
+    // ── 2. Hourly / 24-Hour Forecast Highlights ──────────────────────
+    if ((type === 'full' || type === 'hourly') && this.weatherData?.hourly?.time) {
+      const h = this.weatherData.hourly;
+      const totalHours = h.time.length;
+      const startIdx = Math.max(0, currentIdx);
+      const endIdx = Math.min(totalHours, startIdx + 24);
+
+      let temps24h = [];
+      let hourlyRows = [];
+
+      for (let i = startIdx; i < endIdx; i += 3) {
+        const hourWeather = WeatherService.getHourlyAtIndex(this.weatherData, i);
+        if (hourWeather) {
+          const hourLabel = WeatherService.formatHourLabel(h.time[i], this.weatherData?.utc_offset_seconds);
+          hourlyRows.push(`  • ${hourLabel} — ${WeatherService.formatTemp(hourWeather.temperature)} ${hourWeather.icon} ${hourWeather.description}`);
+        }
+      }
+
+      for (let i = startIdx; i < endIdx; i++) {
+        if (h.temperature_2m?.[i] != null) temps24h.push(h.temperature_2m[i]);
+      }
+
+      if (temps24h.length > 0) {
+        const min24 = Math.min(...temps24h);
+        const max24 = Math.max(...temps24h);
+        text += `\n\n📊 24-Hour Overview (High: ${WeatherService.formatTemp(max24)} / Low: ${WeatherService.formatTemp(min24)})\n` + hourlyRows.join("\n");
       }
     }
 
-    // Fallback: copy to clipboard
-    try {
-      await navigator.clipboard.writeText(text);
-      this.showToast("Weather copied to clipboard!", "success");
-    } catch (e) {
-      this.showToast("Could not copy to clipboard.", "error");
+    // ── 3. Weekly 7-Day Forecast ────────────────────────────────────
+    if (type === 'full' || type === 'weekly') {
+      const dailyList = WeatherService.getDailyForecast(this.weatherData);
+      if (dailyList && dailyList.length > 0) {
+        // getDailyForecast returns PAST_DAYS of history before today, so start at
+        // today rather than at index 0 — otherwise the "forecast" leads with
+        // three days that have already happened.
+        const todayStr = new Date().toISOString().split("T")[0];
+        const todayIdx = dailyList.findIndex((d) => d.date === todayStr);
+        const startDay = todayIdx >= 0 ? todayIdx : (WeatherService.PAST_DAYS ?? 0);
+        text += `\n\n📅 7-Day Weekly Forecast:\n`;
+        const days = dailyList.slice(startDay, startDay + 7).map((d) => {
+          const dayName = WeatherService.formatDayLabel(d.date);
+          const maxStr = WeatherService.formatTemp(d.maxTemp);
+          const minStr = WeatherService.formatTemp(d.minTemp);
+          const precipStr = d.precipProb > 0 ? ` (${d.precipProb}% precip)` : "";
+          return `  • ${dayName} — ${minStr} / ${maxStr} ${d.icon} ${d.description}${precipStr}`;
+        });
+        text += days.join("\n");
+      }
     }
+
+    // ── 4. App Link & Sharing Execution ─────────────────────────────────
+    const shareUrl = (this.selectedLat != null && this.selectedLng != null)
+      ? `${window.location.origin}${window.location.pathname}?lat=${this.selectedLat.toFixed(4)}&lng=${this.selectedLng.toFixed(4)}&name=${encodeURIComponent(this.selectedName)}`
+      : window.location.href;
+    
+    text += `\n\n🔗 Live Map & Forecast: ${shareUrl}`;
+
+    if (target === 'whatsapp') {
+      const waUrl = `https://api.whatsapp.com/send?text=${encodeURIComponent(text)}`;
+      window.open(waUrl, "_blank", "noopener,noreferrer");
+      this.toggleShareModal(false);
+      return;
+    }
+
+    if (target === 'telegram') {
+      const tgUrl = `https://t.me/share/url?url=${encodeURIComponent(shareUrl)}&text=${encodeURIComponent(text)}`;
+      window.open(tgUrl, "_blank", "noopener,noreferrer");
+      this.toggleShareModal(false);
+      return;
+    }
+
+    if (target === 'x') {
+      const xUrl = `https://twitter.com/intent/tweet?text=${encodeURIComponent(text)}`;
+      window.open(xUrl, "_blank", "noopener,noreferrer");
+      this.toggleShareModal(false);
+      return;
+    }
+
+    if (target === 'copy') {
+      const success = await this.copyToClipboard(text);
+      if (success) {
+        this.showToast("Weather report copied to clipboard!", "success");
+      } else {
+        this.showToast("Could not copy weather report.", "error");
+      }
+      this.toggleShareModal(false);
+      return;
+    }
+
+    // Default target === 'native': System Share Sheet
+    this.toggleShareModal(false);
+    if (navigator.share) {
+      try {
+        await navigator.share({ title: `Weather: ${this.selectedName}`, text: text, url: shareUrl });
+        return;
+      } catch (e) {
+        if (e && e.name === "AbortError") return;
+        console.warn("navigator.share failed, opening WhatsApp fallback:", e);
+      }
+    }
+
+    // Fallback if system share not supported (e.g. desktop)
+    const waUrl = `https://api.whatsapp.com/send?text=${encodeURIComponent(text)}`;
+    window.open(waUrl, "_blank", "noopener,noreferrer");
   }
 
   // ================================================================
@@ -4092,6 +4764,14 @@ ${precipProb > 0 ? `<span class="text-[9px] sm:text-[10px] text-blue-500 font-se
 
     // Render all bookmarks (mix of fresh + cached)
     this.bookmarks.forEach((b) => {
+      // Don't render a duplicate bookmark pin on top of the active selected location marker card
+      if (this.selectedLat != null && this.selectedLng != null) {
+        const isSelected =
+          Math.abs(b.lat - this.selectedLat) < 0.0001 &&
+          Math.abs(b.lng - this.selectedLng) < 0.0001;
+        if (isSelected) return;
+      }
+
       const cached = pinCache[b.lat + "_" + b.lng];
       if (!cached || !cached.weather) return;
 
@@ -4114,7 +4794,10 @@ ${precipProb > 0 ? `<span class="text-[9px] sm:text-[10px] text-blue-500 font-se
         offset: [0, -18],
         className: "location-tooltip",
       });
-      marker.on("click", () => this.selectLocation(b.lat, b.lng, b.name));
+      marker.on("click", (e) => {
+        if (this._isDragGesture(e)) return;
+        this.selectLocation(b.lat, b.lng, b.name);
+      });
       this.bookmarkMarkers.push(marker);
     });
   }
@@ -4729,17 +5412,8 @@ ${precipProb > 0 ? `<span class="text-[9px] sm:text-[10px] text-blue-500 font-se
 
     document.documentElement.classList.toggle("dark", this.isDark);
 
-    if (this.isDark) {
-      if (this.map.hasLayer(this.lightTiles)) {
-        this.map.removeLayer(this.lightTiles);
-      }
-      this.darkTiles.addTo(this.map);
-    } else {
-      if (this.map.hasLayer(this.darkTiles)) {
-        this.map.removeLayer(this.darkTiles);
-      }
-      this.lightTiles.addTo(this.map);
-    }
+    // Re-apply theme tiles (handles language preference)
+    this.applyThemeTiles();
 
     // Update theme-color meta tag for browser chrome
     const meta = document.querySelector('meta[name="theme-color"]');
@@ -4758,25 +5432,47 @@ ${precipProb > 0 ? `<span class="text-[9px] sm:text-[10px] text-blue-500 font-se
       return;
     }
 
-    this.showToast("Finding your location...", "info");
+    // Instant response (0ms) if pre-warmed GPS coordinates are available
+    let optimisticCoords = null;
+    if (this._lastKnownGpsCoords) {
+      const { latitude, longitude } = this._lastKnownGpsCoords;
+      optimisticCoords = { latitude, longitude };
+      this.handleMapClick(latitude, longitude);
+    } else {
+      this.showToast("Finding your location...", "info");
+    }
 
     navigator.geolocation.getCurrentPosition(
       (pos) => {
+        this._lastKnownGpsCoords = pos.coords;
         const { latitude, longitude } = pos.coords;
+        // Skip the second full fetch when the fresh fix rounds to the same
+        // place we already showed optimistically — otherwise every click runs
+        // selectLocation twice (two forecast + AQI pairs, two reverse geocodes)
+        // and the panel visibly flickers.
+        if (
+          optimisticCoords &&
+          Math.abs(optimisticCoords.latitude - latitude) < 0.001 &&
+          Math.abs(optimisticCoords.longitude - longitude) < 0.001
+        ) {
+          return;
+        }
         this.handleMapClick(latitude, longitude);
       },
       (err) => {
-        const messages = {
-          1: "Location permission denied.",
-          2: "Location unavailable.",
-          3: "Location request timed out.",
-        };
-        this.showToast(
-          messages[err.code] || "Could not get your location.",
-          "error",
-        );
+        if (!this._lastKnownGpsCoords) {
+          const messages = {
+            1: "Location permission denied.",
+            2: "Location unavailable.",
+            3: "Location request timed out.",
+          };
+          this.showToast(
+            messages[err.code] || "Could not get your location.",
+            "error",
+          );
+        }
       },
-      { enableHighAccuracy: true, timeout: 10000 },
+      { enableHighAccuracy: true, timeout: 10000, maximumAge: 300000 },
     );
   }
 
@@ -5430,12 +6126,29 @@ ${precipProb > 0 ? `<span class="text-[9px] sm:text-[10px] text-blue-500 font-se
       let reloading = false;
       // When a new SW takes control, reload once so the new app shell /
       // assets (and fixes like the navigation fallback) actually run.
+      //
+      // `reloading` alone only guards within a single page lifetime, and it is
+      // reset by the very reload it triggers — so a SW that keeps re-claiming
+      // would spin the page in an endless reload loop. The timestamp below
+      // survives the reload and breaks that loop, while still allowing a genuine
+      // later update to reload the page (unlike a plain sessionStorage flag,
+      // which would suppress every future update for the whole session).
+      const RELOAD_COOLDOWN_MS = 10000;
       navigator.serviceWorker.addEventListener("controllerchange", () => {
-        if (reloading || sessionStorage.getItem("sw_reload")) return;
+        if (reloading) return;
+        const last = parseInt(sessionStorage.getItem("sw_reload_at") || "0", 10);
+        if (last && Date.now() - last < RELOAD_COOLDOWN_MS) {
+          console.warn("Skipping SW reload — one just happened, avoiding a loop.");
+          return;
+        }
         reloading = true;
-        sessionStorage.setItem("sw_reload", "1");
+        try {
+          sessionStorage.setItem("sw_reload_at", String(Date.now()));
+        } catch (e) {
+          /* private mode — the in-page `reloading` flag still applies */
+        }
         // Small delay to let clients.claim() finish before reloading
-        setTimeout(() => location.reload(), 500);
+        setTimeout(() => location.reload(), 300);
       });
       window.addEventListener("load", () => {
         navigator.serviceWorker
@@ -5502,25 +6215,12 @@ ${precipProb > 0 ? `<span class="text-[9px] sm:text-[10px] text-blue-500 font-se
   //  NEW FEATURES: Auto-Refresh, Temp Overlay, PWA, Compact, Shareable URL
   // ================================================================
 
-  readShareableUrl() {
-    const params = new URLSearchParams(window.location.search);
-    const lat = parseFloat(params.get("lat"));
-    const lng = parseFloat(params.get("lng"));
-    const name = params.get("name") || "Shared location";
-    if (!isNaN(lat) && !isNaN(lng)) {
-      this.selectLocation(lat, lng, name);
-    }
-  }
-
-  updateShareableUrl() {
-    if (!this.selectedLat || !this.selectedLng) return;
-    const params = new URLSearchParams();
-    params.set("lat", this.selectedLat.toFixed(4));
-    params.set("lng", this.selectedLng.toFixed(4));
-    params.set("name", this.selectedName);
-    const url = `${window.location.origin}${window.location.pathname}?${params.toString()}`;
-    window.history.replaceState({}, "", url);
-  }
+  // NOTE: readShareableUrl()/updateShareableUrl() used to live here. They were
+  // superseded by _checkUrlParamsOnStartup() and _updateUrlParams(), which
+  // additionally validate the lat/lng ranges, preserve any unrelated query
+  // params, and guard with `!= null` rather than a falsy check (the old code
+  // silently refused to write a URL for any location on the equator or the
+  // prime meridian, where lat or lng is exactly 0).
 
   installPWA() {
     // iOS Safari: no programmatic install — guide the user to the
@@ -5666,8 +6366,8 @@ ${precipProb > 0 ? `<span class="text-[9px] sm:text-[10px] text-blue-500 font-se
       x: pad + i * cw,
       h: (d.uv / maxUV) * (h - pad * 2 - 8),
       uv: d.uv,
-      label: new Date(d.date)
-        .toLocaleDateString("en", { weekday: "short" })
+      label: WeatherService.parseIsoLocal(d.date)
+        .toLocaleDateString("en-US", { weekday: "short" })
         .slice(0, 2),
     }));
     svg.innerHTML = bars
@@ -6172,8 +6872,26 @@ ${precipProb > 0 ? `<span class="text-[9px] sm:text-[10px] text-blue-500 font-se
       this.$.accountLoggedIn.classList.remove("hidden");
     if (this.$.googleSignOutBtn)
       this.$.googleSignOutBtn.classList.remove("hidden");
-    if (this.$.accountAvatarImg)
-      this.$.accountAvatarImg.src = this.user.photoURL || "";
+
+    const initialsEl = document.getElementById("accountAvatarInitials");
+    if (initialsEl) {
+      const name = this.user.displayName || "User";
+      initialsEl.textContent = name.charAt(0).toUpperCase();
+    }
+
+    if (this.$.accountAvatarImg) {
+      if (this.user.photoURL) {
+        this.$.accountAvatarImg.src = this.user.photoURL;
+        this.$.accountAvatarImg.onerror = () => {
+          this.$.accountAvatarImg.classList.add("hidden");
+        };
+        this.$.accountAvatarImg.onload = () => {
+          this.$.accountAvatarImg.classList.remove("hidden");
+        };
+      } else {
+        this.$.accountAvatarImg.classList.add("hidden");
+      }
+    }
     if (this.$.accountName)
       this.$.accountName.textContent = this.user.displayName || "Google User";
     if (this.$.accountEmail)
@@ -6209,7 +6927,7 @@ ${precipProb > 0 ? `<span class="text-[9px] sm:text-[10px] text-blue-500 font-se
     this.updateSettingsUIFromLocal();
   }
 
-  async loadUserDataFromCloud() {
+  async loadUserDataFromCloud(showToast = false) {
     if (!this.user) return;
     try {
       const userDocRef = this._fb.doc(this._fb.db, "users", this.user.uid);
@@ -6282,6 +7000,12 @@ ${precipProb > 0 ? `<span class="text-[9px] sm:text-[10px] text-blue-500 font-se
               this.$.settingsTimeline24hToggle.checked = prefs.timeline24h;
             }
           }
+
+          if (prefs.mapLanguage != null) {
+            this.mapLanguage = prefs.mapLanguage;
+            this.updateMapLanguageUI();
+            this.applyThemeTiles();
+          }
         }
 
         if (data.defaultLocation) {
@@ -6318,10 +7042,11 @@ ${precipProb > 0 ? `<span class="text-[9px] sm:text-[10px] text-blue-500 font-se
         this.updateSettingsUIFromLocal();
 
         if (this.$.syncStatusTime) {
-          this.$.syncStatusTime.textContent =
-            "Last synced: " + new Date().toLocaleTimeString();
+          this.$.syncStatusTime.textContent = new Date().toLocaleTimeString();
         }
-        this.showToast("Cloud settings synchronized.", "success");
+        if (showToast) {
+          this.showToast("Cloud settings synchronized.", "success");
+        }
       } else {
         await this.saveUserDataToCloud();
         this.updateHomeButton();
@@ -6330,8 +7055,9 @@ ${precipProb > 0 ? `<span class="text-[9px] sm:text-[10px] text-blue-500 font-se
       }
     } catch (e) {
       console.error("Error loading data from Firestore:", e);
-      this.showToast("Could not load cloud settings.", "error");
-      alert("Could not load cloud settings: " + e.message);
+      if (showToast) {
+        this.showToast("Could not load cloud settings.", "error");
+      }
     }
   }
 
@@ -6350,6 +7076,7 @@ ${precipProb > 0 ? `<span class="text-[9px] sm:text-[10px] text-blue-500 font-se
         soundscapes: this.audioActive || false,
         volume: this.volumeLevel || 0.5,
         timeline24h: this.timeline24hMode,
+        mapLanguage: this.mapLanguage,
       },
       bookmarks: this.bookmarks,
       searchHistory: searchHist,
@@ -6384,8 +7111,7 @@ ${precipProb > 0 ? `<span class="text-[9px] sm:text-[10px] text-blue-500 font-se
       const userDocRef = this._fb.doc(this._fb.db, "users", this.user.uid);
       await this._fb.setDoc(userDocRef, dataToSave, { merge: true });
       if (this.$.syncStatusTime) {
-        this.$.syncStatusTime.textContent =
-          "Last synced: " + new Date().toLocaleTimeString();
+        this.$.syncStatusTime.textContent = new Date().toLocaleTimeString();
       }
     } catch (e) {
       console.error("Error writing settings to cloud:", e);
@@ -6731,6 +7457,90 @@ ${precipProb > 0 ? `<span class="text-[9px] sm:text-[10px] text-blue-500 font-se
       );
     } catch (e) {
       console.warn("Failed to save FCM token to cloud:", e);
+    }
+  }
+
+  getSavedMapLanguage() {
+    try {
+      const saved = localStorage.getItem("mapLanguage");
+      if (saved) return saved;
+    } catch (e) {
+      // ignore
+    }
+    return null;
+  }
+
+  setMapLanguage(lang) {
+    this.mapLanguage = lang;
+    try {
+      localStorage.setItem("mapLanguage", lang);
+    } catch (e) {
+      // ignore
+    }
+    this.updateMapLanguageUI();
+    this.applyThemeTiles();
+    // Force map to refresh tiles (clear browser cache for new tile URLs)
+    if (this.map) {
+      this.map.invalidateSize();
+      this.map._onFocus();
+    }
+    this.saveUserDataToCloud();
+  }
+
+  updateMapLanguageUI() {
+    const isEnglish = this.mapLanguage === 'en';
+    
+    // Update settings panel checkbox
+    if (this.$.settingsMapLanguageToggle) {
+      this.$.settingsMapLanguageToggle.checked = !isEnglish; // checked = native
+    }
+
+    // Also update the legacy top bar button if it exists (for backwards compat)
+    const btn = document.getElementById("mapLanguageToggle");
+    if (btn) {
+      btn.textContent = isEnglish ? '🌐 EN' : '🌐 Native';
+      btn.setAttribute('aria-label', isEnglish ? 'Switch to native language labels' : 'Switch to English labels');
+      btn.title = isEnglish ? 'Map labels: English (click for native)' : 'Map labels: Native (click for English)';
+    }
+  }
+
+  applyThemeTiles() {
+    // Remove all existing tile layers
+    [this.enLightTiles, this.enDarkTiles, this.nativeLightTiles, this.nativeDarkTiles].forEach((layer) => {
+      if (this.map?.hasLayer(layer)) {
+        this.map.removeLayer(layer);
+      }
+    });
+
+    const isEnglish = this.mapLanguage === 'en';
+    const lightTiles = isEnglish ? this.enLightTiles : this.nativeLightTiles;
+    const darkTiles = isEnglish ? this.enDarkTiles : this.nativeDarkTiles;
+
+    // Add cache-busting timestamp to force fresh tiles
+    const cacheBuster = Date.now();
+
+    if (this.isDark) {
+      const darkUrl = darkTiles.options.urlTemplate || darkTiles._url;
+      darkTiles.setUrl(darkUrl + (darkUrl.includes('?') ? '&' : '?') + '_=' + cacheBuster);
+      darkTiles.addTo(this.map);
+      darkTiles.once("tileerror", () => {
+        if (this.map?.hasLayer(darkTiles)) {
+          this.map.removeLayer(darkTiles);
+          const fallback = isEnglish ? this.nativeDarkTiles : this.enDarkTiles;
+          fallback.addTo(this.map);
+        }
+      });
+    } else {
+      const lightUrl = lightTiles.options.urlTemplate || lightTiles._url;
+      lightTiles.setUrl(lightUrl + (lightUrl.includes('?') ? '&' : '?') + '_=' + cacheBuster);
+      lightTiles.addTo(this.map);
+      lightTiles.once("tileerror", () => {
+        if (this.map?.hasLayer(lightTiles)) {
+          this.map.removeLayer(lightTiles);
+          const fallback = isEnglish ? this.nativeLightTiles : this.enLightTiles;
+          fallback.addTo(this.map);
+        }
+      });
     }
   }
 }

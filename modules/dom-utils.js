@@ -36,3 +36,5 @@ window.domUtils = {
     el?.classList.toggle("hidden");
   },
 };
+
+export const domUtils = window.domUtils;

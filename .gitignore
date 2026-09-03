@@ -8,3 +8,5 @@ nul
 *.timestamp-*
 .uploads/
 lighthouse-report.json
+*.tmp
+aurafisky-desktop/

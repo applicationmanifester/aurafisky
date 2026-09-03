@@ -17,10 +17,11 @@ export function init(app) {
   app.renderEnsemble = renderEnsemble;
   app._ensembleReady = true;
   ensureSection();
-  if ("Worker" in window) {
+  if (typeof window !== "undefined" && "Worker" in window) {
     try {
       worker = new Worker(
         new URL("../workers/compute.worker.js", import.meta.url),
+        { type: "module" }
       );
     } catch (e) {
       worker = null;
@@ -43,7 +44,7 @@ function ensureSection() {
   else if (content) content.appendChild(sec);
 }
 
-async function fetchModelSnapshot(lat, lng, modelId) {
+async function fetchModelSnapshot(lat, lng, modelId, signal) {
   const round = (v) => v.toFixed(4);
   const cacheKey = `${round(lat)},${round(lng)},${modelId || "auto"}`;
   if (_ensembleCache.has(cacheKey)) {
@@ -66,11 +67,11 @@ async function fetchModelSnapshot(lat, lng, modelId) {
   if (modelId) params.set("models", modelId);
   const url = base + "?" + params.toString();
   try {
-    const res = await fetch(url);
+    const res = await fetch(url, { signal });
     if (!res.ok) {
       // If a 4xx with a specific model, retry without model selection
       if (modelId && res.status >= 400 && res.status < 500) {
-        return fetchModelSnapshot(lat, lng, null);
+        return fetchModelSnapshot(lat, lng, null, signal);
       }
       return null; // 429/503/offline
     }
@@ -88,20 +89,30 @@ async function fetchModelSnapshot(lat, lng, modelId) {
     _ensembleCache.set(cacheKey, { data: result, ts: Date.now() });
     return result;
   } catch {
-    return null; // network error / offline
+    return null; // network error / offline / aborted
   }
 }
 
-async function renderEnsemble(lat, lng) {
+let ensembleAbortCtrl = null;
+
+export async function renderEnsemble(lat, lng) {
   const body = document.getElementById("ensembleBody");
   if (!body || lat === null || lat === undefined || lng === null || lng === undefined) return;
+  
+  if (ensembleAbortCtrl) {
+    ensembleAbortCtrl.abort();
+  }
+  ensembleAbortCtrl = new AbortController();
+  const signal = ensembleAbortCtrl.signal;
+
   body.textContent = "Comparing ECMWF · GFS · ICON…";
   try {
     const snapshots = await Promise.all(
       ENSEMBLE_MODELS.map((m) =>
-        fetchModelSnapshot(lat, lng, m.id).catch(() => null),
+        fetchModelSnapshot(lat, lng, m.id, signal).catch(() => null),
       ),
     );
+    if (signal.aborted) return;
     const valid = snapshots.filter(Boolean);
     if (!valid.length) {
       body.textContent = "Ensemble data unavailable (rate limited or offline).";
@@ -112,18 +123,36 @@ async function renderEnsemble(lat, lng) {
     if (worker) {
       result = await new Promise((resolve) => {
         const id = ++reqId;
+        let timer = null;
+        const cleanup = () => {
+          if (timer) clearTimeout(timer);
+          worker.removeEventListener("message", handler);
+          worker.removeEventListener("error", errorHandler);
+        };
         const handler = (e) => {
-          if (e.data.id === id) {
-            worker.removeEventListener("message", handler);
+          if (e.data?.id === id) {
+            cleanup();
             resolve(e.data.result);
           }
         };
+        const errorHandler = () => {
+          cleanup();
+          resolve(aggregate(valid));
+        };
+        timer = setTimeout(() => {
+          cleanup();
+          resolve(aggregate(valid));
+        }, 1500); // 1.5s worker timeout fallback
+
         worker.addEventListener("message", handler);
+        worker.addEventListener("error", errorHandler, { once: true });
         worker.postMessage({ id, snapshots: valid });
       });
     } else {
       result = aggregate(valid);
     }
+
+    if (signal.aborted) return;
 
     const code = valid[0].code;
     const info =
@@ -162,7 +191,9 @@ async function renderEnsemble(lat, lng) {
       "%</span></div>" +
       "</div>";
   } catch (e) {
-    body.textContent = "Ensemble data unavailable.";
+    if (!signal.aborted) {
+      body.textContent = "Ensemble data unavailable.";
+    }
   }
 }
 

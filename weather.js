@@ -34,17 +34,19 @@ const WeatherService = (() => {
     _requestCache.set(key, value);
   }
 
-  function _cacheKey(url) {
-    return url;
+  function _cacheKey(url, options = {}) {
+    // Include all request-determining params in key to avoid collisions
+    return url + '|' + JSON.stringify(options);
   }
 
-  async function _cachedFetch(url, fetchFn, ttl = REQUEST_CACHE_TTL) {
-    const key = _cacheKey(url);
+  async function _cachedFetch(url, fetchFn, ttl = REQUEST_CACHE_TTL, options = {}) {
+    const key = _cacheKey(url, options);
     const cached = _requestCache.get(key);
     if (cached) {
       if (Date.now() - cached.ts < ttl) return cached.data;
       _requestCache.delete(key);
     }
+    // Store promise IMMEDIATELY so concurrent callers share it (fixes race condition)
     const promise = fetchFn()
       .then((data) => {
         _setCache(key, { data, ts: Date.now() });
@@ -197,7 +199,7 @@ const WeatherService = (() => {
    * @param {number} lng - Longitude
    * @returns {Promise<Object>} Parsed weather data
    */
-  async function fetchForecast(lat, lng, retries = 3) {
+  async function fetchForecast(lat, lng, retries = 3, signal) {
     const round = (v) => v.toFixed(4);
     const cacheKey = `${FORECAST_URL}?latitude=${round(lat)}&longitude=${round(lng)}&past_days=${PAST_DAYS}&forecast_days=${FORECAST_DAYS}&timezone=auto`;
     if (_requestCache.has(cacheKey)) {
@@ -245,7 +247,7 @@ const WeatherService = (() => {
     for (let attempt = 0; attempt <= retries; attempt++) {
       try {
         const url = `${FORECAST_URL}?${params}`;
-        const response = await fetch(url);
+        const response = await fetch(url, { signal });
         if (!response.ok)
           throw new Error(`Weather API error: ${response.status}`);
         const data = await response.json();
@@ -724,7 +726,7 @@ const WeatherService = (() => {
    * @param {number} lng - Longitude
    * @returns {Promise<Object>} Air Quality data
    */
-  async function fetchAirQuality(lat, lng, retries = 3) {
+  async function fetchAirQuality(lat, lng, retries = 3, signal) {
     const round = (v) => v.toFixed(4);
     const cacheKey = `aq:${round(lat)},${round(lng)},d${PAST_DAYS},f${FORECAST_DAYS}`;
     if (_requestCache.has(cacheKey)) {
@@ -745,6 +747,7 @@ const WeatherService = (() => {
       try {
         const response = await fetch(
           `https://air-quality-api.open-meteo.com/v1/air-quality?${params}`,
+          { signal }
         );
         if (!response.ok) return null;
         const data = await response.json();
@@ -846,7 +849,7 @@ const WeatherService = (() => {
    * @param {string} dateStr - ISO Date (YYYY-MM-DD)
    * @returns {Promise<Object>} Historical daily weather metrics
    */
-  async function fetchHistoricalWeather(lat, lng, dateStr) {
+  async function fetchHistoricalWeather(lat, lng, dateStr, signal) {
     const round = (v) => v.toFixed(4);
     const cacheKey = `hist:${round(lat)},${round(lng)},${dateStr}`;
     if (_requestCache.has(cacheKey)) {
@@ -866,6 +869,7 @@ const WeatherService = (() => {
     try {
       const response = await fetch(
         `https://archive-api.open-meteo.com/v1/archive?${params}`,
+        { signal }
       );
       if (!response.ok)
         throw new Error(`Historical Weather API error: ${response.status}`);

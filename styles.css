@@ -8,9 +8,34 @@
  * ============================================================
  */
 
-/* ── Dark mode tile filter (open-source fallback) ─────────────── */
-.dark .dark-mode-tiles {
-  filter: invert(0.9) hue-rotate(180deg) contrast(1.5) brightness(0.6);
+/* ── Modern Map Tile Color Grading & Filtering ────────────────── */
+/* OpenLayers renders every layer (basemap + radar/route/temp overlays) onto
+   its own <canvas> inside #map. The dark theme uses OpenFreeMap's own
+   properly-designed dark vector style, so there's no invert filter to carry
+   over there. The light theme's saturate/contrast/brightness tint was
+   dropped: it was written for static raster <img> tiles, where the browser
+   filters each tile once and then just repositions the cached result. Here
+   it sits on a single canvas OpenLayers repaints every animation frame
+   during pan/zoom, so the filter (a per-pixel shader pass) was being
+   recomputed on every frame of every scroll — a real source of scroll
+   jank, not just a cosmetic tweak. */
+#map canvas {
+  /* intentionally unfiltered — see comment above */
+}
+
+/* Atmospheric Map Vignette Overlay */
+#map::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 400;
+  box-shadow: inset 0 0 100px rgba(15, 23, 42, 0.08);
+  transition: box-shadow 0.3s ease;
+}
+
+.dark #map::after {
+  box-shadow: inset 0 0 120px rgba(0, 0, 0, 0.35);
 }
 
 /* ── CSS Custom Properties ──────────────────────────────────── */
@@ -92,7 +117,7 @@ html, body {
 /* ── Top bar paint containment & z-index ─────────────────── */
 /*
  * The top bar relies on the Tailwind arbitrary-value class z-[1002] to stay
- * above the Leaflet map (which sets z-index:1000 on its internal panes).
+ * above the map (OpenLayers layers/overlays use much lower z-indices).
  * If the compiled Tailwind build does not emit the z-[1002] rule, the bar
  * falls back to z-index:auto and gets painted UNDER #map (which comes later
  * in the DOM with position:relative). That hides the logo, search box and
@@ -109,14 +134,10 @@ html, body {
   width: 100%;
   height: 100%;
   height: var(--app-height, 100vh);
-  overscroll-behavior: none;
-}
-.leaflet-container {
   background: #0f172a;
   overscroll-behavior: none;
-  touch-action: none; /* let Leaflet own the gesture, no page scroll */
+  touch-action: none; /* let OpenLayers own the gesture, no page scroll */
 }
-.leaflet-control-attribution { display: none; }
 
 /* ── Hide scrollbar for scrollable containers ──────────────── */
 .hide-scrollbar::-webkit-scrollbar { display: none; }
@@ -243,7 +264,7 @@ html, body {
   }
 }
 
-/* ── Leaflet Reset ──────────────────────────────────────────── */
+/* ── Marker Content Reset ──────────────────────────────────── */
 .custom-weather-marker-icon {
   background: transparent !important;
   border: none !important;
@@ -252,12 +273,18 @@ html, body {
 /* ── Weather Marker (on-map widget) ─────────────────────────── */
 .weather-marker {
   cursor: pointer;
-  transition: transform 0.2s ease, box-shadow 0.2s ease;
+  transition: transform 0.25s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.25s ease;
   animation: markerAppear 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
+  box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.12), 0 8px 10px -6px rgba(0, 0, 0, 0.1), 0 0 0 1px rgba(255, 255, 255, 0.6);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+}
+.dark .weather-marker {
+  box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.5), 0 8px 10px -6px rgba(0, 0, 0, 0.4), 0 0 0 1px rgba(255, 255, 255, 0.12);
 }
 .weather-marker:hover {
-  transform: scale(1.08);
-  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.18);
+  transform: scale(1.1) translateY(-2px);
+  box-shadow: 0 14px 28px -4px rgba(0, 0, 0, 0.2), 0 0 15px rgba(20, 184, 166, 0.35);
 }
 
 @keyframes markerAppear {
@@ -275,14 +302,14 @@ html, body {
 .weather-marker::after {
   content: '';
   position: absolute;
-  bottom: -8px;
+  bottom: -7px;
   left: 50%;
   transform: translateX(-50%);
   width: 0;
   height: 0;
-  border-left: 8px solid transparent;
-  border-right: 8px solid transparent;
-  border-top: 8px solid white;
+  border-left: 7px solid transparent;
+  border-right: 7px solid transparent;
+  border-top: 7px solid white;
 }
 .dark .weather-marker::after {
   border-top-color: #1e293b;
@@ -558,17 +585,6 @@ input[type='range'].timeline-slider::-moz-range-thumb {
   0% { opacity: 0.5; }
   50% { opacity: 1; }
   100% { opacity: 0.5; }
-}
-
-/* ── Leaflet Controls Positioning ────────────────────────────── */
-.leaflet-bottom.leaflet-right {
-  margin-bottom: 96px; /* Shift zoom control up to clear timeline slider */
-  margin-right: 12px;
-}
-@media (max-width: 639px) {
-  .leaflet-bottom.leaflet-right {
-    margin-bottom: 110px;
-  }
 }
 
 /* ── Dual-Axis SVG Chart Bars ───────────────────────────────── */
@@ -895,21 +911,6 @@ input[type='range'].timeline-slider::-moz-range-thumb {
   border-color: #14b8a6;
 }
 
-/* ── Temperature Tooltip ──────────────────────────────────── */
-.temp-tooltip {
-  background: transparent !important;
-  border: none !important;
-  box-shadow: none !important;
-  font-size: 11px !important;
-  font-weight: 700 !important;
-  color: #1e293b !important;
-}
-.dark .temp-tooltip {
-  color: #f1f5f9 !important;
-}
-.leaflet-tooltip-top.temp-tooltip::before {
-  display: none !important;
-}
 
 /* ── Compact Mode (Fitted Card Compartment) ─────────────────── */
 /* Hides action buttons except expand icon */
@@ -1165,7 +1166,25 @@ button, a, input, select, textarea, [role="button"] {
 @media (prefers-reduced-motion: reduce) {
   .home-marker-shell { animation: none; }
 }
-.home-tooltip {
+/* ── OpenLayers HTML markers (weather/home/bookmark pins) ─────── */
+/* ol.Overlay positions this element directly; position:relative here is
+   only so the optional .ol-tooltip child can be absolutely placed above it.
+   Superseded the old .home-tooltip / .location-tooltip skins, which used to
+   ride on Leaflet's own bindTooltip box+arrow — now self-contained since
+   there's no Leaflet tooltip system to piggyback on any more. */
+.ol-html-marker {
+  position: relative;
+}
+.ol-tooltip {
+  position: absolute;
+  left: 50%;
+  bottom: 100%;
+  transform: translateX(-50%);
+  margin-bottom: 8px;
+  white-space: nowrap;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.15s ease;
   background: rgba(15, 23, 42, 0.88);
   color: #fff;
   border: 1px solid rgba(255, 255, 255, 0.08);
@@ -1174,9 +1193,19 @@ button, a, input, select, textarea, [role="button"] {
   font-weight: 600;
   padding: 5px 9px;
   box-shadow: 0 10px 24px rgba(2, 6, 23, 0.24);
+  z-index: 1;
 }
-.home-tooltip::before {
+.ol-tooltip::after {
+  content: "";
+  position: absolute;
+  top: 100%;
+  left: 50%;
+  transform: translateX(-50%);
+  border: 5px solid transparent;
   border-top-color: rgba(15, 23, 42, 0.88);
+}
+.ol-marker-hoverable:hover .ol-tooltip {
+  opacity: 1;
 }
 
 @media (max-width: 639px) {
@@ -1263,17 +1292,3 @@ button, a, input, select, textarea, [role="button"] {
   color: var(--primary-light);
 }
 
-/* ── Map tile seams ─────────────────────────────────────────── */
-/* Basemap tiles are laid out on exact 256px integer boundaries, but each one
-   is composited as its own GPU layer, so the browser leaves a hairline gap at
-   every edge and .leaflet-container's background shows through as a faint
-   grid over the whole map. Growing each tile by half a pixel makes neighbours
-   overlap just enough to close the seam, with no visible effect otherwise.
-   Scoped to img tiles so Leaflet's own sizing of other panes is untouched, and
-   NOT applied via `transform` — Leaflet positions tiles with a transform
-   matrix, so overriding that would displace them. `!important` is required
-   because Leaflet writes `width:256px;height:256px` inline on every tile. */
-.leaflet-container img.leaflet-tile {
-  width: 256.5px !important;
-  height: 256.5px !important;
-}

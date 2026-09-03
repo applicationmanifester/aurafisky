@@ -3,6 +3,12 @@ import { VitePWA } from 'vite-plugin-pwa';
 
 export default defineConfig({
   base: './',
+  define: {
+    // Injected at build time from environment variables
+    // Required: VITE_FIREBASE_API_KEY, VITE_FCM_VAPID_KEY
+    '__FIREBASE_API_KEY__': JSON.stringify(process.env.VITE_FIREBASE_API_KEY || ''),
+    '__FCM_VAPID_KEY__': JSON.stringify(process.env.VITE_FCM_VAPID_KEY || ''),
+  },
   build: {
     target: 'es2022',
     minify: 'terser',
@@ -18,7 +24,31 @@ export default defineConfig({
     rollupOptions: {
       output: {
         manualChunks: {
-          'features': ['./features/ensemble.js', './features/routes.js'],
+          // Large third-party map libs — split out so they cache independently
+          // of app-core (they change far less often than app.js) and so the
+          // main bundle doesn't trip the >500kB chunk-size warning.
+          'vendor-map': ['ol', 'ol-mapbox-style'],
+          'features': [
+            './features/ensemble.js',
+            './features/routes.js',
+            './features/radar.js',
+            './features/bookmarks.js',
+            './features/compareCities.js',
+            './features/units.js',
+            './features/share.js',
+            './features/hourlyStrip.js',
+            './features/insights.js',
+            './features/minimalMode.js',
+            './features/canvasEffects.js',
+            './features/audio.js',
+            './features/myLocation.js',
+            './features/timeMachine.js',
+            './features/astronomy.js',
+            './features/advisories.js',
+            './features/appToggles.js',
+            './features/dashboard.js',
+            './features/keyboardShortcuts.js',
+          ],
           'app-core': ['./app.js']
         },
         chunkFileNames: 'assets/js/[name]-[hash].js',
@@ -94,13 +124,45 @@ export default defineConfig({
         }
       },
       {
+        // Vector basemap: style JSON / sprite / glyph docs — small in count,
+        // want fresh copies so a style update on OpenFreeMap's end shows up.
+        urlPattern: ({ url }) => url.hostname === 'tiles.openfreemap.org' && /\/(styles|sprites|fonts)\//.test(url.pathname),
+        handler: 'NetworkFirst',
+        options: {
+          cacheName: 'map-style',
+          networkTimeoutSeconds: 3,
+          expiration: {
+            maxEntries: 30,
+            maxAgeSeconds: 60 * 60 * 24 // 1d
+          },
+          cacheableResponse: { statuses: [0, 200] }
+        }
+      },
+      {
+        // Actual vector tile data (planet pbf tiles) — far more distinct
+        // requests than the old raster setup since one basemap now covers
+        // both light/dark + every language, so a larger cache budget.
         urlPattern: ({ url }) => url.hostname === 'tiles.openfreemap.org',
         handler: 'CacheFirst',
         options: {
           cacheName: 'map-tiles',
           expiration: {
-            maxEntries: 200,
+            maxEntries: 500,
             maxAgeSeconds: 60 * 60 * 24 * 30 // 30d
+          },
+          cacheableResponse: { statuses: [0, 200] }
+        }
+      },
+      {
+        // Vector basemap label font (Noto Sans), loaded via @fontsource on
+        // jsdelivr by ol-mapbox-style — long-lived, immutable per version.
+        urlPattern: ({ url }) => url.hostname === 'cdn.jsdelivr.net',
+        handler: 'CacheFirst',
+        options: {
+          cacheName: 'map-fonts',
+          expiration: {
+            maxEntries: 60,
+            maxAgeSeconds: 60 * 60 * 24 * 365 // 1y
           },
           cacheableResponse: { statuses: [0, 200] }
         }
@@ -126,6 +188,13 @@ export default defineConfig({
     })
   ],
   optimizeDeps: {
-    include: ['leaflet', 'localforage', 'dompurify']
+    // Deep ol/* sub-path imports (ol/Map.js, ol/View.js, ...) get discovered
+    // and pre-bundled automatically from actual usage — except when a new
+    // one (like ol/interaction/defaults.js) is added to an already-running
+    // dev server: the on-demand optimizer can get stuck serving 503s for
+    // that one path indefinitely instead of self-healing, and only a dev
+    // server restart clears it. Listing it here makes Vite pre-bundle it on
+    // cold start like the others, so this can't happen for it again.
+    include: ['ol', 'ol-mapbox-style', 'localforage', 'dompurify', 'ol/interaction/defaults.js']
   }
 });

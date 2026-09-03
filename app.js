@@ -1,9 +1,9 @@
 /*
  * ============================================================
- * Aurafisky Application — app.js (Leaflet + Immersive Features)
+ * Aurafisky Application — app.js (OpenLayers + Immersive Features)
  * ============================================================
  * Main application controller. Handles:
- *   - Leaflet.js Map initialization & theme-adaptive tiles
+ *   - OpenLayers vector-tile map initialization & theme-adaptive basemap
  *   - Live RainViewer animated overlays (Weather Radar & Satellite Clouds)
  *   - Map Canvas Weather Particle overlays (Rain, Snow, Wind, Storm effects)
  *   - 24-Hour Dual-Axis SVG Forecast Charts (Temp curves + Precip probability bars)
@@ -24,14 +24,30 @@ import "@fontsource/inter/500.css";
 import "@fontsource/inter/600.css";
 import "@fontsource/inter/700.css";
 import "@fontsource/inter/800.css";
-import "leaflet/dist/leaflet.css";
+import "ol/ol.css";
 
-import L from "leaflet";
+// OpenLayers: renders vector tiles via Canvas 2D, not WebGL — chosen over
+// MapLibre GL specifically because it doesn't depend on GPU-accelerated
+// WebGL being available (see modules/map-language.js for why real language
+// switching needs vector tiles at all rather than raster ones).
+import OlMap from "ol/Map.js";
+import View from "ol/View.js";
+import LayerGroup from "ol/layer/Group.js";
+import { defaults as defaultInteractions } from "ol/interaction/defaults.js";
+import { fromLonLat, toLonLat } from "ol/proj.js";
+import { apply as applyMapboxStyle, applyStyle as applyMapboxLayerStyle, getLayers as getMapboxLayers } from "ol-mapbox-style";
+import { HtmlMarker } from "./modules/ol-marker.js";
+import { localizeGlStyle } from "./modules/map-language.js";
 import localforage from "localforage";
 import DOMPurify from "dompurify";
 
+localforage.config({
+  name: "aurafisky",
+  storeName: "aurafisky_store",
+  description: "Aurafisky bookmarks, settings, and cached weather data",
+});
+
 if (typeof window !== "undefined") {
-  if (!window.L) window.L = L;
   if (!window.localforage) window.localforage = localforage;
   if (!window.DOMPurify) window.DOMPurify = DOMPurify;
 }
@@ -40,6 +56,7 @@ import './weather.js';
 import './modules/dom-utils.js';
 import './modules/toast.js';
 import './src/icons.js';
+import { initFeatures } from './features/registry.js';
 
 class AurafiskyApp {
   // Helper to set innerHTML safely using DOMPurify
@@ -57,13 +74,14 @@ class AurafiskyApp {
       projectId: "aurafisky",
       appId: "1:206842187982:web:994268ad1fa6290b45409f",
       storageBucket: "aurafisky.firebasestorage.app",
-      apiKey:
-        window.FIREBASE_API_KEY || "AIzaSyCF0fSv5OUy05AnYZot4Y9Y07TnJjjNl1I",
+      // Injected at build time from VITE_FIREBASE_API_KEY (see vite.config.js
+      // `define` + .env.example). No hardcoded fallback — set the env var.
+      apiKey: typeof __FIREBASE_API_KEY__ !== "undefined" ? __FIREBASE_API_KEY__ : "",
       authDomain: "aurafisky.firebaseapp.com",
       messagingSenderId: "206842187982",
       // Web Push VAPID key from Firebase Console → Project Settings → Cloud Messaging.
-      // Set window.FCM_VAPID_KEY before app load, or replace the placeholder.
-      vapidKey: window.FCM_VAPID_KEY || "",
+      // Injected at build time from VITE_FCM_VAPID_KEY.
+      vapidKey: typeof __FCM_VAPID_KEY__ !== "undefined" ? __FCM_VAPID_KEY__ : "",
     };
     this.fcmToken = null;
     this._fb = null; // Firebase modules (lazy-loaded)
@@ -75,10 +93,8 @@ class AurafiskyApp {
     this.hourlyNotificationTimer = null;
 
     // ── State ──────────────────────────────────────────────────
-    this.map = null; // Leaflet map instance
-    this.lightTiles = null; // Light tile layer
-    this.darkTiles = null; // Dark tile layer
-    this.marker = null; // Leaflet marker instance
+    this.map = null; // OpenLayers map instance
+    this.marker = null; // HtmlMarker instance (see modules/ol-marker.js)
     this._mapClickDebounce = false; // Debounce guard for rapid map clicks
     this._timelineRAF = null; // RequestAnimationFrame cache for timeline
 
@@ -465,16 +481,54 @@ class AurafiskyApp {
       console.error("Unhandled promise rejection:", e.reason);
     });
 
-    // Theme defaults to system preference (user sign-in will restore cloud preference)
-    this.isDark = window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches;
+    // Accessibility keyboard navigation & modal listeners (moved out of an
+    // inline <script> in index.html so the CSP doesn't need 'unsafe-inline'
+    // for scripts).
+    document.addEventListener("keydown", (e) => {
+      if (e.key === "Escape") {
+        const modal = document.getElementById("termsModal");
+        if (modal && modal.style.display !== "none" && !modal.classList.contains("hidden")) {
+          modal.style.display = "none";
+          modal.classList.add("hidden");
+        }
+      }
+      if ((e.key === "Enter" || e.key === " ") && e.target && e.target.getAttribute("role") === "button") {
+        e.preventDefault();
+        e.target.click();
+      }
+    });
+
+    // Theme defaults to light regardless of OS/device preference, but if
+    // this browser has switched to dark before we start there dark right
+    // away instead of always flashing light first. The cloud-synced
+    // preference (see saveUserDataToCloud's prefs.theme handling) arrives
+    // later over the network and used to call toggleDarkMode() *after* the
+    // light basemap had already started rendering — swapping the whole
+    // vector basemap out mid-load, which is what "a different map suddenly
+    // appears" was: a real theme flip, not a rendering glitch. Reading the
+    // last-known theme synchronously here closes that gap for returning
+    // visitors; toggleDarkMode() below keeps this in sync going forward.
+    let initialDark = false;
+    try {
+      initialDark = localStorage.getItem("aurafisky_theme") === "dark";
+    } catch (e) {
+      // ignore — storage unavailable, fall back to light
+    }
+    this.isDark = initialDark;
     document.documentElement.classList.toggle("dark", this.isDark);
+
+    // Attach feature-module methods (radar, bookmarks, audio, canvas effects, etc.)
+    // eagerly and synchronously, before anything below binds an event handler or
+    // calls one directly — avoids a load-order race where a listener could fire
+    // before its handler method exists (see features/registry.js).
+    initFeatures(this);
 
     // Load bookmarks (in-memory until cloud sync)
     this.loadBookmarks();
     this.startBookmarkAlertPolling();
 
-    // Setup Leaflet map viewport
-    this.initLeafletMap();
+    // Setup OpenLayers map viewport
+    this.initMap();
 
     // Setup Particle Canvas Overlay
     this.initWeatherCanvas();
@@ -482,9 +536,6 @@ class AurafiskyApp {
     // Bind event handlers
     this.bindEvents();
     this.initKeyboardShortcuts();
-
-    // Lazy-load advanced feature modules (ensemble, routes, copilot)
-    this._initFeaturesLazy();
 
     // Initialize Firebase integrations & bind user profile / settings triggers
     this.initFirebase();
@@ -511,7 +562,7 @@ class AurafiskyApp {
    * Shared by the map click handler and the weather / home / bookmark marker
    * click handlers, which previously each carried their own copy of this logic.
    *
-   * @param {Object} e - Leaflet mouse event (may carry `originalEvent`)
+   * @param {Object} e - OpenLayers MapBrowserEvent (carries `originalEvent`)
    * @returns {boolean} true if the event should be treated as a drag, not a tap
    */
   _isDragGesture(e) {
@@ -540,14 +591,12 @@ class AurafiskyApp {
     return dist > DRAG_SLOP_PX;
   }
 
-  // Dynamically load feature modules on demand
-  async _initFeaturesLazy() {
-    try {
-      const { initFeatures } = await import("./features/registry.js");
-      await initFeatures(this);
-    } catch (e) {
-      console.warn("Features failed to load:", e);
-    }
+  // OL's Map has no zoomIn()/zoomOut() of its own (Leaflet did) — animate
+  // the View's zoom by one step instead.
+  _zoomBy(delta) {
+    if (!this.map) return;
+    const view = this.map.getView();
+    view.animate({ zoom: view.getZoom() + delta, duration: 200 });
   }
 
   // Set --app-height to the true visible viewport height so layout using
@@ -559,139 +608,133 @@ class AurafiskyApp {
     document.documentElement.style.setProperty("--app-height", `${h}px`);
     // Also set visual viewport height for search dropdown
     document.documentElement.style.setProperty("--visual-viewport-height", `${h}px`);
-    this.map?.invalidateSize();
+    this.map?.updateSize();
   }
 
   // ================================================================
   //  MAP INITIALIZATION & TILE SETUPS
   // ================================================================
 
-  initLeafletMap() {
+  initMap() {
     try {
-      this.map = L.map("map", {
-        center: [20.0, 0.0],
-        zoom: 3,
-        minZoom: 2,
-        zoomControl: false,
-        attributionControl: true,
-        worldCopyJump: true,
-        maxBounds: [
-          [-85, -10000],
-          [85, 10000],
-        ],
-        maxBoundsViscosity: 1.0,
+      // Latitude clamp only — longitude is left unconstrained (multiWorld)
+      // so panning wraps the way Leaflet's worldCopyJump used to.
+      const maxLat = fromLonLat([0, 85])[1];
+      const minLat = fromLonLat([0, -85])[1];
+
+      this.map = new OlMap({
+        target: "map",
+        layers: [],
+        view: new View({
+          center: fromLonLat([0.0, 20.0]),
+          zoom: 3,
+          minZoom: 2,
+          extent: [-Infinity, minLat, Infinity, maxLat],
+          // Constrain the whole viewport to the extent, not just the center.
+          // Web Mercator ends at ~±85° — past that there is no map to draw,
+          // only background. With constrainOnlyCenter the center stopped at
+          // the pole but the viewport kept going, so half the screen showed
+          // that void (the "empty tiles": nothing was failing to load, there
+          // was simply no world left there). Constraining the viewport stops
+          // the pan at the edge instead, the way every other map app does.
+          // OL handles the zoomed-way-out case where the world is shorter
+          // than the viewport by centering it (see ol/centerconstraint.js).
+          multiWorld: true,
+        }),
+        controls: [], // zoom controls are integrated into the radar panel instead
+        // This is a weather map, not a navigation tool — nothing in the UI
+        // ever rotates it back, so an accidental two-finger twist on mobile
+        // or Alt+Shift-drag on desktop just leaves the map stuck sideways
+        // with no way back short of a reload. Drop both rotate gestures;
+        // every other default interaction (pan, zoom, keyboard) stays.
+        interactions: defaultInteractions({
+          altShiftDragRotate: false,
+          pinchRotate: false,
+        }),
       });
 
-      // Language preference: 'en' for English (OpenFreeMap), 'native' for local language (OSM)
+      // Language preference: 'en' for English, 'native' for each place's local name
       this.mapLanguage = this.getSavedMapLanguage() || 'en';
 
-      // English tiles (OpenFreeMap) - renders labels in English
-      this.enLightTiles = L.tileLayer(
-        "https://tiles.openfreemap.org/styles/liberty/{z}/{x}/{y}.png?lang=en",
-        {
-          attribution: "&copy; OpenStreetMap contributors &copy; OpenFreeMap",
-          maxZoom: 19,
-          keepBuffer: 3,
-          noWrap: false,
-          bounds: [[-85, -180], [85, 180]],
-        },
-      );
+      this.lightBasemap = new LayerGroup();
+      this.darkBasemap = new LayerGroup();
+      this.map.addLayer(this.isDark ? this.darkBasemap : this.lightBasemap);
 
-      this.enDarkTiles = L.tileLayer(
-        "https://tiles.openfreemap.org/styles/dark/{z}/{x}/{y}.png?lang=en",
-        {
-          attribution: "&copy; OpenStreetMap contributors &copy; OpenFreeMap",
-          maxZoom: 19,
-          keepBuffer: 3,
-          noWrap: false,
-          bounds: [[-85, -180], [85, 180]],
-        },
-      );
+      // Real vector basemap: OpenFreeMap's OpenMapTiles-schema tiles, styled
+      // via the same Mapbox/MapLibre style JSON OpenFreeMap publishes,
+      // rendered client-side by OpenLayers' Canvas 2D vector-tile renderer
+      // (no WebGL dependency — see modules/map-language.js for why real
+      // language switching needs vector tiles at all). Replaces the old
+      // raster-tile setup, whose URLs were dead ends: OpenFreeMap serves
+      // vector tiles only (a "?lang=en" raster PNG endpoint 404s on every
+      // tile — part of the original "tiles render slow" complaint), and
+      // OSM's raster server silently ignores "?lang=native". Style JSON is
+      // fetched once per theme, localized for the current language (see
+      // localizeGlStyle), and applied to a LayerGroup per theme so toggling
+      // dark mode is just swapping which group is on the map.
+      this._glStyleUrls = {
+        light: "https://tiles.openfreemap.org/styles/liberty",
+        dark: "https://tiles.openfreemap.org/styles/dark",
+      };
+      this._glStyles = {}; // cache of the raw (un-localized) fetched style JSON, by theme
 
-      // Native language tiles (OpenStreetMap standard) - renders labels in local language
-      this.nativeLightTiles = L.tileLayer(
-        "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png?lang=native",
-        {
-          attribution: "&copy; OpenStreetMap contributors",
-          maxZoom: 19,
-          keepBuffer: 3,
-          noWrap: false,
-          bounds: [[-85, -180], [85, 180]],
-          subdomains: "abc",
-        },
-      );
-
-      this.nativeDarkTiles = L.tileLayer(
-        "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png?lang=native",
-        {
-          attribution: "&copy; OpenStreetMap contributors",
-          maxZoom: 19,
-          keepBuffer: 3,
-          noWrap: false,
-          bounds: [[-85, -180], [85, 180]],
-          subdomains: "abc",
-          className: "dark-mode-tiles",
-        },
-      );
-
-      // Apply theme + language tile
-      const applyThemeTiles = () => {
-        // Remove all existing tile layers
-        [this.enLightTiles, this.enDarkTiles, this.nativeLightTiles, this.nativeDarkTiles].forEach((layer) => {
-          if (this.map.hasLayer(layer)) {
-            this.map.removeLayer(layer);
+      const loadBasemap = async (theme, group) => {
+        try {
+          const res = await fetch(this._glStyleUrls[theme]);
+          const rawStyle = await res.json();
+          this._glStyles[theme] = rawStyle;
+          await applyMapboxStyle(group, localizeGlStyle(rawStyle, this.mapLanguage));
+          // Preload 1 level of lower-resolution tiles beyond the viewport so
+          // panning into new territory shows something immediately instead
+          // of a blank tile while the full-res one is still being fetched
+          // and parsed (vector tiles decode on the main thread — there's no
+          // background worker like MapLibre GL had — so this preload buffer
+          // is what actually keeps panning feeling smooth).
+          for (const vtLayer of getMapboxLayers(group, "openmaptiles")) {
+            vtLayer.setPreload(1);
           }
-        });
-
-        const isEnglish = this.mapLanguage === 'en';
-        const lightTiles = isEnglish ? this.enLightTiles : this.nativeLightTiles;
-        const darkTiles = isEnglish ? this.enDarkTiles : this.nativeDarkTiles;
-
-        if (this.isDark) {
-          darkTiles.addTo(this.map);
-          darkTiles.once("tileerror", () => {
-            if (this.map.hasLayer(darkTiles)) {
-              this.map.removeLayer(darkTiles);
-              // Fallback to other language's dark tiles
-              const fallback = isEnglish ? this.nativeDarkTiles : this.enDarkTiles;
-              fallback.addTo(this.map);
-            }
-          });
-        } else {
-          lightTiles.addTo(this.map);
-          lightTiles.once("tileerror", () => {
-            if (this.map.hasLayer(lightTiles)) {
-              this.map.removeLayer(lightTiles);
-              // Fallback to other language's light tiles
-              const fallback = isEnglish ? this.nativeLightTiles : this.enLightTiles;
-              fallback.addTo(this.map);
-            }
-          });
+          // A location passed in on startup (shared link, restored session)
+          // calls selectLocation() — and therefore view.animate() — before
+          // this fetch resolves, while the map still has zero layers. OL
+          // doesn't always notice that layers were added to a view that
+          // already has stale frame state from animating before anything
+          // was renderable: the map reports every layer/source as "ready"
+          // but the canvas stays blank until something else nudges it. Force
+          // that nudge here instead of relying on it happening implicitly.
+          this.map.render();
+        } catch (err) {
+          console.error(`Basemap load failed (${theme}):`, err);
         }
       };
-      applyThemeTiles();
+      // Load the visible theme first, on its own — fetching+parsing both
+      // basemaps at once (the old behavior) doubled network requests and
+      // main-thread parse work during the exact window the visible map is
+      // trying to paint, which is real time added to "map loads slowly".
+      // The other theme loads right after, still well before anyone would
+      // toggle it, so switching dark/light stays instant.
+      const activeTheme = this.isDark ? "dark" : "light";
+      const inactiveTheme = this.isDark ? "light" : "dark";
+      const activeGroup = this.isDark ? this.darkBasemap : this.lightBasemap;
+      const inactiveGroup = this.isDark ? this.lightBasemap : this.darkBasemap;
+      loadBasemap(activeTheme, activeGroup).then(() =>
+        loadBasemap(inactiveTheme, inactiveGroup),
+      );
 
-      // Hard-enforce map bounds (already set in L.map options, but set again
-      // here for safety so inertia panning on mobile can't escape the valid range).
-      this.map.setMaxBounds([[-85, -10000], [85, 10000]]);
-      this.map.on("movestart zoomstart", () => {
+      this.map.on("movestart", () => {
         if (this.radarPlaying) {
           this._radarWasPlayingBeforeMove = true;
           this.pauseRadarPlayback();
         }
+        this._mapWasDragged = true;
       });
-      
+
       // Track touch/drag start position to prevent accidental location selection
       // while panning on mobile. Consumed by _isDragGesture(), which every map
       // and marker click handler shares.
       this._touchStartPos = null;
       this._mapWasDragged = false;
 
-      this.map.on("movestart dragstart", () => {
-        this._mapWasDragged = true;
-      });
-
-      const mapContainer = this.map.getContainer();
+      const mapContainer = this.map.getTargetElement();
       if (mapContainer) {
         mapContainer.addEventListener("pointerdown", (e) => {
           this._touchStartPos = { x: e.clientX, y: e.clientY };
@@ -699,11 +742,10 @@ class AurafiskyApp {
         }, { passive: true });
       }
 
-      this.map.on("moveend zoomend", () => {
-        const c = this.map.getCenter();
-        if (c.lat < -85 || c.lat > 85) {
-          this.map.setView([Math.max(Math.min(c.lat, 85), -85), c.lng], this.map.getZoom());
-        }
+      // OL's View extent constraint (set above) already keeps latitude in
+      // range on its own — no manual re-clamp-after-the-fact needed here,
+      // unlike Leaflet's maxBounds which snapped back reactively.
+      this.map.on("moveend", () => {
         if (this._radarWasPlayingBeforeMove) {
           this._radarWasPlayingBeforeMove = false;
           clearTimeout(this._radarResumeTimer);
@@ -713,8 +755,6 @@ class AurafiskyApp {
         }
       });
 
-      // Zoom controls are integrated into radar controls panel instead
-
       // Bind map click handler with drag & threshold validation
       this.map.on("click", async (e) => {
         if (this._mapClickDebounce) return;
@@ -722,28 +762,37 @@ class AurafiskyApp {
         // Ignore clicks triggered by panning/swiping gestures on mobile/desktop
         if (this._isDragGesture(e)) return;
 
-        // Check if click is near home pin (pixel distance)
+        // While the route-drawing feature is active, a tap adds a route stop
+        // and must not ALSO run the normal "select this location" flow below
+        // — that used to fire on every stop-add, yanking the weather panel
+        // and marker/tooltip to each new point in rapid succession (the
+        // "popup disappears immediately" symptom when placing route stops).
+        if (this._routeModeActive) return;
+
+        // Check if click is near home pin (pixel distance) — a fallback for
+        // taps that land just outside the marker's own DOM footprint;
+        // direct hits are handled by the marker's own click listener, which
+        // (via ol.Overlay's stopEvent) never reaches this handler at all.
         if (this._homeMarker && this.defaultLocation) {
-          const markerPx = this.map.latLngToContainerPoint([
-            this.defaultLocation.lat,
-            this.defaultLocation.lng,
-          ]);
-          const dist = Math.hypot(
-            e.containerPoint.x - markerPx.x,
-            e.containerPoint.y - markerPx.y,
+          const markerPx = this.map.getPixelFromCoordinate(
+            fromLonLat([this.defaultLocation.lng, this.defaultLocation.lat]),
           );
-          if (dist < 20) {
-            this.selectLocation(
-              this.defaultLocation.lat,
-              this.defaultLocation.lng,
-              this.defaultLocation.name,
-            );
-            return;
+          if (markerPx) {
+            const dist = Math.hypot(e.pixel[0] - markerPx[0], e.pixel[1] - markerPx[1]);
+            if (dist < 20) {
+              this.selectLocation(
+                this.defaultLocation.lat,
+                this.defaultLocation.lng,
+                this.defaultLocation.name,
+              );
+              return;
+            }
           }
         }
         this._mapClickDebounce = true;
         try {
-          await this.handleMapClick(e.latlng.lat, e.latlng.lng);
+          const [lng, lat] = toLonLat(e.coordinate);
+          await this.handleMapClick(lat, lng);
         } catch (err) {
           console.error("Map click handler error:", err);
         } finally {
@@ -756,15 +805,34 @@ class AurafiskyApp {
       this.hideLoadingOverlay();
       this.showToast("Click anywhere or search for a city!", "info");
 
-      // Staggered size invalidation checks to handle dynamic CSS/Tailwind runtime injection
-      setTimeout(() => this.map && this.map.invalidateSize(), 100);
-      setTimeout(() => this.map && this.map.invalidateSize(), 500);
-      setTimeout(() => this.map && this.map.invalidateSize(), 1500);
+      // Keep OL's idea of the viewport in sync with the container's real box.
+      // OL caches the size it measured and renders tiles for that size only,
+      // so any change it doesn't hear about leaves the map painted across
+      // part of the container and blank for the rest. The window "resize"
+      // and visualViewport listeners below miss the cases where the element
+      // changes without the window doing so — --app-height being written by
+      // viewport-height.js, Tailwind/CSS arriving late, fonts reflowing the
+      // layout — which is what the staggered timeouts underneath were
+      // guessing at. A ResizeObserver watches the element itself, so every
+      // one of those is covered by observation instead of by guesswork.
+      const mapEl = this.map.getTargetElement();
+      if (mapEl && typeof ResizeObserver !== "undefined") {
+        this._mapResizeObserver = new ResizeObserver(() => {
+          this.map?.updateSize();
+        });
+        this._mapResizeObserver.observe(mapEl);
+      }
 
-      // Re-fit Leaflet tiles when the mobile URL bar shows/hides (visual viewport)
+      // Belt-and-braces for browsers without ResizeObserver, and for CSS that
+      // lands between construction and the observer's first callback.
+      setTimeout(() => this.map && this.map.updateSize(), 100);
+      setTimeout(() => this.map && this.map.updateSize(), 500);
+      setTimeout(() => this.map && this.map.updateSize(), 1500);
+
+      // Re-fit the map when the mobile URL bar shows/hides (visual viewport)
       if (window.visualViewport) {
         const onVV = () => {
-          this.map && this.map.invalidateSize();
+          this.map && this.map.updateSize();
           // Update CSS variable for search dropdown positioning
           document.documentElement.style.setProperty('--visual-viewport-height', `${window.visualViewport.height}px`);
         };
@@ -774,7 +842,7 @@ class AurafiskyApp {
         onVV();
       }
     } catch (error) {
-      console.error("Leaflet initialization failed:", error);
+      console.error("Map initialization failed:", error);
       this.hideLoadingOverlay();
       this.showToast("Failed to load map. Refresh the page.", "error");
     }
@@ -1045,11 +1113,11 @@ class AurafiskyApp {
 
     // ── Weather Overlay controls ────────────────────────────────
     this.$.zoomInBtn?.addEventListener("click", () => {
-      this.map?.zoomIn();
+      this._zoomBy(1);
       this._haptic('selection');
     });
     this.$.zoomOutBtn?.addEventListener("click", () => {
-      this.map?.zoomOut();
+      this._zoomBy(-1);
       this._haptic('selection');
     });
     this.$.resetViewBtn?.addEventListener("click", () => this.resetView());
@@ -1310,7 +1378,7 @@ class AurafiskyApp {
       (e) => {
         if (e.touches.length !== 1) return;
         // Disable pull-to-refresh during map panning or panel interactions
-        const isMapTouch = e.target.closest("#map") || e.target.closest(".leaflet-container") || e.target.closest("#weatherPanel");
+        const isMapTouch = e.target.closest("#map") || e.target.closest("#weatherPanel");
         if (isMapTouch) {
           this._pullActive = false;
           return;
@@ -1441,7 +1509,7 @@ class AurafiskyApp {
         this._resizeRAF = null;
         this.resizeWeatherCanvas();
         if (this.map) {
-          this.map.invalidateSize();
+          this.map.updateSize();
         }
       });
     };
@@ -1811,10 +1879,20 @@ class AurafiskyApp {
 
       this._cachedDecomposition = null;
 
-      // Center viewport (fix sequential Leaflet animation aborts)
-      this.map.invalidateSize();
-      const targetZoom = Math.max(this.map.getZoom(), 9);
-      this.map.setView([lat, lng], targetZoom);
+      // Center viewport. Web Mercator (what the view's extent/fromLonLat use)
+      // is only defined up to ~85.05° latitude — the poles project to
+      // infinity. A location right at that edge (a saved session, a shared
+      // link, a search result near a pole) used to be handed straight to
+      // fromLonLat()/view.animate() and would hang the tab: the requested
+      // center fell just outside the view's own extent clamp, and OL never
+      // settled on a resolution. Clamp only the point we center on — lat/lng
+      // used for weather data, the marker, and the name stay exact.
+      const viewCenterLat = Math.max(-85, Math.min(85, lat));
+
+      this.map.updateSize();
+      const view = this.map.getView();
+      const targetZoom = Math.max(view.getZoom(), 9);
+      view.animate({ center: fromLonLat([lng, viewCenterLat]), zoom: targetZoom });
 
       // Refresh UI panel state
       this._updateHeaderLocationAndCoords(name, lat, lng);
@@ -2151,13 +2229,11 @@ class AurafiskyApp {
   }
 
   /**
-   * Builds a reusable Leaflet divIcon from a weather snapshot.
+   * Builds the marker's inner HTML from a weather snapshot.
    * Single source of truth for the marker template (#4/#9).
    */
-  _buildMarkerIcon(weather) {
-    return L.divIcon({
-      className: "custom-weather-marker-icon",
-      html: `
+  _buildMarkerHtml(weather) {
+    return `
         <div class="weather-marker relative bg-white dark:bg-slate-800 rounded-2xl px-3.5 py-2.5 shadow-lg
                     border border-slate-200/60 dark:border-slate-600/30 text-center min-w-[80px]">
           <div class="text-2xl leading-none mb-1">${weather.icon}</div>
@@ -2168,10 +2244,7 @@ class AurafiskyApp {
             ${weather.description}
           </div>
         </div>
-      `,
-      iconSize: [90, 60],
-      iconAnchor: [45, 68],
-    });
+      `;
   }
 
   createWeatherMarker(lat, lng, hourIndex = null) {
@@ -2187,36 +2260,34 @@ class AurafiskyApp {
     // The timeline calls this on every hour change. Tearing the marker down and
     // re-adding it each time churns the DOM, drops the tooltip and click
     // binding, and makes the marker flicker while the slider is dragged — so
-    // when the marker is already at this position, just swap its icon.
+    // when the marker is already at this position, just swap its content.
+    const pos = this.marker?.getPosition();
     const samePosition =
-      this.marker &&
-      Math.abs(this.marker.getLatLng().lat - lat) < 1e-9 &&
-      Math.abs(this.marker.getLatLng().lng - lng) < 1e-9;
+      pos &&
+      Math.abs(pos.lat - lat) < 1e-9 &&
+      Math.abs(pos.lng - lng) < 1e-9;
 
     if (samePosition) {
-      this.marker.setIcon(this._buildMarkerIcon(weather));
+      this.marker.setHtml(this._buildMarkerHtml(weather), this.selectedName, "location-tooltip");
     } else {
       if (this.marker) {
         this.marker.remove();
         this.marker = null;
       }
 
-      this.marker = L.marker([lat, lng], {
-        icon: this._buildMarkerIcon(weather),
-      }).addTo(this.map);
-
-      if (this.selectedName) {
-        this.marker.bindTooltip(this.selectedName, {
-          permanent: false,
-          direction: "top",
-          offset: [0, -68],
-          className: "location-tooltip",
-        });
-      }
-
-      this.marker.on("click", (e) => {
-        if (this._isDragGesture(e)) return;
-        this.showWeatherPanel();
+      this.marker = new HtmlMarker(this.map, {
+        lat,
+        lng,
+        html: this._buildMarkerHtml(weather),
+        className: "custom-weather-marker-icon",
+        size: [90, 60],
+        anchor: [45, 68],
+        tooltip: this.selectedName || undefined,
+        tooltipClassName: "location-tooltip",
+        onClick: (domEvent) => {
+          if (this._isDragGesture({ originalEvent: domEvent })) return;
+          this.showWeatherPanel();
+        },
       });
     }
 
@@ -2536,7 +2607,7 @@ class AurafiskyApp {
 
     // Synchronize marker bubble (uses shared template #4/#9)
     if (this.marker) {
-      this.marker.setIcon(this._buildMarkerIcon(weather));
+      this.marker.setHtml(this._buildMarkerHtml(weather), this.selectedName, "location-tooltip");
     }
 
     // Update shareable URL
@@ -3127,8 +3198,8 @@ class AurafiskyApp {
 
   resetView() {
     if (!this.map) return;
-    this.map.invalidateSize();
-    this.map.setView([20.0, 0.0], 3, { animate: true });
+    this.map.updateSize();
+    this.map.getView().animate({ center: fromLonLat([0.0, 20.0]), zoom: 3 });
     this.showToast("Map view reset", "info");
   }
 
@@ -3224,1177 +3295,67 @@ class AurafiskyApp {
   // ================================================================
   //  WEATHER RADAR & SATELLITE OVERLAYS (RainViewer API)
   // ================================================================
-
-  async toggleRadar() {
-    this.radarActive = !this.radarActive;
-
-    this.$.radarDot.classList.toggle("active", this.radarActive);
-
-    if (this.overlayType === "temperature" || this.overlayType === "wind") {
-      this.$.radarPlayback.classList.add("hidden");
-    } else {
-      this.$.radarPlayback.classList.toggle("hidden", !this.radarActive);
-    }
-    this.$.radarExtras.classList.toggle("hidden", !this.radarActive);
-
-    if (this.radarActive) {
-      if (this.overlayType === "temperature") {
-        this.showToast("Loading temperature overlay...", "info");
-        this.stopRadarPlayback();
-        this.clearRadarLayers();
-        this.clearTempOverlay();
-        this.activeEffectType = "none";
-        if (this.$.legendPrecip) this.$.legendPrecip.classList.add("hidden");
-        if (this.$.legendTemp) this.$.legendTemp.classList.remove("hidden");
-        await this.initTempOverlayLayers();
-      } else if (this.overlayType === "wind") {
-        this.showToast("Wind flow overlay active", "info");
-        this.stopRadarPlayback();
-        this.clearRadarLayers();
-        this.clearTempOverlay();
-        this.activeEffectType = "wind";
-        this.initWindParticles();
-        if (this.$.legendPrecip) this.$.legendPrecip.classList.add("hidden");
-        if (this.$.legendTemp) this.$.legendTemp.classList.add("hidden");
-        if (!this.animationFrameId) this.runWeatherCanvasLoop();
-      } else {
-        this.showToast(
-          `Loading weather ${this.overlayType === "radar" ? "radar" : "satellite"} frames...`,
-          "info",
-        );
-        this.clearTempOverlay();
-        this.activeEffectType = "none";
-        if (this.$.legendPrecip) this.$.legendPrecip.classList.remove("hidden");
-        if (this.$.legendTemp) this.$.legendTemp.classList.add("hidden");
-        await this.initRadarLayers();
-        this.startRadarPlayback();
-      }
-    } else {
-      this.stopRadarPlayback();
-      this.clearRadarLayers();
-      this.clearTempOverlay();
-      this.activeEffectType = "none";
-      if (this.$.legendPrecip) this.$.legendPrecip.classList.remove("hidden");
-      if (this.$.legendTemp) this.$.legendTemp.classList.add("hidden");
-    }
-
-    // Expand/collapse the control panel to match radar state
-    if (this.$.radarExpandedPanel) {
-      this.$.radarExpandedPanel.classList.toggle("hidden", !this.radarActive);
-    }
-    if (this.$.radarCollapsedBtn) {
-      this.$.radarCollapsedBtn.classList.toggle("hidden", this.radarActive);
-    }
-  }
-
-  async initRadarLayers() {
-    try {
-      const response = await fetch(
-        "https://api.rainviewer.com/public/weather-maps.json",
-      );
-      if (!response.ok) throw new Error("RainViewer API request failed");
-
-      const data = await response.json();
-
-      // Hide satellite option if no satellite data available
-      const hasSatellite = data.satellite?.infrared?.length > 0;
-      const satOption = this.$.layerTypeSelect.querySelector(
-        'option[value="satellite"]',
-      );
-      if (satOption) satOption.hidden = !hasSatellite;
-      if (this.overlayType === "satellite" && !hasSatellite) {
-        this.overlayType = "radar";
-        this.$.layerTypeSelect.value = "radar";
-      }
-
-      // Reset opacity from slider
-      this.radarOpacity = parseInt(this.$.radarOpacitySlider.value, 10) / 100;
-
-      let allFrames = [];
-      if (this.overlayType === "radar") {
-        const pastFrames = data.radar.past || [];
-        const nowcastFrames = data.radar.nowcast || [];
-        allFrames = [...pastFrames, ...nowcastFrames].slice(-6);
-      } else {
-        allFrames = (data.satellite.infrared || []).slice(-6);
-      }
-
-      this.clearRadarLayers();
-      this.radarTimestamps = allFrames.map((f) => f.time);
-      this._radarFrameData = allFrames;
-      this.radarLayers = [];
-      this.radarIndex = -1;
-      this.setRadarFrame(0);
-
-      this.$.radarOpacitySlider.oninput = () => {
-        this.radarOpacity = parseInt(this.$.radarOpacitySlider.value, 10) / 100;
-        if (this.radarLayers[this.radarIndex]) {
-          this.radarLayers[this.radarIndex].setOpacity(this.radarOpacity);
-        }
-      };
-
-      this._frameCache = new Map();
-    } catch (error) {
-      console.error("Radar init error:", error);
-      this.showToast("Could not load map overlays.", "error");
-      if (this.radarActive) this.toggleRadar();
-    }
-  }
-
-  _getOrCreateRadarLayer(index) {
-    const layer = this.radarLayers[index];
-    if (layer) return layer;
-    const frame = this._radarFrameData?.[index];
-    if (!frame) return null;
-    const newLayer = L.tileLayer(
-      `https://tilecache.rainviewer.com${frame.path}/256/{z}/{x}/{y}/2/1_1.png`,
-      {
-        opacity: 0.0,
-        zIndex: 500,
-        maxZoom: 18,
-        maxNativeZoom: 7,
-        noWrap: false,
-        updateWhenIdle: true,
-        updateWhenZooming: false,
-        keepBuffer: 1,
-      },
-    );
-    newLayer.on("tileerror", () => {
-      // Quietly swallow 429 / network errors for radar tiles without breaking app
-    });
-    this.radarLayers[index] = newLayer;
-    return newLayer;
-  }
-
-  setRadarFrame(newIndex) {
-    if (!this.radarLayers.length && this._radarFrameData?.length) {
-      this.radarLayers = new Array(this._radarFrameData.length).fill(null);
-    }
-    if (this.radarLayers.length === 0) return;
-
-    // Hide old active layer
-    const oldActiveLayer = this._getLayerAt(this.radarIndex);
-    if (oldActiveLayer && this.radarIndex !== newIndex) {
-      oldActiveLayer.setOpacity(0.0);
-      if (this.map.hasLayer(oldActiveLayer))
-        this.map.removeLayer(oldActiveLayer);
-    }
-
-    this.radarIndex = newIndex;
-    const newActiveLayer = this._getOrCreateRadarLayer(newIndex);
-    if (newActiveLayer) {
-      if (!this.map.hasLayer(newActiveLayer)) newActiveLayer.addTo(this.map);
-      newActiveLayer.setOpacity(this.radarOpacity);
-    }
-
-    // Prune: remove all other layers (free tile requests & memory)
-    this.radarLayers.forEach((layer, idx) => {
-      if (layer && idx !== newIndex) {
-        if (this.map.hasLayer(layer)) this.map.removeLayer(layer);
-      }
-    });
-
-    this.updateRadarTimeLabel();
-  }
-
-  _getLayerAt(index) {
-    if (index < 0) return null;
-    return this.radarLayers[index] ?? null;
-  }
-
-  toggleRadarPlayback() {
-    if (this.radarPlaying) {
-      this.pauseRadarPlayback();
-    } else {
-      this.startRadarPlayback();
-    }
-  }
-
-  startRadarPlayback() {
-    if (this.radarLayers.length === 0) return;
-    if (this.radarTimer) clearInterval(this.radarTimer);
-
-    this.setRadarFrame(this.radarIndex);
-    this.radarPlaying = true;
-    this.$.radarPlayIcon.classList.add("hidden");
-    this.$.radarPauseIcon.classList.remove("hidden");
-
-    this.radarTimer = setInterval(() => {
-      const nextIdx = (this.radarIndex + 1) % this.radarLayers.length;
-      this.setRadarFrame(nextIdx);
-    }, 1000);
-  }
-
-  pauseRadarPlayback() {
-    this.radarPlaying = false;
-    this.$.radarPlayIcon.classList.remove("hidden");
-    this.$.radarPauseIcon.classList.add("hidden");
-    clearInterval(this.radarTimer);
-  }
-
-  stopRadarPlayback() {
-    this.pauseRadarPlayback();
-    this.setRadarFrame(this.radarLayers.length - 1);
-  }
-
-  clearRadarLayers() {
-    // Clear radar timer to prevent memory leaks
-    if (this.radarTimer) {
-      clearInterval(this.radarTimer);
-      this.radarTimer = null;
-    }
-
-    // Remove all radar layers from map
-    this.radarLayers.forEach((layer) => {
-      if (layer && this.map.hasLayer(layer)) {
-        this.map.removeLayer(layer);
-      }
-    });
-    this.radarLayers = [];
-    this.radarTimestamps = [];
-  }
-
-  updateRadarTimeLabel() {
-    if (this.radarTimestamps[this.radarIndex]) {
-      const timestamp = this.radarTimestamps[this.radarIndex];
-      const date = new Date(timestamp * 1000);
-      this.$.radarTimeLabel.textContent = date.toLocaleTimeString([], {
-        hour: "2-digit",
-        minute: "2-digit",
-      });
-    } else {
-      this.$.radarTimeLabel.textContent = "--:--";
-    }
-  }
+  // (relocated to features/radar.js -- see features/registry.js)
 
   // ================================================================
   //  SAVED LOCATIONS / BOOKMARKS FAVORITES
   // ================================================================
-
-  async loadBookmarks() {
-    this.bookmarks = (await this._loadBookmarksFromStorage()) || [];
-    this.renderBookmarksList();
-    this.refreshBookmarkPins();
-  }
-
-  async _loadBookmarksFromStorage() {
-    if (!this._fb?.firestore) return [];
-    try {
-      const snapshot = await this._fb.firestore
-        .collection(`users/${this.user?.uid}/bookmarks`)
-        .get();
-      return snapshot.docs.map((doc) => doc.data());
-    } catch (e) {
-      console.error("Failed to load bookmarks:", e);
-      return [];
-    }
-  }
-
-  saveBookmarks() {
-    this.renderBookmarksList();
-    this.updateStarUI();
-    this.refreshBookmarkPins();
-    this.saveUserDataToCloud();
-  }
-
-  toggleFavoriteCurrentLocation() {
-    if (this.selectedLat == null || this.selectedLng == null) return;
-
-    if (!this.user) {
-      this.toggleAccountDialog(true);
-      this.showToast("Sign in with Google to save bookmarks", "info");
-      return;
-    }
-
-    const isFav = this.isCurrentLocationFavorited();
-    if (isFav) {
-      this.bookmarks = this.bookmarks.filter(
-        (b) =>
-          Math.abs(b.lat - this.selectedLat) > 0.0001 ||
-          Math.abs(b.lng - this.selectedLng) > 0.0001,
-      );
-      this.showToast("Removed location from bookmarks.", "success");
-    } else {
-      this.bookmarks.push({
-        name: this.selectedName,
-        lat: this.selectedLat,
-        lng: this.selectedLng,
-      });
-      this.showToast("Saved location to bookmarks.", "success");
-    }
-    this.saveBookmarks();
-  }
-
-  isCurrentLocationFavorited() {
-    if (this.selectedLat == null || this.selectedLng == null) return false;
-    return this.bookmarks.some(
-      (b) =>
-        Math.abs(b.lat - this.selectedLat) < 0.0001 &&
-        Math.abs(b.lng - this.selectedLng) < 0.0001,
-    );
-  }
-
-  updateStarUI() {
-    const isFav = this.isCurrentLocationFavorited();
-    this.$.starOutlineIcon.classList.toggle("hidden", isFav);
-    this.$.starFilledIcon.classList.toggle("hidden", !isFav);
-  }
-
-  toggleHomeLocation() {
-    if (this.selectedLat == null || this.selectedLng == null) return;
-
-    if (
-      this.defaultLocation &&
-      Math.abs(this.defaultLocation.lat - this.selectedLat) < 0.0001 &&
-      Math.abs(this.defaultLocation.lng - this.selectedLng) < 0.0001
-    ) {
-      this.defaultLocation = null;
-      this.defaultLocationNotify = false;
-      this.setupHourlyNotifications();
-      this.showToast("Home location removed.", "success");
-    } else {
-      this.defaultLocation = {
-        lat: this.selectedLat,
-        lng: this.selectedLng,
-        name:
-          this.selectedName ||
-          `${this.selectedLat.toFixed(4)}, ${this.selectedLng.toFixed(4)}`,
-      };
-      this.showToast(`Home set to ${this.defaultLocation.name}`, "success");
-    }
-
-    this.updateHomeButton();
-    this.updateHomeMarker();
-    this.updateSettingsUIFromLocal();
-    this.saveUserDataToCloud();
-  }
-
-  updateHomeButton() {
-    const isHome =
-      this.defaultLocation &&
-      this.selectedLat &&
-      Math.abs(this.defaultLocation.lat - this.selectedLat) < 0.0001 &&
-      Math.abs(this.defaultLocation.lng - this.selectedLng) < 0.0001;
-    if (this.$.homeOutlineIcon) {
-      this.$.homeOutlineIcon.classList.toggle("text-amber-500", isHome);
-      this.$.homeOutlineIcon.classList.toggle("text-slate-400", !isHome);
-    }
-    if (this.$.homeToggleBtn) {
-      this.$.homeToggleBtn.title = isHome
-        ? "Remove home location"
-        : "Set as home location";
-    }
-    if (this.$.panelLocationName && isHome) {
-      const badge = this.$.panelLocationName.querySelector(".home-badge");
-      if (!badge) {
-        const el = document.createElement("span");
-        el.className =
-          "home-badge text-[10px] font-bold text-amber-600 dark:text-amber-400 ml-1";
-        el.textContent = "🏠 Home";
-        this.$.panelLocationName.appendChild(el);
-      }
-    } else if (this.$.panelLocationName) {
-      const badge = this.$.panelLocationName.querySelector(".home-badge");
-      if (badge) badge.remove();
-    }
-  }
-
-  updateHomeMarker() {
-    if (this._homeMarker) {
-      this._homeMarker.remove();
-      this._homeMarker = null;
-    }
-    if (this.defaultLocation) {
-      const icon = L.divIcon({
-        className: "home-marker",
-        html: `
-          <span class="home-marker-shell" aria-hidden="true">
-            <span class="home-marker-ring"></span>
-            <span class="home-marker-pin">
-              <span class="home-marker-core"></span>
-            </span>
-          </span>
-        `,
-        iconSize: [40, 56],
-        iconAnchor: [20, 50],
-      });
-      // Home is an anchor, not a scratch pin: once it is set it must stay put
-      // until it is explicitly removed. It used to be draggable, so a stray
-      // drag on the map silently relocated the user's home (and pushed the new
-      // coordinates to the cloud) with only a toast to say so.
-      this._homeMarker = L.marker(
-        [this.defaultLocation.lat, this.defaultLocation.lng],
-        { icon, zIndexOffset: 1000, draggable: false, keyboard: false },
-      ).addTo(this.map);
-      this._homeMarker.bindTooltip(this.defaultLocation.name, {
-        direction: "top",
-        offset: L.point(0, -24),
-        className: "home-tooltip",
-      });
-      this._homeMarker.on("click", (e) => {
-        if (this._isDragGesture(e)) return;
-        this.selectLocation(
-          this.defaultLocation.lat,
-          this.defaultLocation.lng,
-          this.defaultLocation.name,
-        );
-      });
-    }
-  }
-
-  renderBookmarksList() {
-    // Clear existing content to avoid duplicate event listeners
-    this.$.bookmarksList.innerHTML = "";
-
-    if (this.bookmarks.length === 0) {
-      this.$.bookmarksList.innerHTML = `
-                <div class="px-3 py-3 text-xs text-slate-400 text-center">No saved locations</div>
-            `;
-      return;
-    }
-
-    // Create DOM elements without innerHTML to avoid XSS
-    this.bookmarks.forEach((b, idx) => {
-      const container = document.createElement("div");
-      container.className =
-        "flex items-center justify-between px-3 py-1.5 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg group";
-
-      // Item button
-      const btn = document.createElement("button");
-      btn.className =
-        "bookmark-item-btn text-left truncate flex-1 font-semibold text-slate-700 dark:text-slate-200";
-      btn.dataset.index = idx;
-      btn.textContent = b.name;
-      btn.addEventListener("click", () => {
-        this.$.bookmarksDropdown.classList.add("hidden");
-        this.selectLocation(b.lat, b.lng, b.name);
-      });
-      container.appendChild(btn);
-
-      // Action buttons container
-      const actions = document.createElement("div");
-      actions.className = "flex items-center gap-1.5";
-
-      // Compare button
-      const compareBtn = document.createElement("button");
-      compareBtn.className =
-        "bookmark-compare-btn px-1.5 py-0.5 rounded text-[10px] font-bold text-primary dark:text-primary-light hover:bg-primary/10 transition-colors";
-      compareBtn.dataset.index = idx;
-      compareBtn.title = "Compare weather with active location";
-      compareBtn.textContent = "Compare";
-      compareBtn.addEventListener("click", (e) => {
-        e.stopPropagation();
-        this.$.bookmarksDropdown.classList.add("hidden");
-        this.compareWeatherWithActive(this.bookmarks[idx]);
-      });
-      actions.appendChild(compareBtn);
-
-      // Remove button
-      const removeBtn = document.createElement("button");
-      removeBtn.className =
-        "bookmark-remove-btn p-1 text-slate-400 hover:text-red-500 opacity-0 group-hover:opacity-100 focus:opacity-100 transition-opacity";
-      removeBtn.dataset.index = idx;
-      removeBtn.title = "Delete bookmark";
-
-      const icon = document.createElement("svg");
-      icon.className = "w-4 h-4";
-      icon.setAttribute("fill", "none");
-      icon.setAttribute("viewBox", "0 0 24 24");
-      icon.setAttribute("stroke", "currentColor");
-      icon.setAttribute("stroke-width", "2");
-      icon.innerHTML =
-        '<path stroke-linecap="round" stroke-linejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />';
-
-      removeBtn.appendChild(icon);
-      removeBtn.addEventListener("click", (e) => {
-        e.stopPropagation();
-        this.bookmarks.splice(idx, 1);
-        this.saveBookmarks();
-      });
-      actions.appendChild(removeBtn);
-      container.appendChild(actions);
-
-      this.$.bookmarksList.appendChild(container);
-    });
-  }
+  // (relocated to features/bookmarks.js -- see features/registry.js)
 
   // ================================================================
   //  COMPARE CITIES VIEW
   // ================================================================
-
-  async compareWeatherWithActive(favLocation) {
-    if (!this.weatherData || !this.selectedLat || !this.selectedLng) {
-      this.showToast(
-        "Please select a main location on the map first.",
-        "error",
-      );
-      return;
-    }
-
-    const latDiff = Math.abs(this.selectedLat - favLocation.lat);
-    const lngDiff = Math.abs(this.selectedLng - favLocation.lng);
-    if (latDiff < 0.01 && lngDiff < 0.01) {
-      this.showToast(
-        "You cannot compare a location with itself. Select a different location on the map first.",
-        "warning",
-      );
-      return;
-    }
-
-    this.showToast(`Comparing with ${favLocation.name}...`, "info");
-
-    try {
-      // Fetch details of target comparison location
-      const [forecastB, airQualityB] = await Promise.all([
-        WeatherService.fetchForecast(favLocation.lat, favLocation.lng),
-        WeatherService.fetchAirQuality(favLocation.lat, favLocation.lng),
-      ]);
-
-      const idxA = parseInt(this.$.timelineSlider.value, 10);
-      const idxB = WeatherService.getCurrentHourIndex(
-      forecastB,
-      forecastB?.utc_offset_seconds || 0,
-    );
-
-      const wA = WeatherService.getHourlyAtIndex(this.weatherData, idxA);
-      const wB = WeatherService.getHourlyAtIndex(forecastB, idxB);
-
-      // Extract AQIs
-      const aqiA = this.airQualityData?.hourly?.us_aqi[idxA] ?? "--";
-      const aqiB = airQualityB?.hourly?.us_aqi[idxB] ?? "--";
-
-      // Populate text comparisons
-      this.$.compareHeading.textContent = `${this.selectedName.split(",")[0]} vs ${favLocation.name.split(",")[0]}`;
-      this.$.compareTempA.textContent = WeatherService.formatTemp(
-        wA.temperature,
-      );
-      this.$.compareTempB.textContent = WeatherService.formatTemp(
-        wB.temperature,
-      );
-
-      this.$.compareWindA.textContent = WeatherService.formatWind(wA.windSpeed);
-      this.$.compareWindB.textContent = WeatherService.formatWind(wB.windSpeed);
-
-      this.$.compareAQIA.textContent = aqiA;
-      this.$.compareAQIB.textContent = aqiB;
-
-      this.$.compareHumidityA.textContent = `${wA.humidity ?? "--"}%`;
-      this.$.compareHumidityB.textContent = `${wB.humidity ?? "--"}%`;
-
-      this.$.compareDescA.textContent = `${wA.icon} ${wA.description}`;
-      this.$.compareDescB.textContent = `${wB.icon} ${wB.description}`;
-
-      // Open compare panel
-      this.showComparePanel();
-    } catch (e) {
-      console.error("Compare fetch failed:", e);
-      this.showToast("Could not load comparison data.", "error");
-    }
-  }
-
-  showComparePanel() {
-    this.$.comparePanel.classList.remove("hidden");
-    setTimeout(() => {
-      this.$.comparePanel.classList.add("open");
-      if (
-        window.innerWidth < 640 &&
-        this.$.radarExpandedPanel &&
-        !this.$.radarExpandedPanel.classList.contains("hidden")
-      ) {
-        this.$.radarExpandedPanel.classList.add("hidden");
-        this.$.radarCollapsedBtn.classList.remove("hidden");
-      }
-    }, 50);
-  }
-
-  hideComparePanel() {
-    this.$.comparePanel.classList.remove("open");
-    setTimeout(() => this.$.comparePanel.classList.add("hidden"), 400);
-  }
+  // (relocated to features/compareCities.js -- see features/registry.js)
 
   // ================================================================
   //  UNIT TOGGLE (°C/°F, km/h/mph)
   // ================================================================
-
-  toggleUnits() {
-    const current = WeatherService.getUnits();
-    const next = current === "metric" ? "imperial" : "metric";
-    WeatherService.setUnits(next);
-    this.syncUnitLabel();
-
-    // Re-render all weather data
-    if (this.weatherData) {
-      this.updateWeatherDisplay(parseInt(this.$.timelineSlider.value, 10));
-      this.createWeatherMarker(this.selectedLat, this.selectedLng);
-    }
-
-    this.showToast(
-      `Switched to ${next === "imperial" ? "°F / mph" : "°C / km/h"}`,
-      "success",
-    );
-    this.updateSettingsUIFromLocal();
-    this.saveUserDataToCloud();
-  }
-
-  syncUnitLabel() {
-    const label = document.getElementById("settingsUnitsLabel");
-    const sub = document.getElementById("settingsUnitsSub");
-    if (label) {
-      const units = WeatherService.getUnits();
-      label.textContent = `Units (${units === "imperial" ? "Imperial" : "Metric"})`;
-      if (sub) {
-        sub.textContent = units === "imperial" ? "°F, mph, inch" : "°C, km/h, mm";
-      }
-    }
-  }
-
-  async copyToClipboard(text) {
-    if (navigator.clipboard && window.isSecureContext) {
-      try {
-        await navigator.clipboard.writeText(text);
-        return true;
-      } catch (err) {
-        console.warn("navigator.clipboard.writeText failed, trying execCommand fallback:", err);
-      }
-    }
-    try {
-      const textarea = document.createElement("textarea");
-      textarea.value = text;
-      textarea.style.position = "fixed";
-      textarea.style.left = "-999999px";
-      textarea.style.top = "-999999px";
-      document.body.appendChild(textarea);
-      textarea.focus();
-      textarea.select();
-      const successful = document.execCommand("copy");
-      document.body.removeChild(textarea);
-      return successful;
-    } catch (err) {
-      console.error("Clipboard copy fallback failed:", err);
-      return false;
-    }
-  }
-
-  toggleShareModal(show) {
-    if (!this.$.shareModal) return;
-    if (show) {
-      this.$.shareModal.classList.remove("hidden");
-      this.$.shareModal.classList.add("flex");
-    } else {
-      this.$.shareModal.classList.add("hidden");
-      this.$.shareModal.classList.remove("flex");
-    }
-  }
+  // (relocated to features/units.js -- see features/registry.js)
 
   // ================================================================
   //  SHARE WEATHER
   // ================================================================
-
-  async shareWeather(type = 'current', target = 'native') {
-    if (!this.weatherData) {
-      this.showToast("No weather data to share.", "error");
-      return;
-    }
-
-    // The slider value is a *view* index; in 24h mode it must be shifted by the
-    // timeline offset to become a data index, exactly as updateTimeline does.
-    const timeOffset = this.timeline24hMode ? this._getTimelineOffset() : 0;
-    const currentIdx = parseInt(this.$.timelineSlider.value, 10) + timeOffset;
-    const weather = WeatherService.getHourlyAtIndex(this.weatherData, currentIdx);
-    if (!weather) return;
-
-    const timeStr = WeatherService.formatDateTime(
-      weather.time,
-      this.weatherData?.timezone,
-      this.weatherData?.utc_offset_seconds,
-    );
-    const aqiVal = this.airQualityData?.hourly?.us_aqi[currentIdx];
-    const aqiText = aqiVal != null ? ` | AQI: ${Math.round(aqiVal)}` : "";
-    const gust = weather.windGusts != null ? ` | Gusts: ${WeatherService.formatWind(weather.windGusts)}` : "";
-    const pressure = weather.pressure != null ? ` | Pressure: ${WeatherService.formatPressure(weather.pressure)}` : "";
-    const uv = weather.uvIndex != null ? ` | UV: ${weather.uvIndex.toFixed(1)}` : "";
-    const vis = weather.visibility != null ? ` | Visibility: ${WeatherService.formatVisibility(weather.visibility)}` : "";
-    const clouds = weather.cloudCover != null ? ` | Clouds: ${weather.cloudCover}%` : "";
-    const precip = weather.precipProb != null && weather.precipProb > 0 ? ` | Precip: ${weather.precipProb}%` : "";
-
-    const coordsStr = (this.selectedLat != null && this.selectedLng != null)
-      ? ` (${this.selectedLat.toFixed(4)}, ${this.selectedLng.toFixed(4)})`
-      : "";
-
-    // ── 1. Current Overview ──────────────────────────────────────────
-    let text = `🌤️ Weather Report for ${this.selectedName}${coordsStr}
-As of ${timeStr}
-
-Current: ${WeatherService.formatTemp(weather.temperature)} ${weather.icon} ${weather.description}
-Feels like: ${WeatherService.formatTemp(weather.feelsLike)} | Humidity: ${weather.humidity}%
-Wind: ${WeatherService.formatWind(weather.windSpeed)} ${WeatherService.getWindDirection(weather.windDirection)}${gust}${pressure}${uv}${vis}${clouds}${precip}${aqiText}`;
-
-    // ── 2. Hourly / 24-Hour Forecast Highlights ──────────────────────
-    if ((type === 'full' || type === 'hourly') && this.weatherData?.hourly?.time) {
-      const h = this.weatherData.hourly;
-      const totalHours = h.time.length;
-      const startIdx = Math.max(0, currentIdx);
-      const endIdx = Math.min(totalHours, startIdx + 24);
-
-      let temps24h = [];
-      let hourlyRows = [];
-
-      for (let i = startIdx; i < endIdx; i += 3) {
-        const hourWeather = WeatherService.getHourlyAtIndex(this.weatherData, i);
-        if (hourWeather) {
-          const hourLabel = WeatherService.formatHourLabel(h.time[i], this.weatherData?.utc_offset_seconds);
-          hourlyRows.push(`  • ${hourLabel} — ${WeatherService.formatTemp(hourWeather.temperature)} ${hourWeather.icon} ${hourWeather.description}`);
-        }
-      }
-
-      for (let i = startIdx; i < endIdx; i++) {
-        if (h.temperature_2m?.[i] != null) temps24h.push(h.temperature_2m[i]);
-      }
-
-      if (temps24h.length > 0) {
-        const min24 = Math.min(...temps24h);
-        const max24 = Math.max(...temps24h);
-        text += `\n\n📊 24-Hour Overview (High: ${WeatherService.formatTemp(max24)} / Low: ${WeatherService.formatTemp(min24)})\n` + hourlyRows.join("\n");
-      }
-    }
-
-    // ── 3. Weekly 7-Day Forecast ────────────────────────────────────
-    if (type === 'full' || type === 'weekly') {
-      const dailyList = WeatherService.getDailyForecast(this.weatherData);
-      if (dailyList && dailyList.length > 0) {
-        // getDailyForecast returns PAST_DAYS of history before today, so start at
-        // today rather than at index 0 — otherwise the "forecast" leads with
-        // three days that have already happened.
-        const todayStr = new Date().toISOString().split("T")[0];
-        const todayIdx = dailyList.findIndex((d) => d.date === todayStr);
-        const startDay = todayIdx >= 0 ? todayIdx : (WeatherService.PAST_DAYS ?? 0);
-        text += `\n\n📅 7-Day Weekly Forecast:\n`;
-        const days = dailyList.slice(startDay, startDay + 7).map((d) => {
-          const dayName = WeatherService.formatDayLabel(d.date);
-          const maxStr = WeatherService.formatTemp(d.maxTemp);
-          const minStr = WeatherService.formatTemp(d.minTemp);
-          const precipStr = d.precipProb > 0 ? ` (${d.precipProb}% precip)` : "";
-          return `  • ${dayName} — ${minStr} / ${maxStr} ${d.icon} ${d.description}${precipStr}`;
-        });
-        text += days.join("\n");
-      }
-    }
-
-    // ── 4. App Link & Sharing Execution ─────────────────────────────────
-    const shareUrl = (this.selectedLat != null && this.selectedLng != null)
-      ? `${window.location.origin}${window.location.pathname}?lat=${this.selectedLat.toFixed(4)}&lng=${this.selectedLng.toFixed(4)}&name=${encodeURIComponent(this.selectedName)}`
-      : window.location.href;
-    
-    text += `\n\n🔗 Live Map & Forecast: ${shareUrl}`;
-
-    if (target === 'whatsapp') {
-      const waUrl = `https://api.whatsapp.com/send?text=${encodeURIComponent(text)}`;
-      window.open(waUrl, "_blank", "noopener,noreferrer");
-      this.toggleShareModal(false);
-      return;
-    }
-
-    if (target === 'telegram') {
-      const tgUrl = `https://t.me/share/url?url=${encodeURIComponent(shareUrl)}&text=${encodeURIComponent(text)}`;
-      window.open(tgUrl, "_blank", "noopener,noreferrer");
-      this.toggleShareModal(false);
-      return;
-    }
-
-    if (target === 'x') {
-      const xUrl = `https://twitter.com/intent/tweet?text=${encodeURIComponent(text)}`;
-      window.open(xUrl, "_blank", "noopener,noreferrer");
-      this.toggleShareModal(false);
-      return;
-    }
-
-    if (target === 'copy') {
-      const success = await this.copyToClipboard(text);
-      if (success) {
-        this.showToast("Weather report copied to clipboard!", "success");
-      } else {
-        this.showToast("Could not copy weather report.", "error");
-      }
-      this.toggleShareModal(false);
-      return;
-    }
-
-    // Default target === 'native': System Share Sheet
-    this.toggleShareModal(false);
-    if (navigator.share) {
-      try {
-        await navigator.share({ title: `Weather: ${this.selectedName}`, text: text, url: shareUrl });
-        return;
-      } catch (e) {
-        if (e && e.name === "AbortError") return;
-        console.warn("navigator.share failed, opening WhatsApp fallback:", e);
-      }
-    }
-
-    // Fallback if system share not supported (e.g. desktop)
-    const waUrl = `https://api.whatsapp.com/send?text=${encodeURIComponent(text)}`;
-    window.open(waUrl, "_blank", "noopener,noreferrer");
-  }
+  // (relocated to features/share.js -- see features/registry.js)
 
   // ================================================================
   //  HOURLY FORECAST SCROLL STRIP
   // ================================================================
-
-  renderHourlyStrip(currentIdx) {
-    if (!this.weatherData || !this.weatherData.hourly) return;
-
-    const h = this.weatherData.hourly;
-    const nowIdx = WeatherService.getCurrentHourIndex(
-      this.weatherData,
-      this.weatherData?.utc_offset_seconds || 0,
-    );
-    const limit = Math.min(h.time.length, nowIdx + 48);
-
-    const allHours = [];
-    for (let i = nowIdx; i < limit; i++) {
-      allHours.push(i);
-    }
-
-    this.renderHourlyTabContent(allHours, nowIdx);
-  }
-
-  renderHourlyTabContent(hours, nowIdx) {
-    const container = this.$.hourlyTabContent;
-    if (!container) return;
-    const h = this.weatherData.hourly;
-
-    const hourlyHTML = hours
-      .map((i) => {
-        const temp = h.temperature_2m[i];
-        const code = h.weather_code[i];
-        const isDay = h.is_day ? h.is_day[i] : 1;
-        const info = WeatherService.getWeatherInfo(code, isDay);
-        const precipProb = h.precipitation_probability?.[i] || 0;
-        const wind = h.wind_speed_10m?.[i];
-        const humidity = h.relative_humidity_2m?.[i];
-        const isNow = i === nowIdx;
-        const timeStr = WeatherService.formatHourLabel(h.time[i], this.weatherData?.utc_offset_seconds);
-
-        return `<button class="hourly-row w-full flex items-center gap-1.5 sm:gap-2 px-2 sm:px-3 py-1.5 sm:py-2 rounded-xl text-left transition-colors ${isNow ? "bg-primary/10 border border-primary/20" : "hover:bg-slate-100/60 dark:hover:bg-slate-800/40 border border-transparent"}" data-idx="${i}" aria-label="${isNow ? "Now" : timeStr}: ${info.description}">
-<span class="w-7 sm:w-10 text-[9px] sm:text-[10px] font-semibold text-slate-500 dark:text-slate-400 flex-shrink-0">${isNow ? "Now" : timeStr}</span>
-<span class="text-base sm:text-lg flex-shrink-0 w-5 sm:w-7 text-center">${info.icon}</span>
-<span class="w-7 sm:w-10 text-xs sm:text-sm font-bold text-slate-800 dark:text-slate-100 flex-shrink-0">${WeatherService.formatTemp(temp)}</span>
-${precipProb > 0 ? `<span class="text-[9px] sm:text-[10px] text-blue-500 font-semibold w-7 sm:w-10 flex-shrink-0">${precipProb}%</span>` : '<span class="w-7 sm:w-10 flex-shrink-0"></span>'}
-<span class="text-[9px] sm:text-[10px] text-slate-400 flex-1 min-w-0 truncate">${wind != null ? `💨 ${WeatherService.formatWind(wind)}` : ""}</span>
-<span class="text-[9px] sm:text-[10px] text-slate-400 w-7 sm:w-10 flex-shrink-0 text-right">${humidity != null ? `💧${humidity}%` : ""}</span>
-</button>`;
-      })
-      .join("");
-
-    container.querySelectorAll(".hourly-row").forEach((btn) => {
-      btn.addEventListener("click", () => {
-        const idx = parseInt(btn.dataset.idx, 10);
-        this.$.timelineSlider.value = idx;
-        this.handleTimelineChange(idx);
-      });
-    });
-  }
+  // (relocated to features/hourlyStrip.js -- see features/registry.js)
 
   // ================================================================
   //  BEST OUTDOOR WINDOW
   // ================================================================
-
-  renderBestOutdoorWindow(startIdx) {
-    const bestWindow = WeatherService.findBestOutdoorWindow(
-      this.weatherData,
-      startIdx,
-    );
-
-    if (!bestWindow) {
-      this.$.bestWindowCard.classList.add("hidden");
-      return;
-    }
-
-    const startTime = WeatherService.formatTimeOnly(bestWindow.startTime);
-    const endTime = WeatherService.formatTimeOnly(bestWindow.endTime);
-
-    this.$.bestWindowText.textContent = `${startTime} – ${endTime} (${bestWindow.hours}h, avg ${WeatherService.formatTemp(bestWindow.avgTemp)}, no rain)`;
-    this.$.bestWindowCard.classList.remove("hidden");
-  }
+  // (relocated to features/insights.js -- see features/registry.js)
 
   // ================================================================
   //  TEMPORAL COMPRESSION GRID
   // ================================================================
-
-  renderTemporalGrid(matrices) {
-    if (!matrices || !this.$.dailyForecast) return;
-    const todayStr = new Date().toLocaleDateString("en-CA");
-    const future = matrices.filter((m) => m.date >= todayStr).slice(0, 7);
-
-    if (future.length === 0) return;
-
-    const gridRows = future
-      .map((day) => {
-        const isToday = day.date === todayStr;
-        const dayLabel = isToday
-          ? "Today"
-          : WeatherService.formatDayLabel(day.date);
-        const cols = day.blocks
-          .map(
-            (b) =>
-              `<div class="temporal-block" style="background:${this._blockColor(b.code, b.hour)}" title="${b.hour}:00 - ${b.hour + 3}:00">${b.icon}</div>`,
-          )
-          .join("");
-        return `
-        <div class="flex flex-col">
-          <div class="temporal-day-label">${dayLabel}</div>
-          <div class="temporal-grid">${cols}</div>
-          <div class="text-[8px] text-slate-400 text-center mt-0.5">${WeatherService.formatTemp(day.minTemp)}-${WeatherService.formatTemp(day.maxTemp)}</div>
-        </div>
-      `;
-      })
-      .join("");
-
-    const dailyHTML = `
-       <div class="flex gap-2 overflow-x-auto pb-2 custom-scrollbar">${gridRows}</div>
-     `;
-    this.setSafeHTML(this.$.dailyForecast, dailyHTML);
-  }
-
-  _blockColor(code, hour) {
-    const isDay = hour >= 6 && hour < 18;
-    if (code === 0 || code === 1)
-      return isDay ? "rgba(253,224,71,0.15)" : "rgba(148,163,184,0.1)";
-    if (code >= 2 && code <= 3) return "rgba(148,163,184,0.2)";
-    if (code >= 45 && code <= 48) return "rgba(148,163,184,0.15)";
-    if (code >= 51 && code <= 57) return "rgba(96,165,250,0.2)";
-    if (code >= 61 && code <= 67) return "rgba(59,130,246,0.25)";
-    if (code >= 71 && code <= 77) return "rgba(167,243,208,0.2)";
-    if (code >= 80 && code <= 82) return "rgba(59,130,246,0.3)";
-    if (code >= 85 && code <= 86) return "rgba(167,243,208,0.25)";
-    if (code >= 95) return "rgba(168,85,247,0.25)";
-    return isDay ? "rgba(253,224,71,0.08)" : "rgba(148,163,184,0.05)";
-  }
+  // (relocated to features/insights.js -- see features/registry.js)
 
   // ================================================================
   //  COMFORT INDEX DISPLAY
   // ================================================================
-
-  updateComfortDisplay(score, info) {
-    if (score == null || !info) {
-      this.$.comfortIndex.textContent = "--";
-      this.$.comfortLabel.textContent = "";
-      return;
-    }
-    this.$.comfortIndex.textContent = `${score}`;
-    this.$.comfortIndex.className = `text-lg font-extrabold ${info.color}`;
-    this.$.comfortLabel.textContent = `${info.icon} ${info.label}`;
-    this.$.comfortLabel.className = `text-[10px] font-semibold ${info.color}`;
-  }
+  // (relocated to features/insights.js -- see features/registry.js)
 
   // ================================================================
   //  PRESSURE TENDENCY
   // ================================================================
-
-  updatePressureTendency(tendency) {
-    if (!tendency) {
-      this.$.pressureTendency.textContent = "";
-      return;
-    }
-    const emoji =
-      tendency.direction === "falling"
-        ? "📉"
-        : tendency.direction === "rising"
-          ? "📈"
-          : "➡️";
-    this.$.pressureTendency.textContent = `${emoji} ${tendency.label} (${tendency.rate.toFixed(1)} hPa/h) — ${tendency.desc}`;
-    this.$.pressureTendency.className = `text-[10px] font-medium mt-0.5 ${
-      tendency.direction === "falling"
-        ? "text-red-500"
-        : tendency.direction === "rising"
-          ? "text-emerald-500"
-          : "text-slate-400"
-    }`;
-  }
-
-  updateTempDelta(hourIndex) {
-    if (!this.weatherData || hourIndex <= 0) {
-      this.$.panelTempDelta.classList.add("hidden");
-      return;
-    }
-    const prev = WeatherService.getHourlyAtIndex(
-      this.weatherData,
-      hourIndex - 1,
-    );
-    const curr = WeatherService.getHourlyAtIndex(this.weatherData, hourIndex);
-    if (
-      !prev ||
-      !curr ||
-      curr.temperature == null ||
-      prev.temperature == null
-    ) {
-      this.$.panelTempDelta.classList.add("hidden");
-      return;
-    }
-    const diff = curr.temperature - prev.temperature;
-    if (Math.abs(diff) < 0.5) {
-      this.$.panelTempDelta.classList.add("hidden");
-      return;
-    }
-    const arrow = diff > 0 ? "▲" : "▼";
-    const cls = diff > 0 ? "text-red-500" : "text-blue-500";
-    this.$.panelTempDelta.textContent = `${arrow} ${diff > 0 ? "+" : ""}${diff.toFixed(1)}°`;
-    this.$.panelTempDelta.className = `text-xs font-semibold ${cls}`;
-    this.$.panelTempDelta.classList.remove("hidden");
-  }
+  // (relocated to features/insights.js -- see features/registry.js)
 
   // ================================================================
   //  TIMELINE DELTAS (rate of change)
   // ================================================================
-
-  renderTimelineDeltas(deltas) {
-    if (!deltas || !this.$.timelineDelta) {
-      if (this.$.timelineDelta) this.$.timelineDelta.textContent = "";
-      return;
-    }
-    const parts = [];
-    const hasMomentum = this.$.momentumLabel && this.$.momentumLabel.innerHTML.trim() !== "";
-    if (deltas.tempDiff != null && !hasMomentum) {
-      const sign = deltas.tempDiff > 0 ? "+" : "";
-      const cls =
-        deltas.tempDiff > 0
-          ? "text-red-400"
-          : deltas.tempDiff < 0
-            ? "text-blue-400"
-            : "text-slate-400";
-      parts.push(
-        `<span class="${cls}">${sign}${deltas.tempDiff.toFixed(1)}°C/h</span>`,
-      );
-    }
-    if (deltas.windDiff != null && Math.abs(deltas.windDiff) >= 1) {
-      const sign = deltas.windDiff > 0 ? "+" : "";
-      parts.push(
-        `<span class="text-slate-400">${sign}${deltas.windDiff.toFixed(0)} km/h wind</span>`,
-      );
-    }
-    if (deltas.pressureDiff != null && Math.abs(deltas.pressureDiff) >= 0.2) {
-      const sign = deltas.pressureDiff > 0 ? "+" : "";
-      const cls =
-        deltas.pressureDiff > 0.3
-          ? "text-emerald-500"
-          : deltas.pressureDiff < -0.3
-            ? "text-red-500"
-            : "text-slate-400";
-      parts.push(
-        `<span class="${cls}">${sign}${deltas.pressureDiff.toFixed(1)} hPa</span>`,
-      );
-    }
-    this.setSafeHTML(this.$.timelineDelta, parts.join(" · "));
-    this.$.timelineDelta.className = "text-[10px] font-medium hidden md:inline-block text-slate-500 dark:text-slate-400 truncate";
-  }
+  // (relocated to features/insights.js -- see features/registry.js)
 
   // ================================================================
   //  NEXT RAIN BUTTON
   // ================================================================
-
-  updateNextRainButton(currentIdx) {
-    const nextRain = WeatherService.findNextRainHour(
-      this.weatherData,
-      currentIdx,
-    );
-    if (nextRain != null) {
-      this.$.nextRainBtn.classList.remove("hidden");
-      const timeStr = WeatherService.formatTimeOnly(
-        this.weatherData.hourly.time[nextRain]
-      );
-      // Use textContent to avoid innerHTML injection
-      this.$.nextRainBtn.textContent = `🌧️ Next rain ${timeStr}`;
-      // Store the target index for the click handler (#2)
-      this.$.nextRainBtn.dataset.rainIdx = nextRain;
-    } else {
-      this.$.nextRainBtn.classList.add("hidden");
-    }
-  }
-
-  /** Jumps timeline to the next forecasted rain hour (#2). */
-  jumpToNextRain() {
-    const idx = parseInt(this.$.nextRainBtn.dataset.rainIdx, 10);
-    if (!isNaN(idx)) {
-      const timeOffset = this.timeline24hMode ? this._getTimelineOffset() : 0;
-      const sliderVal = idx - timeOffset;
-      this.$.timelineSlider.value = sliderVal;
-      this.handleTimelineChange(sliderVal);
-    }
-  }
+  // (relocated to features/insights.js -- see features/registry.js)
 
   // ================================================================
   //  PREDICTIVE ARRIVAL (weather coming your way)
   // ================================================================
-
-  async updatePredictiveArrival(weather, hourIndex) {
-    if (!weather || !this.weatherData || !this.$.predictiveArrival) return;
-    const windDir = weather.windDirection;
-    if (windDir == null || windDir < 0) {
-      this.$.predictiveArrival.classList.add("hidden");
-      return;
-    }
-    const upwind = WeatherService.getUpwindPoint(
-      this.selectedLat,
-      this.selectedLng,
-      windDir,
-    );
-    if (!upwind) {
-      this.$.predictiveArrival.classList.add("hidden");
-      return;
-    }
-
-    const lastWinder = this._lastPredictiveWindDir;
-    if (lastWinder != null && Math.abs(windDir - lastWinder) < 22.5) {
-      const lastData = this._lastPredictiveUpwindData;
-      if (
-        lastData &&
-        lastData.lat === upwind.lat &&
-        lastData.lng === upwind.lng
-      ) {
-        const nowIdx = WeatherService.getCurrentHourIndex(lastData.data);
-        const upwindWeather = WeatherService.getHourlyAtIndex(
-          lastData.data,
-          nowIdx,
-        );
-        if (upwindWeather) {
-          const travelHours = 2;
-          const predHTML = `<span class="text-[10px] font-bold text-teal-500 uppercase tracking-wider">🌬️ Coming your way</span><span class="text-xs text-slate-600 dark:text-slate-300">${upwindWeather.icon} ${upwindWeather.description}, ${WeatherService.formatTemp(upwindWeather.temperature)} arriving in ~${travelHours}h from the ${WeatherService.getWindDirection(windDir)}</span>`;
-          this.setSafeHTML(this.$.predictiveArrival, predHTML);
-          this.$.predictiveArrival.classList.remove("hidden");
-          return;
-        }
-      }
-    }
-    this._lastPredictiveWindDir = windDir;
-
-    let upwindData = null;
-    try {
-      upwindData = await WeatherService.fetchForecast(upwind.lat, upwind.lng);
-    } catch {
-      this.$.predictiveArrival.classList.add("hidden");
-      return;
-    }
-    this._lastPredictiveUpwindData = {
-      data: upwindData,
-      lat: upwind.lat,
-      lng: upwind.lng,
-    };
-
-    const nowIdx = WeatherService.getCurrentHourIndex(
-      upwindData,
-      upwindData?.utc_offset_seconds || 0,
-    );
-    const upwindWeather = WeatherService.getHourlyAtIndex(upwindData, nowIdx);
-    if (!upwindWeather) {
-      this.$.predictiveArrival.classList.add("hidden");
-      return;
-    }
-
-    const travelHours = 2;
-    const predHTML = `<span class="text-[10px] font-bold text-teal-500 uppercase tracking-wider">🌬️ Coming your way</span><span class="text-xs text-slate-600 dark:text-slate-300">${upwindWeather.icon} ${upwindWeather.description}, ${WeatherService.formatTemp(upwindWeather.temperature)} arriving in ~${travelHours}h from the ${WeatherService.getWindDirection(windDir)}</span>`;
-    this.setSafeHTML(this.$.predictiveArrival, predHTML);
-    this.$.predictiveArrival.classList.remove("hidden");
-  }
+  // (relocated to features/insights.js -- see features/registry.js)
 
   // ================================================================
   //  DATA EXPORT
@@ -4403,162 +3364,7 @@ ${precipProb > 0 ? `<span class="text-[9px] sm:text-[10px] text-blue-500 font-se
   // ================================================================
   //  EXTREME MINIMAL MODE
   // ================================================================
-
-  toggleMinimalMode() {
-    this.minimalMode = !this.minimalMode;
-    document.documentElement.classList.toggle("compact", this.minimalMode);
-    
-    const panel = this.$.weatherPanel;
-    if (this.currentLocation || this.selectedLat != null) {
-      panel.classList.add("open");
-    }
-    panel.classList.remove("minimized");
-    
-    this.updateSettingsUIFromLocal();
-    this.saveUserDataToCloud();
-  }
-
-  rebindPanelEvents() {
-    const ids = [
-      "panelCloseBtn",
-      "panelMinimizeBtn",
-      "homeToggleBtn",
-      "homeOutlineIcon",
-      "favoriteToggleBtn",
-      "starOutlineIcon",
-      "starFilledIcon",
-      "shareWeatherBtn",
-      "panelLocationName",
-      "panelTempDelta",
-      "panelTimeLabel",
-      "panelIcon",
-      "panelTemp",
-      "panelDescription",
-      "panelFeelsLike",
-      "panelHumidity",
-      "panelWind",
-      "windArrow",
-      "panelDewPoint",
-      "panelWindGusts",
-      "panelVisibility",
-      "panelPressure",
-      "pressureTendency",
-      "panelClouds",
-      "panelUV",
-      "panelPrecip",
-      "aqiCard",
-      "panelAQILabel",
-      "panelAQIMetrics",
-      "panelAQIBadge",
-      "advisoryBanner",
-      "advisoryIcon",
-      "advisoryTitle",
-      "advisoryDesc",
-      "comfortIndex",
-      "comfortLabel",
-      "hourlyStrip",
-      "bestWindowCard",
-      "bestWindowText",
-      "dailyForecast",
-      "trendSvg",
-      "chartHours",
-      "chartLine",
-      "chartArea",
-      "chartPoints",
-      "timeMachineTrigger",
-      "timeMachineChevron",
-      "timeMachineDrawer",
-      "timeMachineSvg",
-      "timeMachineLine",
-      "timeMachinePoints",
-      "timeMachineRows",
-      "offlineTimeMachineBadge",
-      "predictiveArrival",
-      "anomalyLabel",
-      "patternLabel",
-      "nextRainBtn",
-      "timelineDelta",
-      "sunArcPassed",
-      "sunArcDot",
-      "sunSunrise",
-      "sunSunset",
-      "sunDayLength",
-      "sunCountdown",
-      "moonLitPath",
-      "moonPhaseLabel",
-      "moonPhasePercent",
-      "moonPhaseDesc",
-      "confidenceToggle",
-      "signalNoiseBtn",
-      "percentileLabel",
-      "trustScore",
-      "momentumLabel",
-      "cumulativeCurve",
-      "paramImportance",
-      "freshnessLabel",
-      "briefingBtn",
-      "briefingContent",
-      "regimeLabel",
-      "spatialGradLabel",
-      "analogLabel",
-      "weatherPanelSkeleton",
-      "weatherPanelContent",
-      "pollenCard",
-      "pollenBirch",
-      "pollenGrass",
-      "pollenMugwort",
-      "pollenAlder",
-      "uvChart",
-      "zoomInBtn",
-      "zoomOutBtn",
-    ];
-
-    // Detach old listeners before rebinding to prevent duplicates
-    if (this._rebindCleanups) {
-      this._rebindCleanups.forEach((fn) => fn());
-    }
-    this._rebindCleanups = [];
-
-    const addSafe = (el, event, handler) => {
-      if (!el) return;
-      el.addEventListener(event, handler);
-      this._rebindCleanups.push(() => el.removeEventListener(event, handler));
-    };
-
-    ids.forEach((id) => {
-      const el = document.getElementById(id);
-      if (el) this.$[id] = el;
-    });
-
-    addSafe(this.$.panelCloseBtn, "click", () => this.hideWeatherPanel());
-    addSafe(this.$.panelMinimizeBtn, "click", () =>
-      this.toggleMinimizeWeatherPanel(),
-    );
-    addSafe(this.$.homeToggleBtn, "click", () => this.toggleHomeLocation());
-    addSafe(this.$.favoriteToggleBtn, "click", () =>
-      this.toggleFavoriteCurrentLocation(),
-    );
-    addSafe(this.$.shareWeatherBtn, "click", () => this.shareWeather());
-    addSafe(this.$.timeMachineTrigger, "click", () =>
-      this.toggleClimateTimeMachine(),
-    );
-    addSafe(this.$.nextRainBtn, "click", () => this.jumpToNextRain());
-    this.$.installBtn?.addEventListener("click", () => this.installPWA());
-    addSafe(this.$.zoomInBtn, "click", () => this.map.zoomIn());
-    addSafe(this.$.zoomOutBtn, "click", () => this.map.zoomOut());
-    addSafe(this.$.signalNoiseBtn, "click", () => this.toggleSignalNoiseView());
-    addSafe(this.$.confidenceToggle, "click", () => {
-      this.showConfidence = !this.showConfidence;
-      this.$.confidenceToggle?.classList.toggle(
-        "toggle-active",
-        this.showConfidence,
-      );
-      if (this.weatherData)
-        this.drawHourlySparkline(parseInt(this.$.timelineSlider.value, 10));
-    });
-    addSafe(this.$.briefingBtn, "click", () => this.generateBriefing());
-    this.initDashboardDrag();
-  }
+  // (relocated to features/minimalMode.js -- see features/registry.js)
 
   // ================================================================
   //  SEARCH KEYBOARD NAVIGATION & HISTORY
@@ -4715,554 +3521,17 @@ ${precipProb > 0 ? `<span class="text-[9px] sm:text-[10px] text-blue-500 font-se
   // ================================================================
   //  BOOKMARK MAP PINS
   // ================================================================
-
-  updateBookmarksMapToggleUI() {
-    const btn = this.$.toggleBookmarksMapBtn;
-    if (!btn) return;
-    if (this.showBookmarksOnMap) {
-      btn.innerHTML = "🚫 Hide on Map";
-    } else {
-      btn.innerHTML = "👁️ Show on Map";
-    }
-  }
-
-  async refreshBookmarkPins() {
-    // Clear existing bookmark markers
-    this.bookmarkMarkers.forEach((m) => m.remove());
-    this.bookmarkMarkers = [];
-
-    if (!this.map || this.bookmarks.length === 0) return;
-    if (!this.showBookmarksOnMap) return;
-
-    // Use cached data if recent (< 5 min)
-    const pinCache = this._getBookmarkPinCache();
-    const now = Date.now();
-    const needsFetch = this.bookmarks.filter((b) => {
-      const cached = pinCache[b.lat + "_" + b.lng];
-      return !cached || now - cached.ts > 300000;
-    });
-
-    if (needsFetch.length > 0) {
-      await Promise.all(
-        needsFetch.map(async (b) => {
-          try {
-            const forecast = await WeatherService.fetchForecast(b.lat, b.lng);
-            const idx = WeatherService.getCurrentHourIndex(
-              forecast,
-              forecast?.utc_offset_seconds || 0,
-            );
-            const w = WeatherService.getHourlyAtIndex(forecast, idx);
-            pinCache[b.lat + "_" + b.lng] = { weather: w, ts: Date.now() };
-          } catch {
-            // Briefly cache failure to avoid aggressive re-tries
-            pinCache[b.lat + "_" + b.lng] = { weather: null, ts: Date.now() };
-          }
-        })
-      );
-      this._saveBookmarkPinCache(pinCache);
-    }
-
-    // Render all bookmarks (mix of fresh + cached)
-    this.bookmarks.forEach((b) => {
-      // Don't render a duplicate bookmark pin on top of the active selected location marker card
-      if (this.selectedLat != null && this.selectedLng != null) {
-        const isSelected =
-          Math.abs(b.lat - this.selectedLat) < 0.0001 &&
-          Math.abs(b.lng - this.selectedLng) < 0.0001;
-        if (isSelected) return;
-      }
-
-      const cached = pinCache[b.lat + "_" + b.lng];
-      if (!cached || !cached.weather) return;
-
-      const icon = L.divIcon({
-        className: "bookmark-pin-icon",
-        html: `
-          <div class="flex items-center gap-1 bg-white/90 dark:bg-slate-800/90 rounded-lg px-2 py-1 shadow-md border border-slate-200/40 dark:border-slate-600/30 cursor-pointer" style="white-space:nowrap;">
-            <span class="text-sm">${cached.weather.icon}</span>
-            <span class="text-[10px] font-bold text-slate-800 dark:text-white">${WeatherService.formatTemp(cached.weather.temperature)}</span>
-          </div>
-        `,
-        iconSize: [70, 28],
-        iconAnchor: [35, 14],
-      });
-
-      const marker = L.marker([b.lat, b.lng], { icon }).addTo(this.map);
-      marker.bindTooltip(b.name, {
-        permanent: false,
-        direction: "top",
-        offset: [0, -18],
-        className: "location-tooltip",
-      });
-      marker.on("click", (e) => {
-        if (this._isDragGesture(e)) return;
-        this.selectLocation(b.lat, b.lng, b.name);
-      });
-      this.bookmarkMarkers.push(marker);
-    });
-  }
-
-  _getBookmarkPinCache() {
-    return this._pinCache || {};
-  }
-
-  _saveBookmarkPinCache(cache) {
-    this._pinCache = cache;
-  }
+  // (relocated to features/bookmarks.js -- see features/registry.js)
 
   // ================================================================
   //  MAP CANVAS WEATHER EFFECTS (Rain, Snow, Windy, Storm animations)
   // ================================================================
-
-  initWeatherCanvas() {
-    this.canvas = document.getElementById("weatherCanvas");
-    if (!this.canvas) return;
-    this.ctx = this.canvas.getContext("2d");
-
-    // Resize canvas to cover map exactly
-    this.resizeWeatherCanvas();
-
-    // Connect resize triggers to Leaflet zoom/move bounds
-    this.map.on("zoomstart movestart", () => {
-      this.canvas.style.opacity = "0"; // Hide effects during transition
-    });
-    this.map.on("zoomend moveend", () => {
-      this.resizeWeatherCanvas();
-      this.canvas.style.opacity = "1";
-    });
-
-    // Start the animation loop
-    this.runWeatherCanvasLoop();
-  }
-
-  resizeWeatherCanvas() {
-    if (!this.canvas) return;
-    const rect = this.$.map.getBoundingClientRect();
-    this.canvas.width = rect.width;
-    this.canvas.height = rect.height;
-  }
-
-  updateWeatherCanvasOverlayEffect(code, windSpeed, windDirection) {
-    this.currentWindSpeed = windSpeed || 0;
-    this.currentWindDirection = windDirection || 0;
-
-    // Don't override the manual wind flow overlay
-    if (this.overlayType === "wind" && this.radarActive) {
-      this.initWindParticles();
-      return;
-    }
-
-    let effect = "none";
-
-    if (WeatherService.isRainCode(code)) {
-      effect = "rain";
-    } else if (WeatherService.isStormCode(code)) {
-      effect = "storm";
-    } else if (WeatherService.isSnowCode(code)) {
-      effect = "snow";
-    } else if (windSpeed > 25) {
-      effect = "wind";
-    }
-
-    if (this.activeEffectType === effect) return;
-    const wasIdle = this.activeEffectType === "none";
-    this.activeEffectType = effect;
-    this.particles = []; // Clear current particle arrays
-
-    // Restart animation loop if it was paused (perf #7)
-    if (wasIdle && effect !== "none" && !this.animationFrameId) {
-      this.runWeatherCanvasLoop();
-    }
-
-    // Initialize particle arrays
-    const w = this.canvas.width;
-    const h = this.canvas.height;
-
-    if (effect === "rain" || effect === "storm") {
-      const count = effect === "storm" ? 120 : 70;
-      for (let i = 0; i < count; i++) {
-        this.particles.push({
-          x: Math.random() * w,
-          y: Math.random() * h - h,
-          vyBase: 6 + Math.random() * 8,
-          len: 12 + Math.random() * 16,
-          opacity: 0.15 + Math.random() * 0.35,
-        });
-      }
-    } else if (effect === "snow") {
-      const count = 45;
-      for (let i = 0; i < count; i++) {
-        this.particles.push({
-          x: Math.random() * w,
-          y: Math.random() * h,
-          r: 1.5 + Math.random() * 3,
-          vyBase: 0.6 + Math.random() * 1.2,
-          opacity: 0.2 + Math.random() * 0.5,
-          swingSpeed: 0.02 + Math.random() * 0.03,
-          swingRange: 1 + Math.random() * 2,
-          swingOffset: Math.random() * Math.PI,
-        });
-      }
-    } else if (effect === "wind") {
-      const count = 12;
-      for (let i = 0; i < count; i++) {
-        this.particles.push({
-          x: Math.random() * w - 100,
-          y: Math.random() * h,
-          vBase: 3 + Math.random() * 4,
-          len: 80 + Math.random() * 140,
-          opacity: 0.08 + Math.random() * 0.15,
-          curveOffset: Math.random() * Math.PI,
-        });
-      }
-    }
-  }
-
-  runWeatherCanvasLoop() {
-    if (this.animationFrameId) return;
-    const TWO_PI = Math.PI * 2;
-    const draw = (now) => {
-      if (this.activeEffectType === "none" && this.lightningFlash === 0) {
-        this.animationFrameId = null;
-        return;
-      }
-
-      const ctx = this.ctx;
-      const w = this.canvas.width;
-      const h = this.canvas.height;
-      ctx.clearRect(0, 0, w, h);
-
-      // Lightning flash (rare, fast path)
-      if (this.activeEffectType === "storm") {
-        if (Math.random() < 0.004) this.lightningFlash = 0.8;
-        if (this.lightningFlash > 0.01) {
-          ctx.fillStyle = `rgba(255,255,255,${this.lightningFlash})`;
-          ctx.fillRect(0, 0, w, h);
-          this.lightningFlash *= 0.88;
-        }
-      }
-
-      // Wind vectors (shared for all effects)
-      const theta = (((this.currentWindDirection || 0) - 90) * Math.PI) / 180;
-      const windIntensity = (this.currentWindSpeed || 0) / 10;
-      const cosT = Math.cos(theta);
-      const sinT = Math.sin(theta);
-      const windDx = cosT * windIntensity;
-      const windDy = sinT * windIntensity;
-
-      const particles = this.particles;
-      const len = particles.length;
-
-      if (
-        this.activeEffectType === "rain" ||
-        this.activeEffectType === "storm"
-      ) {
-        ctx.strokeStyle = this.isDark
-          ? "rgba(129,140,248,0.45)"
-          : "rgba(59,130,246,0.35)";
-        ctx.lineWidth = 1.2;
-        ctx.beginPath();
-        for (let i = 0; i < len; i++) {
-          const p = particles[i];
-          const vx = windDx * 1.5 - 0.5;
-          const vy = p.vyBase + (windDy > 0 ? windDy * 0.2 : 0);
-          ctx.moveTo(p.x, p.y);
-          ctx.lineTo(p.x + vx, p.y + p.len);
-          p.x += vx;
-          p.y += vy;
-          if (p.y > h) {
-            p.y = -p.len;
-            p.x = Math.random() * w;
-          }
-          if (p.x < -20) p.x = w + 20;
-          else if (p.x > w + 20) p.x = -20;
-        }
-        ctx.stroke();
-      } else if (this.activeEffectType === "snow") {
-        ctx.fillStyle = this.isDark
-          ? "rgba(255,255,255,0.85)"
-          : "rgba(156,163,175,0.7)";
-        const t = now * 0.001;
-        ctx.beginPath();
-        for (let i = 0; i < len; i++) {
-          const p = particles[i];
-          const vx =
-            windDx * 0.6 + Math.sin(t * p.swingSpeed + p.swingOffset) * 0.2;
-          const vy = p.vyBase + (windDy > 0 ? windDy * 0.05 : 0);
-          ctx.moveTo(p.x, p.y);
-          ctx.arc(p.x, p.y, p.r, 0, TWO_PI);
-          p.y += vy;
-          p.x += vx;
-          if (p.y > h) {
-            p.y = -p.r * 2;
-            p.x = Math.random() * w;
-          }
-          if (p.x < -20) p.x = w + 20;
-          else if (p.x > w + 20) p.x = -20;
-        }
-        ctx.fill();
-      } else if (this.activeEffectType === "wind") {
-        ctx.strokeStyle = this.isDark
-          ? "rgba(255,255,255,0.2)"
-          : "rgba(148,163,184,0.35)";
-        ctx.lineWidth = 1.5;
-        ctx.beginPath();
-        for (let i = 0; i < len; i++) {
-          const p = particles[i];
-          const startX = p.x;
-          const startY = p.y;
-          const vx = cosT * p.vBase;
-          const vy = sinT * p.vBase;
-          ctx.moveTo(startX, startY);
-          ctx.lineTo(
-            startX - cosT * p.len,
-            startY -
-              sinT * p.len +
-              Math.sin(startX * 0.008 + p.curveOffset) * 10,
-          );
-          p.x += vx;
-          p.y += vy;
-          if (p.x > w + 200 || p.x < -300 || p.y > h + 200 || p.y < -200) {
-            p.x = Math.random() * w - 50;
-            p.y = Math.random() * h;
-          }
-        }
-        ctx.stroke();
-      }
-
-      this.animationFrameId = requestAnimationFrame(draw);
-    };
-
-    this.animationFrameId = requestAnimationFrame(draw);
-  }
+  // (relocated to features/canvasEffects.js -- see features/registry.js)
 
   // ================================================================
   //  IMMERSIVE AUDIO WEATHER SOUNDSCAPES (Web Audio Synthesizer)
   // ================================================================
-
-  toggleAmbientSoundscape(forceState) {
-    if (forceState !== undefined) {
-      this.audioActive = forceState;
-    } else {
-      this.audioActive = !this.audioActive;
-    }
-
-    if (this.$.settingsSoundToggle) {
-      this.$.settingsSoundToggle.checked = this.audioActive;
-    }
-
-    if (this.audioActive) {
-      if (!this.audioContext) {
-        this.audioContext = new (
-          window.AudioContext || window.webkitAudioContext
-        )();
-      }
-      if (this.audioContext.state === "suspended") {
-        this.audioContext.resume();
-      }
-      this.showToast("Weather ambient soundscapes active.", "success");
-
-      if (this.weatherData) {
-        const weather = WeatherService.getHourlyAtIndex(
-          this.weatherData,
-          parseInt(this.$.timelineSlider.value, 10),
-        );
-        if (weather) {
-          this.updateAmbientSoundscapeSynthesizer(
-            weather.weatherCode,
-            weather.windSpeed,
-          );
-        }
-      }
-    } else {
-      this.stopAllSounds();
-    }
-  }
-
-  updateAmbientSoundscapeSynthesizer(code, windSpeed) {
-    if (!this.audioActive || !this.audioContext) return;
-
-    let soundType = "calm";
-
-    if ((code >= 51 && code <= 67) || (code >= 80 && code <= 82)) {
-      soundType = "rain";
-    } else if (code >= 95 && code <= 99) {
-      soundType = "storm";
-    } else if (windSpeed > 25) {
-      soundType = "windy";
-    }
-
-    if (this.activeSoundType === soundType) return;
-    this.activeSoundType = soundType;
-
-    this.stopAllSounds();
-
-    const ctx = this.audioContext;
-    const masterGain = ctx.createGain();
-    masterGain.gain.setValueAtTime(0.001, ctx.currentTime);
-    masterGain.gain.linearRampToValueAtTime(
-      this.volumeLevel * 0.24,
-      ctx.currentTime + 1.5,
-    );
-    masterGain.connect(ctx.destination);
-    this.audioNodes.master = masterGain;
-
-    // Shared noise buffer — allocate once and reuse
-    if (!this._noiseBuffer) {
-      const bufSize = 2 * ctx.sampleRate;
-      this._noiseBuffer = ctx.createBuffer(1, bufSize, ctx.sampleRate);
-      const data = this._noiseBuffer.getChannelData(0);
-      for (let i = 0; i < bufSize; i++) {
-        data[i] = Math.random() * 2 - 1;
-      }
-    }
-
-    if (soundType === "rain") {
-      const whiteNoise = ctx.createBufferSource();
-      whiteNoise.buffer = this._noiseBuffer;
-      whiteNoise.loop = true;
-
-      const filter = ctx.createBiquadFilter();
-      filter.type = "bandpass";
-      filter.frequency.value = 1000;
-      filter.Q.value = 1;
-
-      whiteNoise.connect(filter);
-      filter.connect(masterGain);
-      whiteNoise.start();
-
-      this.audioNodes.whiteNoise = whiteNoise;
-      this.audioNodes.filter = filter;
-    } else if (soundType === "storm") {
-      const whiteNoise = ctx.createBufferSource();
-      whiteNoise.buffer = this._noiseBuffer;
-      whiteNoise.loop = true;
-
-      const filter = ctx.createBiquadFilter();
-      filter.type = "bandpass";
-      filter.frequency.value = 800;
-
-      whiteNoise.connect(filter);
-      filter.connect(masterGain);
-      whiteNoise.start();
-
-      this.audioNodes.whiteNoise = whiteNoise;
-      this.audioNodes.filter = filter;
-
-      this.thunderInterval = setInterval(() => {
-        this.triggerSynthesizedThunder(ctx, masterGain);
-      }, 9000);
-
-      this.triggerSynthesizedThunder(ctx, masterGain);
-    } else if (soundType === "windy") {
-      const whiteNoise = ctx.createBufferSource();
-      whiteNoise.buffer = this._noiseBuffer;
-      whiteNoise.loop = true;
-
-      const filter = ctx.createBiquadFilter();
-      filter.type = "lowpass";
-      filter.frequency.value = 350;
-      filter.Q.value = 3.0;
-
-      const lfo = ctx.createOscillator();
-      lfo.frequency.value = 0.12;
-
-      const lfoGain = ctx.createGain();
-      lfoGain.gain.value = 180;
-
-      lfo.connect(lfoGain);
-      lfoGain.connect(filter.frequency);
-
-      whiteNoise.connect(filter);
-      filter.connect(masterGain);
-
-      lfo.start();
-      whiteNoise.start();
-
-      this.audioNodes.whiteNoise = whiteNoise;
-      this.audioNodes.lfo = lfo;
-      this.audioNodes.filter = filter;
-    } else {
-      this.birdsInterval = setInterval(() => {
-        this.triggerBirdChirp(ctx, masterGain);
-      }, 6000);
-
-      this.triggerBirdChirp(ctx, masterGain);
-    }
-  }
-
-  triggerSynthesizedThunder(ctx, destinationGain) {
-    if (!this.audioActive || !ctx) return;
-
-    const thunderOsc = ctx.createOscillator();
-    thunderOsc.type = "triangle";
-    thunderOsc.frequency.setValueAtTime(60, ctx.currentTime);
-    thunderOsc.frequency.exponentialRampToValueAtTime(
-      12,
-      ctx.currentTime + 3.0,
-    );
-
-    const thunderGain = ctx.createGain();
-    thunderGain.gain.setValueAtTime(0.001, ctx.currentTime);
-    thunderGain.gain.linearRampToValueAtTime(0.7, ctx.currentTime + 0.1);
-    thunderGain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 3.0);
-
-    thunderOsc.connect(thunderGain);
-    thunderGain.connect(destinationGain);
-
-    thunderOsc.start();
-    thunderOsc.stop(ctx.currentTime + 3.5);
-  }
-
-  triggerBirdChirp(ctx, destinationGain) {
-    if (!this.audioActive || !ctx) return;
-
-    const now = ctx.currentTime;
-    const osc = ctx.createOscillator();
-    const gainNode = ctx.createGain();
-
-    osc.type = "sine";
-
-    osc.frequency.setValueAtTime(2200, now);
-    osc.frequency.exponentialRampToValueAtTime(3200, now + 0.1);
-    osc.frequency.setValueAtTime(2400, now + 0.15);
-    osc.frequency.exponentialRampToValueAtTime(3600, now + 0.25);
-
-    gainNode.gain.setValueAtTime(0.001, now);
-    gainNode.gain.linearRampToValueAtTime(0.08, now + 0.05);
-    gainNode.gain.exponentialRampToValueAtTime(0.001, now + 0.3);
-
-    osc.connect(gainNode);
-    gainNode.connect(destinationGain);
-
-    osc.start(now);
-    osc.stop(now + 0.35);
-  }
-
-  stopAllSounds() {
-    if (this.thunderInterval) {
-      clearInterval(this.thunderInterval);
-      this.thunderInterval = null;
-    }
-    if (this.birdsInterval) {
-      clearInterval(this.birdsInterval);
-      this.birdsInterval = null;
-    }
-
-    Object.keys(this.audioNodes).forEach((key) => {
-      const node = this.audioNodes[key];
-      if (node) {
-        try {
-          node.stop();
-        } catch {}
-        try {
-          node.disconnect();
-        } catch {}
-      }
-    });
-    this.audioNodes = {};
-    this.activeSoundType = null;
-  }
+  // (relocated to features/audio.js -- see features/registry.js)
 
   // ================================================================
   //  SEARCH INPUTS (Open-Meteo Geocoding Falls)
@@ -5411,9 +3680,14 @@ ${precipProb > 0 ? `<span class="text-[9px] sm:text-[10px] text-blue-500 font-se
     this.isDark = !this.isDark;
 
     document.documentElement.classList.toggle("dark", this.isDark);
+    try {
+      localStorage.setItem("aurafisky_theme", this.isDark ? "dark" : "light");
+    } catch (e) {
+      // ignore — storage unavailable
+    }
 
-    // Re-apply theme tiles (handles language preference)
-    this.applyThemeTiles();
+    // Swap basemap style (handles language preference)
+    this._switchBasemapTheme();
 
     // Update theme-color meta tag for browser chrome
     const meta = document.querySelector('meta[name="theme-color"]');
@@ -5425,133 +3699,12 @@ ${precipProb > 0 ? `<span class="text-[9px] sm:text-[10px] text-blue-500 font-se
   // ================================================================
   //  MY LOCATION
   // ================================================================
-
-  getMyLocation() {
-    if (!navigator.geolocation) {
-      this.showToast("Geolocation is not supported by your browser.", "error");
-      return;
-    }
-
-    // Instant response (0ms) if pre-warmed GPS coordinates are available
-    let optimisticCoords = null;
-    if (this._lastKnownGpsCoords) {
-      const { latitude, longitude } = this._lastKnownGpsCoords;
-      optimisticCoords = { latitude, longitude };
-      this.handleMapClick(latitude, longitude);
-    } else {
-      this.showToast("Finding your location...", "info");
-    }
-
-    navigator.geolocation.getCurrentPosition(
-      (pos) => {
-        this._lastKnownGpsCoords = pos.coords;
-        const { latitude, longitude } = pos.coords;
-        // Skip the second full fetch when the fresh fix rounds to the same
-        // place we already showed optimistically — otherwise every click runs
-        // selectLocation twice (two forecast + AQI pairs, two reverse geocodes)
-        // and the panel visibly flickers.
-        if (
-          optimisticCoords &&
-          Math.abs(optimisticCoords.latitude - latitude) < 0.001 &&
-          Math.abs(optimisticCoords.longitude - longitude) < 0.001
-        ) {
-          return;
-        }
-        this.handleMapClick(latitude, longitude);
-      },
-      (err) => {
-        if (!this._lastKnownGpsCoords) {
-          const messages = {
-            1: "Location permission denied.",
-            2: "Location unavailable.",
-            3: "Location request timed out.",
-          };
-          this.showToast(
-            messages[err.code] || "Could not get your location.",
-            "error",
-          );
-        }
-      },
-      { enableHighAccuracy: true, timeout: 10000, maximumAge: 300000 },
-    );
-  }
+  // (relocated to features/myLocation.js -- see features/registry.js)
 
   // ================================================================
   //  ADVANCED FEATURE METHODS
   // ================================================================
-
-  updateTrustScore(trust) {
-    if (!this.$.trustScore) return;
-    if (!trust) {
-      this.$.trustScore.textContent = "";
-      return;
-    }
-    const color =
-      trust.overall >= 80
-        ? "text-emerald-500"
-        : trust.overall >= 60
-          ? "text-amber-500"
-          : "text-red-500";
-    this.$.trustScore.textContent = `🎯 ${trust.overall}% trust (temp ${trust.temp}%, wind ${trust.wind}%, precip ${trust.precip}%)`;
-    this.$.trustScore.className = `text-[9px] font-semibold ${color}`;
-  }
-
-  updateParamImportance(importance) {
-    if (!importance || importance.length === 0 || !this.$.paramImportance) {
-      this.$.paramImportance.textContent = "";
-      return;
-    }
-    this.$.paramImportance.innerHTML =
-      "🔍 " +
-      importance
-        .map(
-          (p) =>
-            `<span class="font-bold ${p.impact > 10 ? "text-red-500" : "text-amber-500"}">${p.key}</span>`,
-        )
-        .join(" > ") +
-      " limiting comfort";
-    this.$.paramImportance.className = "text-[10px] text-slate-400";
-  }
-
-  toggleSignalNoiseView() {
-    this.showSignal = !this.showSignal;
-    this.$.signalNoiseBtn.classList.toggle("toggle-active", this.showSignal);
-    if (this.weatherData) {
-      this.drawHourlySparkline(parseInt(this.$.timelineSlider.value, 10));
-    }
-  }
-
-  generateBriefing() {
-    const hourIdx = parseInt(this.$.timelineSlider.value, 10);
-    const weather = WeatherService.getHourlyAtIndex(this.weatherData, hourIdx);
-    if (!weather) return;
-    const aqiVal = this.airQualityData?.hourly?.us_aqi[hourIdx];
-    const tendency = WeatherService.getPressureTendency(
-      this.weatherData,
-      hourIdx,
-    );
-    const windShift = WeatherService.getWindShift(this.weatherData, hourIdx);
-    const anomaly = WeatherService.detectAnomaly(
-      weather.temperature,
-      this._historicalResults,
-    );
-    const daily = WeatherService.getDailyForecast(this.weatherData);
-    const briefing = WeatherService.generateBriefing(
-      weather,
-      daily,
-      aqiVal,
-      tendency,
-      windShift,
-      anomaly,
-      this.weatherData?.timezone,
-      this.weatherData?.utc_offset_seconds,
-    );
-    if (this.$.briefingContent) {
-      this.$.briefingContent.textContent = briefing;
-      this.$.briefingContent.classList.remove("hidden");
-    }
-    this.showToast("📡 Briefing generated", "success");
-  }
+  // (relocated to features/insights.js -- see features/registry.js)
 
   // ================================================================
   //  PANEL VISIBILITIES
@@ -5648,466 +3801,22 @@ ${precipProb > 0 ? `<span class="text-[9px] sm:text-[10px] text-blue-500 font-se
   // ================================================================
   //  VOLUME CONTROLS
   // ================================================================
-
-  handleVolumeChange(volume) {
-    this.volumeLevel = volume;
-    if (this.audioActive && this.audioNodes.master && this.audioContext) {
-      this.audioNodes.master.gain.setValueAtTime(
-        volume * 0.24,
-        this.audioContext.currentTime,
-      );
-    }
-  }
+  // (relocated to features/audio.js -- see features/registry.js)
 
   // ================================================================
   //  CLIMATE TIME-MACHINE
   // ================================================================
-
-  toggleClimateTimeMachine() {
-    const drawer = this.$.timeMachineDrawer;
-    const chevron = this.$.timeMachineChevron;
-    const isClosed = drawer.classList.contains("hidden");
-
-    if (isClosed) {
-      drawer.classList.remove("hidden");
-      chevron.classList.add("rotate-180");
-      this.loadClimateTimeMachineData();
-    } else {
-      this.closeClimateTimeMachine();
-    }
-  }
-
-  closeClimateTimeMachine() {
-    this.$.timeMachineDrawer.classList.add("hidden");
-    this.$.timeMachineChevron.classList.remove("rotate-180");
-  }
-
-  async loadClimateTimeMachineData() {
-    const activeHourIdx = parseInt(this.$.timelineSlider.value, 10);
-    const weather = WeatherService.getHourlyAtIndex(
-      this.weatherData,
-      activeHourIdx,
-    );
-    if (!weather) return;
-
-    const parts = weather.time.split("T");
-    if (parts.length < 2) return;
-    const dateParts = parts[0].split("-");
-    const year = parseInt(dateParts[0], 10);
-    const month = dateParts[1];
-    const day = dateParts[2];
-
-    const yearsPast = [5, 10, 20];
-    const dates = yearsPast.map((y) => `${year - y}-${month}-${day}`);
-
-    const cacheKey = `climate_${this.selectedLat.toFixed(3)}_${this.selectedLng.toFixed(3)}_${month}-${day}`;
-    if (this._climateCache?.key === cacheKey) {
-      this.renderClimateTimeMachineData(dates, this._climateCache.results);
-      return;
-    }
-
-    this.$.timeMachineRows.innerHTML = `
-      <div class="flex items-center justify-center py-4">
-        <div class="w-5 h-5 border-2 border-primary/30 border-t-primary rounded-full animate-spin"></div>
-      </div>
-    `;
-    this.$.timeMachinePoints.innerHTML = "";
-    this.$.timeMachineLine.setAttribute("d", "");
-
-    try {
-      // Fetch past records in parallel (deduplicated via in-memory cache in WeatherService)
-      const results = await Promise.all(
-        dates.map((dateStr) =>
-          WeatherService.fetchHistoricalWeather(
-            this.selectedLat,
-            this.selectedLng,
-            dateStr,
-          ).catch((e) => {
-            console.warn(`Failed to fetch history for ${dateStr}:`, e);
-            return null;
-          }),
-        ),
-      );
-
-      this._climateCache = { key: cacheKey, results };
-      this._historicalResults = results;
-      this.renderClimateTimeMachine(yearsPast, results, weather.temperature);
-
-      // Find analog year
-      const analog = WeatherService.findAnalogDay(this.weatherData, results);
-      if (analog && this.$.analogLabel) {
-        this.$.analogLabel.textContent = `📅 Most like ${analog.year} years ago: ${analog.icon} ${analog.desc}, ${Math.round(analog.temp)}°C`;
-        this.$.analogLabel.className =
-          "text-[10px] font-semibold text-emerald-500 dark:text-emerald-400 mt-1";
-        this.$.analogLabel.classList.remove("hidden");
-      }
-    } catch (e) {
-      console.error("Time machine load error:", e);
-      this.$.timeMachineRows.innerHTML = `<div class="text-[10px] text-red-500 text-center py-2">Failed to load climate history.</div>`;
-    }
-  }
-
-  renderClimateTimeMachine(yearsPast, results, currentTemp) {
-    const historyData = [];
-
-    results.forEach((res, i) => {
-      const yearsAgo = yearsPast[i];
-      if (res && res.daily && res.daily.temperature_2m_max) {
-        const d = res.daily;
-        const max = d.temperature_2m_max[0];
-        const min = d.temperature_2m_min[0];
-        const avg = (max + min) / 2;
-        const code = d.weather_code[0] ?? 0;
-        const info = WeatherService.getWeatherInfo(code, true);
-        const precip = d.precipitation_sum[0] ?? 0;
-
-        historyData.push({
-          label: `${yearsAgo} years ago`,
-          temp: avg,
-          maxTemp: max,
-          minTemp: min,
-          icon: info.icon,
-          description: info.description,
-          precip: precip,
-        });
-      } else {
-        historyData.push({
-          label: `${yearsAgo} years ago`,
-          temp: null,
-          maxTemp: null,
-          minTemp: null,
-          icon: "❓",
-          description: "Data unavailable",
-          precip: 0,
-        });
-      }
-    });
-
-    // Add current temp
-    historyData.push({
-      label: "Now",
-      temp: currentTemp,
-      maxTemp: currentTemp,
-      minTemp: currentTemp,
-      icon: "📍",
-      description: "Active selection",
-      precip: 0,
-    });
-
-    // Sort chronologically left-to-right: 20 years, 10 years, 5 years, Now
-    const chronData = [
-      historyData[2], // 20 years
-      historyData[1], // 10 years
-      historyData[0], // 5 years
-      historyData[3], // Now
-    ];
-
-    // Render list rows
-    const rowsHTML = chronData
-      .map((d) => {
-        if (d.temp == null) {
-          return `
-          <div class="flex justify-between items-center text-[10px] text-slate-400 py-0.5">
-            <span class="font-medium">${d.label}</span>
-            <span>Data unavailable</span>
-          </div>
-        `;
-        }
-        return `
-        <div class="flex justify-between items-center text-[10px] py-1 hover:bg-slate-100/50 dark:hover:bg-slate-800/30 px-1.5 rounded-md">
-          <span class="font-semibold text-slate-500 dark:text-slate-400 w-20 flex-shrink-0">${d.label}</span>
-          <span class="text-sm mr-2">${d.icon}</span>
-          <span class="text-slate-600 dark:text-slate-300 flex-1 truncate mr-2">${d.description}</span>
-          <span class="font-bold text-slate-800 dark:text-slate-100">${Math.round(d.temp)}°C</span>
-          <span class="text-[9px] text-slate-400 dark:text-slate-500 ml-1.5 w-12 text-right">${d.precip > 0 ? d.precip.toFixed(1) + "mm" : "Dry"}</span>
-        </div>
-      `;
-      })
-      .join("");
-    this.setSafeHTML(this.$.timeMachineRows, rowsHTML);
-
-    // Draw mini SVG trend line
-    const validTemps = chronData
-      .filter((d) => d.temp != null)
-      .map((d) => d.temp);
-    if (validTemps.length >= 2) {
-      const minT = Math.min(...validTemps);
-      const maxT = Math.max(...validTemps);
-      const tRange = Math.max(1, maxT - minT);
-
-      const width = 200;
-      const height = 40;
-      const padLeft = 15;
-      const padRight = 15;
-      const padTop = 10;
-      const padBottom = 10;
-
-      const chartW = width - padLeft - padRight;
-      const chartH = height - padTop - padBottom;
-
-      const svgPoints = chronData.map((d, idx) => {
-        if (d.temp == null) return null;
-        const x = padLeft + (idx / 3) * chartW;
-        const y = padTop + chartH - ((d.temp - minT) / tRange) * chartH;
-        return { x, y, temp: d.temp, label: d.label };
-      });
-
-      const cleanPoints = svgPoints.filter((p) => p !== null);
-
-      let pathCmd = `M ${cleanPoints[0].x} ${cleanPoints[0].y}`;
-      for (let i = 1; i < cleanPoints.length; i++) {
-        pathCmd += ` L ${cleanPoints[i].x} ${cleanPoints[i].y}`;
-      }
-      this.$.timeMachineLine.setAttribute("d", pathCmd);
-
-      this.$.timeMachinePoints.innerHTML = "";
-      cleanPoints.forEach((p) => {
-        const circle = document.createElementNS(
-          "http://www.w3.org/2000/svg",
-          "circle",
-        );
-        circle.setAttribute("cx", p.x);
-        circle.setAttribute("cy", p.y);
-        circle.setAttribute("r", "2.5");
-        circle.setAttribute("class", "tm-point");
-        circle.setAttribute("title", `${p.label}: ${Math.round(p.temp)}°C`);
-        this.$.timeMachinePoints.appendChild(circle);
-
-        const text = document.createElementNS(
-          "http://www.w3.org/2000/svg",
-          "text",
-        );
-        text.setAttribute("x", p.x);
-        text.setAttribute("y", p.y - 4.5);
-        text.setAttribute("class", "tm-text");
-        text.textContent = `${Math.round(p.temp)}°`;
-        this.$.timeMachinePoints.appendChild(text);
-      });
-    }
-
-    // Anomaly detection
-    const anomaly = WeatherService.detectAnomaly(currentTemp, results);
-    if (anomaly && this.$.anomalyLabel) {
-      this.$.anomalyLabel.textContent = `⚠️ ${anomaly.label}`;
-      this.$.anomalyLabel.className = `text-[10px] font-semibold mt-2 ${
-        anomaly.severity === "extreme"
-          ? "text-red-500"
-          : anomaly.severity === "significant"
-            ? "text-orange-500"
-            : "text-amber-500"
-      }`;
-      this.$.anomalyLabel.classList.remove("hidden");
-    }
-
-    // Historical pattern mining
-    const pattern = WeatherService.getHistoricalPattern(
-      this.weatherData,
-      results,
-    );
-    if (pattern && this.$.patternLabel) {
-      this.$.patternLabel.textContent = `📊 ${pattern.label}`;
-      this.$.patternLabel.className =
-        "text-[10px] font-semibold text-teal-500 dark:text-teal-400 mt-1";
-      this.$.patternLabel.classList.remove("hidden");
-    }
-  }
+  // (relocated to features/timeMachine.js -- see features/registry.js)
 
   // ================================================================
   //  ASTRONOMY & DAY CYCLES
   // ================================================================
-
-  updateAstronomyWidget(weather, _hourIndex) {
-    if (!this.weatherData) return;
-
-    try {
-      const dateStr = weather.time.split("T")[0];
-      const daily = WeatherService.getDailyForecast(this.weatherData);
-      const currentDayData = daily.find((d) => d.date === dateStr) || daily[0];
-
-      if (
-        !currentDayData ||
-        !currentDayData.sunrise ||
-        !currentDayData.sunset
-      ) {
-        return;
-      }
-
-      const sunriseTime = new Date(currentDayData.sunrise);
-      const sunsetTime = new Date(currentDayData.sunset);
-      const currentTime = new Date(weather.time);
-
-      const diffMs = sunsetTime - sunriseTime;
-      const diffHours = Math.floor(diffMs / 3600000);
-      const diffMins = Math.floor((diffMs % 3600000) / 60000);
-      this.$.sunDayLength.textContent = `${diffHours}h ${diffMins}m`;
-
-      this.$.sunSunrise.textContent = sunriseTime.toLocaleTimeString([], {
-        hour: "2-digit",
-        minute: "2-digit",
-      });
-      this.$.sunSunset.textContent = sunsetTime.toLocaleTimeString([], {
-        hour: "2-digit",
-        minute: "2-digit",
-      });
-
-      // Live sunrise/sunset countdown timer — ticks every minute
-      if (this.$.sunCountdown) {
-        const updateCountdown = () => {
-          const tTime = new Date();
-          if (tTime >= sunriseTime && tTime <= sunsetTime) {
-            const diff = sunsetTime - tTime;
-            const h = Math.floor(diff / 3600000);
-            const m = Math.floor((diff % 3600000) / 60000);
-            this.$.sunCountdown.textContent = `Sunset in ${h}h ${m}m`;
-            this.$.sunCountdown.className =
-              "text-[7px] text-amber-500 dark:text-amber-400 font-bold mt-0.5";
-          } else {
-            let nextSunrise = sunriseTime;
-            if (tTime > sunsetTime) {
-              nextSunrise = new Date(
-                sunriseTime.getTime() + 24 * 60 * 60 * 1000,
-              );
-            }
-            const diff = nextSunrise - tTime;
-            const h = Math.floor(diff / 3600000);
-            const m = Math.floor((diff % 3600000) / 60000);
-            this.$.sunCountdown.textContent = `Sunrise in ${h}h ${m}m`;
-            this.$.sunCountdown.className =
-              "text-[7px] text-emerald-500 dark:text-emerald-400 font-bold mt-0.5";
-          }
-        };
-        updateCountdown();
-        // Clear any previous timer before starting a new one
-        if (this.sunCountdownTimer) clearInterval(this.sunCountdownTimer);
-        this.sunCountdownTimer = setInterval(updateCountdown, 60000);
-      }
-
-      // Calculate Sun Arc Dot position
-      if (currentTime >= sunriseTime && currentTime <= sunsetTime) {
-        const frac = (currentTime - sunriseTime) / (sunsetTime - sunriseTime);
-        const angle = Math.PI - frac * Math.PI; // Semicircular bend from PI to 0 radians
-
-        const cx = 50 + 45 * Math.cos(angle);
-        const cy = 45 - 45 * Math.sin(angle);
-
-        this.$.sunArcDot.setAttribute("cx", cx);
-        this.$.sunArcDot.setAttribute("cy", cy);
-        this.$.sunArcDot.setAttribute("fill", "#f59e0b");
-        this.$.sunArcDot.setAttribute("r", "4");
-
-        if (this.$.sunArcPassed) {
-          this.$.sunArcPassed.setAttribute(
-            "d",
-            `M 5,45 A 45,45 0 0,1 ${cx} ${cy}`,
-          );
-        }
-      } else {
-        // Night position
-        const isBeforeSunrise = currentTime < sunriseTime;
-        this.$.sunArcDot.setAttribute("cx", isBeforeSunrise ? 5 : 95);
-        this.$.sunArcDot.setAttribute("cy", 45);
-        this.$.sunArcDot.setAttribute("fill", "#94a3b8");
-        this.$.sunArcDot.setAttribute("r", "3");
-        if (this.$.sunArcPassed) {
-          this.$.sunArcPassed.setAttribute("d", "M 5,45 A 45,45 0 0,1 5,45");
-        }
-      }
-
-      // Moon Phase widget update
-      const moon = WeatherService.getMoonPhase(currentTime);
-      this.$.moonPhaseLabel.textContent = moon.label;
-      this.$.moonPhasePercent.textContent = `${Math.round(moon.phase * 100)}%`;
-      this.$.moonPhaseDesc.textContent = `${moon.icon} Phase fraction: ${moon.phase.toFixed(2)}`;
-
-      // Draw custom SVG moon shadowing
-      const d = this.getMoonSvgPath(moon.phase);
-      this.$.moonLitPath.setAttribute("d", d);
-    } catch (e) {
-      console.warn("Astronomy widget update failed:", e);
-    }
-  }
-
-  getMoonSvgPath(p) {
-    const r = 18;
-
-    if (p <= 0.03 || p >= 0.97) {
-      return ""; // New Moon - completely dark
-    }
-    if (p >= 0.47 && p <= 0.53) {
-      return `M 20 2 A 18 18 0 0 1 20 38 A 18 18 0 0 1 20 2`; // Full Moon
-    }
-
-    if (p < 0.5) {
-      // Lit on the right side
-      const rx = r - 4 * r * p;
-      const sweep = rx < 0 ? 1 : 0;
-      return `M 20 2 A 18 18 0 0 1 20 38 A ${Math.abs(rx)} 18 0 0 ${sweep} 20 2`;
-    } else {
-      // Lit on the left side
-      const rx = r - 4 * r * (p - 0.5);
-      const sweep = rx < 0 ? 0 : 1;
-      return `M 20 2 A 18 18 0 0 0 20 38 A ${Math.abs(rx)} 18 0 0 ${sweep} 20 2`;
-    }
-  }
+  // (relocated to features/astronomy.js -- see features/registry.js)
 
   // ================================================================
   //  WEATHER ADVISORIES & FA VICONS
   // ================================================================
-
-  renderAdvisoryBanner(advisories) {
-    if (!advisories || advisories.length === 0) {
-      this.$.advisoryBanner.classList.add("hidden");
-      return;
-    }
-
-    const severityPrecedence = {
-      extreme: 4,
-      severe: 3,
-      warning: 2,
-      advisory: 1,
-    };
-    advisories.sort(
-      (a, b) => severityPrecedence[b.severity] - severityPrecedence[a.severity],
-    );
-
-    const topAlert = advisories[0];
-
-    this.$.advisoryBanner.className = `mb-4 rounded-xl p-3 border shadow-sm flex items-start gap-2.5 transition-all duration-300 alert-${topAlert.severity}`;
-    this.$.advisoryIcon.textContent =
-      topAlert.type === "aqi"
-        ? "🍃"
-        : topAlert.type === "wind"
-          ? "💨"
-          : topAlert.type === "heat"
-            ? "☀️"
-            : "⚠️";
-    this.$.advisoryTitle.textContent = topAlert.title;
-    this.$.advisoryDesc.textContent = topAlert.desc;
-
-    this.$.advisoryBanner.classList.remove("hidden");
-  }
-
-  updateWeatherFavicon(weatherCode, isDay = true) {
-    let favicon = document.querySelector('link[rel="icon"]');
-    if (!favicon) {
-      favicon = document.createElement("link");
-      favicon.rel = "icon";
-      document.head.appendChild(favicon);
-    }
-    // Use IconSystem to generate a proper SVG favicon with the weather icon
-    if (
-      window.IconSystem &&
-      typeof IconSystem.getDynamicFavicon === "function"
-    ) {
-      favicon.href = IconSystem.getDynamicFavicon(weatherCode, isDay);
-    } else {
-      // Fallback to original emoji-based favicon
-      const iconSvg = WeatherIcons.getIcon(weatherCode, isDay);
-      const inner = iconSvg.match(/<svg[^>]*>([\s\S]*)<\/svg>/);
-      const content = inner ? inner[1] : iconSvg;
-      favicon.href = `data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><g transform='scale(2) translate(26,26)'>${encodeURIComponent(content)}</g></svg>`;
-    }
-  }
+  // (relocated to features/advisories.js -- see features/registry.js)
 
   // ================================================================
   //  PWA SERVICE WORKER
@@ -6214,349 +3923,27 @@ ${precipProb > 0 ? `<span class="text-[9px] sm:text-[10px] text-blue-500 font-se
   // ================================================================
   //  NEW FEATURES: Auto-Refresh, Temp Overlay, PWA, Compact, Shareable URL
   // ================================================================
-
-  // NOTE: readShareableUrl()/updateShareableUrl() used to live here. They were
-  // superseded by _checkUrlParamsOnStartup() and _updateUrlParams(), which
-  // additionally validate the lat/lng ranges, preserve any unrelated query
-  // params, and guard with `!= null` rather than a falsy check (the old code
-  // silently refused to write a URL for any location on the equator or the
-  // prime meridian, where lat or lng is exactly 0).
-
-  installPWA() {
-    // iOS Safari: no programmatic install — guide the user to the
-    // Share sheet → "Add to Home Screen".
-    if (this._isIOS || !this.deferredPrompt) {
-      this.showToast(
-        "Tap ⑆ Share, then “Add to Home Screen” to install.",
-        "info",
-        5000,
-      );
-      return;
-    }
-    this.deferredPrompt.prompt();
-    this.deferredPrompt.userChoice.then((choiceResult) => {
-      if (choiceResult.outcome === "accepted") {
-        this.showToast("Aurafisky installed!", "success");
-      }
-      this.deferredPrompt = null;
-      this.$.installBtn?.classList.add("hidden");
-    });
-  }
-
-  async initTempOverlayLayers() {
-    this.clearTempOverlay();
-    if (!this.selectedLat || !this.selectedLng) return;
-
-    const lat = this.selectedLat;
-    const lng = this.selectedLng;
-    const offsets = [-0.5, -0.25, 0, 0.25, 0.5];
-    const points = [];
-    for (const dlat of offsets) {
-      for (const dlng of offsets) {
-        points.push({
-          lat: lat + dlat,
-          lng: lng + dlng + (dlat === 0 && dlng === 0 ? 0 : 0),
-        });
-      }
-    }
-
-    try {
-      const latsParam = points.map((p) => p.lat.toFixed(4)).join(",");
-      const lngsParam = points.map((p) => p.lng.toFixed(4)).join(",");
-      let results = await fetch(
-        `https://api.open-meteo.com/v1/forecast?latitude=${latsParam}&longitude=${lngsParam}&current=temperature_2m,weather_code&timezone=auto`,
-      )
-        .then((res) => {
-          if (!res.ok) throw new Error("Failed to fetch weather grid");
-          return res.json();
-        })
-        .catch((err) => {
-          console.error("Weather grid fetch error:", err);
-          return [];
-        });
-
-      if (!Array.isArray(results)) {
-        results = [results];
-      }
-
-      const tempMin = Math.min(
-        ...results
-          .filter((r) => r?.current?.temperature_2m != null)
-          .map((r) => r.current.temperature_2m),
-      );
-      const tempMax = Math.max(
-        ...results
-          .filter((r) => r?.current?.temperature_2m != null)
-          .map((r) => r.current.temperature_2m),
-      );
-      const tempRange = Math.max(1, tempMax - tempMin);
-
-      results.forEach((data, i) => {
-        if (!data?.current?.temperature_2m) return;
-        const temp = data.current.temperature_2m;
-        const pt = points[i];
-        const frac = (temp - tempMin) / tempRange;
-        const color = this.tempToColor(frac);
-        const circle = L.circleMarker([pt.lat, pt.lng], {
-          radius: 18,
-          color: color,
-          fillColor: color,
-          fillOpacity: 0.5,
-          weight: 1,
-          opacity: 0.7,
-        }).addTo(this.map);
-        circle.bindTooltip(`${temp.toFixed(1)}°C`, {
-          permanent: true,
-          direction: "center",
-          className: "temp-tooltip",
-        });
-        this.tempOverlayLayers.push(circle);
-      });
-    } catch (e) {
-      console.warn("Temperature overlay fetch failed:", e);
-    }
-  }
-
-  tempToColor(frac) {
-    const r = Math.min(255, Math.round(255 * frac));
-    const b = Math.round(255 * (1 - frac));
-    const g = Math.round(120 * (1 - Math.abs(frac - 0.5) * 2));
-    return `rgb(${r},${g},${b})`;
-  }
-
-  clearTempOverlay() {
-    this.tempOverlayLayers.forEach((layer) => {
-      if (layer.remove) layer.remove();
-    });
-    this.tempOverlayLayers = [];
-  }
-
-  initWindParticles() {
-    const w = this.canvas?.width || 400;
-    const h = this.canvas?.height || 400;
-    const dir = ((this.currentWindDirection || 0) * Math.PI) / 180;
-    this.particles = [];
-    for (let i = 0; i < 25; i++) {
-      this.particles.push({
-        x: Math.random() * w,
-        y: Math.random() * h,
-        vBase: 2 + Math.random() * 4,
-        len: 40 + Math.random() * 80,
-        opacity: 0.08 + Math.random() * 0.18,
-        curveOffset: Math.random() * Math.PI * 2,
-        dir: dir + (Math.random() - 0.5) * 0.6,
-      });
-    }
-  }
+  // (relocated to features/appToggles.js -- see features/registry.js)
 
   // ================================================================
   //  UV INDEX FORECAST CHART
   // ================================================================
-
-  renderUVChart() {
-    const data = WeatherService.getWeeklyUV(this.weatherData);
-    const svg = this.$.uvChart;
-    if (!data || data.length < 2 || !svg) return;
-    const maxUV = Math.max(...data.map((d) => d.uv), 1);
-    const w = 280,
-      h = 80,
-      pad = 4;
-    const cw = (w - pad * 2) / (data.length - 1);
-    const bars = data.map((d, i) => ({
-      x: pad + i * cw,
-      h: (d.uv / maxUV) * (h - pad * 2 - 8),
-      uv: d.uv,
-      label: WeatherService.parseIsoLocal(d.date)
-        .toLocaleDateString("en-US", { weekday: "short" })
-        .slice(0, 2),
-    }));
-    svg.innerHTML = bars
-      .map(
-        (b) =>
-          `<rect x="${b.x}" y="${h - pad - b.h}" width="${Math.max(4, cw - 4)}" height="${b.h}" rx="2" fill="${b.uv >= 6 ? "#f59e0b" : b.uv >= 3 ? "#fbbf24" : "#10b981"}" opacity="0.8"/>
-       <text x="${b.x + cw / 2}" y="${h - 2}" font-size="7" fill="#94a3b8" text-anchor="middle" font-weight="600">${b.label}</text>
-       <text x="${b.x + cw / 2}" y="${h - pad - b.h - 3}" font-size="7" fill="#64748b" text-anchor="middle" font-weight="700">${b.uv.toFixed(1)}</text>`,
-      )
-      .join("");
-  }
-
-  // ================================================================
+  // (relocated to features/insights.js -- see features/registry.js)
   //  METRIC SEARCH
   // ================================================================
   //  CUSTOMIZABLE DASHBOARD (Drag-to-Reorder Metric Cards)
   // ================================================================
-
-  initDashboardDrag() {
-    const grid = document.querySelector(".grid-cols-2.gap-2\\.5");
-    if (!grid) return;
-    let dragEl = null;
-    const onStart = (e) => {
-      const card = e.target.closest(".metric-card");
-      if (
-        !card ||
-        card.closest("#aqiCard") ||
-        card.closest("#pollenCard") ||
-        (card.closest(".col-span-2") && !card.classList.contains("metric-card"))
-      )
-        return;
-      dragEl = card;
-      dragEl.style.opacity = "0.5";
-      dragEl.style.transform = "scale(1.02)";
-    };
-    const onEnd = (e) => {
-      if (!dragEl) return;
-      dragEl.style.opacity = "";
-      dragEl.style.transform = "";
-      const target = e.target.closest(".metric-card");
-      if (target && target !== dragEl) {
-        grid.insertBefore(dragEl, target.nextSibling);
-      }
-      dragEl = null;
-    };
-    grid.querySelectorAll(".metric-card").forEach((card) => {
-      card.draggable = true;
-      card.addEventListener("dragstart", onStart);
-      card.addEventListener("dragend", onEnd);
-    });
-  }
+  // (relocated to features/dashboard.js -- see features/registry.js)
 
   // ================================================================
   //  KEYBOARD SHORTCUTS
   // ================================================================
-
-  initKeyboardShortcuts() {
-    document.addEventListener("keydown", (e) => {
-      // Don't trigger if typing in an input
-      if (e.target.tagName === "INPUT" || e.target.tagName === "TEXTAREA") {
-        if (e.key === "Escape") {
-          e.target.blur();
-          this.$.searchDropdown.classList.remove("open");
-        }
-        return;
-      }
-      // Close app info modal on Escape
-      if (
-        e.key === "Escape" &&
-        this.$.appInfoModal &&
-        this.$.appInfoModal.style.display !== "none"
-      ) {
-        this.toggleAppInfoModal();
-        return;
-      }
-      switch (e.key.toLowerCase()) {
-        case "?":
-          e.preventDefault();
-          this.toggleAppInfoModal();
-          break;
-        case "d":
-          e.preventDefault();
-          this.toggleDarkMode();
-          break;
-        case "r":
-          e.preventDefault();
-          this.toggleRadar();
-          break;
-        case "m":
-          e.preventDefault();
-          this.toggleMinimalMode();
-          break;
-        case "/":
-          e.preventDefault();
-          this.$.searchInput?.focus();
-          break;
-        case "g":
-          e.preventDefault();
-          this.getMyLocation();
-          break;
-      }
-    });
-    if (this.$.shortcutsCloseBtn) {
-      this.$.shortcutsCloseBtn.addEventListener("click", () =>
-        this.toggleShortcutsModal(),
-      );
-    }
-    if (this.$.shortcutsModal) {
-      this.$.shortcutsModal.addEventListener("click", (e) => {
-        if (e.target === this.$.shortcutsModal) this.toggleShortcutsModal();
-      });
-    }
-    // ── App Info Modal ──────────────────────────────────────
-    if (this.$.appInfoCloseBtn) {
-      this.$.appInfoCloseBtn.addEventListener("click", () =>
-        this.toggleAppInfoModal(),
-      );
-    }
-    if (this.$.appInfoCloseBtn2) {
-      this.$.appInfoCloseBtn2.addEventListener("click", () =>
-        this.toggleAppInfoModal(),
-      );
-    }
-    if (this.$.appInfoModal) {
-      this.$.appInfoModal.addEventListener("click", (e) => {
-        if (e.target === this.$.appInfoModal) this.toggleAppInfoModal();
-      });
-    }
-    if (this.$.logoBtn) {
-      this.$.logoBtn.addEventListener("click", () => this.toggleAppInfoModal());
-    }
-  }
-
-  toggleShortcutsModal() {
-    if (!this.$.shortcutsModal) return;
-    const isHidden =
-      this.$.shortcutsModal.style.display === "none" ||
-      !this.$.shortcutsModal.style.display;
-    this.$.shortcutsModal.style.display = isHidden ? "flex" : "none";
-    this.$.shortcutsModal.classList.toggle("hidden", !isHidden);
-  }
-
-  toggleAppInfoModal() {
-    if (!this.$.appInfoModal) return;
-    const isHidden =
-      this.$.appInfoModal.style.display === "none" ||
-      !this.$.appInfoModal.style.display;
-    this.$.appInfoModal.style.display = isHidden ? "flex" : "none";
-    this.$.appInfoModal.classList.toggle("hidden", !isHidden);
-  }
+  // (relocated to features/keyboardShortcuts.js -- see features/registry.js)
 
   // ================================================================
   //  SEVERE WEATHER ALERTS FOR BOOKMARKS
   // ================================================================
-
-  async checkBookmarkAlerts() {
-    if (!this.bookmarks?.length) return;
-    for (const bm of this.bookmarks) {
-      try {
-        const data = await WeatherService.fetchForecast(bm.lat, bm.lng);
-        if (!data?.hourly) continue;
-        const nowIdx = WeatherService.getCurrentHourIndex(data);
-        const w = WeatherService.getHourlyAtIndex(data, nowIdx);
-        if (!w) continue;
-        const aqi = await WeatherService.fetchAirQuality(bm.lat, bm.lng);
-        const aqiVal = aqi?.hourly?.us_aqi?.[nowIdx];
-        const advisories = WeatherService.getAdvisories(w, aqiVal);
-        if (advisories?.length) {
-          const severe = advisories.filter(
-            (a) => a.severity === "extreme" || a.severity === "severe",
-          );
-          if (severe.length) {
-            this.showToast(`⚠️ ${bm.name}: ${severe[0].title}`, "error");
-          }
-        }
-      } catch (e) {
-        console.warn("Bookmark alert check failed for", bm.name, e);
-      }
-    }
-  }
-
-  startBookmarkAlertPolling() {
-    if (this._alertPollTimer) clearInterval(this._alertPollTimer);
-    this.checkBookmarkAlerts();
-    this._alertPollTimer = setInterval(
-      () => this.checkBookmarkAlerts(),
-      600000,
-    );
-  }
+  // (relocated to features/bookmarks.js -- see features/registry.js)
 
   // ================================================================
   //  TOAST SYSTEM & OVERLAYS
@@ -7004,7 +4391,7 @@ ${precipProb > 0 ? `<span class="text-[9px] sm:text-[10px] text-blue-500 font-se
           if (prefs.mapLanguage != null) {
             this.mapLanguage = prefs.mapLanguage;
             this.updateMapLanguageUI();
-            this.applyThemeTiles();
+            this._applyMapLanguage();
           }
         }
 
@@ -7478,12 +4865,7 @@ ${precipProb > 0 ? `<span class="text-[9px] sm:text-[10px] text-blue-500 font-se
       // ignore
     }
     this.updateMapLanguageUI();
-    this.applyThemeTiles();
-    // Force map to refresh tiles (clear browser cache for new tile URLs)
-    if (this.map) {
-      this.map.invalidateSize();
-      this.map._onFocus();
-    }
+    this._applyMapLanguage();
     this.saveUserDataToCloud();
   }
 
@@ -7504,43 +4886,44 @@ ${precipProb > 0 ? `<span class="text-[9px] sm:text-[10px] text-blue-500 font-se
     }
   }
 
-  applyThemeTiles() {
-    // Remove all existing tile layers
-    [this.enLightTiles, this.enDarkTiles, this.nativeLightTiles, this.nativeDarkTiles].forEach((layer) => {
-      if (this.map?.hasLayer(layer)) {
-        this.map.removeLayer(layer);
-      }
-    });
+  /**
+   * Swap the active vector basemap layer group when light/dark theme
+   * changes. Both groups were already styled (with the current language) in
+   * initMap(), so this is just an add/remove — no re-fetching.
+   */
+  _switchBasemapTheme() {
+    if (!this.map || !this.lightBasemap || !this.darkBasemap) return;
+    const show = this.isDark ? this.darkBasemap : this.lightBasemap;
+    const hide = this.isDark ? this.lightBasemap : this.darkBasemap;
+    const layers = this.map.getLayers();
+    if (layers.getArray().includes(hide)) layers.remove(hide);
+    if (!layers.getArray().includes(show)) layers.push(show);
+  }
 
-    const isEnglish = this.mapLanguage === 'en';
-    const lightTiles = isEnglish ? this.enLightTiles : this.nativeLightTiles;
-    const darkTiles = isEnglish ? this.enDarkTiles : this.nativeDarkTiles;
+  /**
+   * Real map-language switching. OpenFreeMap's vector tiles (OpenMapTiles
+   * schema) carry both a local `name` field and an English `name_en` field
+   * per feature — confirmed by inspecting the live liberty/dark style JSON's
+   * label layers, all of which build text-field as a "case"/"coalesce"
+   * expression over exactly those two fields (see localizeGlStyle in
+   * modules/map-language.js). Re-styling the vector-tile layer for the
+   * `openmaptiles` source re-labels the whole map (cities, roads, POIs,
+   * water) instantly, client-side — no new tile requests.
+   */
+  _applyMapLanguage() {
+    const theme = this.isDark ? "dark" : "light";
+    const group = this.isDark ? this.darkBasemap : this.lightBasemap;
+    const rawStyle = this._glStyles?.[theme];
+    // Style hasn't finished loading yet — nothing to re-style. initMap()
+    // already applies the current this.mapLanguage once the fetch resolves,
+    // so there's no missed update, just nothing to do yet.
+    if (!group || !rawStyle) return;
 
-    // Add cache-busting timestamp to force fresh tiles
-    const cacheBuster = Date.now();
-
-    if (this.isDark) {
-      const darkUrl = darkTiles.options.urlTemplate || darkTiles._url;
-      darkTiles.setUrl(darkUrl + (darkUrl.includes('?') ? '&' : '?') + '_=' + cacheBuster);
-      darkTiles.addTo(this.map);
-      darkTiles.once("tileerror", () => {
-        if (this.map?.hasLayer(darkTiles)) {
-          this.map.removeLayer(darkTiles);
-          const fallback = isEnglish ? this.nativeDarkTiles : this.enDarkTiles;
-          fallback.addTo(this.map);
-        }
-      });
-    } else {
-      const lightUrl = lightTiles.options.urlTemplate || lightTiles._url;
-      lightTiles.setUrl(lightUrl + (lightUrl.includes('?') ? '&' : '?') + '_=' + cacheBuster);
-      lightTiles.addTo(this.map);
-      lightTiles.once("tileerror", () => {
-        if (this.map?.hasLayer(lightTiles)) {
-          this.map.removeLayer(lightTiles);
-          const fallback = isEnglish ? this.nativeLightTiles : this.enLightTiles;
-          fallback.addTo(this.map);
-        }
-      });
+    const localized = localizeGlStyle(rawStyle, this.mapLanguage);
+    for (const vtLayer of getMapboxLayers(group, "openmaptiles")) {
+      applyMapboxLayerStyle(vtLayer, localized, "openmaptiles").catch((err) =>
+        console.error("Map language re-style failed:", err),
+      );
     }
   }
 }

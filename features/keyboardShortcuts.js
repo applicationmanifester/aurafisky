@@ -47,29 +47,41 @@ function initKeyboardShortcuts() {
       }
     });
     if (this.$.shortcutsCloseBtn) {
-      this.$.shortcutsCloseBtn.addEventListener("click", () =>
-        this.toggleShortcutsModal(),
-      );
+      this.$.shortcutsCloseBtn.addEventListener("click", (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        this.toggleShortcutsModal(false);
+      });
     }
     if (this.$.shortcutsModal) {
       this.$.shortcutsModal.addEventListener("click", (e) => {
-        if (e.target === this.$.shortcutsModal) this.toggleShortcutsModal();
+        const dialog = this.$.shortcutsModal.firstElementChild;
+        if (!dialog || !dialog.contains(e.target)) {
+          this.toggleShortcutsModal(false);
+        }
       });
     }
     // ── App Info Modal ──────────────────────────────────────
     if (this.$.appInfoCloseBtn) {
-      this.$.appInfoCloseBtn.addEventListener("click", () =>
-        this.toggleAppInfoModal(),
-      );
+      this.$.appInfoCloseBtn.addEventListener("click", (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        this.toggleAppInfoModal(false);
+      });
     }
     if (this.$.appInfoCloseBtn2) {
-      this.$.appInfoCloseBtn2.addEventListener("click", () =>
-        this.toggleAppInfoModal(),
-      );
+      this.$.appInfoCloseBtn2.addEventListener("click", (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        this.toggleAppInfoModal(false);
+      });
     }
     if (this.$.appInfoModal) {
       this.$.appInfoModal.addEventListener("click", (e) => {
-        if (e.target === this.$.appInfoModal) this.toggleAppInfoModal();
+        const dialog = this.$.appInfoModal.firstElementChild;
+        if (!dialog || !dialog.contains(e.target)) {
+          this.toggleAppInfoModal(false);
+        }
       });
     }
     if (this.$.logoBtn) {
@@ -77,22 +89,26 @@ function initKeyboardShortcuts() {
     }
   }
 
-function toggleShortcutsModal() {
+function toggleShortcutsModal(force) {
     if (!this.$.shortcutsModal) return;
-    const isHidden =
+    const isCurrentlyHidden =
       this.$.shortcutsModal.style.display === "none" ||
-      !this.$.shortcutsModal.style.display;
-    this.$.shortcutsModal.style.display = isHidden ? "flex" : "none";
-    this.$.shortcutsModal.classList.toggle("hidden", !isHidden);
+      !this.$.shortcutsModal.style.display ||
+      this.$.shortcutsModal.classList.contains("hidden");
+    const open = typeof force === "boolean" ? force : isCurrentlyHidden;
+    this.$.shortcutsModal.style.display = open ? "flex" : "none";
+    this.$.shortcutsModal.classList.toggle("hidden", !open);
   }
 
-function toggleAppInfoModal() {
+function toggleAppInfoModal(force) {
     if (!this.$.appInfoModal) return;
-    const isHidden =
+    const isCurrentlyHidden =
       this.$.appInfoModal.style.display === "none" ||
-      !this.$.appInfoModal.style.display;
-    this.$.appInfoModal.style.display = isHidden ? "flex" : "none";
-    this.$.appInfoModal.classList.toggle("hidden", !isHidden);
+      !this.$.appInfoModal.style.display ||
+      this.$.appInfoModal.classList.contains("hidden");
+    const open = typeof force === "boolean" ? force : isCurrentlyHidden;
+    this.$.appInfoModal.style.display = open ? "flex" : "none";
+    this.$.appInfoModal.classList.toggle("hidden", !open);
   }
 
 export function init(app) {

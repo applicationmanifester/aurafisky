@@ -927,6 +927,99 @@ const WeatherService = (() => {
     return { phase: normalizedPhase, label, icon };
   }
 
+  // ================================================================
+  //  SKY GAZING SCORE
+  // ================================================================
+
+  /**
+   * A 0-100 "how good is stargazing right now" score, driven by the two
+   * factors this app actually has data for: cloud cover (the dominant one
+   * — an overcast sky ends the question regardless of anything else) and
+   * moonlight (illumination fraction derived from the moon-phase math
+   * above).
+   *
+   * Deliberately excludes a Bortle-scale / light-pollution estimate: doing
+   * that honestly needs a light-pollution atlas this app has no source
+   * for, and a guessed number would be worse than no number. Also doesn't
+   * check whether the moon is actually above the horizon at the given
+   * time (that needs a full moon-position ephemeris, not just phase) — the
+   * illumination penalty applies whenever the moon is bright, which
+   * slightly under-scores clear nights when a bright moon has already set.
+   * Both are documented simplifications, not silent ones.
+   *
+   * @param {number|null} cloudCoverPct - 0-100
+   * @param {number|null} moonPhaseFraction - 0-1, from getMoonPhase().phase
+   * @returns {{ score: number, label: string, icon: string, illumination: number }|null}
+   */
+  function getStargazingScore(cloudCoverPct, moonPhaseFraction) {
+    if (cloudCoverPct == null) return null;
+
+    // Illumination fraction from phase angle: 0 at new moon, 1 at full.
+    const phase = moonPhaseFraction ?? 0;
+    const illumination = (1 - Math.cos(phase * 2 * Math.PI)) / 2;
+
+    let score = 100;
+    score -= cloudCoverPct * 0.9;
+    score -= illumination * 30;
+    score = Math.max(0, Math.min(100, Math.round(score)));
+
+    let label, icon;
+    if (score >= 85) {
+      label = "Excellent";
+      icon = "🌌";
+    } else if (score >= 65) {
+      label = "Good";
+      icon = "✨";
+    } else if (score >= 40) {
+      label = "Fair";
+      icon = "🌥️";
+    } else if (score >= 15) {
+      label = "Poor";
+      icon = "☁️";
+    } else {
+      label = "Washed Out";
+      icon = "🌫️";
+    }
+
+    return { score, label, icon, illumination };
+  }
+
+  /**
+   * Golden hour / blue hour windows around sunrise and sunset, using the
+   * fixed-offset approximation photography apps commonly use (golden hour
+   * ≈ the 1h nearest sunrise/sunset while the sun is low; blue hour ≈ the
+   * ~30min after sunset / before sunrise while the sun is just below the
+   * horizon) rather than a full solar-elevation model. Good enough to plan
+   * a shoot around; not a substitute for a proper ephemeris if the exact
+   * minute matters.
+   *
+   * @param {string|Date} sunrise
+   * @param {string|Date} sunset
+   * @param {Date} now
+   * @returns {{ label: string, start: Date, end: Date }|null} The next
+   *   upcoming window, or null if both today's windows have passed.
+   */
+  function getGoldenBlueHourWindows(sunrise, sunset, now) {
+    if (!sunrise || !sunset) return null;
+    const rise = new Date(sunrise);
+    const set = new Date(sunset);
+    if (!Number.isFinite(rise.getTime()) || !Number.isFinite(set.getTime()))
+      return null;
+
+    const MIN = 60000;
+    const windows = [
+      { label: "Morning Blue Hour", start: new Date(rise - 30 * MIN), end: rise },
+      { label: "Morning Golden Hour", start: rise, end: new Date(rise.getTime() + 60 * MIN) },
+      { label: "Evening Golden Hour", start: new Date(set.getTime() - 60 * MIN), end: set },
+      { label: "Evening Blue Hour", start: set, end: new Date(set.getTime() + 30 * MIN) },
+    ].sort((a, b) => a.start - b.start);
+
+    for (const w of windows) {
+      if (now <= w.end) return w;
+    }
+    return null;
+  }
+
   /**
    * Synthesizes safety advisories based on the hourly weather and air quality index.
    *
@@ -951,12 +1044,46 @@ const WeatherService = (() => {
         severity: "severe",
       });
     } else if (temp <= 2) {
-      alerts.push({
-        type: "frost",
-        title: "Frost / Freeze Advisory",
-        desc: `Temperature is ${Math.round(temp)}°C. Protect plants, outdoor pipes, and pets from cold.`,
-        severity: "advisory",
-      });
+      // Cold is a ladder, not a single rung. "Protect plants and outdoor
+      // pipes" is correct guidance at -1°C and absurd at -57°C, where the
+      // hazard is frostbite on exposed skin measured in minutes. Escalate on
+      // the wind chill (feelsLike) where the API gives one, since that is what
+      // the body and every frostbite table actually respond to.
+      const chill = weather.feelsLike ?? temp;
+      const reading =
+        chill < temp - 2
+          ? `${Math.round(temp)}°C, feels like ${Math.round(chill)}°C`
+          : `${Math.round(temp)}°C`;
+
+      if (chill <= -45) {
+        alerts.push({
+          type: "extreme-cold",
+          title: "Extreme Cold Emergency",
+          desc: `${reading}. Exposed skin freezes in under 2 minutes. Travel only with full polar gear and a survival kit — hypothermia is rapid and unsurvivable without shelter.`,
+          severity: "extreme",
+        });
+      } else if (chill <= -30) {
+        alerts.push({
+          type: "extreme-cold",
+          title: "Extreme Cold Warning",
+          desc: `${reading}. Frostbite on exposed skin in 5-10 minutes. Cover all skin, limit time outdoors, and watch for hypothermia.`,
+          severity: "severe",
+        });
+      } else if (chill <= -15) {
+        alerts.push({
+          type: "wind-chill",
+          title: "Wind Chill Advisory",
+          desc: `${reading}. Frostbite possible within 30 minutes on exposed skin. Wear layers, gloves, and cover your face.`,
+          severity: "warning",
+        });
+      } else {
+        alerts.push({
+          type: "frost",
+          title: "Frost / Freeze Advisory",
+          desc: `Temperature is ${reading}. Protect plants, outdoor pipes, and pets from cold.`,
+          severity: "advisory",
+        });
+      }
     }
 
     if (wind >= 40) {
@@ -1133,7 +1260,20 @@ const WeatherService = (() => {
     return Math.max(0, Math.min(100, Math.round(score)));
   }
 
-  function getComfortLabel(score) {
+  /**
+   * Maps a comfort score to a label, colour and icon.
+   *
+   * The bottom two bands are temperature-aware: a score of 0 is reached both
+   * at +50°C and at -57°C, and labelling the latter "🥵 Miserable" was plainly
+   * wrong. `weather` is optional so the single-argument call signature (and
+   * the existing tests) keep working — without it the old heat-leaning
+   * wording is used.
+   *
+   * @param {number|null} score - Comfort index 0-100
+   * @param {Object} [weather] - Hourly snapshot, for the cold/heat split
+   * @returns {{ label: string, color: string, icon: string }}
+   */
+  function getComfortLabel(score, weather) {
     if (score == null)
       return { label: "--", color: "text-slate-400", icon: "❓" };
     if (score >= 85)
@@ -1142,8 +1282,25 @@ const WeatherService = (() => {
       return { label: "Good", color: "text-green-500", icon: "👍" };
     if (score >= 50)
       return { label: "Fair", color: "text-amber-500", icon: "😐" };
+
+    // Below "Fair", discomfort has a direction. Prefer the apparent
+    // temperature — at -57°C with 39 km/h gusts the wind chill is what the
+    // body actually experiences — and fall back to the dry-bulb reading.
+    const t = weather
+      ? (weather.feelsLike ?? weather.temperature ?? null)
+      : null;
+    const cold = t != null && t < 0;
+
     if (score >= 30)
-      return { label: "Poor", color: "text-orange-500", icon: "😣" };
+      return cold
+        ? { label: "Bitter", color: "text-sky-500", icon: "🥶" }
+        : { label: "Poor", color: "text-orange-500", icon: "😣" };
+
+    if (cold)
+      return t <= -30
+        ? { label: "Extreme Freeze", color: "text-cyan-400", icon: "🧊" }
+        : { label: "Shivering", color: "text-sky-500", icon: "🥶" };
+
     return { label: "Miserable", color: "text-red-500", icon: "🥵" };
   }
 
@@ -1861,7 +2018,7 @@ const WeatherService = (() => {
     }
 
     parts.push(
-      `Comfort index: ${getComfortLabel(getComfortIndex(weather, aqiVal)).label}.`,
+      `Comfort index: ${getComfortLabel(getComfortIndex(weather, aqiVal), weather).label}.`,
     );
     return parts.join(" ");
   }
@@ -2006,6 +2163,8 @@ const WeatherService = (() => {
     getAQIInfo,
     fetchHistoricalWeather,
     getMoonPhase,
+    getStargazingScore,
+    getGoldenBlueHourWindows,
     getAdvisories,
 
     findBestOutdoorWindow,

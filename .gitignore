@@ -10,3 +10,6 @@ nul
 lighthouse-report.json
 *.tmp
 aurafisky-desktop/
+.env
+.env.*
+!.env.example

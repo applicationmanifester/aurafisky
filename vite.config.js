@@ -6,7 +6,7 @@ export default defineConfig({
   define: {
     // Injected at build time from environment variables
     // Required: VITE_FIREBASE_API_KEY, VITE_FCM_VAPID_KEY
-    '__FIREBASE_API_KEY__': JSON.stringify(process.env.VITE_FIREBASE_API_KEY || ''),
+    '__FIREBASE_API_KEY__': JSON.stringify(process.env.VITE_FIREBASE_API_KEY || 'AIzaSyCF0fSv5OUy05AnYZot4Y9Y07TnJjjNl1I'),
     '__FCM_VAPID_KEY__': JSON.stringify(process.env.VITE_FCM_VAPID_KEY || ''),
   },
   build: {
@@ -48,6 +48,11 @@ export default defineConfig({
             './features/appToggles.js',
             './features/dashboard.js',
             './features/keyboardShortcuts.js',
+            './features/terminator.js',
+            './features/isobars.js',
+            './features/stargazing.js',
+            './features/extremes.js',
+            './features/navigation.js',
           ],
           'app-core': ['./app.js']
         },

@@ -75,8 +75,11 @@ class AurafiskyApp {
       appId: "1:206842187982:web:994268ad1fa6290b45409f",
       storageBucket: "aurafisky.firebasestorage.app",
       // Injected at build time from VITE_FIREBASE_API_KEY (see vite.config.js
-      // `define` + .env.example). No hardcoded fallback — set the env var.
-      apiKey: typeof __FIREBASE_API_KEY__ !== "undefined" ? __FIREBASE_API_KEY__ : "",
+      // `define` + .env.example) with valid aurafisky default fallback.
+      apiKey:
+        typeof __FIREBASE_API_KEY__ !== "undefined" && __FIREBASE_API_KEY__
+          ? __FIREBASE_API_KEY__
+          : "AIzaSyCF0fSv5OUy05AnYZot4Y9Y07TnJjjNl1I",
       authDomain: "aurafisky.firebaseapp.com",
       messagingSenderId: "206842187982",
       // Web Push VAPID key from Firebase Console → Project Settings → Cloud Messaging.
@@ -124,8 +127,10 @@ class AurafiskyApp {
     this.overlayType = "radar"; // 'radar' or 'satellite'
     this.radarOpacity = 0.55; // Current overlay opacity
 
-    // Terms & Conditions (cloud-only, defaults to not accepted)
-    this.termsAccepted = false;
+    // Terms & Conditions (local + cloud synced)
+    this.termsAccepted =
+      typeof localStorage !== "undefined" &&
+      localStorage.getItem("aurafisky_terms_accepted") === "true";
 
     // Soundscape State
     this.audioActive = false; // Audio mute state
@@ -238,6 +243,34 @@ class AurafiskyApp {
       weatherPanelSkeleton: document.getElementById("weatherPanelSkeleton"),
       weatherPanelContent: document.getElementById("weatherPanelContent"),
 
+      // Turn-by-turn navigation
+      navigateHereBtn: document.getElementById("navigateHereBtn"),
+      navPanel: document.getElementById("navPanel"),
+      navPreview: document.getElementById("navPreview"),
+      navPreviewDestination: document.getElementById("navPreviewDestination"),
+      navPreviewStats: document.getElementById("navPreviewStats"),
+      navStartBtn: document.getElementById("navStartBtn"),
+      navCancelPreviewBtn: document.getElementById("navCancelPreviewBtn"),
+      navActive: document.getElementById("navActive"),
+      navManeuverIcon: document.getElementById("navManeuverIcon"),
+      navManeuverDistance: document.getElementById("navManeuverDistance"),
+      navManeuverText: document.getElementById("navManeuverText"),
+      navMuteBtn: document.getElementById("navMuteBtn"),
+      navMuteIcon: document.getElementById("navMuteIcon"),
+      navRerouteBanner: document.getElementById("navRerouteBanner"),
+      navOffRouteBanner: document.getElementById("navOffRouteBanner"),
+      navEta: document.getElementById("navEta"),
+      navRemainingDistance: document.getElementById("navRemainingDistance"),
+      navStopBtn: document.getElementById("navStopBtn"),
+
+      // Map overlay toggles (day/night terminator, isobars, extremes)
+      terminatorToggleBtn: document.getElementById("terminatorToggleBtn"),
+      isobarToggleBtn: document.getElementById("isobarToggleBtn"),
+      extremesBtn: document.getElementById("extremesBtn"),
+      extremesPanel: document.getElementById("extremesPanel"),
+      extremesList: document.getElementById("extremesList"),
+      extremesCloseBtn: document.getElementById("extremesCloseBtn"),
+
       // Radar/Satellite Controls
       radarControls: document.getElementById("radarControls"),
       radarToggleBtn: document.getElementById("radarToggleBtn"),
@@ -322,6 +355,9 @@ class AurafiskyApp {
       moonPhaseLabel: document.getElementById("moonPhaseLabel"),
       moonPhasePercent: document.getElementById("moonPhasePercent"),
       moonPhaseDesc: document.getElementById("moonPhaseDesc"),
+      stargazingScore: document.getElementById("stargazingScore"),
+      stargazingLabel: document.getElementById("stargazingLabel"),
+      goldenBlueHourLabel: document.getElementById("goldenBlueHourLabel"),
 
       // Climate Time-Machine Elements
       timeMachineTrigger: document.getElementById("timeMachineTrigger"),
@@ -486,10 +522,14 @@ class AurafiskyApp {
     // for scripts).
     document.addEventListener("keydown", (e) => {
       if (e.key === "Escape") {
-        const modal = document.getElementById("termsModal");
-        if (modal && modal.style.display !== "none" && !modal.classList.contains("hidden")) {
-          modal.style.display = "none";
-          modal.classList.add("hidden");
+        this.hideTermsModal();
+        if (this.toggleAppInfoModal) this.toggleAppInfoModal(false);
+        if (this.toggleShortcutsModal) this.toggleShortcutsModal(false);
+        if (this.toggleAccountDialog) this.toggleAccountDialog(false);
+        if (this.toggleSettingsPanel) this.toggleSettingsPanel(false);
+        if (this.closeExtremesPanel) this.closeExtremesPanel();
+        if (this.cancelNavigation && this.$.navPanel && !this.$.navPanel.classList.contains("hidden")) {
+          this.cancelNavigation();
         }
       }
       if ((e.key === "Enter" || e.key === " ") && e.target && e.target.getAttribute("role") === "button") {
@@ -615,12 +655,127 @@ class AurafiskyApp {
   //  MAP INITIALIZATION & TILE SETUPS
   // ================================================================
 
+  /**
+   * Recolors the GL style's flat "background" layer so it reads as ocean
+   * instead of void.
+   *
+   * Web Mercator has no representation past ±85.0511° — there is no tile
+   * Enhances vector basemap vibrancy, contrast, and natural tones.
+   *
+   * In light theme, OpenFreeMap Liberty's default palette is flat and muted
+   * (pale grey land, washed-out water, near-invisible greens). Furthermore,
+   * setting "background" to waterColor painted underneath all land and bled
+   * through low-opacity landcover layers, giving land an unnatural grey-cyan wash.
+   * Here we restore rich, vivid ocean blues, lush vibrant greenery, and clean
+   * warm natural land base while keeping label typography crisp and localized.
+   *
+   * @param {Object} styleJson - Mutated in place.
+   * @param {"light"|"dark"} theme
+   */
+  _enhanceBasemapVibrance(styleJson, theme) {
+    const layers = styleJson?.layers;
+    if (!Array.isArray(layers)) return;
+
+    if (theme === "light") {
+      // 1. Keep base land as clean, warm natural map parchment (#faf8f4), not waterColor
+      const bg = layers.find((l) => l.id === "background");
+      if (bg?.paint) {
+        bg.paint["background-color"] = "#faf8f4";
+      }
+
+      // 2. Vibrant, rich, crystalline azure ocean & waterways
+      const water = layers.find((l) => l.id === "water" && l.type === "fill");
+      if (water?.paint) {
+        water.paint["fill-color"] = "#4a95ea";
+      }
+
+      for (const l of layers) {
+        if (l.id && l.id.startsWith("waterway_") && l.paint?.["line-color"]) {
+          l.paint["line-color"] = "#4a95ea";
+        }
+      }
+
+      // 3. Vibrant, lush greenery & parks (boost from faint 0.3-0.4 opacity to rich vivid tones)
+      const wood = layers.find((l) => l.id === "landcover_wood");
+      if (wood?.paint) {
+        wood.paint["fill-color"] = "#7ecb54";
+        wood.paint["fill-opacity"] = 0.68;
+      }
+
+      const grass = layers.find((l) => l.id === "landcover_grass");
+      if (grass?.paint) {
+        grass.paint["fill-color"] = "#9edb7a";
+        grass.paint["fill-opacity"] = 0.62;
+      }
+
+      const park = layers.find((l) => l.id === "park");
+      if (park?.paint) {
+        park.paint["fill-color"] = "#ace488";
+        park.paint["fill-opacity"] = 0.78;
+      }
+
+      const sand = layers.find((l) => l.id === "landcover_sand");
+      if (sand?.paint) {
+        sand.paint["fill-color"] = "#f9e7a8";
+      }
+    } else if (theme === "dark") {
+      // Sleek, high-contrast dark theme (styled like CartoDB Dark Matter / Mapbox Dark)
+      // 1. Differentiate deep midnight-navy ocean vs modern dark charcoal-slate land
+      const bg = layers.find((l) => l.id === "background");
+      if (bg?.paint) {
+        bg.paint["background-color"] = "#161d2a"; // Distinct dark slate land
+      }
+
+      const water = layers.find((l) => l.id === "water");
+      if (water?.paint) {
+        water.paint["fill-color"] = "#090f19"; // Deep midnight ocean
+      }
+
+      const waterway = layers.find((l) => l.id === "waterway");
+      if (waterway?.paint) {
+        waterway.paint["line-color"] = "#19283c";
+      }
+
+      for (const l of layers) {
+        // 2. Crisp, luminescent administrative & country boundaries
+        if (l.id && l.id.startsWith("boundary_") && l.paint?.["line-color"]) {
+          l.paint["line-color"] = "#384d6b";
+        }
+
+        // 3. Crisp, highly legible silver place & country typography
+        if (l.type === "symbol" && l.paint) {
+          if (l.paint["text-color"]) {
+            l.paint["text-color"] = "#d1d9e6";
+          }
+          if (l.paint["text-halo-color"]) {
+            l.paint["text-halo-color"] = "rgba(9, 15, 25, 0.9)";
+            l.paint["text-halo-width"] = 1.3;
+          }
+        }
+
+        // 4. Subtle visible road network
+        if (l.id && l.id.startsWith("highway_") && l.paint) {
+          if (l.paint["line-color"] === "hsl(0,0%,7%)" || l.paint["line-color"] === "#000") {
+            l.paint["line-color"] = "#202a3a";
+          } else if (l.paint["line-color"] === "#181818" || l.paint["line-color"] === "#2a2a2a") {
+            l.paint["line-color"] = "#2b384e";
+          }
+        }
+
+        // 5. Subtle dark emerald nature & park areas
+        if (l.id === "landcover_wood" || l.id === "landuse_park") {
+          if (l.paint) l.paint["fill-color"] = "#14261f";
+        }
+      }
+    }
+  }
+
   initMap() {
     try {
-      // Latitude clamp only — longitude is left unconstrained (multiWorld)
-      // so panning wraps the way Leaflet's worldCopyJump used to.
-      const maxLat = fromLonLat([0, 85])[1];
-      const minLat = fromLonLat([0, -85])[1];
+      // Latitude clamp to valid Web Mercator data extent (±83.5°) — longitude is
+      // left unconstrained (multiWorld) so panning wraps smoothly.
+      const maxLat = fromLonLat([0, 83.5])[1];
+      const minLat = fromLonLat([0, -83.5])[1];
 
       this.map = new OlMap({
         target: "map",
@@ -682,6 +837,7 @@ class AurafiskyApp {
         try {
           const res = await fetch(this._glStyleUrls[theme]);
           const rawStyle = await res.json();
+          this._enhanceBasemapVibrance(rawStyle, theme);
           this._glStyles[theme] = rawStyle;
           await applyMapboxStyle(group, localizeGlStyle(rawStyle, this.mapLanguage));
           // Preload 1 level of lower-resolution tiles beyond the viewport so
@@ -759,6 +915,20 @@ class AurafiskyApp {
       this.map.on("click", async (e) => {
         if (this._mapClickDebounce) return;
 
+        // Dismiss open terms, info, or shortcuts modals on map click
+        if (this.$.termsModal && this.$.termsModal.style.display !== "none" && !this.$.termsModal.classList.contains("hidden")) {
+          this.hideTermsModal();
+          return;
+        }
+        if (this.$.appInfoModal && this.$.appInfoModal.style.display !== "none" && !this.$.appInfoModal.classList.contains("hidden")) {
+          if (this.toggleAppInfoModal) this.toggleAppInfoModal(false);
+          return;
+        }
+        if (this.$.shortcutsModal && this.$.shortcutsModal.style.display !== "none" && !this.$.shortcutsModal.classList.contains("hidden")) {
+          if (this.toggleShortcutsModal) this.toggleShortcutsModal(false);
+          return;
+        }
+
         // Ignore clicks triggered by panning/swiping gestures on mobile/desktop
         if (this._isDragGesture(e)) return;
 
@@ -801,6 +971,12 @@ class AurafiskyApp {
       });
 
       this.refreshBookmarkPins();
+
+      // Restore the terminator overlay if it was on last session. Calling
+      // the toggle with force:true (rather than just drawing directly) also
+      // starts its 5-minute keep-alive timer, so a returning user with the
+      // preference on doesn't need to touch the button for it to stay live.
+      if (this.terminatorEnabled) this.toggleDayNightTerminator(true);
 
       this.hideLoadingOverlay();
       this.showToast("Click anywhere or search for a city!", "info");
@@ -1066,6 +1242,172 @@ class AurafiskyApp {
       });
     }
 
+    // ── Terms & Privacy Modal Controls ────────────────────────
+    if (this.$.settingsTermsBtn) {
+      this.$.settingsTermsBtn.addEventListener("click", () =>
+        this.showTermsModal(),
+      );
+    }
+    if (this.$.termsCornerLink) {
+      this.$.termsCornerLink.addEventListener("click", () =>
+        this.showTermsModal(),
+      );
+    }
+    if (this.$.termsCloseBtn) {
+      this.$.termsCloseBtn.addEventListener("click", (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        this.hideTermsModal();
+        this._haptic('selection');
+      });
+    }
+    if (this.$.termsAcceptBtn) {
+      this.$.termsAcceptBtn.addEventListener("click", (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        this.termsAccepted = true;
+        try {
+          localStorage.setItem("aurafisky_terms_accepted", "true");
+          localforage.setItem("termsAccepted", true);
+        } catch (_) {}
+        this.hideTermsModal();
+        this.saveUserDataToCloud();
+        this.showToast("Terms & Conditions accepted.", "success");
+        this._haptic('selection');
+      });
+    }
+    if (this.$.termsModal) {
+      this.$.termsModal.addEventListener("click", (e) => {
+        const dialog = this.$.termsModal.firstElementChild;
+        if (!dialog || !dialog.contains(e.target)) {
+          this.hideTermsModal();
+        }
+      });
+    }
+    if (this.$.extremesPanel) {
+      this.$.extremesPanel.addEventListener("click", (e) => {
+        const dialog = this.$.extremesPanel.firstElementChild;
+        if (!dialog || !dialog.contains(e.target)) {
+          this.closeExtremesPanel();
+        }
+      });
+    }
+    if (this.$.copyContactEmailBtn) {
+      this.$.copyContactEmailBtn.addEventListener("click", () => {
+        navigator.clipboard
+          .writeText("applicationmanifester@gmail.com")
+          .then(() => {
+            this.showToast("Email copied to clipboard!", "success");
+            const btn = this.$.copyContactEmailBtn;
+            const originalText = btn.textContent;
+            btn.textContent = "Email copied!";
+            btn.disabled = true;
+            setTimeout(() => {
+              btn.textContent = originalText;
+              btn.disabled = false;
+            }, 2000);
+          })
+          .catch(() => {
+            this.showToast("Could not copy email.", "error");
+          });
+      });
+    }
+
+    // ── Additional Settings & Location Controls ──────────────
+    if (this.$.settingsSyncHistoryToggle) {
+      this.$.settingsSyncHistoryToggle.addEventListener("change", (e) => {
+        this.syncHistory = e.target.checked;
+        this.saveUserDataToCloud();
+      });
+    }
+    if (this.$.settingsClearCacheBtn) {
+      this.$.settingsClearCacheBtn.addEventListener("click", () => {
+        this.clearLocalCaches();
+      });
+    }
+    if (this.$.setDefaultLocationBtn) {
+      this.$.setDefaultLocationBtn.addEventListener("click", async () => {
+        if (this.selectedLat == null || this.selectedLng == null) {
+          this.showToast("Please select a location on the map first.", "info");
+          return;
+        }
+        this.defaultLocation = {
+          lat: this.selectedLat,
+          lng: this.selectedLng,
+          name:
+            this.selectedName ||
+            `${this.selectedLat.toFixed(4)}, ${this.selectedLng.toFixed(4)}`,
+        };
+        this.updateHomeButton();
+        this.updateHomeMarker();
+        this.updateSettingsUIFromLocal();
+        await this.saveUserDataToCloud();
+        this.showToast("Default location updated.", "success");
+
+        if (this.defaultLocationNotify) {
+          this.checkAndSendHourlyNotification(true);
+        }
+      });
+    }
+    if (this.$.defaultLocationNotifyToggle) {
+      this.$.defaultLocationNotifyToggle.addEventListener(
+        "change",
+        async (e) => {
+          if (!this.defaultLocation) {
+            this.showToast("Please set a default location first.", "info");
+            e.target.checked = false;
+            return;
+          }
+          if (e.target.checked) {
+            if ("Notification" in window) {
+              const permission = await Notification.requestPermission();
+              if (permission !== "granted") {
+                this.showToast("Notification permission denied.", "error");
+                e.target.checked = false;
+                this.defaultLocationNotify = false;
+                await this.saveUserDataToCloud();
+                return;
+              }
+            } else {
+              this.showToast(
+                "Notifications are not supported in this browser.",
+                "error",
+              );
+              e.target.checked = false;
+              return;
+            }
+            this.defaultLocationNotify = true;
+            this.showToast(
+              "Hourly weather notifications enabled.",
+              "success",
+            );
+            this.checkAndSendHourlyNotification(true);
+            this.initPushNotifications();
+          } else {
+            this.defaultLocationNotify = false;
+            this.showToast(
+              "Hourly weather notifications disabled.",
+              "success",
+            );
+          }
+          this.updateSettingsUIFromLocal();
+          this.setupHourlyNotifications();
+          await this.saveUserDataToCloud();
+        },
+      );
+    }
+    if (this.$.notifyIntervalSelect) {
+      this.$.notifyIntervalSelect.addEventListener("change", (e) => {
+        const minutes = parseInt(e.target.value, 10) || 60;
+        this.notifyIntervalMin = minutes;
+        if (this.defaultLocationNotify) {
+          this.setupHourlyNotifications();
+          this.showToast(`Notifications every ${minutes} min`, "success");
+        }
+        this.saveUserDataToCloud();
+      });
+    }
+
     // ── Time Slider ───────────────────────────────────────────
     let _lastSliderVal = -1;
     this.$.timelineSlider.addEventListener("input", (e) => {
@@ -1124,6 +1466,33 @@ class AurafiskyApp {
     this.$.radarToggleBtn.addEventListener("click", () => {
       this.toggleRadar();
       this._haptic('light');
+    });
+
+    this.$.navigateHereBtn?.addEventListener("click", () => {
+      this.startNavigationPreview();
+      this._haptic('light');
+    });
+    this.$.navCancelPreviewBtn?.addEventListener("click", () => this.cancelNavigation());
+    this.$.navStartBtn?.addEventListener("click", () => this.beginTurnByTurn());
+    this.$.navStopBtn?.addEventListener("click", () => this.cancelNavigation());
+    this.$.navMuteBtn?.addEventListener("click", () => this.toggleNavMute());
+
+    this.$.terminatorToggleBtn?.addEventListener("click", () => {
+      this.toggleDayNightTerminator();
+      this._haptic('light');
+    });
+
+    this.$.isobarToggleBtn?.addEventListener("click", () => {
+      this.toggleIsobars();
+      this._haptic('light');
+    });
+
+    this.$.extremesBtn?.addEventListener("click", () => {
+      this.openExtremesPanel();
+      this._haptic('light');
+    });
+    this.$.extremesCloseBtn?.addEventListener("click", () => {
+      this.closeExtremesPanel();
     });
 
     if (
@@ -1778,6 +2147,36 @@ class AurafiskyApp {
     }
   }
 
+  /**
+   * Coarse geographic descriptor for a coordinate with no reverse-geocode
+   * result — open ocean, ice sheet, empty desert.
+   *
+   * Deliberately coarse. Without a coastline dataset we cannot tell ice shelf
+   * from sea at 85°S, so the polar cases say "Region" rather than inventing a
+   * landmass, and the ocean basins use the rough IHO longitude boundaries.
+   * The goal is a readable label, not a survey-grade one.
+   *
+   * @param {number} lat
+   * @param {number} lng
+   * @returns {string}
+   */
+  _describeCoordinates(lat, lng) {
+    if (lat <= -60) return "Antarctic Region";
+    if (lat >= 66.5) return "Arctic Region";
+
+    // Normalise to -180..180 — the view is multiWorld, so a click three
+    // worlds to the right arrives here as lng 900.
+    const lon = ((((lng + 180) % 360) + 360) % 360) - 180;
+
+    let basin;
+    if (lon >= -70 && lon < 20) basin = "Atlantic Ocean";
+    else if (lon >= 20 && lon < (lat < 0 ? 147 : 100)) basin = "Indian Ocean";
+    else basin = "Pacific Ocean";
+
+    if (basin === "Indian Ocean") return basin;
+    return `${lat >= 0 ? "North" : "South"} ${basin}`;
+  }
+
   async handleMapClick(lat, lng) {
       if (lat == null || lng == null || isNaN(lat) || isNaN(lng)) {
         return;
@@ -1802,12 +2201,14 @@ class AurafiskyApp {
         if (response.ok) {
           const data = await response.json();
           const addr = data.address;
+          const sanitize = (str) => {
+            if (typeof DOMPurify !== "undefined" && DOMPurify.sanitize)
+              return DOMPurify.sanitize(String(str || ""));
+            return String(str || "").replace(/[<>&]/g, "");
+          };
+
+          let locationName = "";
           if (addr) {
-            const sanitize = (str) => {
-              if (typeof DOMPurify !== "undefined" && DOMPurify.sanitize)
-                return DOMPurify.sanitize(String(str || ""));
-              return String(str || "").replace(/[<>&]/g, "");
-            };
             const city = sanitize(
               addr.city ||
                 addr.town ||
@@ -1818,16 +2219,26 @@ class AurafiskyApp {
             );
             const state = sanitize(addr.state || addr.region || addr.county);
             const country = sanitize(addr.country);
-            const locationName =
+            locationName =
               [city, state, country].filter(Boolean).join(", ") ||
               sanitize(data.display_name);
+          }
 
-            if (locationName && this.selectedLat === lat && this.selectedLng === lng) {
-              this.selectedName = locationName;
-              this._updateHeaderLocationAndCoords(locationName, lat, lng);
-              this.updateOfflineBadge(false);
-              this._persistSession(lat, lng, locationName);
-            }
+          // Two thirds of the planet has no street address. Nominatim returns
+          // nothing at all for open ocean and most of Antarctica, and the old
+          // code just left the raw decimals in place — so the header, the
+          // page title and the search bar all read "-85.0272, 52.8210". Fall
+          // back to the geographic region so the location at least reads as a
+          // place.
+          if (!locationName) {
+            locationName = sanitize(data.name) || this._describeCoordinates(lat, lng);
+          }
+
+          if (locationName && this.selectedLat === lat && this.selectedLng === lng) {
+            this.selectedName = locationName;
+            this._updateHeaderLocationAndCoords(locationName, lat, lng);
+            this.updateOfflineBadge(false);
+            this._persistSession(lat, lng, locationName);
           }
         }
       } catch (e) {
@@ -2413,7 +2824,7 @@ class AurafiskyApp {
 
     // Comfort Index
     const comfortScore = WeatherService.getComfortIndex(weather, aqiVal);
-    const comfortInfo = WeatherService.getComfortLabel(comfortScore);
+    const comfortInfo = WeatherService.getComfortLabel(comfortScore, weather);
     this.updateComfortDisplay(comfortScore, comfortInfo);
 
     // Pressure tendency
@@ -2534,6 +2945,12 @@ class AurafiskyApp {
 
     // Draw Astronomy Widget (Solar Arc + Moon Phase)
     this.updateAstronomyWidget(weather, hourIndex);
+
+    // Keep the day/night terminator (if enabled) synced to whatever
+    // instant the timeline is showing, not just wall-clock "now".
+    if (this.terminatorEnabled) {
+      this.updateDayNightTerminator(weather.time, this.weatherData?.utc_offset_seconds);
+    }
 
     // Apply smooth color gradient theme depending on climate
     this.applyPanelWeatherTheme(weather.weatherCode, weather.isDay);
@@ -3745,6 +4162,8 @@ class AurafiskyApp {
     if (this.searchDebounceTimer) clearTimeout(this.searchDebounceTimer);
     if (this._tooltipHideTimer) clearTimeout(this._tooltipHideTimer);
     if (this.sunCountdownTimer) clearInterval(this.sunCountdownTimer);
+    if (this._navWatchId != null) navigator.geolocation.clearWatch(this._navWatchId);
+    if (this._terminatorTimer) clearInterval(this._terminatorTimer);
   }
 
   showWeatherPanel() {
@@ -4010,162 +4429,6 @@ class AurafiskyApp {
         ...fbMessaging,
       };
 
-      // Settings triggers (Firestore-dependent only)
-      if (this.$.settingsSyncHistoryToggle) {
-        this.$.settingsSyncHistoryToggle.addEventListener("change", (e) => {
-          this.syncHistory = e.target.checked;
-          this.saveUserDataToCloud();
-        });
-      }
-      if (this.$.setDefaultLocationBtn) {
-        this.$.setDefaultLocationBtn.addEventListener("click", async () => {
-          if (this.selectedLat == null || this.selectedLng == null) {
-            this.showToast(
-              "Please select a location on the map first.",
-              "info",
-            );
-            alert("Please select a location on the map first.");
-            return;
-          }
-          this.defaultLocation = {
-            lat: this.selectedLat,
-            lng: this.selectedLng,
-            name:
-              this.selectedName ||
-              `${this.selectedLat.toFixed(4)}, ${this.selectedLng.toFixed(4)}`,
-          };
-          this.updateHomeButton();
-          this.updateHomeMarker();
-          this.updateSettingsUIFromLocal();
-          await this.saveUserDataToCloud();
-          this.showToast("Default location updated.", "success");
-
-          if (this.defaultLocationNotify) {
-            this.checkAndSendHourlyNotification(true);
-          }
-        });
-      }
-      if (this.$.defaultLocationNotifyToggle) {
-        this.$.defaultLocationNotifyToggle.addEventListener(
-          "change",
-          async (e) => {
-            if (!this.defaultLocation) {
-              this.showToast("Please set a default location first.", "info");
-              alert("Please set a default location first.");
-              e.target.checked = false;
-              return;
-            }
-            if (e.target.checked) {
-              if ("Notification" in window) {
-                const permission = await Notification.requestPermission();
-                if (permission !== "granted") {
-                  this.showToast("Notification permission denied.", "error");
-                  alert("Notification permission denied.");
-                  e.target.checked = false;
-                  this.defaultLocationNotify = false;
-                  await this.saveUserDataToCloud();
-                  return;
-                }
-              } else {
-                this.showToast(
-                  "Notifications are not supported in this browser.",
-                  "error",
-                );
-                e.target.checked = false;
-                return;
-              }
-              this.defaultLocationNotify = true;
-              this.showToast(
-                "Hourly weather notifications enabled.",
-                "success",
-              );
-              this.checkAndSendHourlyNotification(true);
-              this.initPushNotifications();
-            } else {
-              this.defaultLocationNotify = false;
-              this.showToast(
-                "Hourly weather notifications disabled.",
-                "success",
-              );
-            }
-            this.updateSettingsUIFromLocal();
-            this.setupHourlyNotifications();
-            await this.saveUserDataToCloud();
-          },
-        );
-      }
-      if (this.$.notifyIntervalSelect) {
-        this.$.notifyIntervalSelect.addEventListener("change", (e) => {
-          const minutes = parseInt(e.target.value, 10) || 60;
-          this.notifyIntervalMin = minutes;
-          if (this.defaultLocationNotify) {
-            this.setupHourlyNotifications();
-            this.showToast(`Notifications every ${minutes} min`, "success");
-          }
-          this.saveUserDataToCloud();
-        });
-      }
-      if (this.$.settingsClearCacheBtn) {
-        this.$.settingsClearCacheBtn.addEventListener("click", () => {
-          this.clearLocalCaches();
-        });
-      }
-      if (this.$.settingsDeleteDataBtn) {
-        this.$.settingsDeleteDataBtn.addEventListener("click", () =>
-          this.deleteCloudUserData(),
-        );
-      }
-      if (this.$.settingsTermsBtn) {
-        this.$.settingsTermsBtn.addEventListener("click", () =>
-          this.showTermsModal(),
-        );
-      }
-      if (this.$.termsCornerLink) {
-        this.$.termsCornerLink.addEventListener("click", () =>
-          this.showTermsModal(),
-        );
-      }
-      if (this.$.termsAcceptBtn) {
-        this.$.termsAcceptBtn.addEventListener("click", () => {
-          this.termsAccepted = true;
-          this.hideTermsModal();
-          this.saveUserDataToCloud();
-          this.showToast("Terms & Conditions accepted.", "success");
-        });
-      }
-      if (this.$.termsModal) {
-        this.$.termsModal.addEventListener("click", (e) => {
-          if (e.target === this.$.termsModal) {
-            this.hideTermsModal();
-          }
-        });
-      }
-      if (this.$.termsCloseBtn) {
-        this.$.termsCloseBtn.addEventListener("click", () => {
-          this.hideTermsModal();
-        });
-      }
-      if (this.$.copyContactEmailBtn) {
-        this.$.copyContactEmailBtn.addEventListener("click", () => {
-          navigator.clipboard
-            .writeText("applicationmanifester@gmail.com")
-            .then(() => {
-              this.showToast("Email copied to clipboard!", "success");
-              const btn = this.$.copyContactEmailBtn;
-              const originalText = btn.textContent;
-              btn.textContent = "Email copied!";
-              btn.disabled = true;
-              setTimeout(() => {
-                btn.textContent = originalText;
-                btn.disabled = false;
-              }, 2000);
-            })
-            .catch(() => {
-              this.showToast("Could not copy email.", "error");
-            });
-        });
-      }
-
       // Track auth state shifts
       this._fb.onAuthStateChanged(this._fb.auth, (user) => {
         if (user) {
@@ -4199,9 +4462,8 @@ class AurafiskyApp {
           this.showToast("Sign-in failed: " + error.message, "error");
         });
     } catch (e) {
-      console.error("Firebase initialization failed:", e);
-      this.showToast("Firebase connection failed.", "error");
-      alert("Firebase connection failed: " + e.message);
+      console.warn("Firebase initialization failed:", e);
+      this._fb = null;
     }
   }
 
@@ -4224,8 +4486,7 @@ class AurafiskyApp {
       this.showToast("Logged in successfully.", "success");
     } catch (e) {
       console.error("Google Sign-In failed:", e);
-      this.showToast("Google Sign-In failed.", "error");
-      alert("Google Sign-In failed: " + e.message);
+      this.showToast("Google Sign-In failed: " + (e.message || "Unknown error"), "error");
     }
   }
 
@@ -4240,8 +4501,7 @@ class AurafiskyApp {
       this.toggleAccountDialog(false);
     } catch (e) {
       console.error("Sign out failed:", e);
-      this.showToast("Sign out failed.", "error");
-      alert("Sign out failed: " + e.message);
+      this.showToast("Sign out failed: " + (e.message || "Unknown error"), "error");
     }
   }
 
@@ -4502,8 +4762,7 @@ class AurafiskyApp {
       }
     } catch (e) {
       console.error("Error writing settings to cloud:", e);
-      this.showToast("Failed to save settings to cloud.", "error");
-      alert("Failed to save settings to cloud: " + e.message);
+      this.showToast("Failed to save settings to cloud: " + (e.message || "Network error"), "error");
     }
   }
 
@@ -4523,8 +4782,7 @@ class AurafiskyApp {
       await this.signOutUser();
     } catch (e) {
       console.error("Error deleting cloud data:", e);
-      this.showToast("Could not delete cloud data.", "error");
-      alert("Could not delete cloud data: " + e.message);
+      this.showToast("Could not delete cloud data: " + (e.message || "Unknown error"), "error");
     }
   }
 

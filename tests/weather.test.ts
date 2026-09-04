@@ -81,6 +81,9 @@ const {
   getSpatialGradient,
   // Moon phase
   getMoonPhase,
+  // Sky gazing
+  getStargazingScore,
+  getGoldenBlueHourWindows,
   // Briefing
   generateBriefing,
   // Analog day
@@ -467,6 +470,30 @@ it('formatPressure returns inHg', () => {
       expect(advisories.some((a: any) => a.type === 'frost')).toBe(true);
     });
 
+    it('getAdvisories escalates to extreme cold below -30 wind chill', () => {
+      const weather = createMockHourlyWeather({ temperature: -40, feelsLike: -40 });
+      const advisories = getAdvisories(weather, null);
+      const cold = advisories.find((a: any) => a.type === 'extreme-cold');
+      expect(cold).toBeDefined();
+      expect(cold.severity).toBe('severe');
+      expect(cold.desc).not.toContain('plants');
+    });
+
+    it('getAdvisories treats -57 as an emergency, not a frost advisory', () => {
+      const weather = createMockHourlyWeather({ temperature: -57, feelsLike: -65 });
+      const advisories = getAdvisories(weather, null);
+      expect(advisories.some((a: any) => a.type === 'frost')).toBe(false);
+      const cold = advisories.find((a: any) => a.type === 'extreme-cold');
+      expect(cold.severity).toBe('extreme');
+      expect(cold.desc).toContain('feels like -65');
+    });
+
+    it('getAdvisories issues a wind chill advisory between -15 and -30', () => {
+      const weather = createMockHourlyWeather({ temperature: -10, feelsLike: -20 });
+      const advisories = getAdvisories(weather, null);
+      expect(advisories.some((a: any) => a.type === 'wind-chill')).toBe(true);
+    });
+
     it('getAdvisories returns wind warning for high wind', () => {
       const weather = createMockHourlyWeather({ windSpeed: 50 });
       const advisories = getAdvisories(weather, null);
@@ -578,6 +605,28 @@ it('formatPressure returns inHg', () => {
       expect(getComfortLabel(35)).toEqual({ label: 'Poor', color: 'text-orange-500', icon: '😣' });
       expect(getComfortLabel(20)).toEqual({ label: 'Miserable', color: 'text-red-500', icon: '🥵' });
       expect(getComfortLabel(null)).toEqual({ label: '--', color: 'text-slate-400', icon: '❓' });
+    });
+
+    it('getComfortLabel does not call sub-zero weather a heat problem', () => {
+      const antarctic = createMockHourlyWeather({ temperature: -57, feelsLike: -65 });
+      expect(getComfortLabel(0, antarctic)).toEqual({
+        label: 'Extreme Freeze',
+        color: 'text-cyan-400',
+        icon: '🧊',
+      });
+
+      const chilly = createMockHourlyWeather({ temperature: -8, feelsLike: -12 });
+      expect(getComfortLabel(35, chilly).icon).toBe('🥶');
+      expect(getComfortLabel(10, chilly).label).toBe('Shivering');
+    });
+
+    it('getComfortLabel keeps the heat wording when it is actually hot', () => {
+      const desert = createMockHourlyWeather({ temperature: 48, feelsLike: 52 });
+      expect(getComfortLabel(10, desert)).toEqual({
+        label: 'Miserable',
+        color: 'text-red-500',
+        icon: '🥵',
+      });
     });
   });
 
@@ -1004,6 +1053,64 @@ it('formatPressure returns inHg', () => {
       const fullMoon = getMoonPhase(new Date('2024-01-25T00:00:00Z'));
       expect(fullMoon.label).toBe('Full Moon');
       expect(fullMoon.icon).toBe('🌕');
+    });
+  });
+
+  // ─── Sky Gazing Score ──────────────────────────────────────────
+
+  describe('Sky Gazing Score', () => {
+    it('scores a clear sky with a new moon as excellent', () => {
+      const result = getStargazingScore(0, 0);
+      expect(result?.score).toBe(100);
+      expect(result?.label).toBe('Excellent');
+    });
+
+    it('scores an overcast sky as washed out regardless of moon phase', () => {
+      const result = getStargazingScore(100, 0);
+      expect(result?.score).toBeLessThanOrEqual(15);
+      expect(result?.label).toBe('Washed Out');
+    });
+
+    it('penalizes a full moon even under clear skies', () => {
+      const newMoonResult = getStargazingScore(0, 0);
+      const fullMoonResult = getStargazingScore(0, 0.5);
+      expect(fullMoonResult!.score).toBeLessThan(newMoonResult!.score);
+      expect(fullMoonResult!.illumination).toBeCloseTo(1, 5);
+    });
+
+    it('returns null without cloud cover data', () => {
+      expect(getStargazingScore(null, 0)).toBeNull();
+    });
+
+    it('clamps to 0 rather than going negative', () => {
+      const result = getStargazingScore(100, 0.5);
+      expect(result?.score).toBe(0);
+    });
+  });
+
+  describe('Golden/Blue Hour Windows', () => {
+    const sunrise = '2026-06-01T06:00:00Z';
+    const sunset = '2026-06-01T20:00:00Z';
+
+    it('identifies morning blue hour just before sunrise', () => {
+      const now = new Date('2026-06-01T05:45:00Z');
+      const w = getGoldenBlueHourWindows(sunrise, sunset, now);
+      expect(w?.label).toBe('Morning Blue Hour');
+    });
+
+    it('identifies evening golden hour just before sunset', () => {
+      const now = new Date('2026-06-01T19:30:00Z');
+      const w = getGoldenBlueHourWindows(sunrise, sunset, now);
+      expect(w?.label).toBe('Evening Golden Hour');
+    });
+
+    it('returns null after the evening blue hour has passed', () => {
+      const now = new Date('2026-06-01T21:00:00Z');
+      expect(getGoldenBlueHourWindows(sunrise, sunset, now)).toBeNull();
+    });
+
+    it('returns null without sunrise/sunset data', () => {
+      expect(getGoldenBlueHourWindows(null, null, new Date())).toBeNull();
     });
   });
 

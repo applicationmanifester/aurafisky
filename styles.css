@@ -8,19 +8,43 @@
  * ============================================================
  */
 
+/* ── Map overlay toggle buttons (terminator, isobars) ─────────── */
+#terminatorToggleBtn.terminator-active {
+  background-color: rgba(245, 158, 11, 0.18);
+  border-color: rgba(245, 158, 11, 0.55);
+}
+.dark #terminatorToggleBtn.terminator-active {
+  background-color: rgba(245, 158, 11, 0.25);
+  border-color: rgba(245, 158, 11, 0.6);
+}
+
+#isobarToggleBtn.isobar-active {
+  background-color: var(--primary) !important;
+  border-color: var(--primary) !important;
+  color: #ffffff !important;
+}
+
+/* ── Turn-by-turn live position marker ────────────────────────── */
+@keyframes nav-pulse {
+  0% { transform: scale(0.6); opacity: 0.9; }
+  100% { transform: scale(1.8); opacity: 0; }
+}
+.nav-live-marker {
+  pointer-events: none;
+}
+
 /* ── Modern Map Tile Color Grading & Filtering ────────────────── */
-/* OpenLayers renders every layer (basemap + radar/route/temp overlays) onto
-   its own <canvas> inside #map. The dark theme uses OpenFreeMap's own
-   properly-designed dark vector style, so there's no invert filter to carry
-   over there. The light theme's saturate/contrast/brightness tint was
-   dropped: it was written for static raster <img> tiles, where the browser
-   filters each tile once and then just repositions the cached result. Here
-   it sits on a single canvas OpenLayers repaints every animation frame
-   during pan/zoom, so the filter (a per-pixel shader pass) was being
-   recomputed on every frame of every scroll — a real source of scroll
-   jank, not just a cosmetic tweak. */
-#map canvas {
-  /* intentionally unfiltered — see comment above */
+/* Targets specifically the basemap canvas (the first layer in the OpenLayers
+   stack) to restore vibrant saturation and crisp contrast in light mode,
+   without affecting radar, precipitation, terminator, or marker overlays. */
+#map .ol-layer:first-child canvas,
+.ol-viewport > .ol-layers > .ol-layer:first-child canvas {
+  filter: saturate(1.26) contrast(1.06) brightness(1.01);
+}
+
+.dark #map .ol-layer:first-child canvas,
+.dark .ol-viewport > .ol-layers > .ol-layer:first-child canvas {
+  filter: contrast(1.08) brightness(1.04);
 }
 
 /* Atmospheric Map Vignette Overlay */
@@ -134,9 +158,12 @@ html, body {
   width: 100%;
   height: 100%;
   height: var(--app-height, 100vh);
-  background: #0f172a;
+  background: #4a95ea;
   overscroll-behavior: none;
   touch-action: none; /* let OpenLayers own the gesture, no page scroll */
+}
+.dark #map {
+  background: #0f172a;
 }
 
 /* ── Hide scrollbar for scrollable containers ──────────────── */

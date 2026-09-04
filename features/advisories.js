@@ -1,4 +1,18 @@
-// -- WEATHER ADVISORIES & FA VICONS --
+// -- WEATHER ADVISORIES & FAVICONS --
+
+// Banner glyph per advisory type. A lookup beats the nested ternary this
+// replaced: adding the cold tiers to that chain would have made it six levels
+// deep, and a missing entry silently fell through to the generic ⚠️.
+const ADVISORY_ICONS = {
+  aqi: "🍃",
+  wind: "💨",
+  heat: "☀️",
+  frost: "❄️",
+  "wind-chill": "🥶",
+  "extreme-cold": "🧊",
+  storm: "⛈️",
+  rain: "🌧️",
+};
 
 function renderAdvisoryBanner(advisories) {
     if (!advisories || advisories.length === 0) {
@@ -19,14 +33,7 @@ function renderAdvisoryBanner(advisories) {
     const topAlert = advisories[0];
 
     this.$.advisoryBanner.className = `mb-4 rounded-xl p-3 border shadow-sm flex items-start gap-2.5 transition-all duration-300 alert-${topAlert.severity}`;
-    this.$.advisoryIcon.textContent =
-      topAlert.type === "aqi"
-        ? "🍃"
-        : topAlert.type === "wind"
-          ? "💨"
-          : topAlert.type === "heat"
-            ? "☀️"
-            : "⚠️";
+    this.$.advisoryIcon.textContent = ADVISORY_ICONS[topAlert.type] || "⚠️";
     this.$.advisoryTitle.textContent = topAlert.title;
     this.$.advisoryDesc.textContent = topAlert.desc;
 

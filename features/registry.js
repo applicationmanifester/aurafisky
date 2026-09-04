@@ -30,6 +30,11 @@ import * as advisories from './advisories.js';
 import * as appToggles from './appToggles.js';
 import * as dashboard from './dashboard.js';
 import * as keyboardShortcuts from './keyboardShortcuts.js';
+import * as terminator from './terminator.js';
+import * as isobars from './isobars.js';
+import * as stargazing from './stargazing.js';
+import * as extremes from './extremes.js';
+import * as navigation from './navigation.js';
 
 const featureModules = {
   ensemble,
@@ -51,6 +56,11 @@ const featureModules = {
   appToggles,
   dashboard,
   keyboardShortcuts,
+  terminator,
+  isobars,
+  stargazing,
+  extremes,
+  navigation,
 };
 
 export function initFeatures(app) {

@@ -39,7 +39,7 @@ export async function geocode(query: string): Promise<GeocodeResult[]> {
 
     const url = `${GEOCODING_BASE_URL}?q=${encodeURIComponent(sanitized)}&format=json&limit=5&addressdetails=1`;
     const res = await fetch(url, {
-      headers: { 'User-Agent': 'Aurafisky/2.1.0', 'Accept': 'application/json' }
+      headers: { 'User-Agent': 'Aurafisky/10.9.4', 'Accept': 'application/json' }
     });
     if (!res.ok) throw new Error(`Geocode error: ${res.status}`);
 

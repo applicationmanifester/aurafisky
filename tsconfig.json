@@ -12,11 +12,12 @@
     "skipLibCheck": true,
     "resolveJsonModule": true,
     "isolatedModules": true,
+    "allowImportingTsExtensions": true,
     "paths": {
       "@/*": ["./*"],
       "*": ["./*"]
     },
-    "types": ["vitest/globals"]
+    "types": ["vitest/globals", "vite/client"]
   },
   "include": [
     "**/*.ts",

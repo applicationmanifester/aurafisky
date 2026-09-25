@@ -35,6 +35,8 @@ import * as isobars from './isobars.js';
 import * as stargazing from './stargazing.js';
 import * as extremes from './extremes.js';
 import * as navigation from './navigation.js';
+import * as alerts from './alerts.js';
+import * as shareCard from './shareCard.js';
 
 const featureModules = {
   ensemble,
@@ -61,6 +63,8 @@ const featureModules = {
   stargazing,
   extremes,
   navigation,
+  alerts,
+  shareCard,
 };
 
 export function initFeatures(app) {

@@ -1,4 +1,5 @@
 // -- IMMERSIVE AUDIO WEATHER SOUNDSCAPES (Web Audio Synthesizer) --
+import { Settings } from '../settings.js';
 
 function toggleAmbientSoundscape(forceState) {
     if (forceState !== undefined) {
@@ -34,8 +35,11 @@ function toggleAmbientSoundscape(forceState) {
           );
         }
       }
+      // Start audio visualizer
+      this.startAudioVisualizer();
     } else {
       this.stopAllSounds();
+      this.stopAudioVisualizer();
     }
   }
 
@@ -60,8 +64,9 @@ function updateAmbientSoundscapeSynthesizer(code, windSpeed) {
     const ctx = this.audioContext;
     const masterGain = ctx.createGain();
     masterGain.gain.setValueAtTime(0.001, ctx.currentTime);
+    const intensity = Settings.getSonificationIntensity();
     masterGain.gain.linearRampToValueAtTime(
-      this.volumeLevel * 0.24,
+      this.volumeLevel * 0.24 * intensity,
       ctx.currentTime + 1.5,
     );
     masterGain.connect(ctx.destination);
@@ -229,10 +234,77 @@ function stopAllSounds() {
 function handleVolumeChange(volume) {
     this.volumeLevel = volume;
     if (this.audioActive && this.audioNodes.master && this.audioContext) {
+      const intensity = Settings.getSonificationIntensity();
       this.audioNodes.master.gain.setValueAtTime(
-        volume * 0.24,
+        volume * 0.24 * intensity,
         this.audioContext.currentTime,
       );
+    }
+  }
+
+// Audio Visualizer - draws frequency bars on canvas
+function startAudioVisualizer() {
+    const canvas = document.getElementById('audioVisualizer');
+    if (!canvas || !this.audioContext) return;
+    
+    const ctx = canvas.getContext('2d');
+    const analyser = this.audioContext.createAnalyser();
+    analyser.fftSize = 256;
+    analyser.smoothingTimeConstant = 0.8;
+    
+    // Connect analyser to master gain
+    if (this.audioNodes.master) {
+      this.audioNodes.master.connect(analyser);
+    }
+    
+    const bufferLength = analyser.frequencyBinCount;
+    const dataArray = new Uint8Array(bufferLength);
+    
+    canvas.width = canvas.offsetWidth;
+    canvas.height = canvas.offsetHeight;
+    canvas.classList.remove('hidden');
+    
+    const draw = () => {
+      if (!this.audioActive) {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        canvas.classList.add('hidden');
+        return;
+      }
+      
+      requestAnimationFrame(draw);
+      analyser.getByteFrequencyData(dataArray);
+      
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      
+      const barWidth = (canvas.width / bufferLength) * 2.5;
+      let x = 0;
+      
+      const gradient = ctx.createLinearGradient(0, canvas.height, 0, 0);
+      gradient.addColorStop(0, '#14b8a6');
+      gradient.addColorStop(0.5, '#06b6d4');
+      gradient.addColorStop(1, '#8b5cf6');
+      
+      for (let i = 0; i < bufferLength; i++) {
+        const barHeight = (dataArray[i] / 255) * canvas.height;
+        ctx.fillStyle = gradient;
+        ctx.fillRect(x, canvas.height - barHeight, barWidth, barHeight);
+        x += barWidth + 1;
+      }
+    };
+    
+    this._visualizerRAF = requestAnimationFrame(draw);
+  }
+
+function stopAudioVisualizer() {
+    if (this._visualizerRAF) {
+      cancelAnimationFrame(this._visualizerRAF);
+      this._visualizerRAF = null;
+    }
+    const canvas = document.getElementById('audioVisualizer');
+    if (canvas) {
+      const ctx = canvas.getContext('2d');
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      canvas.classList.add('hidden');
     }
   }
 
@@ -243,4 +315,6 @@ export function init(app) {
   app.triggerBirdChirp = triggerBirdChirp;
   app.stopAllSounds = stopAllSounds;
   app.handleVolumeChange = handleVolumeChange;
+  app.startAudioVisualizer = startAudioVisualizer;
+  app.stopAudioVisualizer = stopAudioVisualizer;
 }

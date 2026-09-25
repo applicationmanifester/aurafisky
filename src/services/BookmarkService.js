@@ -1,4 +1,5 @@
 // src/services/BookmarkService.js
+import DOMPurify from 'dompurify';
 const STORAGE_KEY = 'aurafisky_bookmarks';
 
 /**
@@ -20,7 +21,9 @@ export function addBookmark(name, lat, lon) {
   if (bookmarks.some((b) => Math.abs(b.lat - lat) < 1e-6 && Math.abs(b.lon - lon) < 1e-6)) {
     return bookmarks;
   }
-  const newBookmark = { name, lat, lon };
+  // Sanitize the bookmark name to prevent XSS when rendered in UI
+  const cleanName = DOMPurify.sanitize(name);
+  const newBookmark = { name: cleanName, lat, lon };
   const updated = [...bookmarks, newBookmark];
   saveBookmarks(updated);
   return updated;

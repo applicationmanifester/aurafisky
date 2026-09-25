@@ -1,4 +1,4 @@
-const { app, BrowserWindow, shell, ipcMain } = require('electron');
+const { app, BrowserWindow, shell, session } = require('electron');
 const path = require('path');
 
 let mainWindow = null;
@@ -16,10 +16,32 @@ function createWindow() {
       nodeIntegration: false,
       contextIsolation: true,
       webSecurity: true,
-      sandbox: true
+      sandbox: true,
+      allowRunningInsecureContent: false,
+      experimentalFeatures: false,
     },
     autoHideMenuBar: true,
-    show: false
+    show: false,
+  });
+
+  // Content Security Policy
+  const csp = [
+    "default-src 'self'",
+    "script-src 'self'",
+    "style-src 'self' 'unsafe-inline'",
+    "img-src 'self' data: https:",
+    "connect-src 'self' https://api.open-meteo.com https://nominatim.openstreetmap.org https://*.firebaseio.com wss://*.firebaseio.com",
+    "font-src 'self' data:",
+    "frame-ancestors 'none'",
+  ].join('; ');
+
+  mainWindow.webContents.session.webRequest.onHeadersReceived((details, callback) => {
+    callback({
+      responseHeaders: {
+        ...details.responseHeaders,
+        'Content-Security-Policy': [csp],
+      },
+    });
   });
 
   const indexPath = path.join(__dirname, '../dist/index.html');

@@ -11,7 +11,7 @@ function getMyLocation() {
     if (this._lastKnownGpsCoords) {
       const { latitude, longitude } = this._lastKnownGpsCoords;
       optimisticCoords = { latitude, longitude };
-      this.handleMapClick(latitude, longitude);
+      this._debouncedHandleMapClick(latitude, longitude);
     } else {
       this.showToast("Finding your location...", "info");
     }
@@ -31,7 +31,7 @@ function getMyLocation() {
         ) {
           return;
         }
-        this.handleMapClick(latitude, longitude);
+        this._debouncedHandleMapClick(latitude, longitude);
       },
       (err) => {
         if (!this._lastKnownGpsCoords) {

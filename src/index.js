@@ -4,7 +4,6 @@ export * from './config/constants.js';
 export * from './services/CacheService.js';
 export * from './services/WeatherService.js';
 export * from './services/GeocodeService.js'; // (alias to WeatherService's geocode)
-export * from './services/LifecycleManager.js';
 export * from './services/SearchService.js';
 export * from './services/BookmarkService.js';
 export * from './controllers/MapController.js';

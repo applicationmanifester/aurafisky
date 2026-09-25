@@ -1,178 +1,612 @@
-// Feature: Route / Travel Weather — draw a line on the map and sample the
-// forecast at each stop (drive / run / bike / road-trip). Uses the existing
-// OpenLayers map and Open-Meteo along-point requests. No backend required.
-//
-// Shows a per-stop timeline and an aggregate weather card in a floating
-// panel styled to match the rest of the app (glass card, Tailwind classes).
+// ============================================================================
+// ROUTE STUDIO — Advanced Trip Weather Planner & Route Weather Intelligence
+// ============================================================================
+// - Interactive floating HUD with step-by-step guidance, Undo, and mode toggle
+// - High-contrast numbered waypoint pins (Start A, Stop 2, Destination B)
+// - Interactive Map Waypoint Popover with 1-click "Delete Stop"
+// - 1-Click Delete on every stop card in the panel timeline (Start, Waypoint, Dest)
+// - Multimodal travel planning:
+//     🚗 Driving (snapped to real roads via OSRM)
+//     🚲 Cycling (snapped to road network with cycling speed & energy estimates)
+//     🚶 Walking (pedestrian route snapping with hiking/walking pacing)
+//     ✈️ Flight (curved great-circle spherical geodesics with flight timing)
+// - Time-aware travel weather: arrival ETAs and hourly forecasts per stop
+// - Route Safety & Weather Hazard Engine (freezing rain, storms, wind, fog)
+// - Pro actions: 1-click Turn-by-Turn Navigation handoff, GPX / GeoJSON export
+// ============================================================================
+
 import VectorLayer from "ol/layer/Vector.js";
 import VectorSource from "ol/source/Vector.js";
 import Feature from "ol/Feature.js";
 import LineString from "ol/geom/LineString.js";
+import Overlay from "ol/Overlay.js";
 import { Style, Stroke } from "ol/style.js";
 import { fromLonLat, toLonLat } from "ol/proj.js";
+import { HtmlMarker } from "../modules/ol-marker.js";
+
+const OSRM_BASE = "https://router.project-osrm.org/route/v1/driving";
+const EARTH_RADIUS_M = 6371000;
 
 let appRef = null;
 let routeMode = false;
-let pts = []; // array of [lat, lng]
-let routeSource = null; // ol/source/Vector holding the drawn line
-let routeLayer = null; // ol/layer/Vector
+let pts = []; // [{ lat, lng, name, marker }]
+let activeMarkers = []; // tracks all allocated HtmlMarker instances
+let activePopoverOverlay = null; // currently open waypoint popover
 
+let transportMode = "driving"; // "driving" | "cycling" | "walking" | "direct"
+let departureOffsetHours = 0; // 0 = Now, 1 = +1h, 2 = +2h, etc.
+
+let routeSource = null;
+let routeLayer = null;
+let routeGlowLayer = null;
 let btn = null;
-let panelEl = null; // wrapping floating panel (holds timeline + card)
-let headerEl = null;
-let timelineEl = null; // <ul> for per-stop details
-let cardEl = null; // <div> for the aggregate card
 
-/**
- * Initialise the feature – called from the main app.
- * @param {Object} app – the main app object (must have .map, .showToast)
- */
-export function init(app) {
-  appRef = app;
-  btn = document.getElementById("routeBtn");
-  if (btn) btn.addEventListener("click", toggleRoute);
-  buildPanel();
+let hudEl = null;
+let panelEl = null;
+let activeRouteData = null; // cached analysis data
+let isPanelOpen = false;
+
+// ============================================================================
+//  MATH & MULTIMODAL ROUTE HELPERS (Exported for Unit Testing)
+// ============================================================================
+
+export function toRad(deg) {
+  return (deg * Math.PI) / 180;
+}
+
+export function haversineDistanceMeters(lat1, lng1, lat2, lng2) {
+  const dLat = toRad(lat2 - lat1);
+  const dLng = toRad(lng2 - lng1);
+  const a =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLng / 2) ** 2;
+  return 2 * EARTH_RADIUS_M * Math.asin(Math.min(1, Math.sqrt(a)));
 }
 
 /**
- * Build the floating panel once. Placed top-right, below the top toolbar and
- * above the bottom timeline strip, so it doesn't collide with either — the
- * previous version appended (or tried to append) to a `container` property
- * that never existed on the app, so nothing was ever visible.
+ * Calculate realistic duration based on travel mode
  */
-function buildPanel() {
-  panelEl = document.getElementById("routePanel");
-  if (panelEl) {
-    headerEl = panelEl.querySelector("[data-role='route-header']");
-    timelineEl = document.getElementById("routeTimeline");
-    cardEl = document.getElementById("routeWeatherCard");
-    return;
+export function calculateModeDuration(distanceM, mode, osrmDurationS = null) {
+  if (distanceM == null || distanceM <= 0) return 0;
+  switch (mode) {
+    case "driving":
+      return osrmDurationS != null ? osrmDurationS : Math.round((distanceM / 1000 / 80) * 3600);
+    case "cycling":
+      // Average cycling speed: 18 km/h (5 m/s)
+      return Math.round((distanceM / 1000 / 18) * 3600);
+    case "walking":
+      // Average walking pace: 4.8 km/h (1.33 m/s)
+      return Math.round((distanceM / 1000 / 4.8) * 3600);
+    case "direct":
+      // Aviation: 800 km/h cruising + 30 min (1800s) airport / climb / descent
+      return Math.round(1800 + (distanceM / 1000 / 800) * 3600);
+    default:
+      return Math.round((distanceM / 1000 / 60) * 3600);
+  }
+}
+
+/**
+ * Generate great-circle arc coordinates between two lat/lng points for realistic flight lines
+ */
+export function interpolateGreatCircle(lat1, lng1, lat2, lng2, numPoints = 25) {
+  const phi1 = toRad(lat1);
+  const lambda1 = toRad(lng1);
+  const phi2 = toRad(lat2);
+  const lambda2 = toRad(lng2);
+
+  const d = 2 * Math.asin(
+    Math.sqrt(
+      Math.sin((phi2 - phi1) / 2) ** 2 +
+      Math.cos(phi1) * Math.cos(phi2) * Math.sin((lambda2 - lambda1) / 2) ** 2,
+    ),
+  );
+
+  if (d < 1e-6) return [[lng1, lat1], [lng2, lat2]];
+
+  const coords = [];
+  for (let i = 0; i <= numPoints; i++) {
+    const f = i / numPoints;
+    const A = Math.sin((1 - f) * d) / Math.sin(d);
+    const B = Math.sin(f * d) / Math.sin(d);
+
+    const x = A * Math.cos(phi1) * Math.cos(lambda1) + B * Math.cos(phi2) * Math.cos(lambda2);
+    const y = A * Math.cos(phi1) * Math.sin(lambda1) + B * Math.cos(phi2) * Math.sin(lambda2);
+    const z = A * Math.sin(phi1) + B * Math.sin(phi2);
+
+    const lat = Math.atan2(z, Math.sqrt(x * x + y * y)) * (180 / Math.PI);
+    const lng = Math.atan2(y, x) * (180 / Math.PI);
+    coords.push([lng, lat]);
+  }
+  return coords;
+}
+
+/**
+ * Calculate initial forward bearing from (lat1, lng1) to (lat2, lng2) in degrees [0, 360)
+ */
+export function calculateBearing(lat1, lng1, lat2, lng2) {
+  const phi1 = toRad(lat1);
+  const phi2 = toRad(lat2);
+  const deltaLambda = toRad(lng2 - lng1);
+
+  const y = Math.sin(deltaLambda) * Math.cos(phi2);
+  const x =
+    Math.cos(phi1) * Math.sin(phi2) -
+    Math.sin(phi1) * Math.cos(phi2) * Math.cos(deltaLambda);
+
+  const theta = Math.atan2(y, x);
+  return ((theta * 180) / Math.PI + 360) % 360;
+}
+
+/**
+ * Convert azimuth degrees into 16-point compass label
+ */
+export function bearingToCompass(deg) {
+  if (deg == null || !Number.isFinite(deg)) return "N";
+  const directions = ["N", "NNE", "NE", "ENE", "E", "ESE", "SE", "SSE", "S", "SSW", "SW", "WSW", "W", "WNW", "NW", "NNW"];
+  const val = Math.round(deg / 22.5) % 16;
+  return directions[val];
+}
+
+/**
+ * Aerodynamic relative wind decomposition:
+ * Compares travel leg bearing with meteorological wind (direction wind is coming FROM).
+ * Returns headwind (drag), tailwind (boost), crosswind (shear), and classification.
+ */
+export function calculateRelativeWind(legBearing, windSpeed, windDirection) {
+  if (windSpeed == null || windSpeed <= 0 || windDirection == null || !Number.isFinite(legBearing)) {
+    return {
+      headwind: 0,
+      tailwind: 0,
+      crosswind: 0,
+      classification: "calm",
+      label: "Calm / Light Air",
+      color: "text-slate-500 dark:text-slate-400",
+      bg: "bg-slate-100 dark:bg-slate-800 border-slate-200/50 dark:border-slate-700/50",
+      icon: "🍃",
+    };
   }
 
-  panelEl = document.createElement("div");
-  panelEl.id = "routePanel";
-  panelEl.className =
-    "hidden glass rounded-2xl shadow-2xl overflow-hidden fixed top-20 right-4 z-[1001] " +
-    "w-72 max-h-[calc(100vh-140px)] flex flex-col " +
-    "border border-slate-200/60 dark:border-slate-600/30";
+  // Angle between where wind is blowing from and travel bearing
+  const rad = toRad(windDirection - legBearing);
+  const headwind = windSpeed * Math.cos(rad);
+  const crosswind = Math.abs(windSpeed * Math.sin(rad));
+  const tailwind = -headwind;
 
-  headerEl = document.createElement("div");
-  headerEl.setAttribute("data-role", "route-header");
-  headerEl.className =
-    "flex items-center justify-between px-3.5 py-2.5 border-b border-slate-200/50 dark:border-slate-700/40 flex-shrink-0";
-  headerEl.innerHTML = `
-    <span class="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">🧭 Route Weather</span>
-    <button type="button" data-role="route-close" aria-label="Close route weather" class="p-1 rounded-lg hover:bg-slate-200/60 dark:hover:bg-slate-700/40 text-slate-400 transition-colors">✕</button>
-  `;
-  headerEl
-    .querySelector("[data-role='route-close']")
-    .addEventListener("click", () => {
-      panelEl.classList.add("hidden");
+  let classification = "calm";
+  let label = "Light Air";
+  let color = "text-slate-500 dark:text-slate-400";
+  let bg = "bg-slate-100 dark:bg-slate-800 border-slate-200/50 dark:border-slate-700/50";
+  let icon = "🍃";
+
+  if (windSpeed >= 5) {
+    if (tailwind > 4 && tailwind > crosswind * 0.7) {
+      classification = "tailwind";
+      label = `Tailwind (+${Math.round(tailwind)} km/h)`;
+      color = "text-emerald-700 dark:text-emerald-300";
+      bg = "bg-emerald-500/15 border-emerald-500/30";
+      icon = "🟢 💨";
+    } else if (headwind > 4 && headwind > crosswind * 0.7) {
+      classification = "headwind";
+      label = `Headwind (-${Math.round(headwind)} km/h)`;
+      color = "text-rose-700 dark:text-rose-300";
+      bg = "bg-rose-500/15 border-rose-500/30";
+      icon = "🔴 💨";
+    } else {
+      classification = "crosswind";
+      label = `Crosswind (${Math.round(crosswind)} km/h)`;
+      color = "text-amber-700 dark:text-amber-300";
+      bg = "bg-amber-500/15 border-amber-500/30";
+      icon = "🟡 💨";
+    }
+  }
+
+  return {
+    headwind: Math.round(headwind * 10) / 10,
+    tailwind: Math.round(tailwind * 10) / 10,
+    crosswind: Math.round(crosswind * 10) / 10,
+    classification,
+    label,
+    color,
+    bg,
+    icon,
+  };
+}
+
+/**
+ * 2-Opt Traveling Salesperson (TSP) Local Search Optimizer
+ * Untangles intermediate stops (indices 1 to N-2) while keeping Start (0)
+ * and Destination (N-1) fixed in place to minimize total travel distance.
+ */
+export function solve2OptTSP(waypoints) {
+  if (!Array.isArray(waypoints) || waypoints.length < 4) {
+    return waypoints ? [...waypoints] : [];
+  }
+
+  let route = [...waypoints];
+  const n = route.length;
+
+  function totalDistance(r) {
+    let d = 0;
+    for (let i = 0; i < r.length - 1; i++) {
+      d += haversineDistanceMeters(r[i].lat, r[i].lng, r[i + 1].lat, r[i + 1].lng);
+    }
+    return d;
+  }
+
+  let bestDist = totalDistance(route);
+  let improved = true;
+  let iterations = 0;
+  const maxIterations = 50;
+
+  while (improved && iterations < maxIterations) {
+    improved = false;
+    iterations++;
+
+    // Only swap intermediate points: i from 1 to n - 3, j from i + 1 to n - 2
+    for (let i = 1; i <= n - 3; i++) {
+      for (let j = i + 1; j <= n - 2; j++) {
+        // Reverse sub-array between i and j
+        const newRoute = [
+          ...route.slice(0, i),
+          ...route.slice(i, j + 1).reverse(),
+          ...route.slice(j + 1),
+        ];
+
+        const newDist = totalDistance(newRoute);
+        if (newDist < bestDist - 1e-3) {
+          route = newRoute;
+          bestDist = newDist;
+          improved = true;
+          break;
+        }
+      }
+      if (improved) break;
+    }
+  }
+
+  return route;
+}
+
+
+export function formatRouteDistance(meters, unitSystem = "metric") {
+  if (meters == null || !Number.isFinite(meters)) return "--";
+  if (unitSystem === "imperial") {
+    const miles = meters * 0.000621371;
+    if (miles < 0.1) return `${Math.round(meters * 3.28084)} ft`;
+    return `${miles.toFixed(1)} mi`;
+  }
+  if (meters < 1000) return `${Math.round(meters / 10) * 10} m`;
+  return `${(meters / 1000).toFixed(1)} km`;
+}
+
+export function formatRouteDuration(seconds) {
+  if (seconds == null || !Number.isFinite(seconds)) return "--";
+  const totalMin = Math.round(seconds / 60);
+  if (totalMin < 60) return `${totalMin} min`;
+  const h = Math.floor(totalMin / 60);
+  const m = totalMin % 60;
+  return m === 0 ? `${h}h 0m` : `${h}h ${m}m`;
+}
+
+export function formatSpeed(kmh, unitSystem = "metric") {
+  if (kmh == null || !Number.isFinite(kmh)) return "--";
+  if (unitSystem === "imperial") {
+    return `${Math.round(kmh * 0.621371)} mph`;
+  }
+  return `${Math.round(kmh)} km/h`;
+}
+
+export function formatTemp(celsius, unitSystem = "metric") {
+  if (celsius == null || !Number.isFinite(celsius)) return "--";
+  if (unitSystem === "imperial") {
+    return `${Math.round((celsius * 9) / 5 + 32)}°F`;
+  }
+  return `${Math.round(celsius)}°C`;
+}
+
+export function formatPrecip(mm, unitSystem = "metric") {
+  if (mm == null || !Number.isFinite(mm)) return "--";
+  if (unitSystem === "imperial") {
+    return `${(mm * 0.0393701).toFixed(2)} in`;
+  }
+  return `${mm.toFixed(1)} mm`;
+}
+
+/**
+ * Distribute total route duration across waypoints proportionally to leg distances
+ */
+export function calculateETAs(waypoints, totalDurationS, departureDate = new Date()) {
+  if (!waypoints || waypoints.length === 0) return [];
+  if (waypoints.length === 1) {
+    return [{ ...waypoints[0], eta: new Date(departureDate), cumulativeDurationS: 0 }];
+  }
+
+  const legDistances = [];
+  let totalDist = 0;
+  for (let i = 0; i < waypoints.length - 1; i++) {
+    const d = haversineDistanceMeters(
+      waypoints[i].lat,
+      waypoints[i].lng,
+      waypoints[i + 1].lat,
+      waypoints[i + 1].lng,
+    );
+    legDistances.push(d);
+    totalDist += d;
+  }
+
+  let cumulativeS = 0;
+  const results = [
+    {
+      ...waypoints[0],
+      eta: new Date(departureDate),
+      cumulativeDurationS: 0,
+      legDistanceM: 0,
+    },
+  ];
+
+  for (let i = 0; i < legDistances.length; i++) {
+    const fraction = totalDist > 0 ? legDistances[i] / totalDist : 1 / legDistances.length;
+    const legDurationS = Math.round(fraction * totalDurationS);
+    cumulativeS += legDurationS;
+    const eta = new Date(departureDate.getTime() + cumulativeS * 1000);
+    results.push({
+      ...waypoints[i + 1],
+      eta,
+      cumulativeDurationS: cumulativeS,
+      legDistanceM: legDistances[i],
     });
+  }
 
-  const body = document.createElement("div");
-  body.className = "overflow-y-auto custom-scrollbar px-3.5 py-3 space-y-3";
-
-  timelineEl = document.createElement("ul");
-  timelineEl.id = "routeTimeline";
-  timelineEl.className = "space-y-1.5 list-none p-0 m-0";
-
-  cardEl = document.createElement("div");
-  cardEl.id = "routeWeatherCard";
-  cardEl.className =
-    "bg-slate-100/60 dark:bg-slate-700/40 rounded-xl p-3 text-xs text-slate-600 dark:text-slate-300";
-
-  body.appendChild(timelineEl);
-  body.appendChild(cardEl);
-  panelEl.appendChild(headerEl);
-  panelEl.appendChild(body);
-  document.body.appendChild(panelEl);
+  return results;
 }
 
 /**
- * Create the route's vector layer the first time it's needed.
+ * Route Weather Hazard Detection Engine
  */
-function ensureRouteLayer() {
-  if (routeLayer) return;
-  routeSource = new VectorSource();
-  routeLayer = new VectorLayer({
-    source: routeSource,
-    // Dashed indigo line — same look as the old Leaflet polyline
-    // (#6366f1 @ 0.85 opacity, 4px), baked into the stroke color as rgba
-    // since ol/style has no separate opacity knob for strokes.
-    style: new Style({
-      stroke: new Stroke({ color: "rgba(99,102,241,0.85)", width: 4, lineDash: [6, 6] }),
-    }),
-    zIndex: 400,
+export function detectWeatherHazards({
+  temperature,
+  precipitation,
+  weatherCode,
+  windSpeed,
+  visibility,
+}) {
+  const hazards = [];
+
+  if (
+    (temperature <= 0 && (precipitation > 0 || [56, 57, 66, 67, 71, 73, 75, 77, 85, 86].includes(weatherCode))) ||
+    [66, 67].includes(weatherCode)
+  ) {
+    hazards.push({
+      type: "freezing",
+      severity: "danger",
+      icon: "❄️",
+      title: "Freezing Road Conditions",
+      message: "Sub-zero temperatures with precipitation risk black ice on roads.",
+    });
+  }
+
+  if ([95, 96, 99].includes(weatherCode)) {
+    hazards.push({
+      type: "thunderstorm",
+      severity: "danger",
+      icon: "⛈️",
+      title: "Severe Thunderstorm",
+      message: "Lightning, torrential downpours, and gusty winds along path.",
+    });
+  } else if (precipitation >= 5 || [65, 82].includes(weatherCode)) {
+    hazards.push({
+      type: "heavy_rain",
+      severity: "warning",
+      icon: "🌧️",
+      title: "Heavy Downpour",
+      message: "Heavy rain may cause hydroplaning and low visibility.",
+    });
+  }
+
+  if (windSpeed >= 50) {
+    hazards.push({
+      type: "wind",
+      severity: "danger",
+      icon: "💨",
+      title: "Severe Gale Wind",
+      message: `Dangerously high wind (${Math.round(windSpeed)} km/h) affects travel safety.`,
+    });
+  } else if (windSpeed >= 38) {
+    hazards.push({
+      type: "wind",
+      severity: "warning",
+      icon: "💨",
+      title: "Strong Crosswinds",
+      message: `High winds (${Math.round(windSpeed)} km/h). Exercise caution on open roads/paths.`,
+    });
+  }
+
+  if (visibility != null && visibility < 1000) {
+    hazards.push({
+      type: "fog",
+      severity: "warning",
+      icon: "🌫️",
+      title: "Dense Fog / Low Visibility",
+      message: `Visibility reduced to ${Math.round(visibility)}m. Slow down and use fog lights.`,
+    });
+  } else if ([45, 48].includes(weatherCode)) {
+    hazards.push({
+      type: "fog",
+      severity: "warning",
+      icon: "🌫️",
+      title: "Fog Alert",
+      message: "Foggy conditions present along route.",
+    });
+  }
+
+  if (temperature >= 38) {
+    hazards.push({
+      type: "heat",
+      severity: "warning",
+      icon: "☀️",
+      title: "Extreme Heat",
+      message: `Intense heat (${Math.round(temperature)}°C). Ensure adequate cooling and hydration.`,
+    });
+  }
+
+  return hazards;
+}
+
+/**
+ * Generate standard GPX 1.1 XML string
+ */
+export function generateGPX({ name = "Route Studio Plan", waypoints = [], coordinates = [] }) {
+  const timeStr = new Date().toISOString();
+  let xml = `<?xml version="1.0" encoding="UTF-8"?>
+<gpx version="1.1" creator="Aurafisky Route Studio" xmlns="http://www.topografix.com/GPX/1/1">
+  <metadata>
+    <name>${escapeXml(name)}</name>
+    <time>${timeStr}</time>
+  </metadata>
+`;
+
+  waypoints.forEach((wpt, i) => {
+    const label = wpt.name || `Stop ${i + 1}`;
+    xml += `  <wpt lat="${wpt.lat.toFixed(6)}" lon="${wpt.lng.toFixed(6)}">\n    <name>${escapeXml(label)}</name>\n  </wpt>\n`;
   });
-  appRef.map.addLayer(routeLayer);
-}
 
-/**
- * Toggle drawing mode on/off.
- */
-function toggleRoute() {
-  if (!appRef || !appRef.map) return;
-  routeMode = !routeMode;
-  // Read by the core map-click handler in app.js, which used to also run
-  // its own "select this location" flow on every stop tap — yanking the
-  // main weather panel + marker to each new point and making whatever was
-  // showing look like it "disappeared immediately". Suppressed while true.
-  appRef._routeModeActive = routeMode;
-
-  if (routeMode) {
-    // ----- start a new route -----
-    pts = [];
-    ensureRouteLayer();
-    routeSource.clear();
-    if (btn) {
-      btn.classList.add("bg-primary", "text-white");
-      btn.title = "Tap map to add stops, click again to finish";
-    }
-    clearUI();
-    appRef.showToast("Route mode: tap the map to add stops", "info");
-    appRef.map.on("click", onMapClick);
+  xml += `  <trk>\n    <name>${escapeXml(name)}</name>\n    <trkseg>\n`;
+  if (coordinates.length > 0) {
+    coordinates.forEach(([lng, lat]) => {
+      xml += `      <trkpt lat="${lat.toFixed(6)}" lon="${lng.toFixed(6)}"></trkpt>\n`;
+    });
   } else {
-    // ----- finish drawing -----
-    appRef.map.un("click", onMapClick);
-    if (btn) {
-      btn.classList.remove("bg-primary", "text-white");
-      btn.title = "Draw a route";
+    waypoints.forEach((wpt) => {
+      xml += `      <trkpt lat="${wpt.lat.toFixed(6)}" lon="${wpt.lng.toFixed(6)}"></trkpt>\n`;
+    });
+  }
+  xml += `    </trkseg>\n  </trk>\n</gpx>`;
+  return xml;
+}
+
+/**
+ * Generate GeoJSON FeatureCollection
+ */
+export function generateGeoJSON({ name = "Route Studio Plan", waypoints = [], coordinates = [] }) {
+  const lineCoords = coordinates.length > 0
+    ? coordinates
+    : waypoints.map((w) => [w.lng, w.lat]);
+
+  const features = waypoints.map((w, idx) => ({
+    type: "Feature",
+    geometry: {
+      type: "Point",
+      coordinates: [w.lng, w.lat],
+    },
+    properties: {
+      stopIndex: idx + 1,
+      name: w.name || `Stop ${idx + 1}`,
+      role: idx === 0 ? "start" : idx === waypoints.length - 1 ? "destination" : "waypoint",
+    },
+  }));
+
+  if (lineCoords.length > 1) {
+    features.push({
+      type: "Feature",
+      geometry: {
+        type: "LineString",
+        coordinates: lineCoords,
+      },
+      properties: {
+        name,
+      },
+    });
+  }
+
+  return {
+    type: "FeatureCollection",
+    properties: {
+      name,
+      generatedAt: new Date().toISOString(),
+    },
+    features,
+  };
+}
+
+/**
+ * Generates an executive natural-language travel weather briefing for AuraCopilot
+ */
+export function generateAuraCopilotBriefing(routeData, stops, allHazards = [], mode = "driving") {
+  if (!stops || stops.length < 2) return null;
+
+  const temps = stops.map((s) => s.weather?.temperature).filter((t) => typeof t === "number");
+  const minTemp = temps.length ? Math.min(...temps) : 20;
+  const maxTemp = temps.length ? Math.max(...temps) : 20;
+
+  const maxWind = stops.length ? Math.max(...stops.map((s) => s.weather?.windSpeed || 0)) : 0;
+
+  // Compute leg wind profiles
+  let tailwindLegs = 0;
+  let headwindLegs = 0;
+  let crosswindLegs = 0;
+
+  for (let i = 0; i < stops.length - 1; i++) {
+    const p1 = stops[i];
+    const p2 = stops[i + 1];
+    const bearing = calculateBearing(p1.lat, p1.lng, p2.lat, p2.lng);
+    const windAnalysis = calculateRelativeWind(bearing, p1.weather?.windSpeed, p1.weather?.windDirection);
+    if (windAnalysis.classification === "tailwind") tailwindLegs++;
+    else if (windAnalysis.classification === "headwind") headwindLegs++;
+    else if (windAnalysis.classification === "crosswind") crosswindLegs++;
+  }
+
+  let verdictTitle = "Favorable Travel Window";
+  let verdictBadge = "bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border-emerald-500/30";
+  let verdictIcon = "✨";
+  let narrative = "";
+  let tip = "";
+
+  if (allHazards.some((h) => h.severity === "danger")) {
+    verdictTitle = "Adverse Weather Alert";
+    verdictBadge = "bg-rose-500/15 text-rose-700 dark:text-rose-300 border-rose-500/30";
+    verdictIcon = "⚠️";
+    narrative = `Severe weather hazards detected along your path (${allHazards[0].title}). Exercise extreme caution or delay departure.`;
+    tip = "Test the +1 hr / +2 hrs departure buttons below to see if the front clears.";
+  } else if (allHazards.length > 0) {
+    verdictTitle = "Caution Advised";
+    verdictBadge = "bg-amber-500/15 text-amber-700 dark:text-amber-300 border-amber-500/30";
+    verdictIcon = "⚡";
+    narrative = `Moderate weather impacts anticipated (${allHazards[0].title}). Temperatures will span ${Math.round(minTemp)}°C to ${Math.round(maxTemp)}°C.`;
+    tip = mode === "cycling" || mode === "walking" ? "Carry waterproof outerwear and wind protection." : "Maintain safe following distance.";
+  } else {
+    // Clean conditions
+    if (tailwindLegs > headwindLegs && tailwindLegs > 0) {
+      narrative = `Smooth journey ahead with favorable tailwind support across ${tailwindLegs} leg${tailwindLegs > 1 ? "s" : ""}. Temperatures hover comfortably between ${Math.round(minTemp)}°C and ${Math.round(maxTemp)}°C.`;
+      tip = mode === "cycling" ? "Great pacing conditions with minimal aerodynamic drag." : "Efficient travel conditions with high visibility.";
+    } else if (headwindLegs > 0) {
+      narrative = `Stable skies ahead, though persistent headwinds (${Math.round(maxWind)} km/h peak) will generate added aerodynamic drag on ${headwindLegs} leg${headwindLegs > 1 ? "s" : ""}.`;
+      tip = mode === "cycling" ? "Plan for ~15% extra physical effort or e-bike battery drain." : "Expect slightly higher fuel/battery consumption on open stretches.";
+    } else {
+      narrative = `Clear and calm conditions along your entire route. Temperature window is ${Math.round(minTemp)}°C to ${Math.round(maxTemp)}°C.`;
+      tip = "Ideal departure window with no significant atmospheric resistance.";
     }
-    finishRoute();
   }
+
+  return {
+    verdictTitle,
+    verdictBadge,
+    verdictIcon,
+    narrative,
+    tip,
+  };
 }
 
-/**
- * Handle a map click – add a vertex and redraw the line.
- */
-function onMapClick(e) {
-  if (!routeMode) return;
-  const [lng, lat] = toLonLat(e.coordinate);
-  pts.push([lat, lng]);
-  drawLine();
-}
 
-/**
- * Draw/update the route line.
- */
-function drawLine() {
-  if (!appRef.map) return;
-  ensureRouteLayer();
-  routeSource.clear();
-  if (pts.length > 1) {
-    const coords = pts.map(([lat, lng]) => fromLonLat([lng, lat]));
-    routeSource.addFeature(new Feature(new LineString(coords)));
-  }
-}
-
-/**
- * Clear the timeline and card (called when starting a new route).
- */
-function clearUI() {
-  if (timelineEl) timelineEl.innerHTML = "";
-  if (cardEl) cardEl.innerHTML = "";
-  if (panelEl) panelEl.classList.add("hidden");
+function escapeXml(unsafe) {
+  return String(unsafe || "").replace(/[<>&'"]/g, (c) => {
+    switch (c) {
+      case "<": return "&lt;";
+      case ">": return "&gt;";
+      case "&": return "&amp;";
+      case "'": return "&apos;";
+      case '"': return "&quot;";
+    }
+  });
 }
 
 function weatherInfo(code) {
@@ -181,121 +615,1294 @@ function weatherInfo(code) {
     : { icon: "❓", description: "Unknown" };
 }
 
+function getActiveUnits() {
+  return typeof WeatherService !== "undefined" && WeatherService.getUnits
+    ? WeatherService.getUnits()
+    : "metric";
+}
+
+// ============================================================================
+//  INITIALIZATION & CORE LIFECYCLE
+// ============================================================================
+
+export function init(app) {
+  appRef = app;
+  btn = document.getElementById("routeBtn");
+  if (btn) {
+    btn.title = "Route Studio (Trip Weather Planner)";
+    btn.setAttribute("aria-label", "Route Studio (Trip Weather Planner)");
+    btn.addEventListener("click", toggleRoute);
+  }
+  buildHUD();
+  buildPanel();
+}
+
 /**
- * After the user finishes drawing, fetch weather for each stop,
- * populate the timeline & card, and show the summary toast.
+ * Toggle drawing mode on/off
  */
-async function finishRoute() {
-  if (pts.length < 2) {
-    appRef.showToast("Add at least two stops", "info");
+export function toggleRoute() {
+  if (!appRef || !appRef.map) return;
+  routeMode = !routeMode;
+  appRef._routeModeActive = routeMode;
+
+  const targetEl = appRef.map.getTargetElement();
+
+  if (routeMode) {
+    // ---- Enter Route Studio Mode ----
+    ensureRouteLayers();
+    if (btn) {
+      btn.classList.add("bg-indigo-600", "text-white", "ring-2", "ring-indigo-400/50");
+      btn.title = "Exit Route Studio";
+    }
+
+    if (targetEl) targetEl.style.cursor = "crosshair";
+
+    hidePanel();
+    showHUD();
+    updateHUD();
+
+    appRef.map.on("click", onMapClick);
+    window.addEventListener("keydown", onKeyDown);
+
+    if (pts.length === 0) {
+      appRef.showToast("Route Studio: Click map to place Departure point", "info");
+    } else {
+      appRef.showToast(`Route Studio: ${pts.length} stops loaded. Click map to add more.`, "info");
+    }
+  } else {
+    // ---- Exit Route Studio Mode ----
+    appRef.map.un("click", onMapClick);
+    window.removeEventListener("keydown", onKeyDown);
+
+    if (targetEl) targetEl.style.cursor = "";
+
+    if (btn) {
+      btn.classList.remove("bg-indigo-600", "text-white", "ring-2", "ring-indigo-400/50");
+      btn.title = "Route Studio (Trip Weather Planner)";
+    }
+
+    hideHUD();
+
+    if (pts.length < 2) {
+      clearRoute();
+      hidePanel();
+    }
+  }
+}
+
+function onKeyDown(e) {
+  if (!routeMode && !isPanelOpen) return;
+
+  // Undo: Ctrl+Z or Cmd+Z
+  if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "z") {
+    e.preventDefault();
+    undoLastStop();
     return;
   }
 
-  appRef.showToast("Fetching weather along route…", "info");
+  // Escape: Exit mode or close popover/panel
+  if (e.key === "Escape") {
+    e.preventDefault();
+    closeWaypointPopover();
+    if (isPanelOpen) {
+      hidePanel();
+    } else if (routeMode) {
+      toggleRoute();
+    }
+    return;
+  }
+
+  // Enter: Finish & analyze
+  if (e.key === "Enter" && pts.length >= 2) {
+    e.preventDefault();
+    finishRoute();
+  }
+}
+
+// ============================================================================
+//  MAP VECTOR LAYERS & WAYPOINT MARKERS
+// ============================================================================
+
+function ensureRouteLayers() {
+  if (routeLayer) return;
+
+  routeSource = new VectorSource();
+
+  routeGlowLayer = new VectorLayer({
+    source: routeSource,
+    style: new Style({
+      stroke: new Stroke({
+        color: "rgba(99, 102, 241, 0.35)",
+        width: 8,
+        lineCap: "round",
+        lineJoin: "round",
+      }),
+    }),
+    zIndex: 399,
+  });
+
+  routeLayer = new VectorLayer({
+    source: routeSource,
+    style: new Style({
+      stroke: new Stroke({
+        color: "#6366f1",
+        width: 4,
+        lineCap: "round",
+        lineJoin: "round",
+      }),
+    }),
+    zIndex: 400,
+  });
+
+  appRef.map.addLayer(routeGlowLayer);
+  appRef.map.addLayer(routeLayer);
+}
+
+function closeWaypointPopover() {
+  if (activePopoverOverlay && appRef && appRef.map) {
+    try {
+      appRef.map.removeOverlay(activePopoverOverlay);
+    } catch (e) {}
+    activePopoverOverlay = null;
+  }
+}
+
+function clearWaypointMarkers() {
+  closeWaypointPopover();
+
+  // 1. Remove all OpenLayers overlays tagged for Route Studio
+  if (appRef && appRef.map) {
+    const overlays = appRef.map.getOverlays().getArray().slice();
+    overlays.forEach((ov) => {
+      if (ov.get("isRouteStudioMarker") || ov.get("isRouteStudioPopover")) {
+        appRef.map.removeOverlay(ov);
+      }
+    });
+  }
+
+  // 2. Remove all tracked HtmlMarker instances
+  activeMarkers.forEach((m) => {
+    try {
+      m.remove();
+      if (m.element && m.element.parentNode) {
+        m.element.parentNode.removeChild(m.element);
+      }
+    } catch (e) {}
+  });
+  activeMarkers = [];
+
+  // 3. Fallback: Clean up any lingering DOM elements
+  document.querySelectorAll(".route-studio-marker, .route-studio-popover").forEach((el) => el.remove());
+
+  pts.forEach((p) => {
+    p.marker = null;
+  });
+}
+
+function renderWaypointMarkers() {
+  clearWaypointMarkers();
+  if (!appRef || !appRef.map) return;
+
+  pts.forEach((pt, index) => {
+    const isStart = index === 0;
+    const isEnd = index === pts.length - 1 && pts.length > 1;
+
+    let badgeText = `${index + 1}`;
+    let bgGradient = "from-indigo-600 to-violet-600";
+    let ringColor = "ring-indigo-300";
+
+    if (isStart) {
+      badgeText = "A";
+      bgGradient = "from-emerald-600 to-teal-600";
+      ringColor = "ring-emerald-300";
+    } else if (isEnd) {
+      badgeText = "B";
+      bgGradient = "from-rose-600 to-pink-600";
+      ringColor = "ring-rose-300";
+    }
+
+    const markerHtml = `
+      <div class="relative group cursor-pointer" data-stop-idx="${index}" style="pointer-events: auto;">
+        <div class="w-7 h-7 rounded-full bg-gradient-to-tr ${bgGradient} text-white font-black text-xs flex items-center justify-center shadow-lg ring-2 ${ringColor} transition-transform hover:scale-125 duration-150">
+          ${badgeText}
+        </div>
+        <div class="absolute -bottom-1 left-1/2 -translate-x-1/2 w-1.5 h-1.5 bg-slate-900 rotate-45"></div>
+      </div>
+    `;
+
+    const marker = new HtmlMarker(appRef.map, {
+      lat: pt.lat,
+      lng: pt.lng,
+      html: markerHtml,
+      className: "route-studio-marker",
+      size: [28, 28],
+      anchor: [14, 28],
+      zIndex: 1100 + index,
+      onClick: (e) => {
+        if (e && e.stopPropagation) e.stopPropagation();
+        showWaypointPopover(index);
+      },
+    });
+
+    if (marker && marker.overlay) {
+      marker.overlay.set("isRouteStudioMarker", true);
+    }
+
+    activeMarkers.push(marker);
+    pt.marker = marker;
+  });
+}
+
+/**
+ * Interactive on-map Waypoint Popover with 1-click Delete button
+ */
+function showWaypointPopover(index) {
+  closeWaypointPopover();
+  const pt = pts[index];
+  if (!pt || !appRef || !appRef.map) return;
+
+  const isStart = index === 0;
+  const isEnd = index === pts.length - 1 && pts.length > 1;
+  const roleLabel = isStart ? "Start (Departure)" : isEnd ? "Destination" : `Stop ${index + 1}`;
+  const badgeColor = isStart ? "text-emerald-600 dark:text-emerald-400" : isEnd ? "text-rose-600 dark:text-rose-400" : "text-indigo-600 dark:text-indigo-400";
+
+  const popoverEl = document.createElement("div");
+  popoverEl.className =
+    "route-studio-popover glass p-2.5 rounded-2xl shadow-2xl border border-slate-200/80 dark:border-slate-700/80 " +
+    "text-xs min-w-[160px] text-center space-y-2 pointer-events-auto backdrop-blur-xl animate-fade-in";
+  popoverEl.style.zIndex = "2500";
+
+  popoverEl.innerHTML = `
+    <div class="flex items-center justify-between gap-2 border-b border-slate-200/50 dark:border-slate-700/50 pb-1.5">
+      <span class="font-extrabold ${badgeColor} text-[11px]">${roleLabel}</span>
+      <button type="button" class="route-popover-close text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 p-0.5" aria-label="Close">✕</button>
+    </div>
+    <div class="text-[10px] text-slate-500 dark:text-slate-400 font-mono">${pt.lat.toFixed(4)}, ${pt.lng.toFixed(4)}</div>
+    <button type="button" class="route-popover-delete w-full py-1.5 px-2.5 rounded-xl bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs shadow-md shadow-rose-500/20 flex items-center justify-center gap-1.5 transition-all">
+      <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
+      <span>Delete Stop</span>
+    </button>
+  `;
+
+  popoverEl.querySelector(".route-popover-close").addEventListener("click", (e) => {
+    e.stopPropagation();
+    closeWaypointPopover();
+  });
+
+  popoverEl.querySelector(".route-popover-delete").addEventListener("click", (e) => {
+    e.stopPropagation();
+    closeWaypointPopover();
+    removeStop(index);
+  });
+
+  activePopoverOverlay = new Overlay({
+    element: popoverEl,
+    position: fromLonLat([pt.lng, pt.lat]),
+    positioning: "bottom-center",
+    offset: [0, -32],
+    stopEvent: true,
+  });
+  activePopoverOverlay.set("isRouteStudioPopover", true);
+  appRef.map.addOverlay(activePopoverOverlay);
+}
+
+// ============================================================================
+//  MAP CLICK & ROUTE COMPUTATION (Road Snapping & Multimodal Routing)
+// ============================================================================
+
+async function onMapClick(e) {
+  if (!routeMode) return;
+  closeWaypointPopover();
+  const [lng, lat] = toLonLat(e.coordinate);
+
+  pts.push({
+    lat,
+    lng,
+    name: `Stop ${pts.length + 1}`,
+    marker: null,
+  });
+
+  renderWaypointMarkers();
+  updateHUD();
+
+  await updateRouteGeometry();
+
+  if (isPanelOpen) {
+    await fetchAndRenderRoutePlan();
+  }
+}
+
+/**
+ * Recalculate route geometry:
+ * - 🚗 Driving: real road geometry via OSRM + driving duration
+ * - 🚲 Cycling: real road network geometry via OSRM + cycling duration (18 km/h)
+ * - 🚶 Walking: real road/street network geometry via OSRM + walking duration (4.8 km/h)
+ * - ✈️ Flight: curved great-circle spherical arc + flight cruising speed (800 km/h)
+ */
+async function updateRouteGeometry() {
+  if (!appRef || !appRef.map) return;
+  ensureRouteLayers();
+  routeSource.clear();
+
+  if (pts.length < 2) return;
+
+  // 1. Flight / Direct Geodesic Curved Arc
+  if (transportMode === "direct") {
+    let allCoordinates = [];
+    let totalDistM = 0;
+
+    for (let i = 0; i < pts.length - 1; i++) {
+      const p1 = pts[i];
+      const p2 = pts[i + 1];
+      const arc = interpolateGreatCircle(p1.lat, p1.lng, p2.lat, p2.lng, 25);
+      if (i > 0) arc.shift();
+      allCoordinates.push(...arc);
+      totalDistM += haversineDistanceMeters(p1.lat, p1.lng, p2.lat, p2.lng);
+    }
+
+    const olCoords = allCoordinates.map((c) => fromLonLat(c));
+    routeSource.addFeature(new Feature(new LineString(olCoords)));
+
+    const durationS = calculateModeDuration(totalDistM, "direct");
+
+    activeRouteData = {
+      coordinates: allCoordinates,
+      distanceM: totalDistM,
+      durationS,
+      mode: "direct",
+    };
+
+    updateHUD();
+    return;
+  }
+
+  // 2. Road Network Routing (Drive / Bike / Walk)
+  try {
+    const coordsParam = pts.map((p) => `${p.lng},${p.lat}`).join(";");
+    const url = `${OSRM_BASE}/${coordsParam}?overview=full&geometries=geojson&steps=false`;
+    const res = await fetch(url);
+    if (!res.ok) throw new Error("OSRM error");
+    const data = await res.json();
+
+    if (data.code === "Ok" && data.routes?.length) {
+      const route = data.routes[0];
+      const coordinates = route.geometry.coordinates; // [lng, lat]
+      const olCoords = coordinates.map((c) => fromLonLat(c));
+
+      routeSource.addFeature(new Feature(new LineString(olCoords)));
+
+      const distanceM = route.distance;
+      const durationS = calculateModeDuration(distanceM, transportMode, route.duration);
+
+      activeRouteData = {
+        coordinates,
+        distanceM,
+        durationS,
+        mode: transportMode,
+      };
+
+      updateHUD();
+      return;
+    }
+  } catch (err) {
+    console.warn("OSRM road route unavailable or cross-ocean, falling back to direct line:", err);
+  }
+
+  // 3. Fallback to direct connection if road network fails
+  let totalDistM = 0;
+  for (let i = 0; i < pts.length - 1; i++) {
+    totalDistM += haversineDistanceMeters(pts[i].lat, pts[i].lng, pts[i + 1].lat, pts[i + 1].lng);
+  }
+
+  const coordinates = pts.map((p) => [p.lng, p.lat]);
+  const olCoords = pts.map((p) => fromLonLat([p.lng, p.lat]));
+  routeSource.addFeature(new Feature(new LineString(olCoords)));
+
+  const durationS = calculateModeDuration(totalDistM, transportMode);
+
+  activeRouteData = {
+    coordinates,
+    distanceM: totalDistM,
+    durationS,
+    mode: transportMode,
+  };
+
+  updateHUD();
+}
+
+export function undoLastStop() {
+  closeWaypointPopover();
+  if (pts.length === 0) return;
+  const removed = pts.pop();
+  if (removed && removed.marker) {
+    removed.marker.remove();
+  }
+  renderWaypointMarkers();
+  updateRouteGeometry();
+  updateHUD();
+  appRef.showToast("Removed last stop", "info");
+
+  if (isPanelOpen) {
+    if (pts.length >= 2) {
+      fetchAndRenderRoutePlan();
+    } else {
+      hidePanel();
+      if (!routeMode) toggleRoute();
+    }
+  }
+}
+
+/**
+ * Remove ANY stop by index (Start, Waypoint, or Destination)
+ */
+export function removeStop(index) {
+  closeWaypointPopover();
+  if (index < 0 || index >= pts.length) return;
+  const [removed] = pts.splice(index, 1);
+  if (removed && removed.marker) {
+    removed.marker.remove();
+  }
+  renderWaypointMarkers();
+  updateRouteGeometry();
+  updateHUD();
+  appRef.showToast(`Removed stop ${index + 1}`, "info");
+
+  if (isPanelOpen) {
+    if (pts.length >= 2) {
+      fetchAndRenderRoutePlan();
+    } else {
+      hidePanel();
+      if (!routeMode) toggleRoute();
+    }
+  }
+}
+
+export function reverseRoute() {
+  closeWaypointPopover();
+  if (pts.length < 2) return;
+  pts.reverse();
+  pts.forEach((p, idx) => {
+    p.name = `Stop ${idx + 1}`;
+  });
+  renderWaypointMarkers();
+  updateRouteGeometry();
+  updateHUD();
+  appRef.showToast("Route reversed (swapped start & destination)", "info");
+
+  if (isPanelOpen) {
+    fetchAndRenderRoutePlan();
+  }
+}
+
+/**
+ * 1-Click 2-Opt Waypoint Optimizer:
+ * Reorders intermediate stops to minimize total journey distance while
+ * keeping Departure (A) and Destination (B) anchored.
+ */
+export async function optimizeWaypointOrder() {
+  closeWaypointPopover();
+  if (pts.length < 4) {
+    if (appRef) appRef.showToast("Add at least 4 stops to optimize stop sequence", "info");
+    return;
+  }
+
+  let origDist = 0;
+  for (let i = 0; i < pts.length - 1; i++) {
+    origDist += haversineDistanceMeters(pts[i].lat, pts[i].lng, pts[i + 1].lat, pts[i + 1].lng);
+  }
+
+  const optimized = solve2OptTSP(pts);
+
+  let newDist = 0;
+  for (let i = 0; i < optimized.length - 1; i++) {
+    newDist += haversineDistanceMeters(optimized[i].lat, optimized[i].lng, optimized[i + 1].lat, optimized[i + 1].lng);
+  }
+
+  pts = optimized;
+  pts.forEach((p, idx) => {
+    p.name = `Stop ${idx + 1}`;
+  });
+
+  renderWaypointMarkers();
+  await updateRouteGeometry();
+  updateHUD();
+
+  const savedM = origDist - newDist;
+  const units = getActiveUnits();
+  if (savedM > 100) {
+    const savedStr = formatRouteDistance(savedM, units);
+    if (appRef) appRef.showToast(`⚡ Route optimized! Saved ~${savedStr}`, "success");
+  } else {
+    if (appRef) appRef.showToast("⚡ Route is already in optimal sequence", "success");
+  }
+
+  if (isPanelOpen) {
+    await fetchAndRenderRoutePlan();
+  }
+}
+
+export function clearRoute() {
+  closeWaypointPopover();
+  pts = [];
+  activeRouteData = null;
+  if (routeSource) routeSource.clear();
+  clearWaypointMarkers();
+  updateHUD();
+  hidePanel();
+  appRef.showToast("Route cleared", "info");
+}
+
+// ============================================================================
+//  FLOATING ROUTE STUDIO HUD (Heads-Up Display)
+// ============================================================================
+
+function buildHUD() {
+  hudEl = document.getElementById("routeStudioHud");
+  if (hudEl) return;
+
+  hudEl = document.createElement("div");
+  hudEl.id = "routeStudioHud";
+  hudEl.className =
+    "hidden fixed top-16 sm:top-20 left-1/2 -translate-x-1/2 " +
+    "glass rounded-2xl shadow-2xl border border-slate-200/80 dark:border-slate-700/80 " +
+    "px-3.5 py-2 sm:px-4 sm:py-2.5 flex items-center gap-2 sm:gap-3 backdrop-blur-xl animate-fade-in max-w-[95vw] overflow-x-auto hide-scrollbar pointer-events-auto";
+  hudEl.style.zIndex = "2000";
+
+  hudEl.innerHTML = `
+    <!-- Status & Stop Counter -->
+    <div class="flex items-center gap-2 flex-shrink-0">
+      <div class="relative flex h-3 w-3">
+        <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-indigo-400 opacity-75"></span>
+        <span class="relative inline-flex rounded-full h-3 w-3 bg-indigo-600"></span>
+      </div>
+      <div id="routeHudStatus" class="text-xs font-semibold text-slate-800 dark:text-slate-100 whitespace-nowrap">
+        Click map to place Departure
+      </div>
+    </div>
+
+    <!-- Divider -->
+    <div class="h-4 w-px bg-slate-300 dark:bg-slate-700 flex-shrink-0"></div>
+
+    <!-- Mode Selector -->
+    <div class="flex items-center gap-1 bg-slate-200/60 dark:bg-slate-800/60 p-0.5 rounded-xl flex-shrink-0">
+      <button type="button" data-mode="driving" class="route-mode-btn px-2 py-1 rounded-lg text-xs font-medium transition-all bg-white dark:bg-slate-700 shadow-sm text-indigo-600 dark:text-indigo-400 font-bold" title="Drive (Car speed & road network)">🚗</button>
+      <button type="button" data-mode="cycling" class="route-mode-btn px-2 py-1 rounded-lg text-xs font-medium transition-all text-slate-600 dark:text-slate-300 hover:text-slate-900" title="Bike (Cycling pace ~18 km/h)">🚲</button>
+      <button type="button" data-mode="walking" class="route-mode-btn px-2 py-1 rounded-lg text-xs font-medium transition-all text-slate-600 dark:text-slate-300 hover:text-slate-900" title="Walk (Hiking pace ~4.8 km/h)">🚶</button>
+      <button type="button" data-mode="direct" class="route-mode-btn px-2 py-1 rounded-lg text-xs font-medium transition-all text-slate-600 dark:text-slate-300 hover:text-slate-900" title="Flight (Curved great-circle arc ~800 km/h)">✈️</button>
+    </div>
+
+    <!-- Divider -->
+    <div class="h-4 w-px bg-slate-300 dark:bg-slate-700 flex-shrink-0"></div>
+
+    <!-- Action Buttons -->
+    <div class="flex items-center gap-1.5 flex-shrink-0">
+      <button type="button" id="routeHudUndo" class="p-1.5 rounded-xl hover:bg-slate-200/60 dark:hover:bg-slate-700/60 text-slate-600 dark:text-slate-300 transition-colors" title="Undo last stop (Ctrl+Z)" aria-label="Undo">
+        <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M3 10h10a5 5 0 015 5v2m-15-7l4-4m-4 4l4 4"/></svg>
+      </button>
+
+      <button type="button" id="routeHudOptimize" class="p-1.5 rounded-xl hover:bg-amber-100 dark:hover:bg-amber-900/30 text-amber-600 dark:text-amber-400 transition-colors hidden" title="⚡ Optimize stop sequence (2-Opt TSP for 4+ stops)" aria-label="Optimize stops">
+        <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>
+      </button>
+
+      <button type="button" id="routeHudReverse" class="p-1.5 rounded-xl hover:bg-slate-200/60 dark:hover:bg-slate-700/60 text-slate-600 dark:text-slate-300 transition-colors" title="Reverse route direction" aria-label="Reverse">
+        <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M7 16V4m0 0L3 8m4-4l4 4m6 0v12m0 0l4-4m-4 4l-4-4"/></svg>
+      </button>
+
+      <button type="button" id="routeHudClear" class="p-1.5 rounded-xl hover:bg-slate-200/60 dark:hover:bg-slate-700/60 text-rose-500 transition-colors" title="Clear all stops" aria-label="Clear">
+        <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
+      </button>
+
+      <button type="button" id="routeHudFinish" class="px-3 py-1.5 rounded-xl bg-gradient-to-r from-indigo-600 to-indigo-700 hover:from-indigo-500 hover:to-indigo-600 text-white text-xs font-bold shadow-md shadow-indigo-500/20 transition-all flex items-center gap-1.5 disabled:opacity-50 disabled:pointer-events-none whitespace-nowrap">
+        <span>Analyze Route</span>
+        <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M13 7l5 5m0 0l-5 5m5-5H6"/></svg>
+      </button>
+
+      <button type="button" id="routeHudExit" class="p-1.5 rounded-xl hover:bg-slate-200/60 dark:hover:bg-slate-700/60 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition-colors ml-1" title="Exit (Esc)" aria-label="Close">✕</button>
+    </div>
+  `;
+
+  document.body.appendChild(hudEl);
+
+  hudEl.querySelectorAll(".route-mode-btn").forEach((b) => {
+    b.addEventListener("click", () => {
+      setTransportMode(b.dataset.mode);
+    });
+  });
+
+  hudEl.querySelector("#routeHudUndo")?.addEventListener("click", undoLastStop);
+  hudEl.querySelector("#routeHudOptimize")?.addEventListener("click", optimizeWaypointOrder);
+  hudEl.querySelector("#routeHudReverse")?.addEventListener("click", reverseRoute);
+  hudEl.querySelector("#routeHudClear")?.addEventListener("click", clearRoute);
+  hudEl.querySelector("#routeHudFinish")?.addEventListener("click", finishRoute);
+  hudEl.querySelector("#routeHudExit")?.addEventListener("click", toggleRoute);
+}
+
+function showHUD() {
+  if (hudEl) hudEl.classList.remove("hidden");
+}
+
+function hideHUD() {
+  if (hudEl) hudEl.classList.add("hidden");
+}
+
+function setTransportMode(mode) {
+  transportMode = mode;
+  if (hudEl) {
+    hudEl.querySelectorAll(".route-mode-btn").forEach((b) => {
+      if (b.dataset.mode === mode) {
+        b.className =
+          "route-mode-btn px-2 py-1 rounded-lg text-xs font-medium transition-all bg-white dark:bg-slate-700 shadow-sm text-indigo-600 dark:text-indigo-400 font-bold";
+      } else {
+        b.className =
+          "route-mode-btn px-2 py-1 rounded-lg text-xs font-medium transition-all text-slate-600 dark:text-slate-300 hover:text-slate-900";
+      }
+    });
+  }
+  updateRouteGeometry();
+  if (isPanelOpen) fetchAndRenderRoutePlan();
+}
+
+function updateHUD() {
+  if (!hudEl) return;
+
+  const statusEl = hudEl.querySelector("#routeHudStatus");
+  const finishBtn = hudEl.querySelector("#routeHudFinish");
+  const optBtn = hudEl.querySelector("#routeHudOptimize");
+  const units = getActiveUnits();
+
+  // Show ⚡ Optimize button whenever user has placed 4 or more stops (can reorder intermediates)
+  if (optBtn) {
+    if (pts.length >= 4) {
+      optBtn.classList.remove("hidden");
+    } else {
+      optBtn.classList.add("hidden");
+    }
+  }
+
+  if (pts.length === 0) {
+    if (statusEl) statusEl.textContent = "📍 Click map to place Departure point";
+    if (finishBtn) finishBtn.disabled = true;
+  } else if (pts.length === 1) {
+    if (statusEl) statusEl.textContent = "📍 Click map to set Destination or stop";
+    if (finishBtn) finishBtn.disabled = true;
+  } else {
+    const distStr = activeRouteData ? formatRouteDistance(activeRouteData.distanceM, units) : "--";
+    const durStr = activeRouteData ? formatRouteDuration(activeRouteData.durationS) : "--";
+
+    let modeIcon = "🚗";
+    if (transportMode === "cycling") modeIcon = "🚲";
+    else if (transportMode === "walking") modeIcon = "🚶";
+    else if (transportMode === "direct") modeIcon = "✈️";
+
+    if (statusEl) {
+      statusEl.innerHTML = `<span class="font-bold text-indigo-600 dark:text-indigo-400">${pts.length} stops</span> · ${modeIcon} ${durStr} · ${distStr}`;
+    }
+    if (finishBtn) finishBtn.disabled = false;
+  }
+}
+
+// ============================================================================
+//  ROUTE STUDIO PANEL (Drawer / Analysis View)
+// ============================================================================
+
+function buildPanel() {
+  panelEl = document.getElementById("routePanel");
+  if (panelEl) return;
+
+  panelEl = document.createElement("div");
+  panelEl.id = "routePanel";
+  panelEl.className =
+    "hidden glass rounded-3xl shadow-2xl overflow-hidden fixed top-16 sm:top-20 right-3 sm:right-6 " +
+    "w-[94vw] sm:w-96 max-h-[calc(100vh-100px)] flex flex-col " +
+    "border border-slate-200/80 dark:border-slate-700/70 backdrop-blur-2xl animate-fade-in pointer-events-auto";
+  panelEl.style.zIndex = "2000";
+
+  panelEl.innerHTML = `
+    <!-- Header -->
+    <div class="flex items-center justify-between px-4 py-3 border-b border-slate-200/60 dark:border-slate-700/60 bg-white/40 dark:bg-slate-800/40 flex-shrink-0">
+      <div class="flex items-center gap-2">
+        <span class="text-base" id="routePanelModeIcon">🧭</span>
+        <div>
+          <h3 class="text-xs font-bold uppercase tracking-wider text-slate-800 dark:text-slate-100" id="routePanelTitle">Route Studio</h3>
+          <div id="routePanelSubtitle" class="text-[10px] text-slate-500 dark:text-slate-400 font-medium">Trip Weather & Safety Intelligence</div>
+        </div>
+      </div>
+      <div class="flex items-center gap-1">
+        <button type="button" id="routePanelOptimizeBtn" class="px-2 py-1 rounded-lg text-xs font-semibold text-amber-600 dark:text-amber-400 hover:bg-amber-50 dark:hover:bg-slate-700/50 transition-colors hidden" title="⚡ Optimize intermediate stops to minimize distance">⚡ Optimize</button>
+        <button type="button" id="routePanelEditBtn" class="px-2 py-1 rounded-lg text-xs font-medium text-indigo-600 dark:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-slate-700/50 transition-colors" title="Edit stops on map">✏️ Edit</button>
+        <button type="button" id="routePanelClearBtn" class="px-2 py-1 rounded-lg text-xs font-medium text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-900/30 transition-colors" title="Clear entire route">🗑️ Clear</button>
+        <button type="button" id="routePanelCloseBtn" class="p-1 rounded-lg hover:bg-slate-200/60 dark:hover:bg-slate-700/50 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition-colors ml-1" aria-label="Close route panel">✕</button>
+      </div>
+    </div>
+
+    <!-- Scrollable Content -->
+    <div id="routePanelBody" class="overflow-y-auto custom-scrollbar p-3.5 space-y-3.5 text-slate-700 dark:text-slate-200 text-xs">
+      <!-- Injected dynamically in finishRoute() -->
+    </div>
+
+    <!-- Pro Actions Footer -->
+    <div class="px-3.5 py-3 border-t border-slate-200/60 dark:border-slate-700/60 bg-white/40 dark:bg-slate-800/40 flex flex-wrap gap-2 flex-shrink-0 justify-between">
+      <button type="button" id="routeNavBtn" class="flex-1 min-w-[130px] py-2 px-3 rounded-xl bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-500 hover:to-violet-500 text-white font-bold text-xs shadow-md shadow-indigo-500/20 flex items-center justify-center gap-1.5 transition-all">
+        <span>🚗 Start Navigation</span>
+      </button>
+
+      <div class="flex items-center gap-1.5">
+        <button type="button" id="routeExportGpxBtn" class="p-2 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-700/60 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 font-semibold text-xs transition-colors" title="Export GPX file for Garmin/Strava/GPS">
+          📥 GPX
+        </button>
+        <button type="button" id="routeShareBtn" class="p-2 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-700/60 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 font-semibold text-xs transition-colors" title="Copy route itinerary & GeoJSON">
+          📋 Share
+        </button>
+        <button type="button" id="routeSaveBtn" class="p-2 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-700/60 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 font-semibold text-xs transition-colors" title="Save trip to favorite routes">
+          💾 Save
+        </button>
+      </div>
+    </div>
+  `;
+
+  document.body.appendChild(panelEl);
+
+  panelEl.querySelector("#routePanelCloseBtn")?.addEventListener("click", hidePanel);
+  panelEl.querySelector("#routePanelClearBtn")?.addEventListener("click", clearRoute);
+  panelEl.querySelector("#routePanelOptimizeBtn")?.addEventListener("click", optimizeWaypointOrder);
+  panelEl.querySelector("#routePanelEditBtn")?.addEventListener("click", () => {
+    hidePanel();
+    if (!routeMode) toggleRoute();
+  });
+
+  panelEl.querySelector("#routeNavBtn")?.addEventListener("click", handoverToNavigation);
+  panelEl.querySelector("#routeExportGpxBtn")?.addEventListener("click", exportGPXFile);
+  panelEl.querySelector("#routeShareBtn")?.addEventListener("click", shareRouteItinerary);
+  panelEl.querySelector("#routeSaveBtn")?.addEventListener("click", saveRouteToFavorites);
+}
+
+function showPanel() {
+  if (panelEl) {
+    panelEl.classList.remove("hidden");
+    isPanelOpen = true;
+  }
+}
+
+function hidePanel() {
+  if (panelEl) {
+    panelEl.classList.add("hidden");
+    isPanelOpen = false;
+  }
+}
+
+// ============================================================================
+//  ROUTE WEATHER SAMPLING & ARRIVAL ETA FORECAST
+// ============================================================================
+
+export async function finishRoute() {
+  closeWaypointPopover();
+  if (pts.length < 2) {
+    appRef.showToast("Add at least 2 stops to analyze your trip", "info");
+    return;
+  }
+
+  showPanel();
+  const bodyEl = panelEl ? panelEl.querySelector("#routePanelBody") : document.getElementById("routePanelBody");
+  if (bodyEl) {
+    bodyEl.innerHTML = `
+      <div class="py-12 text-center space-y-3">
+        <div class="inline-block animate-spin text-2xl">🧭</div>
+        <div class="font-bold text-slate-800 dark:text-slate-100">Analyzing Route & Weather…</div>
+        <div class="text-xs text-slate-500 dark:text-slate-400">Computing real arrival ETAs and hazard conditions along ${pts.length} stops…</div>
+      </div>
+    `;
+  }
+
+  appRef.showToast("Fetching time-aware weather along route…", "info");
 
   try {
-    // ---- 1. Fetch weather for every point (parallel) ----
-    const rawResults = await Promise.all(
-      pts.map(([lat, lng]) =>
-        fetch(
-          `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lng}` +
-            `&current=temperature_2m,precipitation,weather_code,wind_speed_10m&timezone=auto`,
+    await fetchAndRenderRoutePlan();
+  } catch (err) {
+    console.error("Route analysis failed:", err);
+    if (bodyEl) {
+      bodyEl.innerHTML = `
+        <div class="py-8 text-center text-rose-500 space-y-2">
+          <div class="text-xl">⚠️</div>
+          <div class="font-bold">Weather Analysis Failed</div>
+          <div class="text-xs text-slate-400">Unable to reach weather services. Check network connection and retry.</div>
+          <button type="button" id="routeRetryBtn" class="mt-2 px-3 py-1.5 rounded-xl bg-slate-200 dark:bg-slate-700 text-slate-800 dark:text-slate-200 font-bold text-xs">Retry</button>
+        </div>
+      `;
+      panelEl.querySelector("#routeRetryBtn")?.addEventListener("click", finishRoute);
+    }
+  }
+}
+
+async function fetchAndRenderRoutePlan() {
+  const units = getActiveUnits();
+  const totalDurationS = activeRouteData?.durationS || 3600;
+  const departureDate = new Date(Date.now() + departureOffsetHours * 3600 * 1000);
+
+  const etaWaypoints = calculateETAs(pts, totalDurationS, departureDate);
+
+  const weatherPromises = etaWaypoints.map(async (wpt) => {
+    try {
+      const url =
+        `https://api.open-meteo.com/v1/forecast?latitude=${wpt.lat}&longitude=${wpt.lng}` +
+        `&current=temperature_2m,precipitation,weather_code,wind_speed_10m,wind_direction_10m` +
+        `&hourly=temperature_2m,precipitation_probability,precipitation,weather_code,wind_speed_10m,wind_direction_10m,visibility` +
+        `&timezone=auto`;
+      const r = await fetch(url);
+      if (!r.ok) return null;
+      const data = await r.json();
+
+      const etaIsoHour = wpt.eta.toISOString().slice(0, 13);
+      let sampled = null;
+
+      if (data.hourly && data.hourly.time) {
+        let matchIdx = data.hourly.time.findIndex((t) => t.startsWith(etaIsoHour));
+        if (matchIdx === -1) matchIdx = 0;
+
+        sampled = {
+          temperature: data.hourly.temperature_2m?.[matchIdx],
+          precipitationProb: data.hourly.precipitation_probability?.[matchIdx] ?? 0,
+          precipitation: data.hourly.precipitation?.[matchIdx] ?? 0,
+          weatherCode: data.hourly.weather_code?.[matchIdx] ?? data.current?.weather_code ?? 0,
+          windSpeed: data.hourly.wind_speed_10m?.[matchIdx] ?? data.current?.wind_speed_10m ?? 0,
+          windDirection: data.hourly.wind_direction_10m?.[matchIdx] ?? data.current?.wind_direction_10m ?? 0,
+          visibility: data.hourly.visibility?.[matchIdx] ?? 10000,
+        };
+      } else {
+        sampled = {
+          temperature: data.current?.temperature_2m ?? 20,
+          precipitationProb: 0,
+          precipitation: data.current?.precipitation ?? 0,
+          weatherCode: data.current?.weather_code ?? 0,
+          windSpeed: data.current?.wind_speed_10m ?? 10,
+          windDirection: data.current?.wind_direction_10m ?? 0,
+          visibility: 10000,
+        };
+      }
+
+      const hazards = detectWeatherHazards(sampled);
+
+      return {
+        ...wpt,
+        weather: sampled,
+        hazards,
+      };
+    } catch (e) {
+      console.warn("Stop weather fetch failed:", wpt, e);
+      return {
+        ...wpt,
+        weather: {
+          temperature: 20,
+          precipitationProb: 0,
+          precipitation: 0,
+          weatherCode: 0,
+          windSpeed: 10,
+          visibility: 10000,
+        },
+        hazards: [],
+      };
+    }
+  });
+
+  const stopResults = await Promise.all(weatherPromises);
+  const validStops = stopResults.filter(Boolean);
+
+  renderRoutePanelContent(validStops, units);
+}
+
+function renderRoutePanelContent(stops, units) {
+  const bodyEl = panelEl ? panelEl.querySelector("#routePanelBody") : document.getElementById("routePanelBody");
+  if (!bodyEl) return;
+
+  const totalDistanceM = activeRouteData?.distanceM || 0;
+  const totalDurationS = activeRouteData?.durationS || 0;
+  const allHazards = stops.flatMap((s) => s.hazards);
+  const rainyStopsCount = stops.filter((s) => s.weather.precipitation > 0 || s.weather.precipitationProb >= 50).length;
+
+  const temps = stops.map((s) => s.weather.temperature).filter((t) => typeof t === "number");
+  const minTemp = temps.length ? Math.min(...temps) : 20;
+  const maxTemp = temps.length ? Math.max(...temps) : 20;
+  const maxWind = stops.length ? Math.max(...stops.map((s) => s.weather.windSpeed || 0)) : 0;
+
+  // Update header mode indicator
+  let modeName = "Driving";
+  let modeEmoji = "🚗";
+  if (transportMode === "cycling") {
+    modeName = "Cycling";
+    modeEmoji = "🚲";
+  } else if (transportMode === "walking") {
+    modeName = "Walking";
+    modeEmoji = "🚶";
+  } else if (transportMode === "direct") {
+    modeName = "Flight";
+    modeEmoji = "✈️";
+  }
+
+  const modeIconEl = panelEl?.querySelector("#routePanelModeIcon");
+  if (modeIconEl) modeIconEl.textContent = modeEmoji;
+
+  const subtitleEl = panelEl?.querySelector("#routePanelSubtitle");
+  if (subtitleEl) subtitleEl.textContent = `${modeName} Trip Weather & Arrival Timeline`;
+
+  // Toggle Header Optimize Button if 4+ stops exist
+  const panelOptBtn = panelEl ? panelEl.querySelector("#routePanelOptimizeBtn") : document.getElementById("routePanelOptimizeBtn");
+  if (panelOptBtn) {
+    if (stops.length >= 4) {
+      panelOptBtn.classList.remove("hidden");
+    } else {
+      panelOptBtn.classList.add("hidden");
+    }
+  }
+
+  // AuraCopilot Smart Environmental Briefing
+  const copilotBriefing = generateAuraCopilotBriefing(activeRouteData, stops, allHazards, transportMode);
+  let copilotHtml = "";
+  if (copilotBriefing) {
+    copilotHtml = `
+      <div class="rounded-2xl border border-indigo-500/30 bg-gradient-to-br from-indigo-500/10 via-purple-500/5 to-slate-900/10 p-3 space-y-2 backdrop-blur-md">
+        <div class="flex items-center justify-between">
+          <div class="flex items-center gap-1.5 font-bold text-xs text-indigo-700 dark:text-indigo-300">
+            <span class="text-sm">✨</span>
+            <span>AuraCopilot™ Briefing</span>
+          </div>
+          <span class="px-2 py-0.5 rounded-full border text-[10px] font-bold ${copilotBriefing.verdictBadge}">
+            ${copilotBriefing.verdictIcon} ${copilotBriefing.verdictTitle}
+          </span>
+        </div>
+        <p class="text-[11px] leading-relaxed text-slate-700 dark:text-slate-300">
+          ${copilotBriefing.narrative}
+        </p>
+        <div class="pt-1.5 border-t border-slate-200/50 dark:border-slate-700/50 flex items-start gap-1.5 text-[10px] text-slate-600 dark:text-slate-400">
+          <span class="font-bold text-indigo-500 dark:text-indigo-400 flex-shrink-0">PRO TIP:</span>
+          <span>${copilotBriefing.tip}</span>
+        </div>
+      </div>
+    `;
+  }
+
+  // Hazard Banner
+  let hazardHtml = "";
+  if (allHazards.length > 0) {
+    const worst = allHazards[0];
+    const isDanger = allHazards.some((h) => h.severity === "danger");
+    const bannerBg = isDanger
+      ? "bg-rose-500/15 border-rose-500/40 text-rose-700 dark:text-rose-300"
+      : "bg-amber-500/15 border-amber-500/40 text-amber-700 dark:text-amber-300";
+
+    hazardHtml = `
+      <div class="rounded-2xl border p-3 flex items-start gap-2.5 ${bannerBg}">
+        <span class="text-xl leading-none flex-shrink-0">${worst.icon}</span>
+        <div>
+          <div class="font-bold text-xs">${worst.title}</div>
+          <div class="text-[11px] mt-0.5 leading-relaxed opacity-90">${worst.message}</div>
+          ${allHazards.length > 1 ? `<div class="text-[10px] mt-1 font-semibold underline">+${allHazards.length - 1} more hazard alerts along route</div>` : ""}
+        </div>
+      </div>
+    `;
+  } else {
+    hazardHtml = `
+      <div class="rounded-2xl border border-emerald-500/30 bg-emerald-500/10 p-2.5 flex items-center gap-2 text-emerald-700 dark:text-emerald-300">
+        <span class="text-base">✨</span>
+        <div class="font-medium text-[11px]">Clear travelling conditions — no severe weather hazards detected.</div>
+      </div>
+    `;
+  }
+
+  // Departure Time Chips
+  const departureChips = [
+    { label: "Leave Now", offset: 0 },
+    { label: "+1 hr", offset: 1 },
+    { label: "+2 hrs", offset: 2 },
+    { label: "+4 hrs", offset: 4 },
+  ]
+    .map(
+      (c) => `
+      <button type="button" data-offset="${c.offset}" class="route-departure-chip px-2.5 py-1 rounded-xl text-[11px] font-semibold transition-all ${
+        departureOffsetHours === c.offset
+          ? "bg-indigo-600 text-white shadow-sm"
+          : "bg-slate-200/60 dark:bg-slate-700/60 text-slate-700 dark:text-slate-300 hover:bg-slate-200"
+      }">
+        ${c.label}
+      </button>
+    `,
+    )
+    .join("");
+
+  // Stop-by-Stop Itinerary Cards with Aerodynamic Relative Wind Legs
+  const itineraryHtml = stops
+    .map((stop, i) => {
+      const isStart = i === 0;
+      const isEnd = i === stops.length - 1;
+      const roleLabel = isStart ? "Start (A)" : isEnd ? "Destination (B)" : `Stop ${i + 1}`;
+      const roleBadgeBg = isStart
+        ? "bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border-emerald-500/30"
+        : isEnd
+        ? "bg-rose-500/15 text-rose-700 dark:text-rose-300 border-rose-500/30"
+        : "bg-indigo-500/15 text-indigo-700 dark:text-indigo-300 border-indigo-500/30";
+
+      const info = weatherInfo(stop.weather.weatherCode);
+      const etaStr = stop.eta.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+
+      const hazardTags = stop.hazards
+        .map(
+          (h) => `
+        <span class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-bold bg-rose-500/20 text-rose-700 dark:text-rose-300">
+          ${h.icon} ${h.title}
+        </span>
+      `,
         )
-          .then((r) => r.json())
-          .catch(() => null),
-      ),
-    );
+        .join("");
 
-    // ---- 2. Keep only the successful responses ----
-    const results = rawResults.filter(Boolean);
-    const validCount = results.length;
-    const rainyCount = results.filter(
-      (r) => r.current && r.current.precipitation > 0,
-    ).length;
+      // Aerodynamic leg connector between consecutive stops
+      let legConnectorHtml = "";
+      if (i < stops.length - 1) {
+        const nextStop = stops[i + 1];
+        const bearing = calculateBearing(stop.lat, stop.lng, nextStop.lat, nextStop.lng);
+        const compass = bearingToCompass(bearing);
+        const relWind = calculateRelativeWind(bearing, stop.weather.windSpeed, stop.weather.windDirection);
+        const legDist = haversineDistanceMeters(stop.lat, stop.lng, nextStop.lat, nextStop.lng);
+        const legDistStr = formatRouteDistance(legDist, units);
 
-    // ---- 3. Build per-stop timeline items ----
-    // Bug fix: this used to read `iconObj.dayIcon`, a property that doesn't
-    // exist on what WeatherService.getWeatherInfo() returns (it's `.icon`),
-    // so every row showed literal "undefined" where the icon/description
-    // should be. Also added: description text and wind speed per stop.
-    if (timelineEl) {
-      timelineEl.innerHTML = "";
-      results.forEach((data, idx) => {
-        const cur = data.current;
-        const info = weatherInfo(cur.weather_code);
-
-        const li = document.createElement("li");
-        li.className =
-          "flex items-start gap-2.5 py-2 px-2.5 rounded-lg bg-slate-100/50 dark:bg-slate-700/30";
-        li.innerHTML = `
-          <span class="text-xl leading-none flex-shrink-0" aria-hidden="true">${info.icon}</span>
-          <div class="min-w-0 flex-1">
-            <div class="flex items-center justify-between gap-2">
-              <span class="text-xs font-bold text-slate-700 dark:text-slate-200">Stop ${idx + 1}</span>
-              <span class="text-sm font-extrabold text-slate-900 dark:text-white">${cur.temperature_2m.toFixed(0)}°C</span>
+        legConnectorHtml = `
+          <div class="flex items-center gap-2 py-1 px-2.5 text-[10px] text-slate-500 dark:text-slate-400">
+            <div class="flex flex-col items-center">
+              <div class="w-0.5 h-2.5 bg-slate-300 dark:bg-slate-700"></div>
+              <div class="w-1.5 h-1.5 rounded-full bg-slate-400 dark:bg-slate-600"></div>
+              <div class="w-0.5 h-2.5 bg-slate-300 dark:bg-slate-700"></div>
             </div>
-            <div class="text-[11px] text-slate-500 dark:text-slate-400 truncate">${info.description}</div>
-            <div class="text-[10px] text-slate-400 dark:text-slate-500 mt-0.5 flex items-center gap-2">
-              <span>💨 ${cur.wind_speed_10m.toFixed(0)} km/h</span>
-              ${cur.precipitation > 0 ? `<span>🌧️ ${cur.precipitation.toFixed(1)} mm</span>` : ""}
+            <div class="flex-1 flex items-center justify-between gap-1 flex-wrap">
+              <span class="font-medium font-mono text-[10px] text-slate-600 dark:text-slate-400">Leg ${i + 1}: ${legDistStr} · Heading ${compass} (${Math.round(bearing)}°)</span>
+              <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full font-bold border text-[10px] ${relWind.bg} ${relWind.color}">
+                <span>${relWind.icon}</span>
+                <span>${relWind.label}</span>
+              </span>
             </div>
           </div>
         `;
-        timelineEl.appendChild(li);
-      });
-    }
+      }
 
-    // ---- 4. Build aggregate weather card ----
-    if (cardEl) {
-      const temps = results
-        .map((r) => r.current.temperature_2m)
-        .filter((t) => typeof t === "number");
-      const avgTemp =
-        temps.length > 0
-          ? (temps.reduce((a, b) => a + b, 0) / temps.length).toFixed(1)
-          : "--";
-      const minTemp = temps.length > 0 ? Math.min(...temps).toFixed(0) : "--";
-      const maxTemp = temps.length > 0 ? Math.max(...temps).toFixed(0) : "--";
-      const maxWind = results.length
-        ? Math.max(...results.map((r) => r.current.wind_speed_10m || 0)).toFixed(0)
-        : "--";
+      return `
+        <div class="rounded-2xl bg-white/60 dark:bg-slate-800/60 border border-slate-200/60 dark:border-slate-700/60 p-3 space-y-2 hover:border-indigo-400/50 transition-all group" data-stop-card="${i}">
+          <div class="flex items-center justify-between">
+            <div class="flex items-center gap-2">
+              <span class="px-2 py-0.5 rounded-lg border text-[10px] font-black uppercase tracking-wider ${roleBadgeBg}">${roleLabel}</span>
+              <span class="font-extrabold text-slate-900 dark:text-slate-100 text-xs">${etaStr}</span>
+            </div>
+            <div class="flex items-center gap-2">
+              <div class="text-base leading-none" title="${info.description}">${info.icon}</div>
+              <button type="button" class="route-delete-stop-btn p-1.5 rounded-xl text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-900/30 transition-all" data-delete-idx="${i}" title="Remove this stop (${roleLabel})" aria-label="Delete stop">
+                <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
+              </button>
+            </div>
+          </div>
 
-      const iconStrip = results
-        .map((r, i) => {
-          const info = weatherInfo(r.current.weather_code);
-          return `<span title="Stop ${i + 1}: ${info.description}, ${r.current.temperature_2m.toFixed(0)}°C">${info.icon}</span>`;
-        })
-        .join(" ");
+          <div class="flex items-center justify-between text-xs cursor-pointer" data-zoom-stop="${i}">
+            <div class="text-slate-500 dark:text-slate-400 text-[11px] truncate max-w-[180px]">
+              ${info.description}
+            </div>
+            <div class="font-black text-sm text-slate-900 dark:text-white">
+              ${formatTemp(stop.weather.temperature, units)}
+            </div>
+          </div>
 
-      cardEl.innerHTML = `
-        <div class="font-bold text-slate-700 dark:text-slate-200 mb-2">Route Summary</div>
-        <div class="grid grid-cols-2 gap-y-1">
-          <div>Stops</div><div class="text-right font-semibold text-slate-800 dark:text-slate-100">${validCount}</div>
-          <div>Rainy stops</div><div class="text-right font-semibold text-slate-800 dark:text-slate-100">${rainyCount}${rainyCount ? " 🌧️" : ""}</div>
-          <div>Avg temp</div><div class="text-right font-semibold text-slate-800 dark:text-slate-100">${avgTemp}°C</div>
-          <div>Range</div><div class="text-right font-semibold text-slate-800 dark:text-slate-100">${minTemp}°C – ${maxTemp}°C</div>
-          <div>Max wind</div><div class="text-right font-semibold text-slate-800 dark:text-slate-100">${maxWind} km/h</div>
+          <div class="flex items-center justify-between pt-1 border-t border-slate-200/40 dark:border-slate-700/40 text-[10px] text-slate-500 dark:text-slate-400 cursor-pointer" data-zoom-stop="${i}">
+            <span class="flex items-center gap-1">💨 ${formatSpeed(stop.weather.windSpeed, units)}</span>
+            <span class="flex items-center gap-1">🌧️ ${stop.weather.precipitationProb}% (${formatPrecip(stop.weather.precipitation, units)})</span>
+          </div>
+
+          ${hazardTags ? `<div class="flex flex-wrap gap-1 pt-1">${hazardTags}</div>` : ""}
         </div>
-        <div class="mt-2.5 text-base leading-none">${iconStrip}</div>
+        ${legConnectorHtml}
       `;
+    })
+    .join("");
+
+  bodyEl.innerHTML = `
+    <!-- AuraCopilot AI Briefing -->
+    ${copilotHtml}
+
+    <!-- Top Hazards Banner -->
+    ${hazardHtml}
+
+    <!-- Key Trip KPIs -->
+    <div class="grid grid-cols-2 gap-2">
+      <div class="bg-slate-100/70 dark:bg-slate-800/70 p-2.5 rounded-2xl border border-slate-200/40 dark:border-slate-700/40">
+        <div class="text-[10px] text-slate-400 uppercase font-bold tracking-wider">Total Distance</div>
+        <div class="text-sm font-black text-slate-900 dark:text-white mt-0.5">${formatRouteDistance(totalDistanceM, units)}</div>
+      </div>
+      <div class="bg-slate-100/70 dark:bg-slate-800/70 p-2.5 rounded-2xl border border-slate-200/40 dark:border-slate-700/40">
+        <div class="text-[10px] text-slate-400 uppercase font-bold tracking-wider">${modeEmoji} ${modeName} Time</div>
+        <div class="text-sm font-black text-slate-900 dark:text-white mt-0.5">${formatRouteDuration(totalDurationS)}</div>
+      </div>
+      <div class="bg-slate-100/70 dark:bg-slate-800/70 p-2.5 rounded-2xl border border-slate-200/40 dark:border-slate-700/40">
+        <div class="text-[10px] text-slate-400 uppercase font-bold tracking-wider">Temp Range</div>
+        <div class="text-xs font-bold text-slate-800 dark:text-slate-100 mt-0.5">${formatTemp(minTemp, units)} – ${formatTemp(maxTemp, units)}</div>
+      </div>
+      <div class="bg-slate-100/70 dark:bg-slate-800/70 p-2.5 rounded-2xl border border-slate-200/40 dark:border-slate-700/40">
+        <div class="text-[10px] text-slate-400 uppercase font-bold tracking-wider">Max Wind / Rain</div>
+        <div class="text-xs font-bold text-slate-800 dark:text-slate-100 mt-0.5">${formatSpeed(maxWind, units)} · ${rainyStopsCount} rainy</div>
+      </div>
+    </div>
+
+    <!-- Departure Time Selector -->
+    <div class="space-y-1.5">
+      <div class="flex items-center justify-between">
+        <span class="text-[11px] font-bold text-slate-700 dark:text-slate-300">Departure Time</span>
+        <span class="text-[10px] text-indigo-600 dark:text-indigo-400 font-semibold">Updates arrival weather</span>
+      </div>
+      <div class="flex items-center gap-1.5 overflow-x-auto pb-0.5 hide-scrollbar">
+        ${departureChips}
+      </div>
+    </div>
+
+    <!-- Itinerary Timeline -->
+    <div class="space-y-2 pt-1">
+      <div class="flex items-center justify-between">
+        <span class="text-[11px] font-bold text-slate-700 dark:text-slate-300">Stop-by-Stop Weather Timeline</span>
+        <button type="button" id="routePanelAddStopBtn" class="text-[10px] font-bold text-indigo-600 dark:text-indigo-400 hover:underline">+ Add Stop</button>
+      </div>
+      <div class="space-y-2">
+        ${itineraryHtml}
+      </div>
+    </div>
+  `;
+
+  // Bind departure time chips
+  bodyEl.querySelectorAll(".route-departure-chip").forEach((chip) => {
+    chip.addEventListener("click", () => {
+      departureOffsetHours = parseInt(chip.dataset.offset, 10) || 0;
+      fetchAndRenderRoutePlan();
+    });
+  });
+
+  // Bind "+ Add Stop" button
+  bodyEl.querySelector("#routePanelAddStopBtn")?.addEventListener("click", () => {
+    hidePanel();
+    if (!routeMode) toggleRoute();
+  });
+
+  // Bind individual delete stop buttons on each card!
+  bodyEl.querySelectorAll(".route-delete-stop-btn").forEach((delBtn) => {
+    delBtn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      const idx = parseInt(delBtn.dataset.deleteIdx, 10);
+      removeStop(idx);
+    });
+  });
+
+  // Bind stop card click to zoom to waypoint
+  bodyEl.querySelectorAll("[data-zoom-stop]").forEach((card) => {
+    card.addEventListener("click", () => {
+      const idx = parseInt(card.dataset.zoomStop, 10);
+      const stop = stops[idx];
+      if (stop && appRef && appRef.map) {
+        appRef.map.getView().animate({
+          center: fromLonLat([stop.lng, stop.lat]),
+          zoom: 12,
+          duration: 600,
+        });
+      }
+    });
+  });
+}
+
+// ============================================================================
+//  PRO TRIP ACTIONS
+// ============================================================================
+
+function handoverToNavigation() {
+  if (pts.length < 2) return;
+  const destination = pts[pts.length - 1];
+
+  appRef.selectedLat = destination.lat;
+  appRef.selectedLng = destination.lng;
+  appRef.selectedName = destination.name || "Route Destination";
+
+  hidePanel();
+
+  if (typeof appRef.startNavigationPreview === "function") {
+    appRef.startNavigationPreview();
+    appRef.showToast("Starting turn-by-turn navigation…", "success");
+  } else {
+    appRef.showToast("Navigation is ready for destination", "info");
+  }
+}
+
+function exportGPXFile() {
+  if (pts.length < 2) return;
+  const gpxXml = generateGPX({
+    name: `Aurafisky Trip (${pts.length} stops)`,
+    waypoints: pts,
+    coordinates: activeRouteData?.coordinates || [],
+  });
+
+  const blob = new Blob([gpxXml], { type: "application/gpx+xml" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `route-studio-${Date.now()}.gpx`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+
+  appRef.showToast("GPX file downloaded successfully", "success");
+}
+
+async function shareRouteItinerary() {
+  if (pts.length < 2) return;
+  const geojson = generateGeoJSON({
+    name: `Aurafisky Trip (${pts.length} stops)`,
+    waypoints: pts,
+    coordinates: activeRouteData?.coordinates || [],
+  });
+
+  const textSummary =
+    `🧭 Aurafisky Trip Plan (${transportMode.toUpperCase()})\n` +
+    `Stops: ${pts.length}\n` +
+    `Total Distance: ${formatRouteDistance(activeRouteData?.distanceM, getActiveUnits())}\n` +
+    `Est. Duration: ${formatRouteDuration(activeRouteData?.durationS)}\n` +
+    `Start: [${pts[0].lat.toFixed(4)}, ${pts[0].lng.toFixed(4)}]\n` +
+    `Destination: [${pts[pts.length - 1].lat.toFixed(4)}, ${pts[pts.length - 1].lng.toFixed(4)}]`;
+
+  try {
+    if (navigator.clipboard) {
+      await navigator.clipboard.writeText(JSON.stringify(geojson, null, 2));
+      appRef.showToast("GeoJSON route copied to clipboard", "success");
+    } else {
+      copyFallback(textSummary);
     }
+  } catch (err) {
+    copyFallback(textSummary);
+  }
+}
 
-    if (panelEl) panelEl.classList.remove("hidden");
+function copyFallback(text) {
+  const ta = document.createElement("textarea");
+  ta.value = text;
+  document.body.appendChild(ta);
+  ta.select();
+  document.execCommand("copy");
+  document.body.removeChild(ta);
+  appRef.showToast("Trip summary copied to clipboard", "success");
+}
 
-    // ---- 5. Summary toast ----
-    const lastValid = results[results.length - 1];
-    const destInfo = lastValid ? weatherInfo(lastValid.current.weather_code) : null;
-
-    appRef.showToast(
-      `Route: ${validCount} stops${rainyCount ? `, 🌧️ rain at ${rainyCount}` : ""}${
-        destInfo
-          ? ` · dest ${destInfo.icon} ${lastValid.current.temperature_2m.toFixed(0)}°C`
-          : ""
-      }`,
-      "success",
-    );
+function saveRouteToFavorites() {
+  if (pts.length < 2) return;
+  try {
+    const saved = JSON.parse(localStorage.getItem("aurafisky_saved_routes") || "[]");
+    saved.push({
+      id: `route_${Date.now()}`,
+      createdAt: new Date().toISOString(),
+      stopsCount: pts.length,
+      waypoints: pts.map((p) => ({ lat: p.lat, lng: p.lng, name: p.name })),
+      distanceM: activeRouteData?.distanceM,
+      durationS: activeRouteData?.durationS,
+      mode: transportMode,
+    });
+    localStorage.setItem("aurafisky_saved_routes", JSON.stringify(saved));
+    appRef.showToast("Route saved to favorites", "success");
   } catch (e) {
-    console.error(e);
-    appRef.showToast("Route weather failed", "error");
+    console.warn("Failed to save route to localStorage:", e);
+    appRef.showToast("Could not save route", "error");
   }
 }

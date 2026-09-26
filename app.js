@@ -33,6 +33,8 @@ import "ol/ol.css";
 import OlMap from "ol/Map.js";
 import View from "ol/View.js";
 import LayerGroup from "ol/layer/Group.js";
+import TileLayer from "ol/layer/Tile.js";
+import XYZ from "ol/source/XYZ.js";
 import { defaults as defaultInteractions } from "ol/interaction/defaults.js";
 import { fromLonLat, toLonLat } from "ol/proj.js";
 import { apply as applyMapboxStyle, applyStyle as applyMapboxLayerStyle, getLayers as getMapboxLayers } from "ol-mapbox-style";
@@ -263,7 +265,11 @@ class AurafiskyApp {
       navRemainingDistance: document.getElementById("navRemainingDistance"),
       navStopBtn: document.getElementById("navStopBtn"),
 
-      // Map overlay toggles (day/night terminator, isobars, extremes)
+      // Map overlay toggles (modes/terrain, day/night terminator, isobars, extremes)
+      mapLayersBtn: document.getElementById("mapLayersBtn"),
+      mapLayersFlyout: document.getElementById("mapLayersFlyout"),
+      mapStyleGrid: document.getElementById("mapStyleGrid"),
+      settingsMapStyleSelect: document.getElementById("settingsMapStyleSelect"),
       terminatorToggleBtn: document.getElementById("terminatorToggleBtn"),
       isobarToggleBtn: document.getElementById("isobarToggleBtn"),
       extremesBtn: document.getElementById("extremesBtn"),
@@ -811,9 +817,60 @@ class AurafiskyApp {
       // Language preference: 'en' for English, 'native' for each place's local name
       this.mapLanguage = this.getSavedMapLanguage() || 'en';
 
+      // Map style preference: 'street' | 'satellite' | 'terrain' | 'dark'
+      const savedMapStyle = localStorage.getItem("aurafisky_map_style");
+      this.mapStyle = savedMapStyle || (this.isDark ? "dark" : "street");
+
       this.lightBasemap = new LayerGroup();
       this.darkBasemap = new LayerGroup();
-      this.map.addLayer(this.isDark ? this.darkBasemap : this.lightBasemap);
+
+      // Satellite basemap: High-resolution Esri World Imagery + Reference Boundaries & Places
+      this.satelliteBasemap = new LayerGroup({
+        layers: [
+          new TileLayer({
+            source: new XYZ({
+              url: "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
+              maxZoom: 19,
+              crossOrigin: "anonymous",
+              attributions: "Tiles &copy; Esri &mdash; Source: Esri, Maxar, Earthstar Geographics, and the GIS User Community"
+            }),
+            preload: 1
+          }),
+          new TileLayer({
+            source: new XYZ({
+              url: "https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}",
+              maxZoom: 19,
+              crossOrigin: "anonymous"
+            }),
+            opacity: 0.95,
+            preload: 1
+          })
+        ]
+      });
+
+      // Terrain basemap: Esri World Topo Map with mountain hillshading, contours, and physical relief
+      this.terrainBasemap = new LayerGroup({
+        layers: [
+          new TileLayer({
+            source: new XYZ({
+              url: "https://server.arcgisonline.com/ArcGIS/rest/services/World_Topo_Map/MapServer/tile/{z}/{y}/{x}",
+              maxZoom: 19,
+              crossOrigin: "anonymous",
+              attributions: "Tiles &copy; Esri &mdash; Esri, DeLorme, NAVTEQ, TomTom, Intermap, USGS, FAO, NPS, NRCAN"
+            }),
+            preload: 1
+          })
+        ]
+      });
+
+      const initialGroup = {
+        street: this.lightBasemap,
+        dark: this.darkBasemap,
+        satellite: this.satelliteBasemap,
+        terrain: this.terrainBasemap
+      }[this.mapStyle] || (this.isDark ? this.darkBasemap : this.lightBasemap);
+
+      this.map.addLayer(initialGroup);
 
       // Real vector basemap: OpenFreeMap's OpenMapTiles-schema tiles, styled
       // via the same Mapbox/MapLibre style JSON OpenFreeMap publishes,
@@ -872,9 +929,10 @@ class AurafiskyApp {
       const inactiveTheme = this.isDark ? "light" : "dark";
       const activeGroup = this.isDark ? this.darkBasemap : this.lightBasemap;
       const inactiveGroup = this.isDark ? this.lightBasemap : this.darkBasemap;
-      loadBasemap(activeTheme, activeGroup).then(() =>
-        loadBasemap(inactiveTheme, inactiveGroup),
-      );
+      loadBasemap(activeTheme, activeGroup).then(() => {
+        loadBasemap(inactiveTheme, inactiveGroup);
+        this._updateMapStyleUI();
+      });
 
       this.map.on("movestart", () => {
         if (this.radarPlaying) {
@@ -1235,6 +1293,45 @@ class AurafiskyApp {
         this._haptic('selection');
       });
     }
+
+    // ── Map Modes & Terrain Switcher ──────────────────────────
+    if (this.$.mapLayersBtn) {
+      this.$.mapLayersBtn.addEventListener("click", (e) => {
+        e.stopPropagation();
+        this.toggleMapLayersFlyout();
+        this._haptic?.('selection');
+      });
+    }
+
+    const styleCards = document.querySelectorAll(".map-style-card");
+    styleCards.forEach((btn) => {
+      btn.addEventListener("click", (e) => {
+        e.stopPropagation();
+        const style = btn.getAttribute("data-map-style");
+        if (style) this.setMapStyle(style);
+        this.toggleMapLayersFlyout(false);
+        this._haptic?.('selection');
+      });
+    });
+
+    document.addEventListener("click", (e) => {
+      if (
+        this.$.mapLayersFlyout &&
+        !this.$.mapLayersFlyout.classList.contains("hidden") &&
+        !this.$.mapLayersFlyout.contains(e.target) &&
+        !this.$.mapLayersBtn?.contains(e.target)
+      ) {
+        this.toggleMapLayersFlyout(false);
+      }
+    });
+
+    if (this.$.settingsMapStyleSelect) {
+      this.$.settingsMapStyleSelect.addEventListener("change", (e) => {
+        this.setMapStyle(e.target.value);
+        this._haptic?.('selection');
+      });
+    }
+
     if (this.$.settingsDeleteDataBtn) {
       this.$.settingsDeleteDataBtn.addEventListener("click", () => {
         this.deleteCloudUserData();
@@ -5151,11 +5248,94 @@ class AurafiskyApp {
    */
   _switchBasemapTheme() {
     if (!this.map || !this.lightBasemap || !this.darkBasemap) return;
-    const show = this.isDark ? this.darkBasemap : this.lightBasemap;
-    const hide = this.isDark ? this.lightBasemap : this.darkBasemap;
+    if (this.isDark) {
+      if (this.mapStyle === 'street') this.mapStyle = 'dark';
+    } else {
+      if (this.mapStyle === 'dark') this.mapStyle = 'street';
+    }
+    this._updateActiveBasemap();
+    this._updateMapStyleUI();
+  }
+
+  setMapStyle(style) {
+    const validStyles = ['street', 'satellite', 'terrain', 'dark'];
+    if (!validStyles.includes(style)) style = 'street';
+    this.mapStyle = style;
+    try {
+      localStorage.setItem("aurafisky_map_style", style);
+    } catch (_) {}
+
+    // Synchronize dark theme if user picked dark or street explicitly
+    if (style === "dark" && !this.isDark) {
+      this.toggleDarkMode();
+      return;
+    } else if (style === "street" && this.isDark) {
+      this.toggleDarkMode();
+      return;
+    }
+
+    this._updateActiveBasemap();
+    this._updateMapStyleUI();
+    const styleNames = {
+      street: "Default (Street)",
+      satellite: "Satellite (Aerial)",
+      terrain: "Terrain (Topographic)",
+      dark: "Dark"
+    };
+    this.showToast(`Map mode: ${styleNames[style] || style}`, "info");
+  }
+
+  _updateActiveBasemap() {
+    if (!this.map) return;
+    const styleGroups = {
+      street: this.lightBasemap,
+      dark: this.darkBasemap,
+      satellite: this.satelliteBasemap,
+      terrain: this.terrainBasemap
+    };
+    const targetGroup = styleGroups[this.mapStyle] || (this.isDark ? this.darkBasemap : this.lightBasemap);
+    const allGroups = [this.lightBasemap, this.darkBasemap, this.satelliteBasemap, this.terrainBasemap];
     const layers = this.map.getLayers();
-    if (layers.getArray().includes(hide)) layers.remove(hide);
-    if (!layers.getArray().includes(show)) layers.push(show);
+
+    allGroups.forEach((g) => {
+      if (g && g !== targetGroup && layers.getArray().includes(g)) {
+        layers.remove(g);
+      }
+    });
+
+    if (targetGroup && !layers.getArray().includes(targetGroup)) {
+      layers.insertAt(0, targetGroup);
+    }
+    this.map.render();
+  }
+
+  _updateMapStyleUI() {
+    const cards = document.querySelectorAll(".map-style-card");
+    cards.forEach((card) => {
+      const match = card.getAttribute("data-map-style") === this.mapStyle;
+      card.classList.toggle("active", match);
+      card.setAttribute("aria-selected", match ? "true" : "false");
+    });
+
+    if (this.$.settingsMapStyleSelect) {
+      this.$.settingsMapStyleSelect.value = this.mapStyle;
+    }
+
+    if (this.$.mapLayersBtn) {
+      const isCustom = this.mapStyle === "satellite" || this.mapStyle === "terrain";
+      this.$.mapLayersBtn.classList.toggle("layers-active", isCustom);
+    }
+  }
+
+  toggleMapLayersFlyout(force) {
+    if (!this.$.mapLayersFlyout) return;
+    const isHidden = this.$.mapLayersFlyout.classList.contains("hidden");
+    const open = force !== undefined ? force : isHidden;
+    this.$.mapLayersFlyout.classList.toggle("hidden", !open);
+    this.$.mapLayersBtn?.setAttribute("aria-expanded", open ? "true" : "false");
+    if (open) {
+      this._updateMapStyleUI();
+    }
   }
 
   /**

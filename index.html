@@ -18,7 +18,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
-  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; child-src 'self' https://aurafisky.firebaseapp.com https://aurafisky.web.app; worker-src 'self' blob:; frame-src https://aurafisky.firebaseapp.com https://aurafisky.web.app; script-src 'self' https://unpkg.com https://cdn.jsdelivr.net https://www.gstatic.com https://apis.google.com https://accounts.google.com https://*.gstatic.com https://*.google.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://unpkg.com https://cdn.jsdelivr.net; font-src 'self' https://fonts.gstatic.com https://cdn.jsdelivr.net; img-src 'self' data: blob: https://tiles.openfreemap.org https://*.tile.openstreetmap.org https://*.basemaps.cartocdn.com https://*.openstreetmap.org https://*.rainviewer.com https://*.open-meteo.com https://*.googleusercontent.com; connect-src 'self' https://tiles.openfreemap.org https://*.tile.openstreetmap.org https://*.basemaps.cartocdn.com https://api.open-meteo.com https://air-quality-api.open-meteo.com https://geocoding-api.open-meteo.com https://archive-api.open-meteo.com https://*.open-meteo.com https://nominatim.openstreetmap.org https://router.project-osrm.org https://api.rainviewer.com https://tilecache.rainviewer.com https://*.firebaseio.com https://*.googleapis.com https://www.gstatic.com https://cdn.jsdelivr.net;" />
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; child-src 'self' https://aurafisky.firebaseapp.com https://aurafisky.web.app; worker-src 'self' blob:; frame-src https://aurafisky.firebaseapp.com https://aurafisky.web.app; script-src 'self' https://unpkg.com https://cdn.jsdelivr.net https://www.gstatic.com https://apis.google.com https://accounts.google.com https://*.gstatic.com https://*.google.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://unpkg.com https://cdn.jsdelivr.net; font-src 'self' https://fonts.gstatic.com https://cdn.jsdelivr.net; img-src 'self' data: blob: https://tiles.openfreemap.org https://*.tile.openstreetmap.org https://*.basemaps.cartocdn.com https://*.openstreetmap.org https://*.rainviewer.com https://*.open-meteo.com https://*.googleusercontent.com https://server.arcgisonline.com https://services.arcgisonline.com https://*.arcgisonline.com https://*.tile.opentopomap.org; connect-src 'self' https://tiles.openfreemap.org https://*.tile.openstreetmap.org https://*.basemaps.cartocdn.com https://api.open-meteo.com https://air-quality-api.open-meteo.com https://geocoding-api.open-meteo.com https://archive-api.open-meteo.com https://*.open-meteo.com https://nominatim.openstreetmap.org https://router.project-osrm.org https://api.rainviewer.com https://tilecache.rainviewer.com https://*.firebaseio.com https://*.googleapis.com https://www.gstatic.com https://cdn.jsdelivr.net https://server.arcgisonline.com https://services.arcgisonline.com https://*.arcgisonline.com https://*.tile.opentopomap.org;" />
   <meta name="mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
 
@@ -712,6 +712,58 @@
     <button id="zoomInBtn" class="w-12 h-12 flex items-center justify-center rounded-xl glass-no-border bg-white/80 dark:bg-slate-800/80 hover:bg-white dark:hover:bg-slate-700 transition-all text-slate-600 dark:text-slate-300 text-xl font-bold shadow-lg active:scale-95" title="Zoom in" aria-label="Zoom in">+</button>
     <button id="zoomOutBtn" class="w-12 h-12 flex items-center justify-center rounded-xl glass-no-border bg-white/80 dark:bg-slate-800/80 hover:bg-white dark:hover:bg-slate-700 transition-all text-slate-600 dark:text-slate-300 text-xl font-bold shadow-lg active:scale-95" title="Zoom out" aria-label="Zoom out">−</button>
 
+    <!-- Map Modes & Terrain Switcher (Street, Satellite, Terrain, Dark) -->
+    <div class="relative pointer-events-auto">
+      <button id="mapLayersBtn" class="w-12 h-12 flex items-center justify-center rounded-xl glass bg-white/80 dark:bg-slate-800/80 hover:bg-white dark:hover:bg-slate-700 transition-all border border-slate-200/60 dark:border-slate-600/30 shadow-lg active:scale-95 group" title="Map terrain & styles (L)" aria-label="Map terrain and styles" aria-expanded="false">
+        <svg class="w-6 h-6 text-slate-700 dark:text-slate-200 transition-transform group-hover:scale-110 duration-200" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+          <polygon points="12 2 2 7 12 12 22 7 12 2"></polygon>
+          <polyline points="2 17 12 22 22 17"></polyline>
+          <polyline points="2 12 12 17 22 12"></polyline>
+        </svg>
+      </button>
+
+      <!-- Floating Map Style Flyout Menu -->
+      <div id="mapLayersFlyout" class="hidden fixed right-16 top-1/2 -translate-y-1/2 z-[1200] p-3 rounded-2xl glass-no-border bg-white/95 dark:bg-slate-900/95 shadow-2xl border border-slate-200/70 dark:border-slate-700/60 w-[260px] animate-in fade-in zoom-in-95 duration-150 backdrop-blur-xl">
+        <div class="flex items-center justify-between px-1 mb-2.5">
+          <span class="text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Map Modes</span>
+          <span class="text-[10px] text-slate-400 font-mono">Press L</span>
+        </div>
+        <div class="grid grid-cols-2 gap-2" id="mapStyleGrid">
+          <!-- Card 1: Default / Street -->
+          <button type="button" data-map-style="street" class="map-style-card flex flex-col items-center gap-1.5 p-2 rounded-xl border border-slate-200 dark:border-slate-700 hover:border-primary transition-all text-center group active:scale-95 cursor-pointer bg-slate-50/80 dark:bg-slate-800/60 relative">
+            <div class="w-full h-12 rounded-lg overflow-hidden relative shadow-sm border border-slate-200/60 dark:border-slate-700/60 bg-[#e5e3df] flex items-center justify-center">
+              <span class="text-xl">🗺️</span>
+            </div>
+            <span class="text-xs font-semibold text-slate-700 dark:text-slate-200">Default</span>
+          </button>
+
+          <!-- Card 2: Satellite -->
+          <button type="button" data-map-style="satellite" class="map-style-card flex flex-col items-center gap-1.5 p-2 rounded-xl border border-slate-200 dark:border-slate-700 hover:border-primary transition-all text-center group active:scale-95 cursor-pointer bg-slate-50/80 dark:bg-slate-800/60 relative">
+            <div class="w-full h-12 rounded-lg overflow-hidden relative shadow-sm border border-slate-200/60 dark:border-slate-700/60 bg-[#142834] flex items-center justify-center">
+              <span class="text-xl">🛰️</span>
+            </div>
+            <span class="text-xs font-semibold text-slate-700 dark:text-slate-200">Satellite</span>
+          </button>
+
+          <!-- Card 3: Terrain -->
+          <button type="button" data-map-style="terrain" class="map-style-card flex flex-col items-center gap-1.5 p-2 rounded-xl border border-slate-200 dark:border-slate-700 hover:border-primary transition-all text-center group active:scale-95 cursor-pointer bg-slate-50/80 dark:bg-slate-800/60 relative">
+            <div class="w-full h-12 rounded-lg overflow-hidden relative shadow-sm border border-slate-200/60 dark:border-slate-700/60 bg-[#7c9664] flex items-center justify-center">
+              <span class="text-xl">🏔️</span>
+            </div>
+            <span class="text-xs font-semibold text-slate-700 dark:text-slate-200">Terrain</span>
+          </button>
+
+          <!-- Card 4: Dark -->
+          <button type="button" data-map-style="dark" class="map-style-card flex flex-col items-center gap-1.5 p-2 rounded-xl border border-slate-200 dark:border-slate-700 hover:border-primary transition-all text-center group active:scale-95 cursor-pointer bg-slate-50/80 dark:bg-slate-800/60 relative">
+            <div class="w-full h-12 rounded-lg overflow-hidden relative shadow-sm border border-slate-200/60 dark:border-slate-700/60 bg-[#1a1d24] flex items-center justify-center">
+              <span class="text-xl">🌙</span>
+            </div>
+            <span class="text-xs font-semibold text-slate-700 dark:text-slate-200">Dark</span>
+          </button>
+        </div>
+      </div>
+    </div>
+
     <!-- Day/Night Terminator Toggle (Sun / Moon Dual Hemisphere) -->
     <button id="terminatorToggleBtn" class="w-12 h-12 flex items-center justify-center rounded-xl glass bg-white/80 dark:bg-slate-800/80 hover:bg-white dark:hover:bg-slate-700 transition-all border border-slate-200/60 dark:border-slate-600/30 shadow-lg active:scale-95 group" title="Toggle day/night terminator" aria-label="Toggle day/night terminator" aria-pressed="false">
       <svg class="w-6 h-6 transition-transform group-hover:rotate-12 duration-300" viewBox="0 0 24 24" fill="none">
@@ -829,6 +881,7 @@
           <div class="font-semibold text-primary">F</div><div>Toggle favorite</div>
           <div class="font-semibold text-primary">C</div><div>Compare panel</div>
           <div class="font-semibold text-primary">T</div><div>Time machine</div>
+          <div class="font-semibold text-primary">L</div><div>Map modes &amp; terrain</div>
           <div class="font-semibold text-primary">Escape</div><div>Close panels / dropdowns</div>
         </div>
       </div>
@@ -1092,6 +1145,22 @@
               <input type="checkbox" id="settingsTimeline24hToggle" class="sr-only peer" aria-label="24-hour timeline mode">
               <div class="w-11 h-6 bg-slate-300 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-primary/30 rounded-full peer dark:bg-slate-600 peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-slate-600 peer-checked:bg-primary dark:peer-checked:bg-primary"></div>
             </label>
+          </div>
+
+          <div class="flex items-center justify-between">
+            <div class="flex items-center gap-3">
+              <div class="w-8 h-8 rounded-xl bg-blue-500/10 text-blue-500 flex items-center justify-center text-sm">🗺️</div>
+              <div class="flex flex-col">
+                <span class="text-sm font-semibold text-slate-700 dark:text-slate-300">Map style</span>
+                <span class="text-xs text-slate-500 dark:text-slate-400">Default, Satellite, Terrain, Dark</span>
+              </div>
+            </div>
+            <select id="settingsMapStyleSelect" class="bg-slate-100 dark:bg-slate-800 text-xs font-semibold text-slate-700 dark:text-slate-200 px-2.5 py-1.5 rounded-lg border border-slate-300 dark:border-slate-600 focus:outline-none focus:ring-2 focus:ring-primary/40 cursor-pointer" aria-label="Map style">
+              <option value="street">Default</option>
+              <option value="satellite">Satellite</option>
+              <option value="terrain">Terrain</option>
+              <option value="dark">Dark</option>
+            </select>
           </div>
 
           <div class="flex items-center justify-between">

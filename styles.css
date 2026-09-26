@@ -1319,3 +1319,26 @@ button, a, input, select, textarea, [role="button"] {
   color: var(--primary-light);
 }
 
+/* ── Map Mode & Terrain Switcher Cards ────────────────────────── */
+.map-style-card {
+  transition: all 0.15s cubic-bezier(0.4, 0, 0.2, 1);
+}
+.map-style-card.active {
+  border-color: var(--primary) !important;
+  background-color: rgba(16, 185, 129, 0.1) !important;
+  box-shadow: 0 0 0 2px var(--primary);
+}
+.dark .map-style-card.active {
+  background-color: rgba(16, 185, 129, 0.18) !important;
+}
+.map-style-card.active span:last-child {
+  color: var(--primary) !important;
+  font-weight: 700;
+}
+#mapLayersBtn.layers-active {
+  border-color: var(--primary);
+  color: var(--primary);
+  background-color: rgba(16, 185, 129, 0.12);
+}
+
+

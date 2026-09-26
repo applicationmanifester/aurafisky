@@ -30,7 +30,7 @@ function createWindow() {
     "script-src 'self'",
     "style-src 'self' 'unsafe-inline'",
     "img-src 'self' data: https:",
-    "connect-src 'self' https://api.open-meteo.com https://nominatim.openstreetmap.org https://*.firebaseio.com wss://*.firebaseio.com",
+    "connect-src 'self' https://api.open-meteo.com https://nominatim.openstreetmap.org https://*.firebaseio.com wss://*.firebaseio.com https://server.arcgisonline.com https://*.arcgisonline.com https://*.tile.opentopomap.org",
     "font-src 'self' data:",
     "frame-ancestors 'none'",
   ].join('; ');

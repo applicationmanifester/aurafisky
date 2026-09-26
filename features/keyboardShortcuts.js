@@ -19,6 +19,14 @@ function initKeyboardShortcuts() {
         this.toggleAppInfoModal();
         return;
       }
+      if (
+        e.key === "Escape" &&
+        this.$.mapLayersFlyout &&
+        !this.$.mapLayersFlyout.classList.contains("hidden")
+      ) {
+        this.toggleMapLayersFlyout(false);
+        return;
+      }
       switch (e.key.toLowerCase()) {
         case "?":
           e.preventDefault();
@@ -43,6 +51,10 @@ function initKeyboardShortcuts() {
         case "g":
           e.preventDefault();
           this.getMyLocation();
+          break;
+        case "l":
+          e.preventDefault();
+          this.toggleMapLayersFlyout?.();
           break;
       }
     });

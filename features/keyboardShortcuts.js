@@ -56,6 +56,10 @@ function initKeyboardShortcuts() {
           e.preventDefault();
           this.toggleMapLayersFlyout?.();
           break;
+        case "w":
+          e.preventDefault();
+          this.toggleWallpaper?.();
+          break;
       }
     });
     if (this.$.shortcutsCloseBtn) {

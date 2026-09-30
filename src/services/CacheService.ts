@@ -76,29 +76,39 @@ export class CacheService<T = unknown> {
     
     const now = Date.now();
     const existing = this.#memoryStore.get(key);
-
+    if (existing?.expiry > now) {
+      return existing.promise ?? Promise.resolve(existing.value);
+    }
     if (existing) {
-      if (existing.expiry > now) {
-        return existing.promise ?? Promise.resolve(existing.value);
-      }
       this.#memoryStore.delete(key);
       await this.#deleteFromDisk(key).catch(() => {});
     }
 
-    const promise = fetcher().then(
-      async (value) => {
-        await this.set(key, value, ttlMs);
-        return value;
-      },
-      async (err) => {
-        this.#memoryStore.delete(key);
-        await this.#deleteFromDisk(key).catch(() => {});
-        throw err;
-      }
-    );
+    // Create a controlled promise wrapper to avoid race conditions
+    let resolveRef: (v: T) => void;
+    let rejectRef: (e: Error) => void;
+    const controlledPromise = new Promise<T>((res, rej) => {
+      resolveRef = res;
+      rejectRef = rej;
+    });
 
-    this.#memoryStore.set(key, { value: undefined as any, expiry: now + (ttlMs ?? this.#defaultTtlMs), promise });
-    return promise;
+    this.#memoryStore.set(key, {
+      value: undefined as any,
+      expiry: now + (ttlMs ?? this.#defaultTtlMs),
+      promise: controlledPromise
+    });
+
+    try {
+      const value = await fetcher();
+      await this.set(key, value, ttlMs);
+      resolveRef!(value);
+      return value;
+    } catch (err) {
+      this.#memoryStore.delete(key);
+      await this.#deleteFromDisk(key).catch(() => {});
+      rejectRef!(err instanceof Error ? err : new Error(String(err)));
+      throw err;
+    }
   }
 
   async get(key: string): Promise<T | undefined> {
@@ -188,7 +198,7 @@ export class CacheService<T = unknown> {
   }
 }
 
-export const weatherCache = new CacheService<any>({ maxEntries: 100, defaultTtlMs: 15 * 60 * 1000, storeName: 'weather' });
-export const geocodeCache = new CacheService<any>({ maxEntries: 200, defaultTtlMs: 60 * 60 * 1000, storeName: 'geocode' });
-export const radarCache = new CacheService<any>({ maxEntries: 50, defaultTtlMs: 60 * 60 * 1000, storeName: 'radar' });
-export const routingCache = new CacheService<any>({ maxEntries: 50, defaultTtlMs: 60 * 60 * 1000, storeName: 'routing' });
+export const weatherCache = new CacheService({ maxEntries: 100, defaultTtlMs: 15 * 60 * 1000, storeName: 'weather' });
+export const geocodeCache = new CacheService({ maxEntries: 200, defaultTtlMs: 60 * 60 * 1000, storeName: 'geocode' });
+export const radarCache = new CacheService({ maxEntries: 50, defaultTtlMs: 60 * 60 * 1000, storeName: 'radar' });
+export const routingCache = new CacheService({ maxEntries: 50, defaultTtlMs: 60 * 60 * 1000, storeName: 'routing' });

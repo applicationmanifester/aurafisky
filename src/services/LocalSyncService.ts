@@ -109,12 +109,13 @@ export class LocalSyncService {
   async set(path: string, data: any, merge = true): Promise<void> {
     if (!localAuthService.currentUser) throw new Error('Not authenticated');
     const key = this.#getStoreKey(path);
+    let payload: any;
     try {
       let existing: any = null;
       if (merge) {
         existing = await localforage.getItem(key);
       }
-      const payload = merge && existing && typeof existing === 'object' && typeof data === 'object'
+      payload = merge && existing && typeof existing === 'object' && typeof data === 'object'
         ? { ...existing, ...data, updatedAt: Date.now() }
         : { ...data, updatedAt: Date.now() };
 
@@ -124,7 +125,7 @@ export class LocalSyncService {
       this.#updateStatus(SYNC_STATUS.SYNCED);
     } catch (err) {
       if (this.#isOnline) throw err;
-      await this.#queueWrite('set', path, { data: payload, merge });
+      await this.#queueWrite('set', path, { data: payload ?? data, merge });
       this.#updateStatus(SYNC_STATUS.OFFLINE);
     }
   }

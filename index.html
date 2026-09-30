@@ -153,7 +153,7 @@
         <span class="hidden sm:inline text-sm font-black select-none tracking-tight">
           <span class="text-[#ff6600]">Aurafi</span><span class="text-[#3b82f6]">sky</span>
         </span>
-        <span class="hidden sm:inline-flex text-[10px] font-bold tracking-tight px-1.5 py-0.5 rounded-full bg-primary/10 text-primary border border-primary/20 select-none leading-none">v10.9.4</span>
+        <span class="hidden sm:inline-flex text-[10px] font-bold tracking-tight px-1.5 py-0.5 rounded-full bg-primary/10 text-primary border border-primary/20 select-none leading-none">v11.0.0</span>
       </div>
 
       <!-- Search Card -->
@@ -298,54 +298,82 @@
   <!-- ============================================================ -->
   <!-- WEATHER PANEL — Slide-in detail card                         -->
   <!-- ============================================================ -->
-  <div id="weatherPanel" class="weather-panel fixed top-36 sm:top-20 left-3 sm:left-4 z-[1000] w-[340px] md:w-[380px] max-w-[calc(100%-24px)] max-h-[calc(100vh-230px)] glass rounded-2xl overflow-hidden flex flex-col" role="dialog" aria-modal="true" aria-labelledby="panelLocationName" inert>
+  <div id="weatherPanel" class="weather-panel fixed top-36 sm:top-20 left-3 sm:left-4 z-[1000] w-[340px] md:w-[380px] max-w-[calc(100%-24px)] max-h-[calc(100vh-230px)] glass rounded-2xl overflow-hidden flex flex-col relative" role="dialog" aria-modal="true" aria-labelledby="panelLocationName" inert>
+    <!-- Weather Card Dynamic Wallpaper Background Layer -->
+    <div id="panelWeatherBg" class="absolute inset-0 pointer-events-none z-0 bg-cover bg-center overflow-hidden opacity-25 dark:opacity-30 transition-all duration-1000" aria-hidden="true">
+      <div class="absolute inset-0 bg-white/40 dark:bg-slate-950/65 backdrop-blur-xl"></div>
+    </div>
+
     <!-- Panel Header Container (non-scrollable) -->
     <div class="flex-shrink-0 border-b-2 border-slate-300 dark:border-slate-600 bg-surface-light/80 dark:bg-surface-dark/80">
       <!-- Drag handle indicator for desktop -->
       <div id="panelDragHandle" class="hidden sm:flex justify-center pt-2 pb-0 select-none cursor-grab active:cursor-grabbing" title="Click & drag to move card on desktop (Double-click to reset position)">
         <div class="w-10 h-1 bg-slate-400/50 dark:bg-slate-500/50 rounded-full hover:bg-slate-500 transition-colors"></div>
       </div>
-      <div class="flex items-center justify-between px-5 pt-3 sm:pt-2 pb-3">
+      <!-- Top row: Location details & Window controls -->
+      <div class="flex items-start justify-between gap-3 px-5 pt-3 sm:pt-2 pb-1">
         <div class="min-w-0 flex-1">
-          <h3 id="panelLocationName" class="text-base font-bold text-slate-900 dark:text-white leading-tight break-words" title="Full location name">Loading...</h3>
+          <h3 id="panelLocationName" class="text-base sm:text-lg font-bold text-slate-900 dark:text-white leading-snug break-words" title="Full location name">Loading...</h3>
           <div id="panelCoordinates" class="text-[11px] font-medium font-mono text-slate-500 dark:text-slate-400 flex items-center gap-1 mt-0.5" title="Latitude and Longitude"></div>
           <p id="panelTimeLabel" class="text-xs text-slate-500 dark:text-slate-400 mt-0.5"></p>
           <div id="trustScore" class="text-[9px] font-semibold text-slate-400 mt-0.5"></div>
           <div id="freshnessLabel" class="text-[9px] text-slate-400 mt-0.5"></div>
         </div>
+        
+        <!-- Window Controls (Minimize / Close / Compact Expand) -->
+        <div class="flex items-center gap-1 flex-shrink-0 pt-0.5">
+          <button id="panelMinimizeBtn" class="p-2 rounded-lg hover:bg-slate-200/70 dark:hover:bg-slate-700/60 transition-colors text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 cursor-pointer" title="Minimize panel" aria-label="Minimize panel">
+            <svg class="w-4 h-4 transition-transform duration-200" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" aria-hidden="true">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7" />
+            </svg>
+          </button>
+          <button id="panelCloseBtn" class="p-2 rounded-lg hover:bg-slate-200/70 dark:hover:bg-slate-700/60 transition-colors text-slate-400 hover:text-rose-500 cursor-pointer" aria-label="Close weather panel">
+            <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" aria-hidden="true">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+          <!-- Compact-mode expand button (hidden normally, shown by .compact CSS) -->
+          <button id="compactExpandBtn" class="hidden p-2 rounded-lg hover:bg-slate-200/70 dark:hover:bg-slate-700/60 transition-colors text-slate-400 cursor-pointer" title="Exit compact mode" aria-label="Expand to full weather card">
+            <svg class="w-5 h-5 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" aria-hidden="true">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4" />
+            </svg>
+          </button>
+        </div>
+      </div>
+
+      <!-- Action buttons row: Flexible icons that fill in space rather than being rigid -->
+      <div id="panelActionsRow" class="flex items-center justify-between gap-1.5 sm:gap-2 px-5 pb-3 pt-2 border-t border-slate-200/60 dark:border-slate-700/60">
         <!-- Bookmark Star Toggle Button -->
-        <button id="favoriteToggleBtn" class="ml-2 p-2.5 rounded-lg hover:bg-slate-200/60 dark:hover:bg-slate-600/40 transition-colors flex-shrink-0" title="Bookmark location" aria-label="Bookmark this location" aria-pressed="false">
-          <svg id="starOutlineIcon" class="w-5 h-5 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" aria-hidden="true">
+        <button id="favoriteToggleBtn" class="flex-1 flex items-center justify-center py-2 px-1.5 rounded-xl bg-slate-100/80 hover:bg-slate-200/90 dark:bg-slate-800/60 dark:hover:bg-slate-700/80 text-slate-500 hover:text-amber-500 transition-all shadow-xs active:scale-95 cursor-pointer" title="Bookmark location" aria-label="Bookmark this location" aria-pressed="false">
+          <svg id="starOutlineIcon" class="w-4 h-4 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" aria-hidden="true">
             <path stroke-linecap="round" stroke-linejoin="round" d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.197-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.784-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z" />
           </svg>
-          <svg id="starFilledIcon" class="w-5 h-5 text-amber-500 hidden" fill="currentColor" viewBox="0 0 20 20" aria-hidden="true">
+          <svg id="starFilledIcon" class="w-4 h-4 text-amber-500 hidden" fill="currentColor" viewBox="0 0 20 20" aria-hidden="true">
             <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
           </svg>
         </button>
-        <button id="shareWeatherBtn" class="ml-1 p-2.5 rounded-lg hover:bg-slate-200/60 dark:hover:bg-slate-600/40 transition-colors flex-shrink-0" title="Share weather" aria-label="Share weather">
+
+        <!-- Share Weather Button -->
+        <button id="shareWeatherBtn" class="flex-1 flex items-center justify-center py-2 px-1.5 rounded-xl bg-slate-100/80 hover:bg-slate-200/90 dark:bg-slate-800/60 dark:hover:bg-slate-700/80 text-slate-500 hover:text-primary transition-all shadow-xs active:scale-95 cursor-pointer" title="Share weather" aria-label="Share weather">
           <svg class="w-4 h-4 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" aria-hidden="true">
             <path stroke-linecap="round" stroke-linejoin="round" d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z" />
           </svg>
         </button>
-        <button id="navigateHereBtn" class="ml-1 p-2.5 rounded-lg hover:bg-slate-200/60 dark:hover:bg-slate-600/40 transition-colors flex-shrink-0" title="Turn-by-turn directions here" aria-label="Turn-by-turn directions here">
+
+        <!-- Set as Wallpaper Button -->
+        <button id="setWallpaperBtn" class="flex-1 flex items-center justify-center py-2 px-1.5 rounded-xl bg-slate-100/80 hover:bg-slate-200/90 dark:bg-slate-800/60 dark:hover:bg-slate-700/80 text-slate-500 hover:text-teal-500 transition-all shadow-xs active:scale-95 cursor-pointer" title="Set as wallpaper" aria-label="Set this location as wallpaper" aria-pressed="false">
+          <svg id="wallpaperOutlineIcon" class="w-4 h-4 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" aria-hidden="true">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4" />
+          </svg>
+          <svg id="wallpaperFilledIcon" class="w-4 h-4 text-teal-400 hidden" fill="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M4 4h7V2H4c-1.1 0-2 .9-2 2v7h2V4h7v7h2V4c0-1.1-.9-2-2-2h-7v2zm6 14H4v7h7v-2H6v-7h2v7h2v-7h2v7h2v-2zm10-14h-7v2h7v7h2V4c0-1.1-.9-2-2-2h-7v2h7v7z" />
+          </svg>
+        </button>
+
+        <!-- Turn-by-turn Navigation Button -->
+        <button id="navigateHereBtn" class="flex-1 flex items-center justify-center py-2 px-1.5 rounded-xl bg-slate-100/80 hover:bg-slate-200/90 dark:bg-slate-800/60 dark:hover:bg-slate-700/80 text-indigo-500 hover:text-indigo-600 transition-all shadow-xs active:scale-95 cursor-pointer" title="Turn-by-turn directions here" aria-label="Turn-by-turn directions here">
           <svg class="w-4 h-4 text-indigo-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" aria-hidden="true">
             <path stroke-linecap="round" stroke-linejoin="round" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
-          </svg>
-        </button>
-        <button id="panelMinimizeBtn" class="ml-1 p-2.5 rounded-lg hover:bg-slate-200/60 dark:hover:bg-slate-600/40 transition-colors flex-shrink-0" title="Minimize panel" aria-label="Minimize panel">
-          <svg class="w-4 h-4 text-slate-400 transition-transform duration-200" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" aria-hidden="true">
-            <path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7" />
-          </svg>
-        </button>
-        <button id="panelCloseBtn" class="ml-1.5 p-2.5 rounded-lg hover:bg-slate-200/60 dark:hover:bg-slate-600/40 transition-colors flex-shrink-0" aria-label="Close weather panel">
-          <svg class="w-4 h-4 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" aria-hidden="true">
-            <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
-          </svg>
-        </button>
-        <!-- Compact-mode expand button (hidden normally, shown by .compact CSS) -->
-        <button id="compactExpandBtn" class="hidden ml-2 p-2.5 rounded-lg hover:bg-slate-200/60 dark:hover:bg-slate-600/40 transition-colors flex-shrink-0" title="Exit compact mode" aria-label="Expand to full weather card">
-          <svg class="w-5 h-5 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" aria-hidden="true">
-            <path stroke-linecap="round" stroke-linejoin="round" d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4" />
           </svg>
         </button>
       </div>
@@ -636,6 +664,487 @@
   </div>
 
   <!-- ============================================================ -->
+  <!-- WALLPAPER OVERLAY — Full-screen weather wallpaper            -->
+  <!-- ============================================================ -->
+  <div id="wallpaperOverlay" class="fixed inset-0 z-[2000] hidden flex-col bg-slate-950/40 backdrop-blur-sm" role="dialog" aria-modal="true" aria-labelledby="wallpaperLocationName">
+    <!-- Background Canvas for Weather Animations -->
+    <canvas id="wallpaperBgCanvas" class="absolute inset-0 pointer-events-none" aria-hidden="true"></canvas>
+
+    <!-- Scenic Online Weather Wallpaper Background (curated Unsplash with silky dual-layer cross-fade) -->
+    <div id="wallpaperPhotoBg" class="absolute inset-0 overflow-hidden pointer-events-none z-0" aria-hidden="true">
+      <div id="wallpaperPhotoA" class="wallpaper-photo-layer active"></div>
+      <div id="wallpaperPhotoB" class="wallpaper-photo-layer"></div>
+      <!-- Atmospheric dark glass scrim & vignette for crisp text contrast -->
+      <div class="wallpaper-scrim absolute inset-0"></div>
+    </div>
+
+    <!-- Aurafisky Brand Wallpaper Background (opt-in via settings or logo click) -->
+    <div id="wallpaperBrandBg" class="hidden absolute inset-0 bg-cover bg-center bg-no-repeat" style="background-image: url('Aurafisky.png');" aria-hidden="true">
+      <div class="absolute inset-0 bg-slate-950/75 backdrop-blur-[2px]"></div>
+    </div>
+
+    <!-- Wallpaper Header: Clean multi-tab navigation & action toolbar -->
+    <header class="flex-shrink-0 px-4 sm:px-6 py-3.5 border-b border-white/15 bg-slate-950/60 backdrop-blur-md z-30">
+      <!-- Top Row: Aurafisky Brand, Centered Full Tabs, and Control Buttons -->
+      <div class="flex flex-wrap items-center justify-between gap-3 mb-2">
+        <!-- Brand Logo & Mode Badge -->
+        <div class="flex items-center gap-2.5 flex-shrink-0">
+          <a href="#" id="wallpaperBrandLogo" class="flex items-center gap-2 opacity-90 hover:opacity-100 transition-opacity" title="Aurafisky Brand Wallpaper" aria-label="Aurafisky">
+            <img src="Aurafisky.png" alt="Aurafisky" class="w-8 h-8 rounded-xl object-cover shadow-md ring-1 ring-white/20" />
+            <div class="hidden sm:flex flex-col">
+              <span class="text-xs font-bold text-white tracking-wide">Aurafisky</span>
+              <span class="text-[9px] font-semibold text-teal-400 uppercase tracking-widest">Live Wallpaper</span>
+            </div>
+          </a>
+        </div>
+
+        <!-- Location Tabs (Center / Flex-1) -->
+        <div id="wallpaperTabs" class="flex-1 flex items-center gap-1.5 min-w-0 max-w-full overflow-hidden" role="tablist" aria-label="Wallpaper locations">
+          <div id="wallpaperTabContainer" class="flex items-center gap-1.5 overflow-x-auto scroll-smooth hide-scrollbar py-0.5 flex-1"></div>
+          <button id="wallpaperAddTabBtn" class="flex-shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-white/10 hover:bg-white/20 text-white text-xs font-semibold border border-white/15 hover:border-white/30 transition-all cursor-pointer shadow-sm active:scale-95" title="Add location tab" aria-label="Add location tab">
+            <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4"/></svg>
+            <span class="hidden md:inline">Add Location</span>
+          </button>
+        </div>
+
+        <!-- Quick Action Toolbar -->
+        <div class="flex items-center gap-1.5 flex-shrink-0">
+          <!-- First Open Hint -->
+          <div id="wallpaperFirstOpenHint" class="hidden text-xs text-slate-400 px-2 py-1 bg-white/5 rounded-lg border border-white/10">
+            Press <kbd class="px-1.5 py-0.5 bg-white/10 rounded font-mono">W</kbd> to toggle, <kbd class="px-1.5 py-0.5 bg-white/10 rounded font-mono">Esc</kbd> to close
+          </div>
+          <!-- Offline Indicator -->
+          <div id="wallpaperOfflineIndicator" class="hidden text-xs text-amber-400 px-2.5 py-1 bg-amber-500/10 border border-amber-500/20 rounded-full flex items-center gap-1" role="status">
+            <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M3 3l18 18M8.5 16.5a5 5 0 017 0M5 12.95a10 10 0 015.166-2.74M19 12.95a10 10 0 00-3.213-2.256M12 20h.01"/></svg>
+            <span>Offline</span>
+          </div>
+
+          <button id="wallpaperAutoRotateBtn" class="p-2 rounded-xl bg-white/10 hover:bg-white/20 text-white transition-all cursor-pointer active:scale-95 border border-white/10" title="Auto-rotate locations" aria-label="Auto-rotate wallpaper locations" aria-pressed="false">
+            <svg id="wallpaperAutoRotateIcon" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M17 1l4 4-4 4"/><path d="M3 11V9a4 4 0 014-4h14"/><path stroke-linecap="round" stroke-linejoin="round" d="M7 23l-4-4 4-4"/><path d="M21 13v2a4 4 0 01-4 4H3"/></svg>
+          </button>
+          <button id="wallpaperFullscreenBtn" class="p-2 rounded-xl bg-white/10 hover:bg-white/20 text-white transition-all cursor-pointer active:scale-95 border border-white/10" title="Fullscreen mode" aria-label="Toggle fullscreen" aria-pressed="false">
+            <svg id="wallpaperFullscreenIcon" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4"/></svg>
+          </button>
+          <button id="wallpaperHighContrastBtn" class="p-2 rounded-xl bg-white/10 hover:bg-white/20 text-white transition-all cursor-pointer active:scale-95 border border-white/10" title="High contrast mode" aria-label="Toggle high contrast" aria-pressed="false">
+            <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 2a10 10 0 000 20V2z" fill="currentColor" stroke="none"/></svg>
+          </button>
+          <button id="wallpaperShareBtn" class="p-2 rounded-xl bg-white/10 hover:bg-white/20 text-white transition-all cursor-pointer active:scale-95 border border-white/10" title="Share wallpaper" aria-label="Share wallpaper link">
+            <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z"/></svg>
+          </button>
+          <button id="wallpaperExportBtn" class="p-2 rounded-xl bg-white/10 hover:bg-white/20 text-white transition-all cursor-pointer active:scale-95 border border-white/10" title="Save as image" aria-label="Download wallpaper as image">
+            <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M4 16v2a2 2 0 002 2h12a2 2 0 002-2v-2M7 10l5 5 5-5M12 15V3"/></svg>
+          </button>
+          <button id="wallpaperSettingsBtn" class="p-2 rounded-xl bg-white/10 hover:bg-white/20 text-white transition-all cursor-pointer active:scale-95 border border-white/10" title="Wallpaper settings" aria-label="Wallpaper settings">
+            <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path stroke-linecap="round" stroke-linejoin="round" d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-2 2 2 2 0 01-2-2v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83 0 2 2 0 010-2.83l.06-.06a1.65 1.65 0 00.33-1.82 1.65 1.65 0 00-1.51-1H3a2 2 0 01-2-2 2 2 0 012-2h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 010-2.83 2 2 0 012.83 0l.06.06a1.65 1.65 0 001.82.33H9a1.65 1.65 0 001-1.51V3a2 2 0 012-2 2 2 0 012 2v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 0 2 2 0 010 2.83l-.06.06a1.65 1.65 0 00-.33 1.82V9a1.65 1.65 0 001.51 1H21a2 2 0 012 2 2 2 0 01-2 2h-.09a1.65 1.65 0 00-1.51 1z"/></svg>
+          </button>
+          <button id="wallpaperRefreshBtn" class="p-2 rounded-xl bg-white/10 hover:bg-white/20 text-white transition-all cursor-pointer active:scale-95 border border-white/10" title="Refresh now" aria-label="Refresh weather data">
+            <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
+          </button>
+          <button id="wallpaperCloseBtn" class="p-2 rounded-xl bg-rose-500/20 hover:bg-rose-500/30 text-rose-300 hover:text-white transition-all cursor-pointer active:scale-95 border border-rose-500/30" title="Close wallpaper" aria-label="Close wallpaper view">
+            <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
+          </button>
+        </div>
+      </div>
+
+      <!-- Second Row: Big Location Title and Neat Context Badges -->
+      <div class="flex flex-wrap items-baseline justify-between gap-3 pt-1 border-t border-white/10">
+        <div class="min-w-0 flex-1">
+          <h2 id="wallpaperLocationName" class="text-xl sm:text-2xl md:text-3xl font-extrabold text-white tracking-tight truncate drop-shadow-md">Loading...</h2>
+          <div class="flex flex-wrap items-center gap-2 mt-1">
+            <div id="wallpaperCoordinates" class="text-xs text-slate-300 font-mono bg-white/10 px-2.5 py-0.5 rounded-full border border-white/10"></div>
+            <div id="wallpaperTimeLabel" class="text-xs text-slate-300 bg-white/10 px-2.5 py-0.5 rounded-full border border-white/10"></div>
+            <div id="wallpaperLastUpdated" class="text-xs text-slate-400">Updated just now</div>
+          </div>
+        </div>
+
+        <!-- Alert Banner (severe weather) -->
+        <div id="wallpaperAlertBanner" class="hidden bg-red-500/90 text-white px-3.5 py-1.5 rounded-full shadow-lg flex items-center gap-2 animate-in slide-in-from-top text-xs font-semibold">
+          <span id="wallpaperAlertText"></span>
+          <button id="wallpaperAlertDismiss" class="p-0.5 hover:bg-white/20 rounded-full cursor-pointer" aria-label="Dismiss alert">
+            <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
+          </button>
+        </div>
+      </div>
+    </header>
+
+    <!-- Main Content -->
+    <!-- Main Content -->
+    <div class="flex-1 overflow-y-auto custom-scrollbar p-4 sm:p-6 md:p-8 space-y-6 w-full max-w-[1520px] mx-auto relative z-10">
+      <!-- Severe Weather Alert Banner (inline) -->
+      <div id="wallpaperInlineAlert" class="hidden bg-red-500/20 border border-red-500/50 rounded-xl p-4" role="alert">
+        <div class="flex items-start gap-3">
+          <svg class="w-5 h-5 text-red-400 flex-shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg>
+          <div class="flex-1">
+            <div id="wallpaperInlineAlertTitle" class="font-semibold text-red-300">Severe Weather Alert</div>
+            <div id="wallpaperInlineAlertDesc" class="text-sm text-red-200 mt-1"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Current Conditions Hero -->
+      <div class="flex flex-col lg:flex-row items-center lg:items-center gap-6 sm:gap-8 text-center sm:text-left relative">
+        <div class="flex-shrink-0 relative">
+          <span id="wallpaperIcon" class="text-7xl sm:text-9xl leading-none block wallpaper-icon-anim">☁️</span>
+        </div>
+        <div class="min-w-0 flex-1">
+          <div id="wallpaperTemp" class="text-5xl sm:text-7xl font-extrabold text-white leading-tight">--°</div>
+          <p id="wallpaperDescription" class="text-lg sm:text-xl text-slate-300 mt-2 capitalize">--</p>
+          <p id="wallpaperFeelsLike" class="text-sm text-slate-400 mt-1">Feels like --°</p>
+        </div>
+
+        <!-- Hero right side: High/Low + Sunrise/Sunset + 24h Trend Sparkline -->
+        <div class="flex-shrink-0 w-full lg:w-[340px] flex flex-col gap-3">
+          <div class="flex items-center justify-between gap-3">
+            <div class="glass rounded-xl px-4 py-2.5 text-center flex-1">
+              <div class="text-[10px] text-slate-400 uppercase tracking-wider mb-0.5">High</div>
+              <div id="wallpaperHighTemp" class="text-lg font-bold text-orange-400">--°</div>
+            </div>
+            <div class="glass rounded-xl px-4 py-2.5 text-center flex-1">
+              <div class="text-[10px] text-slate-400 uppercase tracking-wider mb-0.5">Low</div>
+              <div id="wallpaperLowTemp" class="text-lg font-bold text-sky-400">--°</div>
+            </div>
+          </div>
+          <div class="glass rounded-xl px-4 py-2.5 flex items-center justify-between text-xs text-slate-300">
+            <span class="flex items-center gap-1.5" title="Sunrise">🌅 <span id="wallpaperHeroSunrise">--:--</span></span>
+            <span class="flex items-center gap-1.5" title="Sunset">🌇 <span id="wallpaperHeroSunset">--:--</span></span>
+          </div>
+          <div class="glass rounded-xl px-4 py-3">
+            <div class="flex items-center justify-between mb-1">
+              <div class="text-[10px] text-slate-400 uppercase tracking-wider">Next 24h Trend</div>
+              <div id="wallpaperTrendDelta" class="text-[10px] font-bold"></div>
+            </div>
+            <div class="relative h-12">
+              <svg id="wallpaperTrendSvg" class="w-full h-full overflow-visible" viewBox="0 0 300 48" preserveAspectRatio="none" aria-hidden="true">
+                <defs>
+                  <linearGradient id="wallpaperTrendGrad" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stop-color="#38bdf8" stop-opacity="0.35"></stop>
+                    <stop offset="100%" stop-color="#38bdf8" stop-opacity="0"></stop>
+                  </linearGradient>
+                </defs>
+                <path id="wallpaperTrendArea" fill="url(#wallpaperTrendGrad)" d=""></path>
+                <path id="wallpaperTrendLine" fill="none" stroke="#38bdf8" stroke-width="2" stroke-linecap="round" d=""></path>
+              </svg>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Quick & Detailed Metrics Bento Grid (Responsive 2 / 4 / 8 cols) -->
+      <div class="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-3">
+        <div class="metric-card glass rounded-xl p-3.5 text-center flex flex-col justify-center">
+          <div class="text-[11px] text-slate-400 uppercase tracking-wider mb-1">Humidity</div>
+          <div id="wallpaperHumidity" class="text-xl sm:text-2xl font-bold text-white">--%</div>
+        </div>
+        <div class="metric-card glass rounded-xl p-3.5 text-center flex flex-col justify-center">
+          <div class="text-[11px] text-slate-400 uppercase tracking-wider mb-1">Wind</div>
+          <div id="wallpaperWind" class="text-xl sm:text-2xl font-bold text-white">-- km/h</div>
+        </div>
+        <div class="metric-card glass rounded-xl p-3.5 text-center flex flex-col justify-center">
+          <div class="text-[11px] text-slate-400 uppercase tracking-wider mb-1">Pressure</div>
+          <div id="wallpaperPressure" class="text-xl sm:text-2xl font-bold text-white">-- hPa</div>
+        </div>
+        <div class="metric-card glass rounded-xl p-3.5 text-center flex flex-col justify-center">
+          <div class="text-[11px] text-slate-400 uppercase tracking-wider mb-1">Clouds</div>
+          <div id="wallpaperClouds" class="text-xl sm:text-2xl font-bold text-white">--%</div>
+        </div>
+        <div class="metric-card glass rounded-xl p-3.5 text-center flex flex-col justify-center">
+          <div class="text-[11px] text-slate-400 uppercase tracking-wider mb-1">UV Index</div>
+          <div id="wallpaperUV" class="text-xl sm:text-2xl font-bold text-white">--</div>
+        </div>
+        <div class="metric-card glass rounded-xl p-3.5 text-center flex flex-col justify-center">
+          <div class="text-[11px] text-slate-400 uppercase tracking-wider mb-1">Precipitation</div>
+          <div id="wallpaperPrecip" class="text-xl sm:text-2xl font-bold text-white">-- mm</div>
+        </div>
+        <div class="metric-card glass rounded-xl p-3.5 text-center flex flex-col justify-center">
+          <div class="text-[11px] text-slate-400 uppercase tracking-wider mb-1">Dew Point</div>
+          <div id="wallpaperDewPoint" class="text-xl sm:text-2xl font-bold text-white">--°</div>
+        </div>
+        <div class="metric-card glass rounded-xl p-3.5 text-center flex flex-col justify-center">
+          <div class="text-[11px] text-slate-400 uppercase tracking-wider mb-1">Gusts</div>
+          <div id="wallpaperWindGusts" class="text-xl sm:text-2xl font-bold text-white">--</div>
+        </div>
+      </div>
+
+      <!-- Conditions Analysis Row: Air Quality & Visibility, Comfort Index, Sky Gazing -->
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <!-- Air Quality & Visibility Card -->
+        <div class="glass rounded-xl p-4 border border-white/10 flex flex-col justify-between">
+          <div class="flex items-center justify-between mb-2">
+            <div class="text-xs text-slate-400 uppercase tracking-wider flex items-center gap-2">
+              <span aria-hidden="true">🍃</span> Air Quality & Visibility
+            </div>
+            <div id="wallpaperAQIBadge" class="text-xs font-bold px-3 py-1 rounded-full bg-slate-800 text-slate-400">--</div>
+          </div>
+          <div class="flex items-baseline justify-between mt-1">
+            <div>
+              <div id="wallpaperAQI" class="text-lg font-bold text-white">Loading AQI...</div>
+              <div id="wallpaperAQIMetrics" class="text-[11px] text-slate-400 mt-0.5">PM2.5: -- | PM10: -- | O3: --</div>
+            </div>
+            <div class="text-right">
+              <div class="text-[10px] text-slate-400 uppercase tracking-wider">Visibility</div>
+              <div id="wallpaperVisibility" class="text-xl font-bold text-white">--</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Comfort Index Card -->
+        <div class="glass rounded-xl p-4 border border-white/10 flex flex-col justify-between">
+          <div class="flex items-center justify-between mb-2">
+            <div class="text-xs text-slate-400 uppercase tracking-wider flex items-center gap-2">
+              <span>🌡️</span> Comfort Index
+            </div>
+            <div id="wallpaperComfortScore" class="text-2xl font-extrabold text-white">--</div>
+          </div>
+          <div id="wallpaperComfortLabel" class="text-sm text-slate-300">--</div>
+        </div>
+
+        <!-- Sky Gazing Rating Card -->
+        <div class="glass rounded-xl p-4 border border-white/10 flex flex-col justify-between">
+          <div class="flex items-center justify-between mb-2">
+            <div class="text-xs text-slate-400 uppercase tracking-wider flex items-center gap-2">
+              <span>🔭</span> Sky Gazing
+            </div>
+            <div id="wallpaperStargazing" class="text-2xl font-extrabold text-white">--</div>
+          </div>
+          <div id="wallpaperStargazingLabel" class="text-sm text-slate-300">--</div>
+        </div>
+      </div>
+
+      <!-- Astronomy & Precipitation Dynamics Row -->
+      <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+        <!-- Sun Arc / Day Cycle -->
+        <div class="glass rounded-xl p-4 border border-white/10 flex flex-col justify-between">
+          <div class="text-xs text-slate-400 uppercase tracking-wider mb-2 flex items-center gap-2">
+            <span>🌞</span> Day Cycle
+          </div>
+          <div class="relative h-24 w-full flex items-center justify-center my-1">
+            <svg id="wallpaperSunArc" class="w-full h-full max-h-24 overflow-visible" viewBox="0 0 200 85" aria-hidden="true">
+              <!-- Dashed Horizon Baseline -->
+              <line x1="15" y1="70" x2="185" y2="70" stroke="#334155" stroke-width="1.5" stroke-dasharray="3,3" />
+              <!-- Background Sky Arc (rx=80, ry=55, apex=15, base=70) -->
+              <path d="M 20,70 A 80,55 0 0,1 180,70" fill="none" stroke="#334155" stroke-width="2.5" stroke-dasharray="4,4" stroke-linecap="round"/>
+              <!-- Active Passed Daylight Arc -->
+              <path id="wallpaperSunArcPassed" d="M 20,70 A 80,55 0 0,1 20,70" fill="none" stroke="#f59e0b" stroke-width="3.5" stroke-linecap="round"/>
+              <!-- Sun Indicator Dot -->
+              <circle id="wallpaperSunArcDot" cx="20" cy="70" r="6.5" fill="#f59e0b" filter="drop-shadow(0 0 8px rgba(245,158,11,0.9))"/>
+            </svg>
+          </div>
+          <div class="flex justify-between text-xs text-slate-300 font-semibold px-1 mt-1">
+            <span class="flex items-center gap-1" title="Sunrise">🌅 <span id="wallpaperSunSunrise">--:--</span></span>
+            <span id="wallpaperSunDayLength" class="text-slate-400 text-[11px] font-normal">--h --m</span>
+            <span class="flex items-center gap-1" title="Sunset">🌇 <span id="wallpaperSunSunset">--:--</span></span>
+          </div>
+        </div>
+
+        <!-- Moon Phase Card -->
+        <div class="glass rounded-xl p-4 border border-white/10 flex flex-col items-center justify-between">
+          <div class="text-xs text-slate-400 uppercase tracking-wider mb-2 flex items-center gap-2 self-start">
+            <span>🌙</span> Moon Phase
+          </div>
+          <div class="relative w-16 h-16 my-1">
+            <svg id="wallpaperMoonPhase" class="w-full h-full overflow-visible" viewBox="0 0 60 60" aria-hidden="true">
+              <circle cx="30" cy="30" r="27" fill="#1e293b"/>
+              <path id="wallpaperMoonLitPath" fill="#fef08a" d="M 30 3 A 27 27 0 0 1 30 57 A 27 27 0 0 1 30 3"/>
+              <circle cx="30" cy="30" r="27" fill="none" stroke="#334155" stroke-width="1"/>
+            </svg>
+          </div>
+          <div class="text-center">
+            <div id="wallpaperMoonPhaseLabel" class="text-sm font-bold text-white">--</div>
+            <div id="wallpaperMoonPhasePercent" class="text-xs text-slate-400">--% lit</div>
+          </div>
+        </div>
+
+        <!-- Precipitation Timeline Card -->
+        <div id="wallpaperPrecipTimeline" class="glass rounded-xl p-4 border border-white/10 flex flex-col justify-between">
+          <div class="flex items-center justify-between mb-2">
+            <div class="text-xs text-slate-400 uppercase tracking-wider flex items-center gap-2">
+              <span>🌧️</span> Precipitation Next 12h
+            </div>
+            <div id="wallpaperPrecipNextRain" class="text-xs font-bold text-blue-400" title="Time until rain starts"></div>
+          </div>
+          <div id="wallpaperNoRainMsg" class="hidden text-sm text-slate-400 text-center py-2">No precipitation expected ☀️</div>
+          <div class="relative h-14">
+            <svg id="wallpaperPrecipTimelineSvg" class="w-full h-full overflow-visible" viewBox="0 0 300 60" preserveAspectRatio="none" aria-hidden="true"></svg>
+          </div>
+          <div id="wallpaperPrecipTimelineLabels" class="flex justify-between text-[9px] text-slate-400 mt-1 font-medium px-1"></div>
+        </div>
+      </div>
+
+      <!-- 7-Day Forecast Strip -->
+      <div id="wallpaperDailySection" class="glass rounded-xl p-4 border border-white/10">
+        <div class="text-xs text-slate-400 uppercase tracking-wider mb-3 flex items-center gap-2">
+          <span>📅</span> 7-Day Forecast
+        </div>
+        <div id="wallpaperDailyStrip" class="flex gap-2 overflow-x-auto hide-scrollbar pb-1"></div>
+      </div>
+
+      <!-- Hourly Forecast Strip -->
+      <div id="wallpaperHourlySection" class="glass rounded-xl p-4 border border-white/10">
+        <div class="text-xs text-slate-400 uppercase tracking-wider mb-3 flex items-center gap-2">
+          <span>📊</span> Hourly Forecast (Next 24h)
+        </div>
+        <div id="wallpaperHourlyStrip" class="flex gap-2 overflow-x-auto hide-scrollbar pb-1"></div>
+      </div>
+    </div>
+
+    <!-- Wallpaper Settings Drawer (slides in from right, toggled by settings button) -->
+    <div id="wallpaperSettingsPanel" class="hidden fixed top-0 right-0 bottom-0 w-full max-w-sm bg-slate-950/95 backdrop-blur-md shadow-2xl border-l border-white/10 z-[2100] flex-col">
+      <div class="p-4 border-b border-white/10 flex items-center justify-between flex-shrink-0">
+        <h3 class="text-base font-bold text-white">🖼️ Wallpaper Settings</h3>
+        <button id="wallpaperSettingsCloseBtn" class="p-1.5 rounded-lg hover:bg-white/10 text-slate-400 transition-colors" aria-label="Close wallpaper settings">
+          <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
+        </button>
+      </div>
+      <div class="flex-1 overflow-y-auto custom-scrollbar p-4 space-y-5">
+        <!-- Refresh Interval -->
+        <div>
+          <label class="block text-xs font-semibold uppercase tracking-wider text-slate-400 mb-2">Auto-refresh interval</label>
+          <select id="wallpaperRefreshIntervalSelect" class="w-full bg-slate-900 text-sm font-semibold text-slate-200 px-3 py-2.5 rounded-xl border border-white/10 focus:outline-none focus:ring-2 focus:ring-primary/40 cursor-pointer" aria-label="Auto-refresh interval">
+            <option value="300000">Every 5 minutes</option>
+            <option value="900000">Every 15 minutes</option>
+            <option value="1800000">Every 30 minutes</option>
+            <option value="3600000">Every 60 minutes</option>
+          </select>
+          <p class="text-[11px] text-slate-500 mt-1">Weather data refreshes automatically in the background.</p>
+        </div>
+
+        <!-- Auto-rotate -->
+        <div class="flex items-center justify-between">
+          <div class="flex flex-col">
+            <span class="text-sm font-semibold text-slate-200">Auto-rotate locations</span>
+            <span class="text-xs text-slate-500">Cycle through wallpaper tabs</span>
+          </div>
+          <label class="relative inline-flex items-center cursor-pointer">
+            <input type="checkbox" id="wallpaperAutoRotateToggle" class="sr-only peer" aria-label="Auto-rotate locations">
+            <div class="w-11 h-6 bg-slate-700 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-primary/30 rounded-full peer peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary"></div>
+          </label>
+        </div>
+
+        <!-- Auto-rotate interval -->
+        <div>
+          <label class="block text-xs font-semibold uppercase tracking-wider text-slate-400 mb-2">Auto-rotate interval</label>
+          <select id="wallpaperRotateIntervalSelect" class="w-full bg-slate-900 text-sm font-semibold text-slate-200 px-3 py-2.5 rounded-xl border border-white/10 focus:outline-none focus:ring-2 focus:ring-primary/40 cursor-pointer" aria-label="Auto-rotate interval">
+            <option value="60000">Every 1 minute</option>
+            <option value="300000">Every 5 minutes</option>
+            <option value="900000">Every 15 minutes</option>
+          </select>
+        </div>
+
+        <!-- Immersive audio -->
+        <div class="flex items-center justify-between">
+          <div class="flex flex-col">
+            <span class="text-sm font-semibold text-slate-200">Ambient soundscape</span>
+            <span class="text-xs text-slate-500">Weather-matched audio in wallpaper</span>
+          </div>
+          <label class="relative inline-flex items-center cursor-pointer">
+            <input type="checkbox" id="wallpaperSoundToggle" class="sr-only peer" aria-label="Ambient soundscape">
+            <div class="w-11 h-6 bg-slate-700 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-primary/30 rounded-full peer peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary"></div>
+          </label>
+        </div>
+
+        <!-- Smart notifications thresholds -->
+        <div class="border-t border-white/10 pt-4">
+          <div class="text-xs font-semibold uppercase tracking-wider text-slate-400 mb-3">Alert thresholds</div>
+          <div class="space-y-3">
+            <label class="flex items-center justify-between">
+              <span class="text-sm text-slate-300">Rain alerts</span>
+              <input type="checkbox" id="wallpaperNotifyRain" class="w-4 h-4 accent-primary cursor-pointer" aria-label="Rain alerts">
+            </label>
+            <label class="flex items-center justify-between gap-3">
+              <span class="text-sm text-slate-300 whitespace-nowrap">Temp drop (°C)</span>
+              <input type="number" id="wallpaperNotifyTempDrop" min="1" max="20" class="w-20 bg-slate-900 text-sm text-slate-200 px-2 py-1.5 rounded-lg border border-white/10 focus:outline-none focus:ring-2 focus:ring-primary/40" aria-label="Temperature drop threshold">
+            </label>
+            <label class="flex items-center justify-between gap-3">
+              <span class="text-sm text-slate-300 whitespace-nowrap">UV index above</span>
+              <input type="number" id="wallpaperNotifyUV" min="1" max="11" class="w-20 bg-slate-900 text-sm text-slate-200 px-2 py-1.5 rounded-lg border border-white/10 focus:outline-none focus:ring-2 focus:ring-primary/40" aria-label="UV threshold">
+            </label>
+            <label class="flex items-center justify-between gap-3">
+              <span class="text-sm text-slate-300 whitespace-nowrap">Wind above (km/h)</span>
+              <input type="number" id="wallpaperNotifyWind" min="10" max="120" class="w-20 bg-slate-900 text-sm text-slate-200 px-2 py-1.5 rounded-lg border border-white/10 focus:outline-none focus:ring-2 focus:ring-primary/40" aria-label="Wind threshold">
+            </label>
+          </div>
+        </div>
+
+        <!-- Display options -->
+        <div class="border-t border-white/10 pt-4 space-y-3">
+          <div class="text-xs font-semibold uppercase tracking-wider text-slate-400 mb-1">Display</div>
+          <label class="flex items-center justify-between">
+            <span class="text-sm text-slate-300">High contrast</span>
+            <input type="checkbox" id="wallpaperHCSetting" class="w-4 h-4 accent-primary cursor-pointer" aria-label="High contrast">
+          </label>
+          <label class="flex items-center justify-between">
+            <span class="text-sm text-slate-300">Aurafisky brand wallpaper</span>
+            <input type="checkbox" id="wallpaperBrandToggle" class="w-4 h-4 accent-primary cursor-pointer" aria-label="Aurafisky brand wallpaper">
+          </label>
+          <label class="flex items-center justify-between">
+            <span class="text-sm text-slate-300">Scenic photo background</span>
+            <input type="checkbox" id="wallpaperPhotoToggle" class="w-4 h-4 accent-primary cursor-pointer" aria-label="Scenic photo background">
+          </label>
+          <label class="flex items-center justify-between">
+            <span class="text-sm text-slate-300">Remember wallpaper on reload</span>
+            <input type="checkbox" id="wallpaperPersistToggle" class="w-4 h-4 accent-primary cursor-pointer" aria-label="Remember wallpaper on reload">
+          </label>
+          <label class="flex items-center justify-between">
+            <span class="text-sm text-slate-300">Keep screen awake</span>
+            <input type="checkbox" id="wallpaperWakeLockToggle" class="w-4 h-4 accent-primary cursor-pointer" aria-label="Keep screen awake">
+          </label>
+          <label class="flex items-center justify-between">
+            <span class="text-sm text-slate-300">Geofence triggers</span>
+            <input type="checkbox" id="wallpaperGeofenceToggle" class="w-4 h-4 accent-primary cursor-pointer" aria-label="Geofence triggers">
+          </label>
+          <p class="text-[11px] text-slate-500">Auto-show a wallpaper when you arrive at its location (~500m).</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- Add Wallpaper Tab Modal Dialog -->
+    <div id="wallpaperAddTabModal" class="hidden fixed inset-0 z-[2200] flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-md" role="dialog" aria-modal="true" aria-labelledby="wallpaperAddTabModalTitle">
+      <div class="w-full max-w-md bg-slate-900/95 border border-white/15 rounded-2xl shadow-2xl p-5 space-y-4 text-left">
+        <div class="flex items-center justify-between border-b border-white/10 pb-3">
+          <div class="flex items-center gap-2">
+            <span class="text-lg">📍</span>
+            <h3 id="wallpaperAddTabModalTitle" class="text-base font-bold text-white">Add Wallpaper Location</h3>
+          </div>
+          <button id="wallpaperAddTabModalClose" class="p-1.5 rounded-lg hover:bg-white/10 text-slate-400 hover:text-white transition-colors cursor-pointer" aria-label="Close dialog">
+            <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
+          </button>
+        </div>
+
+        <!-- Search Input -->
+        <div class="relative">
+          <input type="text" id="wallpaperTabSearchInput" placeholder="Search city or location (e.g. Paris, Tokyo, Mumbai)..." class="w-full bg-slate-800/90 text-sm font-medium text-white placeholder-slate-400 pl-9 pr-8 py-2.5 rounded-xl border border-white/15 focus:outline-none focus:ring-2 focus:ring-primary/60" autocomplete="off" />
+          <svg class="w-4 h-4 text-slate-400 absolute left-3 top-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
+          <button id="wallpaperTabSearchClear" class="hidden absolute right-2.5 top-2.5 text-slate-400 hover:text-white p-0.5 cursor-pointer text-sm font-bold" aria-label="Clear search">×</button>
+        </div>
+
+        <!-- Search Results List -->
+        <div id="wallpaperTabSearchResults" class="max-h-44 overflow-y-auto custom-scrollbar space-y-1 text-sm hidden"></div>
+
+        <!-- Popular City Presets -->
+        <div>
+          <div class="text-[11px] font-semibold uppercase tracking-wider text-slate-400 mb-2">Popular Cities</div>
+          <div class="flex flex-wrap gap-1.5" id="wallpaperPopularCities">
+            <button type="button" class="popular-city-chip text-xs px-3 py-1.5 rounded-full bg-white/10 hover:bg-white/20 text-slate-200 border border-white/10 transition-all active:scale-95 cursor-pointer" data-lat="40.7128" data-lng="-74.0060" data-name="New York, USA">🏙️ New York</button>
+            <button type="button" class="popular-city-chip text-xs px-3 py-1.5 rounded-full bg-white/10 hover:bg-white/20 text-slate-200 border border-white/10 transition-all active:scale-95 cursor-pointer" data-lat="35.6762" data-lng="139.6503" data-name="Tokyo, Japan">🗼 Tokyo</button>
+            <button type="button" class="popular-city-chip text-xs px-3 py-1.5 rounded-full bg-white/10 hover:bg-white/20 text-slate-200 border border-white/10 transition-all active:scale-95 cursor-pointer" data-lat="51.5074" data-lng="-0.1278" data-name="London, UK">🎡 London</button>
+            <button type="button" class="popular-city-chip text-xs px-3 py-1.5 rounded-full bg-white/10 hover:bg-white/20 text-slate-200 border border-white/10 transition-all active:scale-95 cursor-pointer" data-lat="48.8566" data-lng="2.3522" data-name="Paris, France">🥖 Paris</button>
+            <button type="button" class="popular-city-chip text-xs px-3 py-1.5 rounded-full bg-white/10 hover:bg-white/20 text-slate-200 border border-white/10 transition-all active:scale-95 cursor-pointer" data-lat="-33.8688" data-lng="151.2093" data-name="Sydney, Australia">🏖️ Sydney</button>
+            <button type="button" class="popular-city-chip text-xs px-3 py-1.5 rounded-full bg-white/10 hover:bg-white/20 text-slate-200 border border-white/10 transition-all active:scale-95 cursor-pointer" data-lat="47.3769" data-lng="8.5417" data-name="Zurich, Switzerland">🏔️ Zurich</button>
+            <button type="button" class="popular-city-chip text-xs px-3 py-1.5 rounded-full bg-white/10 hover:bg-white/20 text-slate-200 border border-white/10 transition-all active:scale-95 cursor-pointer" data-lat="25.2048" data-lng="55.2708" data-name="Dubai, UAE">🌴 Dubai</button>
+            <button type="button" class="popular-city-chip text-xs px-3 py-1.5 rounded-full bg-white/10 hover:bg-white/20 text-slate-200 border border-white/10 transition-all active:scale-95 cursor-pointer" data-lat="13.2803" data-lng="78.2909" data-name="Yalduru, India">📍 Yalduru</button>
+          </div>
+        </div>
+
+        <!-- Saved Favorites Presets -->
+        <div id="wallpaperSavedBookmarksSection" class="hidden">
+          <div class="text-[11px] font-semibold uppercase tracking-wider text-amber-400 mb-2">⭐ Saved Favorites</div>
+          <div class="flex flex-wrap gap-1.5" id="wallpaperSavedBookmarks"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============================================================ -->
   <!-- TIMELINE SLIDER — Bottom time-travel bar                     -->
   <!-- ============================================================ -->
   <div id="timelineBar" class="timeline-container fixed bottom-0 left-0 right-0 z-[1000] p-3 sm:p-4 pointer-events-none">
@@ -879,6 +1388,7 @@
           <div class="font-semibold text-primary">M</div><div>My location</div>
           <div class="font-semibold text-primary">H</div><div>Home location</div>
           <div class="font-semibold text-primary">F</div><div>Toggle favorite</div>
+          <div class="font-semibold text-primary">W</div><div>Toggle wallpaper</div>
           <div class="font-semibold text-primary">C</div><div>Compare panel</div>
           <div class="font-semibold text-primary">T</div><div>Time machine</div>
           <div class="font-semibold text-primary">L</div><div>Map modes &amp; terrain</div>
@@ -963,7 +1473,7 @@
         <div class="border-t border-slate-100 dark:border-slate-800/40 my-3"></div>
 
         <p class="text-xs text-slate-500 dark:text-slate-400">
-          Version 10.9.4 · No API keys, no tracking, and no ads. Weather data provided by Open-Meteo under CC BY 4.0.
+          Version 11.0.0 · No API keys, no tracking, and no ads. Weather data provided by Open-Meteo under CC BY 4.0.
         </p>
       </div>
       <div class="p-4 bg-slate-50 dark:bg-slate-800/50 rounded-b-2xl">
@@ -1273,7 +1783,7 @@
   <!-- TERMS MODAL                                                  -->
   <!-- ============================================================ -->
   <div id="termsModal" class="fixed inset-0 z-[9999] hidden items-center justify-center bg-black/40 backdrop-blur-sm pointer-events-auto" style="display:none" role="dialog" aria-modal="true" aria-labelledby="termsTitle">
-    <div class="bg-white dark:bg-slate-900 rounded-2xl shadow-2xl max-w-2xl w-full mx-4 max-h-[80vh] overflow-y-auto animate-in zoom-in-95"><div class="p-5 border-b border-slate-200/50 dark:border-slate-700/30 flex items-center justify-between"><h3 id="termsTitle" class="text-lg font-bold text-slate-900 dark:text-white">Terms & Privacy</h3><button id="termsCloseBtn" aria-label="Close terms and privacy" class="p-1.5 rounded-lg hover:bg-slate-200/60 dark:hover:bg-slate-600/40 transition-colors"><svg class="w-5 h-5 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" /></svg></button></div><div class="p-5 space-y-4 text-sm text-slate-600 dark:text-slate-300 max-h-[60vh] overflow-y-auto"><p class="text-slate-700 dark:text-slate-200 font-medium">Aurafisky is an interactive, privacy-first weather explorer that blends real-time forecasting, live radar animations, and interactive mapping in a modern, user-friendly interface.</p><h4 class="font-semibold">Data Sources</h4><ul class="list-disc pl-5 space-y-1"><li>Weather: <a href="https://open-meteo.com" target="_blank" rel="noopener" class="text-primary hover:underline">Open-Meteo</a></li><li>Maps: <a href="https://openstreetmap.org" target="_blank" rel="noopener" class="text-primary hover:underline">OpenStreetMap</a> + <a href="https://openfreemap.org" target="_blank" rel="noopener" class="text-primary hover:underline">OpenFreeMap</a></li><li>Radar: <a href="https://rainviewer.com" target="_blank" rel="noopener" class="text-primary hover:underline">RainViewer</a></li><li>Geocoding: <a href="https://nominatim.org" target="_blank" rel="noopener" class="text-primary hover:underline">Nominatim</a></li></ul><h4 class="font-semibold">Privacy</h4><p>No personal data is collected. Location is only used for weather queries and never stored on servers. Favorites & settings sync via Firebase Auth (Google) only if you sign in. For more details, view our <a href="https://sites.google.com/view/aurafisky-privacypolicy/home" target="_blank" rel="noopener" class="text-primary hover:underline font-medium">Full Privacy Policy</a>.</p><h4 class="font-semibold">Offline Use</h4><p>Install as PWA for full offline access. Recent weather data cached in IndexedDB.</p><h4 class="font-semibold">License</h4><p>Version 10.9.4 · Proprietary. All rights reserved. Copyright &copy; 2026 Aurafisky.</p></div><div class="p-4 bg-slate-50 dark:bg-slate-800/50 rounded-b-2xl flex gap-3"><button id="termsAcceptBtn" class="flex-1 bg-primary hover:bg-primary-dark text-white font-semibold py-2.5 rounded-xl transition-colors">Accept & Continue</button><button id="copyContactEmailBtn" class="px-4 py-2.5 bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 font-semibold rounded-xl hover:bg-slate-300 dark:hover:bg-slate-600 transition-colors">Copy contact email</button></div></div></div>
+    <div class="bg-white dark:bg-slate-900 rounded-2xl shadow-2xl max-w-2xl w-full mx-4 max-h-[80vh] overflow-y-auto animate-in zoom-in-95"><div class="p-5 border-b border-slate-200/50 dark:border-slate-700/30 flex items-center justify-between"><h3 id="termsTitle" class="text-lg font-bold text-slate-900 dark:text-white">Terms & Privacy</h3><button id="termsCloseBtn" aria-label="Close terms and privacy" class="p-1.5 rounded-lg hover:bg-slate-200/60 dark:hover:bg-slate-600/40 transition-colors"><svg class="w-5 h-5 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" /></svg></button></div><div class="p-5 space-y-4 text-sm text-slate-600 dark:text-slate-300 max-h-[60vh] overflow-y-auto"><p class="text-slate-700 dark:text-slate-200 font-medium">Aurafisky is an interactive, privacy-first weather explorer that blends real-time forecasting, live radar animations, and interactive mapping in a modern, user-friendly interface.</p><h4 class="font-semibold">Data Sources</h4><ul class="list-disc pl-5 space-y-1"><li>Weather: <a href="https://open-meteo.com" target="_blank" rel="noopener" class="text-primary hover:underline">Open-Meteo</a></li><li>Maps: <a href="https://openstreetmap.org" target="_blank" rel="noopener" class="text-primary hover:underline">OpenStreetMap</a> + <a href="https://openfreemap.org" target="_blank" rel="noopener" class="text-primary hover:underline">OpenFreeMap</a></li><li>Radar: <a href="https://rainviewer.com" target="_blank" rel="noopener" class="text-primary hover:underline">RainViewer</a></li><li>Geocoding: <a href="https://nominatim.org" target="_blank" rel="noopener" class="text-primary hover:underline">Nominatim</a></li></ul><h4 class="font-semibold">Privacy</h4><p>No personal data is collected. Location is only used for weather queries and never stored on servers. Favorites & settings sync via Firebase Auth (Google) only if you sign in. For more details, view our <a href="https://sites.google.com/view/aurafisky-privacypolicy/home" target="_blank" rel="noopener" class="text-primary hover:underline font-medium">Full Privacy Policy</a>.</p><h4 class="font-semibold">Offline Use</h4><p>Install as PWA for full offline access. Recent weather data cached in IndexedDB.</p><h4 class="font-semibold">License</h4><p>Version 11.0.0 · Proprietary. All rights reserved. Copyright &copy; 2026 Aurafisky.</p></div><div class="p-4 bg-slate-50 dark:bg-slate-800/50 rounded-b-2xl flex gap-3"><button id="termsAcceptBtn" class="flex-1 bg-primary hover:bg-primary-dark text-white font-semibold py-2.5 rounded-xl transition-colors">Accept & Continue</button><button id="copyContactEmailBtn" class="px-4 py-2.5 bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 font-semibold rounded-xl hover:bg-slate-300 dark:hover:bg-slate-600 transition-colors">Copy contact email</button></div></div></div>
 
   <!-- ============================================================ -->
   <!-- TURN-BY-TURN NAVIGATION                                      -->

@@ -573,6 +573,213 @@ input[type='range'].timeline-slider::-moz-range-thumb {
   background: linear-gradient(135deg, rgba(12, 60, 90, 0.8) 0%, var(--glass-bg) 100%);
 }
 
+/* ── Wallpaper Overlay Dynamic Weather Gradients ─────────────── */
+#wallpaperOverlay.theme-sunny {
+  background: linear-gradient(160deg, rgba(245, 158, 11, 0.15) 0%, rgba(15, 23, 42, 0.45) 60%);
+}
+#wallpaperOverlay.theme-rainy {
+  background: linear-gradient(160deg, rgba(59, 130, 246, 0.15) 0%, rgba(15, 23, 42, 0.45) 60%);
+}
+#wallpaperOverlay.theme-cloudy {
+  background: linear-gradient(160deg, rgba(100, 116, 139, 0.15) 0%, rgba(15, 23, 42, 0.45) 60%);
+}
+#wallpaperOverlay.theme-stormy {
+  background: linear-gradient(160deg, rgba(139, 92, 246, 0.15) 0%, rgba(10, 10, 20, 0.5) 60%);
+}
+#wallpaperOverlay.theme-snowy {
+  background: linear-gradient(160deg, rgba(30, 64, 175, 0.15) 0%, rgba(15, 23, 42, 0.45) 60%);
+}
+#wallpaperOverlay.theme-night {
+  background: linear-gradient(160deg, rgba(15, 23, 42, 0.4) 0%, rgba(2, 6, 23, 0.65) 100%);
+}
+
+/* ── Scenic Weather Wallpaper Cross-fade & Scrim ─────────────── */
+.wallpaper-photo-layer {
+  position: absolute;
+  inset: 0;
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
+  opacity: 0;
+  transform: scale(1.03);
+  transition: opacity 1.2s cubic-bezier(0.4, 0, 0.2, 1), transform 1.2s cubic-bezier(0.4, 0, 0.2, 1);
+  will-change: opacity, transform;
+}
+.wallpaper-photo-layer.active {
+  opacity: 1;
+  transform: scale(1);
+}
+.wallpaper-scrim {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: radial-gradient(circle at 50% 35%, rgba(15, 23, 42, 0.2) 0%, rgba(2, 6, 23, 0.6) 100%),
+              linear-gradient(180deg, rgba(2, 6, 23, 0.5) 0%, rgba(15, 23, 42, 0.15) 35%, rgba(2, 6, 23, 0.75) 100%);
+  backdrop-filter: blur(1px);
+  -webkit-backdrop-filter: blur(1px);
+}
+
+/* ── Wallpaper Location Tabs ─────────────────────────────────── */
+.wallpaper-tab {
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+.wallpaper-tab:hover {
+  transform: translateY(-1px);
+}
+.wallpaper-tab:active {
+  transform: translateY(0) scale(0.97);
+}
+
+/* ── Floating Weather Card Dynamic Wallpaper Backdrop ────────── */
+#panelWeatherBg {
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
+  pointer-events: none;
+  z-index: 0;
+  transition: background-image 1.2s cubic-bezier(0.4, 0, 0.2, 1), opacity 1s ease;
+}
+
+/* ── Wallpaper Card Styling (dark glass regardless of app theme) ──
+   The .glass class uses a light rgba(255,255,255,0.9) background in light
+   mode, which reads as washed-out white blocks on the dark wallpaper
+   overlay. These rules give every card inside the overlay a proper dark
+   glass look with legible white text. */
+#wallpaperOverlay .metric-card,
+#wallpaperOverlay .glass {
+  background: rgba(15, 23, 42, 0.6) !important;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+}
+#wallpaperOverlay .metric-card:hover {
+  background: rgba(30, 41, 59, 0.75) !important;
+  border-color: rgba(255, 255, 255, 0.28);
+}
+#wallpaperOverlay .metric-card > div:first-child {
+  color: #94a3b8 !important;
+}
+#wallpaperOverlay .metric-card > div:last-child {
+  color: #ffffff;
+}
+#wallpaperOverlay #wallpaperLastUpdated {
+  color: #94a3b8;
+}
+
+/* Wallpaper overlay entrance animation */
+#wallpaperOverlay:not(.hidden) {
+  animation: wallpaper-fade-in 0.25s ease-out;
+}
+@keyframes wallpaper-fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+/* Smooth weather-theme transitions — background eases between gradients
+   instead of snapping when conditions change on refresh */
+#wallpaperOverlay {
+  transition: background 1.2s ease, opacity 0.25s ease;
+}
+
+/* Weather icon gentle pulse (skipped under prefers-reduced-motion) */
+.wallpaper-icon-anim {
+  animation: wallpaper-icon-breathe 4s ease-in-out infinite;
+  transform-origin: center;
+}
+@keyframes wallpaper-icon-breathe {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.06); }
+}
+
+/* Precipitation timeline bar hover */
+.wallpaper-precip-bar {
+  transition: fill-opacity 0.15s ease, fill 0.15s ease;
+  cursor: pointer;
+}
+.wallpaper-precip-bar:hover {
+  fill-opacity: 1;
+}
+
+/* Precipitation hover tooltip */
+.wallpaper-precip-tooltip {
+  position: fixed;
+  z-index: 2100;
+  background: rgba(15, 23, 42, 0.95);
+  color: #ffffff;
+  font-size: 11px;
+  font-weight: 600;
+  padding: 5px 10px;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+  pointer-events: none;
+  opacity: 0;
+  transform: translateX(-50%);
+  transition: opacity 0.12s ease;
+  white-space: nowrap;
+}
+.wallpaper-precip-tooltip.visible {
+  opacity: 1;
+}
+
+/* ── Wallpaper High Contrast Mode ────────────────────────────── */
+#wallpaperOverlay.high-contrast {
+  --wallpaper-text: #ffffff;
+  --wallpaper-label: #e2e8f0;
+  background: #000005 !important;
+}
+#wallpaperOverlay.high-contrast #wallpaperLocationName,
+#wallpaperOverlay.high-contrast #wallpaperTemp,
+#wallpaperOverlay.high-contrast #wallpaperDescription,
+#wallpaperOverlay.high-contrast #wallpaperHumidity,
+#wallpaperOverlay.high-contrast #wallpaperWind,
+#wallpaperOverlay.high-contrast #wallpaperPressure,
+#wallpaperOverlay.high-contrast #wallpaperClouds,
+#wallpaperOverlay.high-contrast #wallpaperUV,
+#wallpaperOverlay.high-contrast #wallpaperPrecip,
+#wallpaperOverlay.high-contrast #wallpaperDewPoint,
+#wallpaperOverlay.high-contrast #wallpaperWindGusts,
+#wallpaperOverlay.high-contrast #wallpaperVisibility,
+#wallpaperOverlay.high-contrast #wallpaperComfortScore,
+#wallpaperOverlay.high-contrast #wallpaperStargazing,
+#wallpaperOverlay.high-contrast #wallpaperMoonPhaseLabel {
+  color: #ffffff !important;
+  text-shadow: 0 0 2px rgba(0, 0, 0, 0.8);
+}
+#wallpaperOverlay.high-contrast #wallpaperFeelsLike,
+#wallpaperOverlay.high-contrast #wallpaperCoordinates,
+#wallpaperOverlay.high-contrast #wallpaperTimeLabel,
+#wallpaperOverlay.high-contrast #wallpaperLastUpdated,
+#wallpaperOverlay.high-contrast #wallpaperAQIMetrics,
+#wallpaperOverlay.high-contrast #wallpaperComfortLabel,
+#wallpaperOverlay.high-contrast #wallpaperStargazingLabel,
+#wallpaperOverlay.high-contrast #wallpaperMoonPhasePercent {
+  color: #cbd5e1 !important;
+}
+#wallpaperOverlay.high-contrast .metric-card,
+#wallpaperOverlay.high-contrast .glass {
+  background: rgba(15, 23, 42, 0.95) !important;
+  border: 2px solid rgba(255, 255, 255, 0.6) !important;
+}
+#wallpaperOverlay.high-contrast .metric-card > div:first-child {
+  color: #f1f5f9 !important;
+}
+
+/* ── Wallpaper Reduced Motion ────────────────────────────────── */
+@media (prefers-reduced-motion: reduce) {
+  #wallpaperOverlay,
+  #wallpaperOverlay * {
+    animation: none !important;
+    transition: none !important;
+  }
+  #wallpaperBgCanvas {
+    display: none !important;
+  }
+}
+
 /* ── SVG Trend Chart Elements ───────────────────────────────── */
 #trendSvg {
   display: block;
@@ -941,6 +1148,7 @@ input[type='range'].timeline-slider::-moz-range-thumb {
 
 /* ── Compact Mode (Fitted Card Compartment) ─────────────────── */
 /* Hides action buttons except expand icon */
+.compact #panelActionsRow,
 .compact #favoriteToggleBtn,
 .compact #shareWeatherBtn,
 .compact #panelMinimizeBtn,

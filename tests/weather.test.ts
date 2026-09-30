@@ -92,27 +92,29 @@ const {
   classifyWeatherRegime,
 } = WS;
 
-type HourlyWeather = WS.HourlyWeather;
-type WeatherAPIResponse = WS.WeatherAPIResponse;
-type DailyForecast = WS.DailyForecast;
-type Advisory = WS.Advisory;
-type OutdoorWindow = WS.OutdoorWindow;
-type DecisionTip = WS.DecisionTip;
-type TimelineDeltas = WS.TimelineDeltas;
-type AnomalyResult = WS.AnomalyResult;
-type HistoricalPattern = WS.HistoricalPattern;
-type UpwindPoint = WS.UpwindPoint;
-type ConfidenceBands = WS.ConfidenceBands;
-type DiurnalBiasMap = WS.DiurnalBiasMap;
-type TrustScore = WS.TrustScore;
-type WeatherMomentum = WS.WeatherMomentum;
-type ParameterImportance = WS.ParameterImportance;
-type FreshnessLabel = WS.FreshnessLabel;
-type TemporalCompression = WS.TemporalCompression;
-type SpatialGradient = WS.SpatialGradient;
-type WeatherRegime = WS.WeatherRegime;
-type Briefing = WS.Briefing;
-type AnalogDay = WS.AnalogDay;
+import type {
+  HourlyWeather,
+  WeatherAPIResponse,
+  DailyForecast,
+  Advisory,
+  OutdoorWindow,
+  DecisionTip,
+  TimelineDeltas,
+  AnomalyResult,
+  HistoricalPattern,
+  UpwindPoint,
+  ConfidenceBands,
+  DiurnalBiasMap,
+  TrustScore,
+  WeatherMomentum,
+  ParameterImportance,
+  FreshnessLabel,
+  TemporalCompression,
+  SpatialGradient,
+  WeatherRegime,
+  Briefing,
+  AnalogDay,
+} from '../src/weather/types.ts';
 
 // ── Test Helpers ────────────────────────────────────────────────
 

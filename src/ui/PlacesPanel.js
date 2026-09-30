@@ -129,7 +129,7 @@ const GEOCODING_BASE_URL = 'https://nominatim.openstreetmap.org/search';
 
 async function searchPlaces(query) {
   const url = `${GEOCODING_BASE_URL}?q=${encodeURIComponent(query)}&format=json&limit=5&addressdetails=1`;
-  const res = await fetch(url, { headers: { 'User-Agent': 'Aurafisky/10.9.4', 'Accept': 'application/json' } });
+  const res = await fetch(url, { headers: { 'User-Agent': 'Aurafisky/11.0.0', 'Accept': 'application/json' } });
   if (!res.ok) throw new Error('Search failed');
   return res.json();
 }

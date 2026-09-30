@@ -336,6 +336,14 @@ class AuthService extends EventEmitter {
     return snap.docs.map(d => ({ id: d.id, ...d.data() } as AlertEvent));
   }
 
+  onAuthStateChanged(callback: (user: User | null) => void) {
+    return onAuthStateChanged(auth, callback);
+  }
+
+  isAnonymous(): boolean {
+    return auth.currentUser?.isAnonymous ?? false;
+  }
+
   static onAuthStateChanged(callback: (user: User | null) => void) {
     return onAuthStateChanged(auth, callback);
   }

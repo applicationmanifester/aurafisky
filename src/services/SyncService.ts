@@ -1,7 +1,8 @@
 // src/services/SyncService.ts
 import {
   collection, doc, getDoc, getDocs, setDoc, updateDoc, deleteDoc,
-  onSnapshot, query, where, orderBy, writeBatch, serverTimestamp, Timestamp
+  onSnapshot, query, where, orderBy, writeBatch, serverTimestamp, Timestamp,
+  QueryConstraint
 } from 'firebase/firestore';
 import { db } from './FirebaseCore.ts';
 import { authService as AuthService } from './AuthService.ts';
@@ -180,7 +181,7 @@ export class SyncService {
       this.#updateStatus(SYNC_STATUS.SYNCED);
     } catch (err) {
       if (this.#isOnline) throw err;
-      for (const op of operations) await this.#queueWrite(op.op, op.path, { data: op.data, merge: op.merge });
+      for (const op of operations) await this.#queueWrite(op.op as 'set' | 'update' | 'delete', op.path, { data: op.data, merge: op.merge });
       this.#updateStatus(SYNC_STATUS.OFFLINE);
     }
   }
@@ -257,7 +258,7 @@ export class SyncService {
     return {
       getAll: () => this.getAll('history', [orderBy('date', 'desc')]),
       subscribe: (cb: (items: any[]) => void, startDate?: Date, endDate?: Date) => {
-        const constraints = [orderBy('date', 'desc')];
+        const constraints: QueryConstraint[] = [orderBy('date', 'desc')];
         if (startDate) constraints.unshift(where('date', '>=', startDate.toISOString().split('T')[0]));
         if (endDate) constraints.unshift(where('date', '<=', endDate.toISOString().split('T')[0]));
         return this.subscribe('history', cb, constraints);

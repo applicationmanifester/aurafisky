@@ -46,6 +46,10 @@ ${precipProb > 0 ? `<span class="text-[9px] sm:text-[10px] text-blue-500 font-se
       })
       .join("");
 
+    // The rows were built but never inserted — the Hourly Forecast section
+    // stayed empty. Assign the built HTML before binding the click handlers.
+    container.innerHTML = hourlyHTML;
+
     container.querySelectorAll(".hourly-row").forEach((btn) => {
       btn.addEventListener("click", () => {
         const idx = parseInt(btn.dataset.idx, 10);

@@ -1,14 +1,14 @@
-import { defineConfig } from 'vite';
+import { defineConfig, loadEnv } from 'vite';
 import { VitePWA } from 'vite-plugin-pwa';
 
-export default defineConfig({
-  base: './',
-  define: {
-    // Injected at build time from environment variables
-    // Required: VITE_FIREBASE_API_KEY, VITE_FCM_VAPID_KEY
-    '__FIREBASE_API_KEY__': JSON.stringify(process.env.VITE_FIREBASE_API_KEY || 'AIzaSyCF0fSv5OUy05AnYZot4Y9Y07TnJjjNl1I'),
-    '__FCM_VAPID_KEY__': JSON.stringify(process.env.VITE_FCM_VAPID_KEY || ''),
-  },
+export default defineConfig(({ mode }) => {
+  const env = loadEnv(mode, process.cwd(), '');
+  return {
+    base: './',
+    define: {
+      '__FIREBASE_API_KEY__': JSON.stringify(env.VITE_FIREBASE_API_KEY || process.env.VITE_FIREBASE_API_KEY || ''),
+      '__FCM_VAPID_KEY__': JSON.stringify(env.VITE_FCM_VAPID_KEY || process.env.VITE_FCM_VAPID_KEY || ''),
+    },
   build: {
     target: 'es2022',
     minify: 'terser',
@@ -99,107 +99,53 @@ export default defineConfig({
           }
         ]
       },
-  workbox: {
-    importScripts: ['sw-widgets.js'],
-    globPatterns: ['**/*.{js,css,html,ico,png,svg,woff2,json}'],
-    runtimeCaching: [
-      {
-        urlPattern: ({ url }) => url.hostname === 'api.open-meteo.com' || url.hostname === 'geocoding-api.open-meteo.com',
-        handler: 'NetworkFirst',
-        options: {
-          cacheName: 'weather-api',
-          networkTimeoutSeconds: 5,
-          expiration: {
-            maxEntries: 20,
-            maxAgeSeconds: 2 * 60 * 60 // 2h
+      workbox: {
+        importScripts: ['sw-widgets.js'],
+        globPatterns: ['**/*.{js,css,html,ico,png,svg,woff2,json}'],
+        runtimeCaching: [
+          {
+            urlPattern: ({ url }) => url.hostname === 'api.open-meteo.com' || url.hostname === 'geocoding-api.open-meteo.com',
+            handler: 'NetworkFirst',
+            options: {
+              cacheName: 'weather-api',
+              networkTimeoutSeconds: 5,
+              expiration: {
+                maxEntries: 20,
+                maxAgeSeconds: 2 * 60 * 60 // 2h
+              },
+              cacheableResponse: { statuses: [0, 200] }
+            }
           },
-          cacheableResponse: { statuses: [0, 200] }
-        }
-      },
-      {
-        urlPattern: ({ url }) => url.hostname === 'tilecache.rainviewer.com',
-        handler: 'CacheFirst',
-        options: {
-          cacheName: 'radar-tiles',
-          expiration: {
-            maxEntries: 150,
-            maxAgeSeconds: 60 * 60 * 24 * 7 // 7d
+          {
+            urlPattern: ({ url }) => url.hostname === 'tilecache.rainviewer.com',
+            handler: 'CacheFirst',
+            options: {
+              cacheName: 'radar-tiles',
+              expiration: {
+                maxEntries: 150,
+                maxAgeSeconds: 60 * 60 * 24 * 7 // 7d
+              },
+              cacheableResponse: { statuses: [0, 200] }
+            }
           },
-          cacheableResponse: { statuses: [0, 200] }
-        }
-      },
-      {
-        // Vector basemap: style JSON / sprite / glyph docs — small in count,
-        // want fresh copies so a style update on OpenFreeMap's end shows up.
-        urlPattern: ({ url }) => url.hostname === 'tiles.openfreemap.org' && /\/(styles|sprites|fonts)\//.test(url.pathname),
-        handler: 'NetworkFirst',
-        options: {
-          cacheName: 'map-style',
-          networkTimeoutSeconds: 3,
-          expiration: {
-            maxEntries: 30,
-            maxAgeSeconds: 60 * 60 * 24 // 1d
-          },
-          cacheableResponse: { statuses: [0, 200] }
-        }
-      },
-      {
-        // Actual vector tile data (planet pbf tiles) — far more distinct
-        // requests than the old raster setup since one basemap now covers
-        // both light/dark + every language, so a larger cache budget.
-        urlPattern: ({ url }) => url.hostname === 'tiles.openfreemap.org',
-        handler: 'CacheFirst',
-        options: {
-          cacheName: 'map-tiles',
-          expiration: {
-            maxEntries: 500,
-            maxAgeSeconds: 60 * 60 * 24 * 30 // 30d
-          },
-          cacheableResponse: { statuses: [0, 200] }
-        }
-      },
-      {
-        // Vector basemap label font (Noto Sans), loaded via @fontsource on
-        // jsdelivr by ol-mapbox-style — long-lived, immutable per version.
-        urlPattern: ({ url }) => url.hostname === 'cdn.jsdelivr.net',
-        handler: 'CacheFirst',
-        options: {
-          cacheName: 'map-fonts',
-          expiration: {
-            maxEntries: 60,
-            maxAgeSeconds: 60 * 60 * 24 * 365 // 1y
-          },
-          cacheableResponse: { statuses: [0, 200] }
-        }
-      },
-      {
-        urlPattern: ({ url }) => url.hostname === 'nominatim.openstreetmap.org',
-        handler: 'NetworkFirst',
-        options: {
-          cacheName: 'geocoding',
-          networkTimeoutSeconds: 3,
-          expiration: {
-            maxEntries: 50,
-            maxAgeSeconds: 1 * 60 * 60 // 1h
-          },
-          cacheableResponse: { statuses: [0, 200] }
-        }
+          {
+            // Vector basemap: style JSON / sprite / glyph docs — small in count,
+            // want fresh copies so a style update on OpenFreeMap's end shows up.
+            urlPattern: ({ url }) => url.hostname === 'tiles.openfreemap.org' && /\/(styles|sprites|fonts)\//.test(url.pathname),
+            handler: 'NetworkFirst',
+            options: {
+              cacheName: 'map-style',
+              networkTimeoutSeconds: 3,
+              expiration: {
+                maxEntries: 30,
+                maxAgeSeconds: 60 * 60 * 24 // 1d
+              },
+              cacheableResponse: { statuses: [0, 200] }
+            }
+          }
+        ]
       }
-    ],
-    navigateFallback: '/index.html',
-    navigateFallbackDenylist: [/\.(?:png|jpg|jpeg|svg|woff2|json)$/],
-    maximumFileSizeToCacheInBytes: 8 * 1024 * 1024
-  }
     })
-  ],
-  optimizeDeps: {
-    // Deep ol/* sub-path imports (ol/Map.js, ol/View.js, ...) get discovered
-    // and pre-bundled automatically from actual usage — except when a new
-    // one (like ol/interaction/defaults.js) is added to an already-running
-    // dev server: the on-demand optimizer can get stuck serving 503s for
-    // that one path indefinitely instead of self-healing, and only a dev
-    // server restart clears it. Listing it here makes Vite pre-bundle it on
-    // cold start like the others, so this can't happen for it again.
-    include: ['ol', 'ol-mapbox-style', 'localforage', 'dompurify', 'ol/interaction/defaults.js']
-  }
+  ]
+};
 });

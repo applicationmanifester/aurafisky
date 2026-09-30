@@ -60,6 +60,44 @@ import './modules/toast.js';
 import './src/icons.js';
 import { initFeatures } from './features/registry.js';
 
+const WEATHER_WALLPAPERS = {
+  clear_day: [
+    "https://images.unsplash.com/photo-1506744038136-46273834b3fb?auto=format&fit=crop&w=1920&q=80",
+    "https://images.unsplash.com/photo-1470240731273-7821a6eeb6bd?auto=format&fit=crop&w=1920&q=80",
+    "https://images.unsplash.com/photo-1507525428034-b723cf961d3e?auto=format&fit=crop&w=1920&q=80",
+  ],
+  clear_night: [
+    "https://images.unsplash.com/photo-1519681393784-d120267933ba?auto=format&fit=crop&w=1920&q=80",
+    "https://images.unsplash.com/photo-1509773896068-7fd415d91e2e?auto=format&fit=crop&w=1920&q=80",
+  ],
+  cloudy_day: [
+    "https://images.unsplash.com/photo-1534088568595-a066f410bcda?auto=format&fit=crop&w=1920&q=80",
+    "https://images.unsplash.com/photo-1499346030926-9a72daac6c63?auto=format&fit=crop&w=1920&q=80",
+  ],
+  cloudy_night: [
+    "https://images.unsplash.com/photo-1532978379173-523e16f371f2?auto=format&fit=crop&w=1920&q=80",
+    "https://images.unsplash.com/photo-1509114397022-ed747cca3f65?auto=format&fit=crop&w=1920&q=80",
+  ],
+  rain: [
+    "https://images.unsplash.com/photo-1515694346937-94d85e41e6f0?auto=format&fit=crop&w=1920&q=80",
+    "https://images.unsplash.com/photo-1534274988757-a28bf1a57c17?auto=format&fit=crop&w=1920&q=80",
+  ],
+  storm: [
+    "https://images.unsplash.com/photo-1605727216801-e27ce1d0cc28?auto=format&fit=crop&w=1920&q=80",
+    "https://images.unsplash.com/photo-1509114397022-ed747cca3f65?auto=format&fit=crop&w=1920&q=80",
+  ],
+  snow: [
+    "https://images.unsplash.com/photo-1483921020237-2ff51e8e4b22?auto=format&fit=crop&w=1920&q=80",
+    "https://images.unsplash.com/photo-1491002052546-bf38f186af56?auto=format&fit=crop&w=1920&q=80",
+    "https://images.unsplash.com/photo-1516431883659-655d41c09bf9?auto=format&fit=crop&w=1920&q=80",
+  ],
+  fog: [
+    "https://images.unsplash.com/photo-1487621167305-5d248087c724?auto=format&fit=crop&w=1920&q=80",
+    "https://images.unsplash.com/photo-1485236715568-ddc5ee6ca227?auto=format&fit=crop&w=1920&q=80",
+    "https://images.unsplash.com/photo-1542601906990-b4d3fb778b09?auto=format&fit=crop&w=1920&q=80",
+  ],
+};
+
 class AurafiskyApp {
   // Helper to set innerHTML safely using DOMPurify
   setSafeHTML(el, html) {
@@ -77,11 +115,8 @@ class AurafiskyApp {
       appId: "1:206842187982:web:994268ad1fa6290b45409f",
       storageBucket: "aurafisky.firebasestorage.app",
       // Injected at build time from VITE_FIREBASE_API_KEY (see vite.config.js
-      // `define` + .env.example) with valid aurafisky default fallback.
-      apiKey:
-        typeof __FIREBASE_API_KEY__ !== "undefined" && __FIREBASE_API_KEY__
-          ? __FIREBASE_API_KEY__
-          : "AIzaSyCF0fSv5OUy05AnYZot4Y9Y07TnJjjNl1I",
+      // `define` + .env.example)
+      apiKey: (typeof __FIREBASE_API_KEY__ !== "undefined" && __FIREBASE_API_KEY__) ? __FIREBASE_API_KEY__ : "",
       authDomain: "aurafisky.firebaseapp.com",
       messagingSenderId: "206842187982",
       // Web Push VAPID key from Firebase Console → Project Settings → Cloud Messaging.
@@ -110,6 +145,7 @@ class AurafiskyApp {
     this.selectedLat = null; // Last selected latitude
     this.selectedLng = null; // Last selected longitude
     this.selectedName = ""; // Last selected location name
+    this._pendingLocation = null; // Location requested while a fetch was in flight
 
     // UI States
     this.isDark = false; // Dark mode state
@@ -196,6 +232,45 @@ class AurafiskyApp {
 
     // Bookmark alert polling timer
     this._alertPollTimer = null;
+
+    // ── Wallpaper State ──────────────────────────────────────────
+    // Support multiple wallpaper locations (max 3)
+    this.wallpaperLocations = []; // Array of { lat, lng, name, id, addedAt }
+    this.activeWallpaperIndex = 0; // Which wallpaper is currently displayed
+    this.wallpaperTimer = null; // Auto-refresh timer (5 min)
+    this.wallpaperRefreshInterval = 300000; // 5 minutes in ms
+    this.isWallpaperMode = false; // Whether wallpaper overlay is visible
+    this.wallpaperAutoRotateTimer = null; // Auto-rotate timer
+    this.wallpaperAutoRotateInterval = 300000; // 5 minutes default
+    this.wallpaperAutoRotateEnabled = false;
+    this.wallpaperLastUpdated = null; // Timestamp of last successful refresh
+    this.wallpaperWeatherData = null; // Cached weather for active wallpaper
+    this.wallpaperAirQualityData = null; // Cached air quality for active wallpaper
+    this.wallpaperCurrentHourIndex = 0; // Current hour index for active wallpaper
+    this.wallpaperTouchStartY = 0; // For swipe-to-close
+    this.wallpaperTouchActive = false; // For swipe-to-close
+    this.wallpaperReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    this.wallpaperHighContrast = false;
+    this.wallpaperBgAnimationId = null; // Background canvas animation frame
+    this.wallpaperBgParticles = null; // Background weather particles
+    this.wallpaperNotificationThresholds = {
+      rain: true,
+      tempDrop: 5, // degrees C
+      uvHigh: 7,
+      windHigh: 40, // km/h
+    };
+    this.wallpaperNotificationSent = new Set(); // Track sent notifications to avoid spam
+    this.wallpaperWakeLock = null; // Wake Lock API sentinel
+    this.wallpaperWakeLockEnabled = false;
+    this.wallpaperFullscreenActive = false;
+    this.wallpaperSoundEnabled = false; // Ambient soundscape in wallpaper mode
+    this.wallpaperPhotoEnabled = true; // Scenic photo background (enabled by default with silky transitions)
+    this._activePhotoLayer = "A"; // Active cross-fade photo layer ("A" or "B")
+    this._currentWallpaperUrl = ""; // Current wallpaper URL to prevent redundant transitions
+    this.wallpaperBrandEnabled = false; // Aurafisky brand wallpaper background
+    this.wallpaperGeofenceEnabled = false; // Geofence triggers
+    this._wallpaperGeofenceWatchId = null;
+    this.wallpaperSoundWasPlayingBefore = false; // Track app soundscape state before wallpaper
 
     // Toast dedup tracking (UI #16)
 
@@ -407,6 +482,9 @@ class AurafiskyApp {
       shareTargetX: document.getElementById("shareTargetX"),
       shareTargetCopy: document.getElementById("shareTargetCopy"),
       panelMinimizeBtn: document.getElementById("panelMinimizeBtn"),
+      setWallpaperBtn: document.getElementById("setWallpaperBtn"),
+      wallpaperOutlineIcon: document.getElementById("wallpaperOutlineIcon"),
+      wallpaperFilledIcon: document.getElementById("wallpaperFilledIcon"),
       hourlyTabContent: document.getElementById("hourlyTabContent"),
 
       hourlyStrip: document.getElementById("hourlyStrip"),
@@ -443,6 +521,123 @@ class AurafiskyApp {
       regimeLabel: document.getElementById("regimeLabel"),
       spatialGradLabel: document.getElementById("spatialGradLabel"),
       analogLabel: document.getElementById("analogLabel"),
+
+      // Wallpaper Overlay Elements
+      wallpaperOverlay: document.getElementById("wallpaperOverlay"),
+      wallpaperCloseBtn: document.getElementById("wallpaperCloseBtn"),
+      wallpaperLocationName: document.getElementById("wallpaperLocationName"),
+      wallpaperCoordinates: document.getElementById("wallpaperCoordinates"),
+      wallpaperTimeLabel: document.getElementById("wallpaperTimeLabel"),
+      wallpaperIcon: document.getElementById("wallpaperIcon"),
+      wallpaperTemp: document.getElementById("wallpaperTemp"),
+      wallpaperDescription: document.getElementById("wallpaperDescription"),
+      wallpaperFeelsLike: document.getElementById("wallpaperFeelsLike"),
+      wallpaperHumidity: document.getElementById("wallpaperHumidity"),
+      wallpaperWind: document.getElementById("wallpaperWind"),
+      wallpaperPressure: document.getElementById("wallpaperPressure"),
+      wallpaperClouds: document.getElementById("wallpaperClouds"),
+      wallpaperUV: document.getElementById("wallpaperUV"),
+      wallpaperPrecip: document.getElementById("wallpaperPrecip"),
+      wallpaperDewPoint: document.getElementById("wallpaperDewPoint"),
+      wallpaperWindGusts: document.getElementById("wallpaperWindGusts"),
+      wallpaperVisibility: document.getElementById("wallpaperVisibility"),
+      wallpaperAQI: document.getElementById("wallpaperAQI"),
+      wallpaperAQIBadge: document.getElementById("wallpaperAQIBadge"),
+      wallpaperAQIMetrics: document.getElementById("wallpaperAQIMetrics"),
+      wallpaperComfortScore: document.getElementById("wallpaperComfortScore"),
+      wallpaperComfortLabel: document.getElementById("wallpaperComfortLabel"),
+      wallpaperSunArc: document.getElementById("wallpaperSunArc"),
+      wallpaperSunArcPassed: document.getElementById("wallpaperSunArcPassed"),
+      wallpaperSunArcDot: document.getElementById("wallpaperSunArcDot"),
+      wallpaperSunSunrise: document.getElementById("wallpaperSunSunrise"),
+      wallpaperSunSunset: document.getElementById("wallpaperSunSunset"),
+      wallpaperSunDayLength: document.getElementById("wallpaperSunDayLength"),
+      wallpaperMoonPhase: document.getElementById("wallpaperMoonPhase"),
+      wallpaperMoonLitPath: document.getElementById("wallpaperMoonLitPath"),
+      wallpaperMoonPhaseLabel: document.getElementById("wallpaperMoonPhaseLabel"),
+      wallpaperMoonPhasePercent: document.getElementById("wallpaperMoonPhasePercent"),
+      wallpaperStargazing: document.getElementById("wallpaperStargazing"),
+      wallpaperStargazingLabel: document.getElementById("wallpaperStargazingLabel"),
+      wallpaperLastUpdated: document.getElementById("wallpaperLastUpdated"),
+      wallpaperRefreshBtn: document.getElementById("wallpaperRefreshBtn"),
+      wallpaperPrecipNextRain: document.getElementById("wallpaperPrecipNextRain"),
+      wallpaperPrecipTimelineLabels: document.getElementById("wallpaperPrecipTimelineLabels"),
+      wallpaperInlineAlert: document.getElementById("wallpaperInlineAlert"),
+      wallpaperInlineAlertTitle: document.getElementById("wallpaperInlineAlertTitle"),
+      wallpaperInlineAlertDesc: document.getElementById("wallpaperInlineAlertDesc"),
+      wallpaperNoRainMsg: document.getElementById("wallpaperNoRainMsg"),
+      // Hero enhancement elements
+      wallpaperHighTemp: document.getElementById("wallpaperHighTemp"),
+      wallpaperLowTemp: document.getElementById("wallpaperLowTemp"),
+      wallpaperHeroSunrise: document.getElementById("wallpaperHeroSunrise"),
+      wallpaperHeroSunset: document.getElementById("wallpaperHeroSunset"),
+      wallpaperTrendDelta: document.getElementById("wallpaperTrendDelta"),
+      wallpaperTrendSvg: document.getElementById("wallpaperTrendSvg"),
+      wallpaperTrendLine: document.getElementById("wallpaperTrendLine"),
+      wallpaperTrendArea: document.getElementById("wallpaperTrendArea"),
+      // Forecast strips
+      wallpaperDailySection: document.getElementById("wallpaperDailySection"),
+      wallpaperDailyStrip: document.getElementById("wallpaperDailyStrip"),
+      wallpaperHourlySection: document.getElementById("wallpaperHourlySection"),
+      wallpaperHourlyStrip: document.getElementById("wallpaperHourlyStrip"),
+      // Settings panel
+      wallpaperSettingsPanel: document.getElementById("wallpaperSettingsPanel"),
+      wallpaperSettingsCloseBtn: document.getElementById("wallpaperSettingsCloseBtn"),
+      wallpaperRefreshIntervalSelect: document.getElementById("wallpaperRefreshIntervalSelect"),
+      wallpaperAutoRotateToggle: document.getElementById("wallpaperAutoRotateToggle"),
+      wallpaperRotateIntervalSelect: document.getElementById("wallpaperRotateIntervalSelect"),
+      wallpaperSoundToggle: document.getElementById("wallpaperSoundToggle"),
+      wallpaperNotifyRain: document.getElementById("wallpaperNotifyRain"),
+      wallpaperNotifyTempDrop: document.getElementById("wallpaperNotifyTempDrop"),
+      wallpaperNotifyUV: document.getElementById("wallpaperNotifyUV"),
+      wallpaperNotifyWind: document.getElementById("wallpaperNotifyWind"),
+      wallpaperHCSetting: document.getElementById("wallpaperHCSetting"),
+      wallpaperBrandToggle: document.getElementById("wallpaperBrandToggle"),
+      wallpaperPhotoToggle: document.getElementById("wallpaperPhotoToggle"),
+      wallpaperPersistToggle: document.getElementById("wallpaperPersistToggle"),
+      wallpaperWakeLockToggle: document.getElementById("wallpaperWakeLockToggle"),
+      wallpaperGeofenceToggle: document.getElementById("wallpaperGeofenceToggle"),
+      // Immersive features
+      wallpaperFullscreenBtn: document.getElementById("wallpaperFullscreenBtn"),
+      wallpaperFullscreenIcon: document.getElementById("wallpaperFullscreenIcon"),
+      wallpaperExportBtn: document.getElementById("wallpaperExportBtn"),
+      wallpaperPhotoBg: document.getElementById("wallpaperPhotoBg"),
+      wallpaperPhotoA: document.getElementById("wallpaperPhotoA"),
+      wallpaperPhotoB: document.getElementById("wallpaperPhotoB"),
+      panelWeatherBg: document.getElementById("panelWeatherBg"),
+      wallpaperBrandBg: document.getElementById("wallpaperBrandBg"),
+      // Mini radar
+      wallpaperRadarSection: document.getElementById("wallpaperRadarSection"),
+      wallpaperRadarBaseMap: document.getElementById("wallpaperRadarBaseMap"),
+      wallpaperRadarImage: document.getElementById("wallpaperRadarImage"),
+      wallpaperRadarDot: document.getElementById("wallpaperRadarDot"),
+      wallpaperRadarTime: document.getElementById("wallpaperRadarTime"),
+      wallpaperRadarLoading: document.getElementById("wallpaperRadarLoading"),
+      // New Wallpaper Enhancement Elements
+      wallpaperTabs: document.getElementById("wallpaperTabs"),
+      wallpaperTabContainer: document.getElementById("wallpaperTabContainer"),
+      wallpaperAddTabBtn: document.getElementById("wallpaperAddTabBtn"),
+      wallpaperAddTabModal: document.getElementById("wallpaperAddTabModal"),
+      wallpaperAddTabModalClose: document.getElementById("wallpaperAddTabModalClose"),
+      wallpaperTabSearchInput: document.getElementById("wallpaperTabSearchInput"),
+      wallpaperTabSearchClear: document.getElementById("wallpaperTabSearchClear"),
+      wallpaperTabSearchResults: document.getElementById("wallpaperTabSearchResults"),
+      wallpaperPopularCities: document.getElementById("wallpaperPopularCities"),
+      wallpaperSavedBookmarksSection: document.getElementById("wallpaperSavedBookmarksSection"),
+      wallpaperSavedBookmarks: document.getElementById("wallpaperSavedBookmarks"),
+      wallpaperAlertBanner: document.getElementById("wallpaperAlertBanner"),
+      wallpaperAlertText: document.getElementById("wallpaperAlertText"),
+      wallpaperAlertDismiss: document.getElementById("wallpaperAlertDismiss"),
+      wallpaperPrecipTimeline: document.getElementById("wallpaperPrecipTimeline"),
+      wallpaperPrecipTimelineSvg: document.getElementById("wallpaperPrecipTimelineSvg"),
+      wallpaperOfflineIndicator: document.getElementById("wallpaperOfflineIndicator"),
+      wallpaperAutoRotateBtn: document.getElementById("wallpaperAutoRotateBtn"),
+      wallpaperAutoRotateIcon: document.getElementById("wallpaperAutoRotateIcon"),
+      wallpaperSettingsBtn: document.getElementById("wallpaperSettingsBtn"),
+      wallpaperShareBtn: document.getElementById("wallpaperShareBtn"),
+      wallpaperHighContrastBtn: document.getElementById("wallpaperHighContrastBtn"),
+      wallpaperBgCanvas: document.getElementById("wallpaperBgCanvas"),
+      wallpaperFirstOpenHint: document.getElementById("wallpaperFirstOpenHint"),
 
       // Auth & Settings Dialogs
       profileBtn: document.getElementById("profileBtn"),
@@ -537,6 +732,26 @@ class AurafiskyApp {
         if (this.cancelNavigation && this.$.navPanel && !this.$.navPanel.classList.contains("hidden")) {
           this.cancelNavigation();
         }
+        if (this.isWallpaperMode) {
+          // Settings drawer closes first, then the overlay (keeps the tabs)
+          this.hideWallpaperSettings();
+          this.hideWallpaperOverlay();
+          this.isWallpaperMode = false;
+          this.stopWallpaperAutoRotate();
+          this.updateWallpaperButtonUI();
+        } else if (this.$.wallpaperSettingsPanel && !this.$.wallpaperSettingsPanel.classList.contains("hidden")) {
+          this.hideWallpaperSettings();
+        }
+      }
+      // Arrow keys switch wallpaper tabs while the overlay is open
+      if (this.isWallpaperMode && this.wallpaperLocations.length > 1) {
+        if (e.key === "ArrowRight") {
+          e.preventDefault();
+          this.switchWallpaperTab((this.activeWallpaperIndex + 1) % this.wallpaperLocations.length);
+        } else if (e.key === "ArrowLeft") {
+          e.preventDefault();
+          this.switchWallpaperTab((this.activeWallpaperIndex - 1 + this.wallpaperLocations.length) % this.wallpaperLocations.length);
+        }
       }
       if ((e.key === "Enter" || e.key === " ") && e.target && e.target.getAttribute("role") === "button") {
         e.preventDefault();
@@ -594,6 +809,17 @@ class AurafiskyApp {
 
     // Load initial startup location (shared URL link first, then restored session, home, or geolocation)
     this._loadInitialStartupLocation();
+
+    // Restore persisted wallpaper (opt-in) after the initial location loads,
+    // so the wallpaper tabs are ready even before the user touches anything.
+    if (this.restoreWallpaperFromStorage()) {
+      setTimeout(() => {
+        this.showWallpaperOverlay();
+        this.loadWallpaperDataForActiveTab();
+        this.startWallpaperAutoRefresh();
+        this.updateWallpaperButtonUI();
+      }, 2000);
+    }
   }
 
   /**
@@ -790,6 +1016,7 @@ class AurafiskyApp {
           center: fromLonLat([0.0, 20.0]),
           zoom: 3,
           minZoom: 2,
+          maxZoom: 18,
           extent: [-Infinity, minLat, Infinity, maxLat],
           // Constrain the whole viewport to the extent, not just the center.
           // Web Mercator ends at ~±85° — past that there is no map to draw,
@@ -825,21 +1052,42 @@ class AurafiskyApp {
       this.darkBasemap = new LayerGroup();
 
       // Satellite basemap: High-resolution Esri World Imagery + Reference Boundaries & Places
+      // maxZoom is set to 18 so OpenLayers oversamples high-res imagery instead of requesting
+      // level 19+ tiles from Esri which lack global coverage and serve "Map data not yet available" placeholders.
       this.satelliteBasemap = new LayerGroup({
         layers: [
           new TileLayer({
             source: new XYZ({
               url: "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
-              maxZoom: 19,
+              maxZoom: 18,
               crossOrigin: "anonymous",
-              attributions: "Tiles &copy; Esri &mdash; Source: Esri, Maxar, Earthstar Geographics, and the GIS User Community"
+              attributions: "Tiles &copy; Esri &mdash; Source: Esri, Maxar, Earthstar Geographics, and the GIS User Community",
+              tileLoadFunction: (tile, src) => {
+                fetch(src)
+                  .then((res) => {
+                    if (!res.ok) throw new Error("Tile fetch failed");
+                    return res.blob();
+                  })
+                  .then((blob) => {
+                    // Esri serves a ~2521 byte dummy tile with "Map data not yet available"
+                    // when coverage is absent at extreme zooms. Intercept and replace with transparent pixel.
+                    if (blob.size <= 3200 && blob.type.includes("jpeg")) {
+                      tile.getImage().src = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=";
+                    } else {
+                      tile.getImage().src = URL.createObjectURL(blob);
+                    }
+                  })
+                  .catch(() => {
+                    tile.getImage().src = src;
+                  });
+              }
             }),
             preload: 1
           }),
           new TileLayer({
             source: new XYZ({
               url: "https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}",
-              maxZoom: 19,
+              maxZoom: 18,
               crossOrigin: "anonymous"
             }),
             opacity: 0.95,
@@ -854,7 +1102,7 @@ class AurafiskyApp {
           new TileLayer({
             source: new XYZ({
               url: "https://server.arcgisonline.com/ArcGIS/rest/services/World_Topo_Map/MapServer/tile/{z}/{y}/{x}",
-              maxZoom: 19,
+              maxZoom: 18,
               crossOrigin: "anonymous",
               attributions: "Tiles &copy; Esri &mdash; Esri, DeLorme, NAVTEQ, TomTom, Intermap, USGS, FAO, NPS, NRCAN"
             }),
@@ -1132,6 +1380,319 @@ class AurafiskyApp {
     this.$.favoriteToggleBtn.addEventListener("click", () => {
       this.toggleFavoriteCurrentLocation();
       this._haptic('light');
+    });
+    this.$.setWallpaperBtn?.addEventListener("click", () => {
+      this.toggleWallpaper();
+      this._haptic('light');
+    });
+
+    // ── Wallpaper Overlay Controls ──────────────────────────────
+    this.$.wallpaperCloseBtn?.addEventListener("click", () => {
+      // Hide the overlay but keep the tabs — re-openable via the wallpaper
+      // button or the W key. Only removing tabs (×) deletes the setup.
+      this.hideWallpaperOverlay();
+      this.isWallpaperMode = false;
+      this.stopWallpaperAutoRotate();
+      this.updateWallpaperButtonUI();
+      this._haptic('selection');
+    });
+    this.$.wallpaperRefreshBtn?.addEventListener("click", () => {
+      this.loadWallpaperDataForActiveTab();
+      this._haptic('selection');
+    });
+    this.$.wallpaperAddTabBtn?.addEventListener("click", () => {
+      this.openWallpaperAddTabModal();
+      this._haptic('light');
+    });
+
+    this.$.wallpaperAddTabModalClose?.addEventListener("click", () => {
+      this.closeWallpaperAddTabModal();
+    });
+
+    this.$.wallpaperAddTabModal?.addEventListener("click", (e) => {
+      if (e.target === this.$.wallpaperAddTabModal) {
+        this.closeWallpaperAddTabModal();
+      }
+    });
+
+    document.addEventListener("keydown", (e) => {
+      if (e.key === "Escape" && this.$.wallpaperAddTabModal && !this.$.wallpaperAddTabModal.classList.contains("hidden")) {
+        this.closeWallpaperAddTabModal();
+      }
+    });
+
+    // Popular city presets click delegation
+    this.$.wallpaperPopularCities?.addEventListener("click", (e) => {
+      const chip = e.target.closest(".popular-city-chip");
+      if (!chip) return;
+      const lat = parseFloat(chip.dataset.lat);
+      const lng = parseFloat(chip.dataset.lng);
+      const name = chip.dataset.name;
+      if (!isNaN(lat) && !isNaN(lng)) {
+        this.addWallpaperTab(lat, lng, name);
+        this.closeWallpaperAddTabModal();
+        this._haptic('success');
+      }
+    });
+
+    // Live search input in add-tab modal
+    let tabSearchDebounce = null;
+    this.$.wallpaperTabSearchInput?.addEventListener("input", (e) => {
+      const val = (e.target.value || "").trim();
+      if (this.$.wallpaperTabSearchClear) {
+        this.$.wallpaperTabSearchClear.classList.toggle("hidden", !val);
+      }
+      if (tabSearchDebounce) clearTimeout(tabSearchDebounce);
+
+      if (!val) {
+        if (this.$.wallpaperTabSearchResults) {
+          this.$.wallpaperTabSearchResults.innerHTML = "";
+          this.$.wallpaperTabSearchResults.classList.add("hidden");
+        }
+        return;
+      }
+
+      tabSearchDebounce = setTimeout(async () => {
+        try {
+          const results = await WeatherService.searchLocations(val);
+          if (!this.$.wallpaperTabSearchResults) return;
+          this.$.wallpaperTabSearchResults.innerHTML = "";
+          if (results && results.length > 0) {
+            this.$.wallpaperTabSearchResults.classList.remove("hidden");
+            results.slice(0, 5).forEach((loc) => {
+              const itemBtn = document.createElement("button");
+              itemBtn.type = "button";
+              itemBtn.className = "w-full text-left px-3 py-2 rounded-lg bg-white/5 hover:bg-white/15 text-slate-200 hover:text-white transition-colors flex items-center justify-between gap-2 cursor-pointer border border-white/5";
+              const dispName = loc.displayName || loc.name;
+              itemBtn.innerHTML = `<span class="truncate font-medium text-xs">${dispName}</span><span class="text-[10px] text-slate-400 font-mono flex-shrink-0">${loc.latitude.toFixed(2)}°, ${loc.longitude.toFixed(2)}°</span>`;
+              itemBtn.addEventListener("click", () => {
+                this.addWallpaperTab(loc.latitude, loc.longitude, dispName);
+                this.closeWallpaperAddTabModal();
+                this._haptic('success');
+              });
+              this.$.wallpaperTabSearchResults.appendChild(itemBtn);
+            });
+          } else {
+            this.$.wallpaperTabSearchResults.classList.remove("hidden");
+            this.$.wallpaperTabSearchResults.innerHTML = '<div class="text-xs text-slate-400 px-3 py-2">No matching locations found.</div>';
+          }
+        } catch (_) {}
+      }, 250);
+    });
+
+    this.$.wallpaperTabSearchClear?.addEventListener("click", () => {
+      if (this.$.wallpaperTabSearchInput) {
+        this.$.wallpaperTabSearchInput.value = "";
+        this.$.wallpaperTabSearchInput.focus();
+      }
+      this.$.wallpaperTabSearchClear?.classList.add("hidden");
+      if (this.$.wallpaperTabSearchResults) {
+        this.$.wallpaperTabSearchResults.innerHTML = "";
+        this.$.wallpaperTabSearchResults.classList.add("hidden");
+      }
+    });
+    document.getElementById("wallpaperBrandLogo")?.addEventListener("click", (e) => {
+      e.preventDefault();
+      this.wallpaperBrandEnabled = !this.wallpaperBrandEnabled;
+      if (this.wallpaperBrandEnabled) {
+        this.showWallpaperBrandBg();
+        if (this.$.wallpaperPhotoToggle) this.$.wallpaperPhotoToggle.checked = false;
+        this.hideWallpaperPhotoBg();
+        this.showToast("Aurafisky brand wallpaper enabled ✨", "success");
+      } else {
+        this.hideWallpaperBrandBg();
+        this.showToast("Default dynamic background restored", "info");
+      }
+      if (this.$.wallpaperBrandToggle) this.$.wallpaperBrandToggle.checked = this.wallpaperBrandEnabled;
+      if (this.wallpaperPersistEnabled) this.saveWallpaperToStorage();
+      this._haptic('selection');
+    });
+    this.$.wallpaperAutoRotateBtn?.addEventListener("click", () => {
+      this.toggleWallpaperAutoRotate();
+      this._haptic('selection');
+    });
+    this.$.wallpaperHighContrastBtn?.addEventListener("click", () => {
+      this.toggleWallpaperHighContrast();
+      this._haptic('selection');
+    });
+    this.$.wallpaperShareBtn?.addEventListener("click", () => {
+      this.shareWallpaper();
+      this._haptic('light');
+    });
+    this.$.wallpaperSettingsBtn?.addEventListener("click", () => {
+      this.showWallpaperSettings();
+      this._haptic('selection');
+    });
+    this.$.wallpaperAlertDismiss?.addEventListener("click", () => {
+      this.dismissWallpaperAlert();
+      this._haptic('light');
+    });
+    this.$.wallpaperFullscreenBtn?.addEventListener("click", () => {
+      this.toggleWallpaperFullscreen();
+      this._haptic('selection');
+    });
+    this.$.wallpaperExportBtn?.addEventListener("click", () => {
+      this.exportWallpaperImage();
+      this._haptic('medium');
+    });
+    this.$.wallpaperSettingsCloseBtn?.addEventListener("click", () => {
+      this.hideWallpaperSettings();
+      this._haptic('selection');
+    });
+
+    // Settings panel controls
+    this.$.wallpaperRefreshIntervalSelect?.addEventListener("change", (e) => {
+      this.wallpaperRefreshInterval = parseInt(e.target.value, 10) || 300000;
+      if (this.isWallpaperMode) this.startWallpaperAutoRefresh();
+      this._haptic('selection');
+    });
+    this.$.wallpaperAutoRotateToggle?.addEventListener("change", (e) => {
+      this.wallpaperAutoRotateEnabled = e.target.checked;
+      if (this.wallpaperAutoRotateEnabled) {
+        this.startWallpaperAutoRotate();
+        this.showToast("Auto-rotate enabled", "success");
+      } else {
+        this.stopWallpaperAutoRotate();
+        this.showToast("Auto-rotate disabled", "info");
+      }
+      this.updateAutoRotateButtonUI();
+      this._haptic('selection');
+    });
+    this.$.wallpaperRotateIntervalSelect?.addEventListener("change", (e) => {
+      this.wallpaperAutoRotateInterval = parseInt(e.target.value, 10) || 300000;
+      if (this.wallpaperAutoRotateEnabled) this.startWallpaperAutoRotate();
+      this._haptic('selection');
+    });
+    this.$.wallpaperSoundToggle?.addEventListener("change", (e) => {
+      this.setWallpaperSoundscape(e.target.checked);
+      this._haptic('selection');
+    });
+    this.$.wallpaperNotifyRain?.addEventListener("change", (e) => {
+      this.wallpaperNotificationThresholds.rain = e.target.checked;
+      this._haptic('selection');
+    });
+    this.$.wallpaperNotifyTempDrop?.addEventListener("change", () => {
+      this.wallpaperNotificationThresholds.tempDrop = parseInt(this.$.wallpaperNotifyTempDrop.value, 10) || 5;
+      this._haptic('selection');
+    });
+    this.$.wallpaperNotifyUV?.addEventListener("change", () => {
+      this.wallpaperNotificationThresholds.uvHigh = parseInt(this.$.wallpaperNotifyUV.value, 10) || 7;
+      this._haptic('selection');
+    });
+    this.$.wallpaperNotifyWind?.addEventListener("change", () => {
+      this.wallpaperNotificationThresholds.windHigh = parseInt(this.$.wallpaperNotifyWind.value, 10) || 40;
+      this._haptic('selection');
+    });
+    this.$.wallpaperHCSetting?.addEventListener("change", (e) => {
+      if (this.wallpaperHighContrast !== e.target.checked) this.toggleWallpaperHighContrast();
+      this._haptic('selection');
+    });
+    this.$.wallpaperBrandToggle?.addEventListener("change", (e) => {
+      this.wallpaperBrandEnabled = e.target.checked;
+      if (this.wallpaperBrandEnabled) {
+        this.showWallpaperBrandBg();
+        if (this.$.wallpaperPhotoToggle) this.$.wallpaperPhotoToggle.checked = false;
+        this.hideWallpaperPhotoBg();
+        this.showToast("Aurafisky brand wallpaper enabled", "success");
+      } else {
+        this.hideWallpaperBrandBg();
+        this.showToast("Brand wallpaper disabled", "info");
+      }
+      if (this.wallpaperPersistEnabled) this.saveWallpaperToStorage();
+      this._haptic('selection');
+    });
+    this.$.wallpaperPhotoToggle?.addEventListener("change", (e) => {
+      this.wallpaperPhotoEnabled = e.target.checked;
+      if (this.wallpaperPhotoEnabled) {
+        this.showWallpaperPhotoBg();
+        this.showToast("Scenic photo background enabled", "success");
+      } else {
+        this.hideWallpaperPhotoBg();
+        this.showToast("Photo background disabled", "info");
+      }
+      this._haptic('selection');
+    });
+    this.$.wallpaperPersistToggle?.addEventListener("change", (e) => {
+      this.wallpaperPersistEnabled = e.target.checked;
+      if (this.wallpaperPersistEnabled) {
+        this.saveWallpaperToStorage();
+        this.showToast("Wallpaper will be remembered on reload", "success");
+      } else {
+        this.clearWallpaperStorage();
+        this.showToast("Wallpaper persistence disabled", "info");
+      }
+      this._haptic('selection');
+    });
+    this.$.wallpaperWakeLockToggle?.addEventListener("change", (e) => {
+      this.wallpaperWakeLockEnabled = e.target.checked;
+      if (this.wallpaperWakeLockEnabled && this.isWallpaperMode) {
+        this.requestWallpaperWakeLock();
+      } else {
+        this.releaseWallpaperWakeLock();
+      }
+      this._haptic('selection');
+    });
+    this.$.wallpaperGeofenceToggle?.addEventListener("change", (e) => {
+      if (this.wallpaperGeofenceEnabled !== e.target.checked) this.toggleWallpaperGeofence();
+      this._haptic('selection');
+    });
+
+    // Track fullscreen changes (user can also exit via F11/Esc)
+    document.addEventListener("fullscreenchange", () => {
+      this.wallpaperFullscreenActive = !!document.fullscreenElement;
+      this.updateFullscreenButtonUI();
+    });
+
+
+    // Touch events for swipe-to-close
+    this.$.wallpaperOverlay?.addEventListener("touchstart", (e) => {
+      if (e.touches.length === 1) {
+        this.wallpaperTouchStartY = e.touches[0].clientY;
+        this.wallpaperTouchActive = true;
+      }
+    }, { passive: true });
+
+    this.$.wallpaperOverlay?.addEventListener("touchmove", (e) => {
+      if (!this.wallpaperTouchActive || e.touches.length !== 1) return;
+      const dy = e.touches[0].clientY - this.wallpaperTouchStartY;
+      if (dy > 0) {
+        e.preventDefault();
+        this.$.wallpaperOverlay.style.transform = `translateY(${dy}px)`;
+        this.$.wallpaperOverlay.style.transition = "none";
+      }
+    }, { passive: false });
+
+    this.$.wallpaperOverlay?.addEventListener("touchend", (e) => {
+      if (!this.wallpaperTouchActive) return;
+      const dy = e.changedTouches[0].clientY - this.wallpaperTouchStartY;
+      this.wallpaperTouchActive = false;
+      this.$.wallpaperOverlay.style.transition = "";
+      if (dy > 100) {
+        // Swipe-down hides the overlay but keeps the tabs
+        this.hideWallpaperOverlay();
+        this.isWallpaperMode = false;
+        this.stopWallpaperAutoRotate();
+        this.updateWallpaperButtonUI();
+      } else {
+        this.$.wallpaperOverlay.style.transform = "";
+      }
+    }, { passive: true });
+
+    // Tab click delegation — check close FIRST: the close button lives inside
+    // a tab element, so closest() matches both and the order decides behavior.
+    this.$.wallpaperTabContainer?.addEventListener("click", (e) => {
+      const closeBtn = e.target.closest('[data-wallpaper-close]');
+      if (closeBtn) {
+        e.stopPropagation();
+        const index = parseInt(closeBtn.dataset.wallpaperClose, 10);
+        this.removeWallpaperTab(index);
+        return;
+      }
+      const tab = e.target.closest('[data-wallpaper-tab]');
+      if (tab) {
+        const index = parseInt(tab.dataset.wallpaperTab, 10);
+        this.switchWallpaperTab(index);
+      }
     });
 
     // ── Map Controls ──────────────────────────────────────────
@@ -1786,6 +2347,20 @@ class AurafiskyApp {
       if (stale && this.selectedLat != null && !this._isFetching && !this.isOffline) {
         this.selectLocation(this.selectedLat, this.selectedLng, this.selectedName);
       }
+      // Refresh wallpaper data if stale and wallpaper mode is active
+      if (this.isWallpaperMode && this.wallpaperLocations.length > 0) {
+        const wallpaperStale =
+          !this.wallpaperLastUpdated ||
+          Date.now() - this.wallpaperLastUpdated > this.wallpaperRefreshInterval;
+        if (wallpaperStale && !this.isOffline) {
+          this.loadWallpaperDataForActiveTab();
+        } else if (this.isWallpaperMode) {
+          // Restart background animation if it stopped while hidden
+          this.startWallpaperBgAnimation();
+          // Update relative time label
+          this.updateWallpaperRelativeTime();
+        }
+      }
     };
     document.addEventListener("visibilitychange", this._boundRefocus);
     window.addEventListener("focus", this._boundRefocus);
@@ -2150,6 +2725,7 @@ class AurafiskyApp {
       const latStr = params.get("lat");
       const lngStr = params.get("lng");
       const nameStr = params.get("name");
+      const wallpaperStr = params.get("wallpaper");
 
       if (latStr != null && lngStr != null) {
         const lat = parseFloat(latStr);
@@ -2157,6 +2733,12 @@ class AurafiskyApp {
         if (!isNaN(lat) && !isNaN(lng) && lat >= -90 && lat <= 90 && lng >= -180 && lng <= 180) {
           const name = nameStr ? decodeURIComponent(nameStr) : `${lat.toFixed(4)}, ${lng.toFixed(4)}`;
           this.selectLocation(lat, lng, name);
+          // Shared wallpaper link: open the wallpaper overlay for this location
+          if (wallpaperStr === "true") {
+            setTimeout(() => {
+              this.addWallpaperTab(lat, lng, name);
+            }, 1500); // Wait for weather data to load first
+          }
           return true;
         }
       }
@@ -2373,7 +2955,14 @@ class AurafiskyApp {
     if (lat == null || lng == null || isNaN(lat) || isNaN(lng)) {
       return;
     }
-    if (this._isFetching) return;
+    // While a fetch is in flight, don't drop the request — remember the
+    // LATEST requested location and run it once the current fetch settles.
+    // Rapid switching (tap A → quickly tap B) used to lose B entirely: the
+    // guard returned silently, so the user had to tap a third time.
+    if (this._isFetching) {
+      this._pendingLocation = { lat, lng, name };
+      return;
+    }
     this._isFetching = true;
     try {
       this._persistSession(lat, lng, name);
@@ -2399,7 +2988,7 @@ class AurafiskyApp {
 
       this.map.updateSize();
       const view = this.map.getView();
-      const targetZoom = Math.max(view.getZoom(), 9);
+      const targetZoom = Math.min(Math.max(view.getZoom(), 9), 17);
       view.animate({ center: fromLonLat([lng, viewCenterLat]), zoom: targetZoom });
 
       // Refresh UI panel state
@@ -2569,10 +3158,17 @@ class AurafiskyApp {
 
       this.updateHomeButton();
       this.updateHomeMarker();
+      this.updateWallpaperButtonUI();
 
 
     } finally {
       this._isFetching = false;
+      // Run the latest location requested while this fetch was in flight
+      if (this._pendingLocation) {
+        const pending = this._pendingLocation;
+        this._pendingLocation = null;
+        this.selectLocation(pending.lat, pending.lng, pending.name);
+      }
     }
   }
 
@@ -2719,20 +3315,6 @@ class AurafiskyApp {
         this.$.panelLocationName.textContent = this.selectedName;
       }
       this.$.offlineTimeMachineBadge.classList.add("hidden");
-    }
-  }
-
-  updateOnlineStatus(online) {
-    this.isOffline = !online;
-    if (online) {
-      this.$.offlineBanner.classList.add("hidden");
-      this.showToast("Device connected back online.", "success");
-    } else {
-      this.$.offlineBanner.classList.remove("hidden");
-      this.showToast(
-        "Device disconnected. Running in offline cache mode.",
-        "error",
-      );
     }
   }
 
@@ -3210,6 +3792,15 @@ class AurafiskyApp {
       "theme-stormy",
       "theme-snowy",
     );
+
+    const lat = this.selectedLat ?? 0;
+    const lng = this.selectedLng ?? 0;
+    const bgUrl = this.getWeatherWallpaperUrl(code, isDay, lat, lng);
+    const panelBg = this.$.panelWeatherBg || document.getElementById("panelWeatherBg");
+    if (panelBg) {
+      panelBg.style.backgroundImage = `url("${bgUrl}")`;
+      panelBg.style.opacity = this.isDark ? "0.22" : "0.16";
+    }
 
     if (!isDay) {
       return;
@@ -4224,6 +4815,2155 @@ class AurafiskyApp {
   //  PANEL VISIBILITIES
   // ================================================================
 
+  // ================================================================
+  //  WALLPAPER MODE — Full-screen weather wallpaper
+  // ================================================================
+
+  /**
+   * Toggles wallpaper mode: opens the overlay if closed, closes it if open,
+   * or creates a tab for the current location when none exist.
+   */
+  toggleWallpaper() {
+    if (!this.selectedLat || !this.selectedLng) {
+      this.showToast("Select a location first", "info");
+      return;
+    }
+
+    const targetLat = this.selectedLat;
+    const targetLng = this.selectedLng;
+    const targetName = this.selectedName || `${targetLat.toFixed(4)}, ${targetLng.toFixed(4)}`;
+
+    // Check if the currently selected location is already the active wallpaper tab
+    const activeTab = this.wallpaperLocations[this.activeWallpaperIndex];
+    const isCurrentActive = activeTab &&
+      Math.abs(activeTab.lat - targetLat) < 0.0001 &&
+      Math.abs(activeTab.lng - targetLng) < 0.0001;
+
+    if (this.isWallpaperMode && isCurrentActive) {
+      // Overlay open and already showing this location → close overlay
+      this.hideWallpaperOverlay();
+      this.isWallpaperMode = false;
+      this.stopWallpaperAutoRotate();
+      this.updateWallpaperButtonUI();
+      return;
+    }
+
+    // Pre-seed wallpaper weather from selected location for instant sync
+    if (this.weatherData) {
+      this.wallpaperWeatherData = this.weatherData;
+      this.wallpaperAirQualityData = this.airQualityData;
+      this.wallpaperCurrentHourIndex = this.currentHourIndex;
+    }
+
+    // If this location is already in tabs, switch to it!
+    const existingIndex = this.wallpaperLocations.findIndex(
+      (w) => Math.abs(w.lat - targetLat) < 0.0001 &&
+             Math.abs(w.lng - targetLng) < 0.0001
+    );
+
+    if (existingIndex >= 0) {
+      this.activeWallpaperIndex = existingIndex;
+      this.isWallpaperMode = true;
+      this.showWallpaperOverlay();
+      this.renderWallpaperTabs();
+      this.loadWallpaperDataForActiveTab();
+      if (this.wallpaperAutoRotateEnabled) this.startWallpaperAutoRotate();
+      this.showToast(`Switched wallpaper to ${targetName} 🖼️`, "success");
+    } else {
+      // Add this new location as a wallpaper tab
+      this.addWallpaperTab(targetLat, targetLng, targetName);
+      this.showToast(`Set wallpaper to ${targetName} 🖼️`, "success");
+    }
+    this.updateWallpaperButtonUI();
+  }
+
+  /**
+   * Adds a new wallpaper tab (or switches to it if it already exists).
+   */
+  addWallpaperTab(lat = null, lng = null, name = null) {
+    const targetLat = lat ?? this.selectedLat;
+    const targetLng = lng ?? this.selectedLng;
+    const targetName = name ?? this.selectedName;
+
+    if (!targetLat || !targetLng) {
+      this.showToast("Select a location first", "info");
+      return;
+    }
+
+    // Pre-seed weather data if coordinates match the currently selected card
+    if (this.weatherData &&
+        Math.abs(targetLat - (this.selectedLat ?? 0)) < 0.001 &&
+        Math.abs(targetLng - (this.selectedLng ?? 0)) < 0.001) {
+      this.wallpaperWeatherData = this.weatherData;
+      this.wallpaperAirQualityData = this.airQualityData;
+      this.wallpaperCurrentHourIndex = this.currentHourIndex;
+    }
+
+    // Prevent duplicate tabs — switching to the existing one instead
+    const existingIndex = this.wallpaperLocations.findIndex(
+      (w) => Math.abs(w.lat - targetLat) < 0.0001 &&
+             Math.abs(w.lng - targetLng) < 0.0001
+    );
+    if (existingIndex >= 0) {
+      this.activeWallpaperIndex = existingIndex;
+      this.isWallpaperMode = true;
+      this.showWallpaperOverlay();
+      this.renderWallpaperTabs();
+      this.loadWallpaperDataForActiveTab();
+      return;
+    }
+
+    if (this.wallpaperLocations.length >= 6) {
+      this.wallpaperLocations.shift();
+      if (this.activeWallpaperIndex > 0) this.activeWallpaperIndex--;
+    }
+
+    const id = Date.now().toString();
+    const newTab = { lat: targetLat, lng: targetLng, name: targetName, id, addedAt: Date.now() };
+    this.wallpaperLocations.push(newTab);
+    this.activeWallpaperIndex = this.wallpaperLocations.length - 1;
+
+    this.isWallpaperMode = true;
+    this.showWallpaperOverlay();
+    this.renderWallpaperTabs();
+    this.loadWallpaperDataForActiveTab();
+    this.startWallpaperAutoRefresh();
+    this.startWallpaperBgAnimation();
+    this.showFirstOpenHint();
+    if (this.wallpaperPersistEnabled) this.saveWallpaperToStorage();
+    this._haptic('success');
+  }
+
+  /**
+   * Removes a wallpaper tab by index.
+   */
+  removeWallpaperTab(index) {
+    this.wallpaperLocations.splice(index, 1);
+    if (this.wallpaperLocations.length === 0) {
+      this.disableWallpaper();
+    } else {
+      if (this.activeWallpaperIndex > index) {
+        this.activeWallpaperIndex--;
+      } else if (this.activeWallpaperIndex >= this.wallpaperLocations.length) {
+        this.activeWallpaperIndex = this.wallpaperLocations.length - 1;
+      }
+      this.renderWallpaperTabs();
+      this.loadWallpaperDataForActiveTab();
+    }
+    if (this.wallpaperPersistEnabled) this.saveWallpaperToStorage();
+    this.updateWallpaperButtonUI();
+    this._haptic('light');
+  }
+
+  /**
+   * Switches to a different wallpaper tab.
+   */
+  switchWallpaperTab(index) {
+    if (index < 0 || index >= this.wallpaperLocations.length) return;
+    this.activeWallpaperIndex = index;
+    this.renderWallpaperTabs();
+    this.loadWallpaperDataForActiveTab();
+    if (this.wallpaperPersistEnabled) this.saveWallpaperToStorage();
+    this._haptic('selection');
+  }
+
+  /**
+   * Renders the wallpaper tabs UI with modern pill aesthetics.
+   */
+  renderWallpaperTabs() {
+    if (!this.$.wallpaperTabContainer) return;
+
+    this.$.wallpaperTabContainer.innerHTML = "";
+    this.wallpaperLocations.forEach((tab, index) => {
+      const isActive = index === this.activeWallpaperIndex;
+      const tabEl = document.createElement("button");
+      tabEl.type = "button";
+      tabEl.className = `wallpaper-tab flex items-center gap-2 px-3.5 py-1.5 rounded-full text-xs font-semibold whitespace-nowrap transition-all select-none cursor-pointer border ${
+        isActive
+          ? "active bg-white/25 text-white border-white/40 shadow-lg shadow-black/25 backdrop-blur-md"
+          : "bg-black/30 hover:bg-white/15 text-slate-200 hover:text-white border-white/10 hover:border-white/25 backdrop-blur-sm"
+      }`;
+      tabEl.dataset.wallpaperTab = index;
+      tabEl.setAttribute("role", "tab");
+      tabEl.setAttribute("aria-selected", isActive);
+      tabEl.title = tab.name;
+
+      // Status indicator dot
+      const statusDot = document.createElement("span");
+      statusDot.className = `w-2 h-2 rounded-full flex-shrink-0 ${
+        isActive ? "bg-emerald-400 ring-2 ring-emerald-400/40 animate-pulse" : "bg-slate-400/60"
+      }`;
+      tabEl.appendChild(statusDot);
+
+      // Name label
+      const nameSpan = document.createElement("span");
+      nameSpan.className = "truncate max-w-[120px] pointer-events-none";
+      const shortName = (tab.name || "").split(",")[0].trim();
+      nameSpan.textContent = shortName;
+      tabEl.appendChild(nameSpan);
+
+      // Close button
+      const closeBtn = document.createElement("span");
+      closeBtn.className = "flex-shrink-0 ml-0.5 p-0.5 rounded-full hover:bg-white/30 text-slate-300 hover:text-white transition-colors cursor-pointer flex items-center justify-center";
+      closeBtn.dataset.wallpaperClose = index;
+      closeBtn.setAttribute("aria-label", `Remove ${tab.name}`);
+      closeBtn.setAttribute("role", "button");
+      closeBtn.setAttribute("tabindex", "0");
+      closeBtn.title = "Remove location";
+      const closeIcon = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+      closeIcon.setAttribute("class", "w-3 h-3 pointer-events-none");
+      closeIcon.setAttribute("fill", "none");
+      closeIcon.setAttribute("viewBox", "0 0 24 24");
+      closeIcon.setAttribute("stroke", "currentColor");
+      closeIcon.setAttribute("stroke-width", "2.5");
+      closeIcon.innerHTML = '<path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/>';
+      closeBtn.appendChild(closeIcon);
+      tabEl.appendChild(closeBtn);
+
+      this.$.wallpaperTabContainer.appendChild(tabEl);
+
+      if (isActive) {
+        try {
+          tabEl.scrollIntoView({ behavior: "smooth", inline: "nearest", block: "nearest" });
+        } catch (_) {}
+      }
+    });
+  }
+
+  /**
+   * Loads weather data for the currently active wallpaper tab.
+   */
+  async loadWallpaperDataForActiveTab() {
+    const activeTab = this.wallpaperLocations[this.activeWallpaperIndex];
+    if (!activeTab) return;
+
+    // Immediately update header title and coordinates to active tab
+    if (this.$.wallpaperLocationName) {
+      this.$.wallpaperLocationName.textContent = activeTab.name;
+    }
+    if (this.$.wallpaperCoordinates) {
+      const latDir = activeTab.lat >= 0 ? "N" : "S";
+      const lngDir = activeTab.lng >= 0 ? "E" : "W";
+      this.$.wallpaperCoordinates.textContent = `${Math.abs(activeTab.lat).toFixed(4)}° ${latDir}, ${Math.abs(activeTab.lng).toFixed(4)}° ${lngDir}`;
+    }
+
+    // Show loading state while fetching
+    if (this.$.wallpaperLastUpdated) {
+      this.$.wallpaperLastUpdated.textContent = "Updating…";
+    }
+
+    // Clear stale conditions if switching from a different location
+    if (!this.wallpaperWeatherData ||
+        Math.abs((this.wallpaperWeatherData.latitude ?? 0) - activeTab.lat) > 0.05 ||
+        Math.abs((this.wallpaperWeatherData.longitude ?? 0) - activeTab.lng) > 0.05) {
+      if (this.$.wallpaperTemp) this.$.wallpaperTemp.textContent = "--°";
+      if (this.$.wallpaperDescription) this.$.wallpaperDescription.textContent = "Loading weather…";
+      if (this.$.wallpaperFeelsLike) this.$.wallpaperFeelsLike.textContent = "Fetching conditions…";
+    }
+
+    const wasOffline = this.isOffline;
+
+    try {
+      const [forecast, airQuality] = await Promise.all([
+        WeatherService.fetchForecast(activeTab.lat, activeTab.lng),
+        WeatherService.fetchAirQuality(activeTab.lat, activeTab.lng),
+      ]);
+
+      this.wallpaperWeatherData = forecast;
+      this.wallpaperAirQualityData = airQuality;
+      this.wallpaperCurrentHourIndex = WeatherService.getCurrentHourIndex(
+        forecast,
+        forecast?.utc_offset_seconds || 0,
+      );
+
+      // Clear the offline badge — data is now fresh
+      this.showWallpaperOffline(false);
+      this.refreshWallpaperDisplay();
+      this.updateWallpaperLastUpdated();
+      this.checkWallpaperAlerts();
+      this.renderPrecipTimeline();
+
+      // Recover from a previously-offline state with a toast
+      if (wasOffline && !this.isOffline) {
+        this.showToast("⚡ Back online — wallpaper updated", "success");
+      }
+    } catch (error) {
+      console.warn("Wallpaper data load failed:", error);
+      // Only show the offline badge when the device is truly offline;
+      // API failures (rate limit, etc.) keep the stale data visible instead.
+      this.showWallpaperOffline(!navigator.onLine);
+      if (this.$.wallpaperLastUpdated) {
+        this.$.wallpaperLastUpdated.textContent = this.wallpaperLastUpdated
+          ? this._formatRelativeUpdate(this.wallpaperLastUpdated)
+          : "Update failed";
+      }
+      if (!this.wallpaperWeatherData) {
+        this.showToast("Could not load wallpaper weather. Check connection.", "error");
+      }
+    }
+  }
+
+  /**
+   * Disables wallpaper mode and closes the overlay.
+   */
+  disableWallpaper() {
+    this.wallpaperLocations = [];
+    this.activeWallpaperIndex = 0;
+    this.isWallpaperMode = false;
+    this.hideWallpaperOverlay();
+    this.stopWallpaperAutoRefresh();
+    this.stopWallpaperAutoRotate();
+    this.stopWallpaperBgAnimation();
+    this.stopWallpaperClockTick();
+    this.hidePrecipTooltip();
+    this.updateWallpaperButtonUI();
+    this.showToast("Wallpaper removed", "info");
+    this._haptic('light');
+  }
+
+  /**
+   * Updates the wallpaper button UI to reflect current state.
+   */
+  updateWallpaperButtonUI() {
+    const isWallpaper = this.wallpaperLocations.some(
+      (w) => Math.abs(w.lat - (this.selectedLat ?? 0)) < 0.0001 &&
+             Math.abs(w.lng - (this.selectedLng ?? 0)) < 0.0001
+    );
+    if (this.$.wallpaperOutlineIcon && this.$.wallpaperFilledIcon) {
+      this.$.wallpaperOutlineIcon.classList.toggle("hidden", isWallpaper);
+      this.$.wallpaperFilledIcon.classList.toggle("hidden", !isWallpaper);
+    }
+    if (this.$.setWallpaperBtn) {
+      this.$.setWallpaperBtn.setAttribute("aria-pressed", isWallpaper);
+      this.$.setWallpaperBtn.title = isWallpaper ? "Remove wallpaper" : "Set as wallpaper";
+    }
+  }
+
+  /**
+   * Shows the full-screen wallpaper overlay.
+   */
+  showWallpaperOverlay() {
+    this.$.wallpaperOverlay.classList.remove("hidden");
+    this.$.wallpaperOverlay.classList.add("flex");
+    // Lock background scroll while the full-screen overlay is open
+    document.body.style.overflow = "hidden";
+    // Ensure at least the active location tab exists
+    if (this.wallpaperLocations.length === 0 && (this.currentLat !== undefined || this.currentLocationName)) {
+      this.wallpaperLocations.push({
+        id: `tab_${Date.now()}`,
+        lat: this.currentLat ?? 0,
+        lng: this.currentLng ?? 0,
+        name: this.currentLocationName || "Current Location",
+        addedAt: Date.now(),
+      });
+      this.activeWallpaperIndex = 0;
+      if (this.weatherData) {
+        this.wallpaperWeatherData = this.weatherData;
+        this.wallpaperAirQualityData = this.airQualityData;
+        this.wallpaperCurrentHourIndex = this.currentHourIndex;
+      }
+    }
+
+    this.renderWallpaperTabs();
+    this.refreshWallpaperDisplay();
+    this.startWallpaperBgAnimation();
+
+    // Immersive features
+    if (this.wallpaperBrandEnabled) {
+      this.showWallpaperBrandBg();
+    } else {
+      this.wallpaperPhotoEnabled = true;
+      this.showWallpaperPhotoBg();
+    }
+    if (this.wallpaperHighContrast) this.$.wallpaperOverlay.classList.add("high-contrast");
+    if (this.wallpaperSoundEnabled) this.setWallpaperSoundscape(true);
+    if (this.wallpaperWakeLockEnabled) this.requestWallpaperWakeLock();
+    if (this.wallpaperAutoRotateEnabled) this.startWallpaperAutoRotate();
+
+    // Persist any settings changes made while open (opt-in)
+    if (this.wallpaperPersistEnabled) this.saveWallpaperToStorage();
+  }
+
+  /**
+   * Hides the full-screen wallpaper overlay.
+   */
+  hideWallpaperOverlay() {
+    this.$.wallpaperOverlay.classList.add("hidden");
+    this.$.wallpaperOverlay.classList.remove("flex");
+    document.body.style.overflow = "";
+    this.stopWallpaperBgAnimation();
+    this.stopWallpaperClockTick();
+    this.hidePrecipTooltip();
+    // Exit browser fullscreen if it was entered from the wallpaper
+    if (document.fullscreenElement) {
+      document.exitFullscreen().catch(() => {});
+    }
+    // Release wake lock — screen only needs to stay awake while visible
+    this.releaseWallpaperWakeLock();
+    // Stop the wallpaper soundscape (restores the app's previous audio state)
+    if (this.wallpaperSoundEnabled) this.setWallpaperSoundscape(false);
+    // Restore the document title + theme-color to the main app state
+    if (this.weatherData && this.selectedLat != null) {
+      const weather = WeatherService.getHourlyAtIndex(this.weatherData, this.currentHourIndex);
+      if (weather) {
+        document.title = `${WeatherService.formatTemp(weather.temperature)} ${weather.icon} ${this.selectedName.split(",")[0]} — Aurafisky`;
+      }
+    }
+    const meta = document.querySelector('meta[name="theme-color"]');
+    if (meta) meta.content = this.isDark ? "#0f172a" : "#6366f1";
+  }
+
+  /**
+   * Starts the 5-minute auto-refresh timer for wallpaper data.
+   */
+  startWallpaperAutoRefresh() {
+    this.stopWallpaperAutoRefresh();
+    this.wallpaperTimer = setInterval(() => {
+      if (this.wallpaperLocations.length > 0 && this.isWallpaperMode) {
+        this.loadWallpaperDataForActiveTab();
+      }
+    }, this.wallpaperRefreshInterval);
+  }
+
+  /**
+   * Stops the wallpaper auto-refresh timer.
+   */
+  stopWallpaperAutoRefresh() {
+    if (this.wallpaperTimer) {
+      clearInterval(this.wallpaperTimer);
+      this.wallpaperTimer = null;
+    }
+  }
+
+  /**
+   * Toggles auto-rotate between wallpaper tabs.
+   */
+  toggleWallpaperAutoRotate() {
+    this.wallpaperAutoRotateEnabled = !this.wallpaperAutoRotateEnabled;
+    if (this.wallpaperAutoRotateEnabled) {
+      this.startWallpaperAutoRotate();
+      this.showToast("Auto-rotate enabled", "success");
+    } else {
+      this.stopWallpaperAutoRotate();
+      this.showToast("Auto-rotate disabled", "info");
+    }
+    this.updateAutoRotateButtonUI();
+  }
+
+  /**
+   * Starts auto-rotate timer.
+   */
+  startWallpaperAutoRotate() {
+    this.stopWallpaperAutoRotate();
+    this.wallpaperAutoRotateTimer = setInterval(() => {
+      if (this.wallpaperLocations.length > 1 && this.isWallpaperMode) {
+        this.activeWallpaperIndex = (this.activeWallpaperIndex + 1) % this.wallpaperLocations.length;
+        this.renderWallpaperTabs();
+        this.loadWallpaperDataForActiveTab();
+      }
+    }, this.wallpaperAutoRotateInterval);
+  }
+
+  /**
+   * Stops auto-rotate timer.
+   */
+  stopWallpaperAutoRotate() {
+    if (this.wallpaperAutoRotateTimer) {
+      clearInterval(this.wallpaperAutoRotateTimer);
+      this.wallpaperAutoRotateTimer = null;
+    }
+  }
+
+  /**
+   * Updates auto-rotate button UI.
+   */
+  updateAutoRotateButtonUI() {
+    if (this.$.wallpaperAutoRotateBtn) {
+      this.$.wallpaperAutoRotateBtn.setAttribute("aria-pressed", this.wallpaperAutoRotateEnabled);
+      this.$.wallpaperAutoRotateBtn.classList.toggle("bg-primary/30", this.wallpaperAutoRotateEnabled);
+      this.$.wallpaperAutoRotateBtn.classList.toggle("text-primary", this.wallpaperAutoRotateEnabled);
+    }
+  }
+
+  /**
+   * Toggles high contrast mode.
+   */
+  toggleWallpaperHighContrast() {
+    this.wallpaperHighContrast = !this.wallpaperHighContrast;
+    this.$.wallpaperOverlay?.classList.toggle("high-contrast", this.wallpaperHighContrast);
+    if (this.$.wallpaperHighContrastBtn) {
+      this.$.wallpaperHighContrastBtn.setAttribute("aria-pressed", this.wallpaperHighContrast);
+      this.$.wallpaperHighContrastBtn.classList.toggle("bg-primary/30", this.wallpaperHighContrast);
+      this.$.wallpaperHighContrastBtn.classList.toggle("text-primary", this.wallpaperHighContrast);
+    }
+    this._haptic('selection');
+  }
+
+  /**
+   * Shares the current wallpaper as a link.
+   */
+  async shareWallpaper() {
+    const activeTab = this.wallpaperLocations[this.activeWallpaperIndex];
+    if (!activeTab) return;
+
+    const url = new URL(window.location.href);
+    url.searchParams.set("wallpaper", "true");
+    url.searchParams.set("lat", activeTab.lat.toFixed(4));
+    url.searchParams.set("lng", activeTab.lng.toFixed(4));
+    url.searchParams.set("name", activeTab.name);
+
+    try {
+      if (navigator.share) {
+        await navigator.share({
+          title: `Aurafisky Wallpaper: ${activeTab.name}`,
+          text: `Weather wallpaper for ${activeTab.name}`,
+          url: url.toString(),
+        });
+      } else {
+        await navigator.clipboard.writeText(url.toString());
+        this.showToast("Link copied to clipboard", "success");
+      }
+    } catch (e) {
+      if (e.name !== "AbortError") {
+        this.showToast("Share failed", "error");
+      }
+    }
+    this._haptic('light');
+  }
+
+  /**
+   * Shows the wallpaper settings drawer.
+   */
+  showWallpaperSettings() {
+    this.syncWallpaperSettingsUI();
+    this.$.wallpaperSettingsPanel?.classList.remove("hidden");
+    this.$.wallpaperSettingsPanel?.classList.add("flex");
+    this._haptic('light');
+  }
+
+  /**
+   * Hides the wallpaper settings drawer.
+   */
+  hideWallpaperSettings() {
+    this.$.wallpaperSettingsPanel?.classList.add("hidden");
+    this.$.wallpaperSettingsPanel?.classList.remove("flex");
+  }
+
+  /**
+   * Dismisses the severe weather alert banner.
+   */
+  dismissWallpaperAlert() {
+    this.$.wallpaperAlertBanner?.classList.add("hidden");
+    this.$.wallpaperInlineAlert?.classList.add("hidden");
+  }
+
+  /**
+   * Checks for severe weather alerts for the active wallpaper.
+   */
+  checkWallpaperAlerts() {
+    if (!this.wallpaperWeatherData || !this.wallpaperAirQualityData) return;
+
+    const weather = WeatherService.getHourlyAtIndex(
+      this.wallpaperWeatherData,
+      this.wallpaperCurrentHourIndex,
+    );
+    const aqiVal = this.wallpaperAirQualityData?.hourly?.us_aqi?.[this.wallpaperCurrentHourIndex];
+    const advisories = WeatherService.getAdvisories(weather, aqiVal);
+
+    const severe = advisories.filter(
+      (a) => a.severity === "extreme" || a.severity === "severe"
+    );
+
+    if (severe.length > 0) {
+      const alert = severe[0];
+      // Advisories carry type/title/desc/severity but no icon — map it here
+      const ALERT_ICONS = {
+        heat: "🔥",
+        "extreme-cold": "🥶",
+        "wind-chill": "🥶",
+        frost: "❄️",
+        wind: "💨",
+        storm: "⛈️",
+        rain: "🌧️",
+        aqi: "🍃",
+      };
+      const alertIcon = ALERT_ICONS[alert.type] || "⚠️";
+      if (this.$.wallpaperAlertText) {
+        this.$.wallpaperAlertText.textContent = `${alertIcon} ${alert.title}: ${alert.desc}`;
+      }
+      this.$.wallpaperAlertBanner?.classList.remove("hidden");
+
+      if (this.$.wallpaperInlineAlertTitle) {
+        this.$.wallpaperInlineAlertTitle.textContent = alert.title;
+      }
+      if (this.$.wallpaperInlineAlertDesc) {
+        this.$.wallpaperInlineAlertDesc.textContent = alert.desc;
+      }
+      this.$.wallpaperInlineAlert?.classList.remove("hidden");
+
+      // Send notification if enabled and not already sent
+      const alertKey = `${this.activeWallpaperIndex}-${alert.type}-${Date.now() / 3600000 | 0}`;
+      if (this.wallpaperNotificationThresholds[alert.type] && !this.wallpaperNotificationSent.has(alertKey)) {
+        this.wallpaperNotificationSent.add(alertKey);
+        this.sendWallpaperNotification(alert, this.wallpaperLocations[this.activeWallpaperIndex]?.name);
+      }
+    } else {
+      this.dismissWallpaperAlert();
+    }
+  }
+
+  /**
+   * Sends a browser notification for wallpaper alert.
+   */
+  async sendWallpaperNotification(alert, locationName) {
+    if (!("Notification" in window) || Notification.permission !== "granted") return;
+
+    try {
+      if ("serviceWorker" in navigator) {
+        const registration = await navigator.serviceWorker.ready;
+        registration.showNotification(`Aurafisky: ${alert.title}`, {
+          body: `${locationName}: ${alert.desc}`,
+          icon: "favicon.svg",
+          badge: "favicon.svg",
+          tag: `wallpaper-alert-${this.activeWallpaperIndex}`,
+          renotify: true,
+        });
+      } else {
+        new Notification(`Aurafisky: ${alert.title}`, {
+          body: `${locationName}: ${alert.desc}`,
+          icon: "favicon.svg",
+        });
+      }
+    } catch (e) {
+      console.warn("Wallpaper notification failed:", e);
+    }
+  }
+
+  /**
+   * Renders the precipitation timeline chart.
+   */
+  renderPrecipTimeline() {
+    if (!this.wallpaperWeatherData?.hourly || !this.$.wallpaperPrecipTimelineSvg) return;
+
+    const hourly = this.wallpaperWeatherData.hourly;
+    const startIdx = this.wallpaperCurrentHourIndex;
+    const endIdx = Math.min(startIdx + 12, hourly.time.length);
+    const points = [];
+    let maxPrecip = 0;
+
+    for (let i = startIdx; i < endIdx; i++) {
+      const precip = hourly.precipitation?.[i] ?? 0;
+      const prob = hourly.precipitation_probability?.[i] ?? 0;
+      const displayValue = Math.max(precip * 10, prob);
+      maxPrecip = Math.max(maxPrecip, displayValue);
+      points.push({ precip, prob, time: hourly.time[i], value: displayValue });
+    }
+
+    if (maxPrecip === 0) {
+      // Show the card with a friendly "no rain" state instead of hiding it
+      this.$.wallpaperPrecipTimeline?.classList.remove("hidden");
+      if (this.$.wallpaperNoRainMsg) this.$.wallpaperNoRainMsg.classList.remove("hidden");
+      if (this.$.wallpaperPrecipTimelineSvg) this.$.wallpaperPrecipTimelineSvg.innerHTML = "";
+      if (this.$.wallpaperPrecipTimelineLabels) this.$.wallpaperPrecipTimelineLabels.innerHTML = "";
+      if (this.$.wallpaperPrecipNextRain) this.$.wallpaperPrecipNextRain.textContent = "Dry";
+      return;
+    }
+
+    this.$.wallpaperPrecipTimeline?.classList.remove("hidden");
+    if (this.$.wallpaperNoRainMsg) this.$.wallpaperNoRainMsg.classList.add("hidden");
+
+    const width = 300;
+    const height = 50;
+    const padding = 20;
+    const chartW = width - padding * 2;
+    const chartH = height - padding * 2;
+
+    const svg = this.$.wallpaperPrecipTimelineSvg;
+    svg.innerHTML = "";
+    svg.setAttribute("viewBox", `0 0 ${width} ${height}`);
+
+    // Bars — with hover tooltips showing probability % and mm
+    points.forEach((p, i) => {
+      const x = padding + (i / Math.max(1, points.length - 1)) * chartW;
+      const barH = maxPrecip > 0 ? (p.value / maxPrecip) * chartH : 0;
+      const y = padding + chartH - barH;
+
+      const rect = document.createElementNS("http://www.w3.org/2000/svg", "rect");
+      rect.setAttribute("x", x - 8);
+      rect.setAttribute("y", y);
+      rect.setAttribute("width", 16);
+      rect.setAttribute("height", barH);
+      rect.setAttribute("rx", 2);
+      // Intensity coloring: brighter blue = heavier expected rain
+      rect.setAttribute("fill", p.precip > 0 ? "rgba(59, 130, 246, 0.8)" : "rgba(59, 130, 246, 0.3)");
+      rect.setAttribute("class", "wallpaper-precip-bar");
+      rect.addEventListener("mouseenter", (e) => this.showPrecipTooltip(e, p));
+      rect.addEventListener("mouseleave", () => this.hidePrecipTooltip());
+      svg.appendChild(rect);
+    });
+
+    // Next rain indicator
+    const nextRainIdx = WeatherService.findNextRainHour(this.wallpaperWeatherData, this.wallpaperCurrentHourIndex);
+    if (nextRainIdx !== null && this.$.wallpaperPrecipNextRain) {
+      const hoursUntil = nextRainIdx - this.wallpaperCurrentHourIndex;
+      this.$.wallpaperPrecipNextRain.textContent = hoursUntil <= 0 ? "Rain now" : `Rain in ${hoursUntil}h`;
+    }
+
+    // Time labels
+    if (this.$.wallpaperPrecipTimelineLabels) {
+      this.$.wallpaperPrecipTimelineLabels.innerHTML = "";
+      [0, Math.floor(points.length / 2), points.length - 1].forEach((i) => {
+        if (points[i]) {
+          const span = document.createElement("span");
+          const t = new Date(points[i].time);
+          span.textContent = t.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false });
+          this.$.wallpaperPrecipTimelineLabels.appendChild(span);
+        }
+      });
+    }
+  }
+
+  /**
+   * Renders the 24h temperature trend sparkline in the wallpaper hero.
+   */
+  renderWallpaperTrendSparkline() {
+    if (!this.wallpaperWeatherData?.hourly || !this.$.wallpaperTrendSvg) return;
+
+    const hourly = this.wallpaperWeatherData.hourly;
+    const startIdx = this.wallpaperCurrentHourIndex;
+    const endIdx = Math.min(startIdx + 24, hourly.time.length);
+    const temps = [];
+    const times = [];
+
+    for (let i = startIdx; i < endIdx; i++) {
+      temps.push(hourly.temperature_2m?.[i]);
+      times.push(hourly.time[i]);
+    }
+    if (temps.length < 2 || temps.some((t) => t == null)) return;
+
+    const minTemp = Math.min(...temps);
+    const maxTemp = Math.max(...temps);
+    const tempRange = Math.max(1, maxTemp - minTemp);
+
+    const width = 300;
+    const height = 48;
+    const pad = 4;
+    const chartW = width - pad * 2;
+    const chartH = height - pad * 2;
+
+    const points = temps.map((t, i) => ({
+      x: pad + (i / (temps.length - 1)) * chartW,
+      y: pad + chartH - ((t - minTemp) / tempRange) * chartH,
+    }));
+
+    let pathCmd = `M ${points[0].x.toFixed(1)} ${points[0].y.toFixed(1)}`;
+    for (let i = 1; i < points.length; i++) {
+      pathCmd += ` L ${points[i].x.toFixed(1)} ${points[i].y.toFixed(1)}`;
+    }
+    this.$.wallpaperTrendLine?.setAttribute("d", pathCmd);
+    this.$.wallpaperTrendArea?.setAttribute(
+      "d",
+      `${pathCmd} L ${points[points.length - 1].x.toFixed(1)} ${height} L ${points[0].x.toFixed(1)} ${height} Z`
+    );
+
+    // Trend delta: how much warmer/cooler in 24h
+    if (this.$.wallpaperTrendDelta) {
+      const delta = temps[temps.length - 1] - temps[0];
+      if (Math.abs(delta) >= 1) {
+        const sign = delta > 0 ? "+" : "";
+        this.$.wallpaperTrendDelta.textContent = `${sign}${delta.toFixed(1)}° / 24h`;
+        this.$.wallpaperTrendDelta.className = `text-[10px] font-bold ${delta > 0 ? "text-orange-400" : "text-sky-400"}`;
+      } else {
+        this.$.wallpaperTrendDelta.textContent = "Steady";
+        this.$.wallpaperTrendDelta.className = "text-[10px] font-bold text-slate-400";
+      }
+    }
+  }
+
+  /**
+   * Shows a hover tooltip for a precipitation timeline bar.
+   */
+  showPrecipTooltip(e, point) {
+    let tip = document.getElementById("wallpaperPrecipTooltip");
+    if (!tip) {
+      tip = document.createElement("div");
+      tip.id = "wallpaperPrecipTooltip";
+      tip.className = "wallpaper-precip-tooltip";
+      this.$.wallpaperOverlay?.appendChild(tip);
+    }
+    const t = new Date(point.time);
+    const timeLabel = t.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false });
+    const prob = Math.round(point.prob);
+    const mm = point.precip.toFixed(1);
+    tip.textContent = `${timeLabel} · ${prob}% · ${mm} mm`;
+    tip.style.left = `${e.clientX}px`;
+    tip.style.top = `${e.clientY - 40}px`;
+    tip.classList.add("visible");
+  }
+
+  /**
+   * Hides the precipitation tooltip.
+   */
+  hidePrecipTooltip() {
+    document.getElementById("wallpaperPrecipTooltip")?.classList.remove("visible");
+  }
+
+  /**
+   * Ticks the wallpaper clock every minute so the header shows the live
+   * current time at the wallpaper location, not a frozen fetch-time stamp.
+   */
+  startWallpaperClockTick() {
+    this.stopWallpaperClockTick();
+    this._wallpaperClockTick = setInterval(() => {
+      if (!this.isWallpaperMode || !this.wallpaperWeatherData) return;
+      if (this.$.wallpaperTimeLabel) {
+        this.$.wallpaperTimeLabel.textContent = `${WeatherService.getFormattedLocationCurrentTime(
+          this.wallpaperWeatherData?.timezone,
+          this.wallpaperWeatherData?.utc_offset_seconds || 0,
+        )} · ${WeatherService.formatDayLabel(this.wallpaperWeatherData?.daily?.time?.[0]) || ""}`;
+      }
+      // Also refresh the relative "updated X ago" label every minute
+      this.updateWallpaperRelativeTime();
+    }, 60000);
+  }
+
+  /**
+   * Stops the wallpaper clock tick.
+   */
+  stopWallpaperClockTick() {
+    if (this._wallpaperClockTick) {
+      clearInterval(this._wallpaperClockTick);
+      this._wallpaperClockTick = null;
+    }
+  }
+
+  /**
+   * Starts background weather animation on canvas.
+   */
+  startWallpaperBgAnimation() {
+    if (this.wallpaperReducedMotion) return;
+    if (!this.$.wallpaperBgCanvas) return;
+    // Guard against double-starting — a second loop would run concurrently
+    // and drive the particles at double speed.
+    if (this.wallpaperBgAnimationId) return;
+
+    const canvas = this.$.wallpaperBgCanvas;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+
+    // Set canvas size — persistent listener so the wallpaper canvas keeps
+    // tracking the window across resizes (not just the first one).
+    this._wallpaperResize = () => {
+      canvas.width = canvas.offsetWidth;
+      canvas.height = canvas.offsetHeight;
+    };
+    this._wallpaperResize();
+    window.addEventListener("resize", this._wallpaperResize);
+
+    this.wallpaperBgAnimationId = requestAnimationFrame(() => this.animateWallpaperBg(ctx, canvas));
+  }
+
+  /**
+   * Stops background weather animation.
+   */
+  stopWallpaperBgAnimation() {
+    if (this.wallpaperBgAnimationId) {
+      cancelAnimationFrame(this.wallpaperBgAnimationId);
+      this.wallpaperBgAnimationId = null;
+    }
+    if (this._wallpaperResize) {
+      window.removeEventListener("resize", this._wallpaperResize);
+      this._wallpaperResize = null;
+    }
+    if (this.$.wallpaperBgCanvas) {
+      const ctx = this.$.wallpaperBgCanvas.getContext("2d");
+      ctx?.clearRect(0, 0, this.$.wallpaperBgCanvas.width, this.$.wallpaperBgCanvas.height);
+    }
+  }
+
+  /**
+   * Animates weather particles on background canvas.
+   */
+  animateWallpaperBg(ctx, canvas) {
+    if (!this.wallpaperWeatherData) {
+      this.wallpaperBgAnimationId = requestAnimationFrame(() => this.animateWallpaperBg(ctx, canvas));
+      return;
+    }
+
+    const weather = WeatherService.getHourlyAtIndex(
+      this.wallpaperWeatherData,
+      this.wallpaperCurrentHourIndex,
+    );
+    if (!weather) {
+      this.wallpaperBgAnimationId = requestAnimationFrame(() => this.animateWallpaperBg(ctx, canvas));
+      return;
+    }
+
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+    const code = weather.weatherCode;
+    const windSpeed = weather.windSpeed ?? 0;
+    const windDir = (weather.windDirection ?? 0) * Math.PI / 180;
+
+    // Initialize particles if needed
+    if (!this.wallpaperBgParticles) {
+      this.wallpaperBgParticles = [];
+      const count = Math.min(80, Math.max(20, Math.floor(canvas.width * canvas.height / 15000)));
+      for (let i = 0; i < count; i++) {
+        this.wallpaperBgParticles.push(this.createWallpaperParticle(canvas, code, windSpeed, windDir));
+      }
+    }
+
+    // Update and draw particles
+    this.wallpaperBgParticles.forEach((p) => {
+      p.x += p.vx;
+      p.y += p.vy;
+      p.life -= p.decay;
+
+      // Wrap around
+      if (p.x < 0) p.x = canvas.width;
+      if (p.x > canvas.width) p.x = 0;
+      if (p.y < 0) p.y = canvas.height;
+      if (p.y > canvas.height) p.y = 0;
+
+      // Respawn dead particles
+      if (p.life <= 0) {
+        Object.assign(p, this.createWallpaperParticle(canvas, code, windSpeed, windDir));
+        p.x = Math.random() * canvas.width;
+        p.y = Math.random() * canvas.height;
+        p.life = 1;
+      }
+
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+      ctx.fillStyle = p.color;
+      ctx.globalAlpha = p.opacity * p.life;
+      ctx.fill();
+    });
+
+    ctx.globalAlpha = 1;
+    this.wallpaperBgAnimationId = requestAnimationFrame(() => this.animateWallpaperBg(ctx, canvas));
+  }
+
+  /**
+   * Creates a weather particle for background animation.
+   */
+  createWallpaperParticle(canvas, code, windSpeed, windDir) {
+    const isRain = WeatherService.isRainCode(code);
+    const isSnow = WeatherService.isSnowCode(code);
+    const isStorm = WeatherService.isStormCode(code);
+
+    let color, size, opacity, vx, vy, decay;
+
+    if (isStorm) {
+      color = "#fbbf24"; // lightning yellow
+      size = Math.random() * 3 + 1;
+      opacity = 0.6;
+      decay = 0.008;
+      vx = Math.cos(windDir) * (windSpeed / 20 + 1);
+      vy = Math.sin(windDir) * (windSpeed / 20 + 1) + 1;
+    } else if (isRain) {
+      color = "#60a5fa";
+      size = Math.random() * 2 + 0.5;
+      opacity = 0.5;
+      decay = 0.01;
+      vx = Math.cos(windDir) * (windSpeed / 30 + 0.5);
+      vy = Math.sin(windDir) * (windSpeed / 30 + 0.5) + 3;
+    } else if (isSnow) {
+      color = "#fff";
+      size = Math.random() * 2.5 + 1;
+      opacity = 0.7;
+      decay = 0.003;
+      vx = Math.cos(windDir) * (windSpeed / 40 + 0.3);
+      vy = Math.sin(windDir) * (windSpeed / 40 + 0.3) + 1;
+    } else {
+      // Clear/cloudy - subtle dust motes
+      color = "#94a3b8";
+      size = Math.random() * 1.5 + 0.5;
+      opacity = 0.15;
+      decay = 0.001;
+      vx = Math.cos(windDir) * (windSpeed / 50 + 0.1);
+      vy = Math.sin(windDir) * (windSpeed / 50 + 0.1) + 0.2;
+    }
+
+    return {
+      x: Math.random() * canvas.width,
+      y: Math.random() * canvas.height,
+      vx, vy, size, color, opacity, decay, life: 1,
+    };
+  }
+
+  /**
+   * Updates the wallpaper display with dynamic background theme.
+   */
+  refreshWallpaperDisplay() {
+    if (!this.wallpaperLocations.length) return;
+
+    const activeTab = this.wallpaperLocations[this.activeWallpaperIndex];
+    if (!activeTab) return;
+
+    // Always keep header name and coordinates in sync with activeTab
+    if (this.$.wallpaperLocationName) this.$.wallpaperLocationName.textContent = activeTab.name;
+    const latDir = activeTab.lat >= 0 ? "N" : "S";
+    const lngDir = activeTab.lng >= 0 ? "E" : "W";
+    if (this.$.wallpaperCoordinates) {
+      this.$.wallpaperCoordinates.textContent = `${Math.abs(activeTab.lat).toFixed(4)}° ${latDir}, ${Math.abs(activeTab.lng).toFixed(4)}° ${lngDir}`;
+    }
+
+    if (!this.wallpaperWeatherData) return;
+
+    const weather = WeatherService.getHourlyAtIndex(
+      this.wallpaperWeatherData,
+      this.wallpaperCurrentHourIndex,
+    );
+    if (!weather) return;
+
+    const aqiVal = this.wallpaperAirQualityData?.hourly?.us_aqi?.[this.wallpaperCurrentHourIndex];
+
+    // Apply dynamic background theme based on weather
+    this.applyWallpaperTheme(weather.weatherCode, weather.isDay);
+
+    // Declare dailyData early so it can be used throughout this method
+    const dailyData = this.wallpaperWeatherData?.daily;
+
+    // Header time
+    this.$.wallpaperTimeLabel.textContent = `${WeatherService.getFormattedLocationCurrentTime(
+      this.wallpaperWeatherData?.timezone,
+      this.wallpaperWeatherData?.utc_offset_seconds || 0,
+    )} · ${WeatherService.formatDayLabel(dailyData?.time?.[0]) || ""}`;
+    this.startWallpaperClockTick();
+
+    // Current conditions hero
+    this.$.wallpaperIcon.textContent = weather.icon;
+    this.$.wallpaperTemp.textContent = WeatherService.formatTemp(weather.temperature);
+    this.$.wallpaperDescription.textContent = weather.description;
+    this.$.wallpaperFeelsLike.textContent = `Feels like ${WeatherService.formatTemp(weather.feelsLike)}`;
+
+    // Hero extras: today's High/Low + Sunrise/Sunset
+    if (this.$.wallpaperHighTemp && this.$.wallpaperLowTemp) {
+      const high = dailyData?.temperature_2m_max?.[0];
+      const low = dailyData?.temperature_2m_min?.[0];
+      this.$.wallpaperHighTemp.textContent = high != null ? WeatherService.formatTemp(high) : "--°";
+      this.$.wallpaperLowTemp.textContent = low != null ? WeatherService.formatTemp(low) : "--°";
+    }
+    if (this.$.wallpaperHeroSunrise && this.$.wallpaperHeroSunset && dailyData) {
+      if (dailyData.sunrise?.[0]) {
+        this.$.wallpaperHeroSunrise.textContent = WeatherService.formatTimeOnly(dailyData.sunrise[0]);
+      }
+      if (dailyData.sunset?.[0]) {
+        this.$.wallpaperHeroSunset.textContent = WeatherService.formatTimeOnly(dailyData.sunset[0]);
+      }
+    }
+
+    // 24h temperature trend sparkline
+    this.renderWallpaperTrendSparkline();
+
+    // Quick metrics
+    this.$.wallpaperHumidity.textContent = `${weather.humidity ?? "--"}%`;
+    this.$.wallpaperWind.textContent = `${WeatherService.formatWind(weather.windSpeed)} ${WeatherService.getWindDirection(weather.windDirection)}`;
+    this.$.wallpaperPressure.textContent = WeatherService.formatPressure(weather.pressure);
+    this.$.wallpaperClouds.textContent = `${weather.cloudCover ?? "--"}%`;
+
+    // Detailed metrics
+    this.$.wallpaperUV.textContent = weather.uvIndex != null ? weather.uvIndex.toFixed(1) : "--";
+    this.$.wallpaperPrecip.textContent = WeatherService.formatPrecip(weather.precipitation);
+    const dewPoint = WeatherService.calculateDewPoint(weather.temperature, weather.humidity);
+    this.$.wallpaperDewPoint.textContent = dewPoint != null ? WeatherService.formatTemp(dewPoint) : "--°";
+    this.$.wallpaperWindGusts.textContent = weather.windGusts != null ? WeatherService.formatWind(weather.windGusts) : "--";
+    this.$.wallpaperVisibility.textContent = WeatherService.formatVisibility(weather.visibility);
+
+    // Air Quality (info.colorClass carries the full Tailwind class, e.g. "text-emerald-500")
+    this.updateWallpaperAQI(aqiVal);
+
+    // Comfort Index
+    const comfortScore = WeatherService.getComfortIndex(weather, aqiVal);
+    const comfortInfo = WeatherService.getComfortLabel(comfortScore, weather);
+    if (this.$.wallpaperComfortScore) {
+      this.$.wallpaperComfortScore.textContent = comfortScore ?? "--";
+    }
+    if (this.$.wallpaperComfortLabel) {
+      this.$.wallpaperComfortLabel.textContent = comfortInfo ? `${comfortInfo.icon} ${comfortInfo.label}` : "--";
+    }
+
+    // Astronomy — guarded so one null element can't kill the whole render
+    try {
+      this.updateWallpaperAstronomy(weather);
+    } catch (e) {
+      console.warn("Wallpaper astronomy render failed:", e);
+    }
+
+    // Stargazing
+    const stargazing = WeatherService.getStargazingScore(weather.cloudCover, this.getMoonPhaseFraction());
+    if (stargazing && this.$.wallpaperStargazing) {
+      this.$.wallpaperStargazing.textContent = stargazing.score;
+      if (this.$.wallpaperStargazingLabel) {
+        this.$.wallpaperStargazingLabel.textContent = `${stargazing.icon} ${stargazing.label}`;
+      }
+    }
+
+    // Precip timeline
+    this.renderPrecipTimeline();
+
+    // Forecast strips
+    this.renderWallpaperDailyStrip();
+    this.renderWallpaperHourlyStrip();
+
+    // Check alerts
+    this.checkWallpaperAlerts();
+
+    // Show offline indicator if needed
+    this.showWallpaperOffline(this.isOffline);
+
+    // Sync browser title + theme-color to wallpaper conditions
+    this.syncWallpaperTitle();
+
+    // Refresh photo background for the active tab (photo is seeded per location)
+    if (this.wallpaperPhotoEnabled) this.showWallpaperPhotoBg();
+
+    // Reorder sections by time of day (morning/commute/evening/night focus)
+    this.applyTimeBasedLayout();
+  }
+
+  /**
+   * Applies dynamic background theme based on weather.
+   */
+  applyWallpaperTheme(code, isDay) {
+    const overlay = this.$.wallpaperOverlay;
+    if (!overlay) return;
+
+    // Remove existing theme classes
+    overlay.classList.remove(
+      "theme-sunny", "theme-rainy", "theme-cloudy", "theme-stormy", "theme-snowy", "theme-night"
+    );
+
+    if (!isDay) {
+      overlay.classList.add("theme-night");
+      return;
+    }
+
+    if (code === 0 || code === 1) {
+      overlay.classList.add("theme-sunny");
+    } else if (code === 2 || code === 3 || code === 45 || code === 48) {
+      overlay.classList.add("theme-cloudy");
+    } else if (WeatherService.isRainCode(code)) {
+      overlay.classList.add("theme-rainy");
+    } else if (WeatherService.isStormCode(code)) {
+      overlay.classList.add("theme-stormy");
+    } else if (WeatherService.isSnowCode(code)) {
+      overlay.classList.add("theme-snowy");
+    }
+  }
+
+  /**
+   * Shows/hides offline indicator.
+   */
+  showWallpaperOffline(isOffline) {
+    if (this.$.wallpaperOfflineIndicator) {
+      this.$.wallpaperOfflineIndicator.classList.toggle("hidden", !isOffline);
+    }
+  }
+
+  /**
+   * Shows first-open hint.
+   */
+  showFirstOpenHint() {
+    const hint = this.$.wallpaperFirstOpenHint;
+    if (!hint) return;
+
+    const hasSeenHint = sessionStorage.getItem("wallpaperHintSeen");
+    if (!hasSeenHint) {
+      hint.classList.remove("hidden");
+      sessionStorage.setItem("wallpaperHintSeen", "true");
+      setTimeout(() => hint.classList.add("hidden"), 8000);
+    }
+  }
+
+  /**
+   * Updates last updated with relative time.
+   */
+  updateWallpaperLastUpdated() {
+    this.wallpaperLastUpdated = Date.now();
+    if (this.$.wallpaperLastUpdated) {
+      this.$.wallpaperLastUpdated.textContent = "Updated just now";
+    }
+    // Update to relative time after a few seconds
+    setTimeout(() => this.updateWallpaperRelativeTime(), 5000);
+  }
+
+  /**
+   * Updates last updated with relative time format.
+   */
+  updateWallpaperRelativeTime() {
+    if (!this.wallpaperLastUpdated || !this.$.wallpaperLastUpdated) return;
+    this.$.wallpaperLastUpdated.textContent = this._formatRelativeUpdate(this.wallpaperLastUpdated);
+  }
+
+  /**
+   * Formats a timestamp as a relative "updated X ago" label.
+   * @param {number} ts - Unix ms timestamp of the last successful refresh
+   * @returns {string}
+   */
+  _formatRelativeUpdate(ts) {
+    const diff = Date.now() - ts;
+    const mins = Math.floor(diff / 60000);
+    if (mins < 1) return "Updated just now";
+    if (mins === 1) return "Updated 1 min ago";
+    if (mins < 60) return `Updated ${mins} min ago`;
+    const hours = Math.floor(mins / 60);
+    return `Updated ${hours}h ago`;
+  }
+
+  /**
+   * Updates the wallpaper AQI display.
+   */
+  updateWallpaperAQI(aqiVal) {
+    if (!this.wallpaperAirQualityData || !this.wallpaperAirQualityData.hourly) {
+      this.$.wallpaperAQI.textContent = "AQI Unavailable";
+      this.$.wallpaperAQIMetrics.textContent = "PM2.5: -- | PM10: -- | O3: --";
+      this.$.wallpaperAQIBadge.textContent = "--";
+      this.$.wallpaperAQIBadge.className = "text-xs font-bold px-3 py-1.5 rounded-full bg-slate-800 text-slate-400";
+      return;
+    }
+
+    const h = this.wallpaperAirQualityData.hourly;
+    const pm25 = h.pm2_5?.[this.wallpaperCurrentHourIndex];
+    const pm10 = h.pm10?.[this.wallpaperCurrentHourIndex];
+    const ozone = h.ozone?.[this.wallpaperCurrentHourIndex];
+
+    const info = WeatherService.getAQIInfo(aqiVal);
+    this.$.wallpaperAQI.textContent = info.label;
+    // info.colorClass is the full Tailwind class (e.g. "text-emerald-500") —
+    // stripping the "text-" prefix produced a class that doesn't exist.
+    this.$.wallpaperAQI.className = `text-lg font-semibold ${info.colorClass}`;
+    this.$.wallpaperAQIMetrics.textContent = `PM2.5: ${pm25 != null ? pm25.toFixed(1) : "--"} | PM10: ${pm10 != null ? pm10.toFixed(1) : "--"} | O3: ${ozone != null ? ozone.toFixed(1) : "--"} µg/m³`;
+
+    this.$.wallpaperAQIBadge.textContent = aqiVal != null ? Math.round(aqiVal) : "--";
+    this.$.wallpaperAQIBadge.className = "text-xs font-bold px-3 py-1.5 rounded-full";
+    if (aqiVal != null) {
+      if (aqiVal <= 50) this.$.wallpaperAQIBadge.classList.add("bg-emerald-500/20", "text-emerald-400");
+      else if (aqiVal <= 100) this.$.wallpaperAQIBadge.classList.add("bg-amber-500/20", "text-amber-400");
+      else if (aqiVal <= 150) this.$.wallpaperAQIBadge.classList.add("bg-orange-500/20", "text-orange-400");
+      else if (aqiVal <= 200) this.$.wallpaperAQIBadge.classList.add("bg-red-500/20", "text-red-400");
+      else if (aqiVal <= 300) this.$.wallpaperAQIBadge.classList.add("bg-fuchsia-500/20", "text-fuchsia-400");
+      else this.$.wallpaperAQIBadge.classList.add("bg-rose-500/20", "text-rose-400");
+    } else {
+      this.$.wallpaperAQIBadge.classList.add("bg-slate-800", "text-slate-400");
+    }
+  }
+
+  /**
+   * Updates the wallpaper astronomy widgets (sun arc, moon phase).
+   */
+  updateWallpaperAstronomy(weather) {
+    if (!this.wallpaperWeatherData?.daily) return;
+
+    const daily = this.wallpaperWeatherData.daily;
+    const sunrise = daily.sunrise?.[0];
+    const sunset = daily.sunset?.[0];
+
+    if (sunrise && sunset && this.$.wallpaperSunArcPassed) {
+      const riseDate = WeatherService.parseIsoLocal(sunrise);
+      const setDate = WeatherService.parseIsoLocal(sunset);
+      const now = new Date();
+      const dayMs = setDate - riseDate;
+      const elapsedMs = now - riseDate;
+      const progress = dayMs > 0 ? Math.max(0, Math.min(1, elapsedMs / dayMs)) : 0;
+
+      // Arc geometry: Ellipse center (100, 70), rx = 80, ry = 55, baseline y = 70, apex y = 15
+      // Progress p in [0, 1] maps to theta in [PI, 0]
+      const theta = Math.PI * (1 - progress);
+      const currentX = (100 - 80 * Math.cos(theta)).toFixed(1);
+      const currentY = (70 - 55 * Math.sin(theta)).toFixed(1);
+
+      if (progress <= 0.005) {
+        this.$.wallpaperSunArcPassed.setAttribute("d", "M 20,70 A 80,55 0 0,1 20,70");
+      } else {
+        this.$.wallpaperSunArcPassed.setAttribute("d", `M 20,70 A 80,55 0 0,1 ${currentX},${currentY}`);
+      }
+      if (this.$.wallpaperSunArcDot) {
+        this.$.wallpaperSunArcDot.setAttribute("cx", currentX);
+        this.$.wallpaperSunArcDot.setAttribute("cy", currentY);
+        const isDaytime = elapsedMs >= 0 && elapsedMs <= dayMs;
+        this.$.wallpaperSunArcDot.setAttribute("opacity", isDaytime ? "1" : "0.35");
+      }
+      if (this.$.wallpaperSunSunrise) {
+        this.$.wallpaperSunSunrise.textContent = WeatherService.formatTimeOnly(sunrise);
+      }
+      if (this.$.wallpaperSunSunset) {
+        this.$.wallpaperSunSunset.textContent = WeatherService.formatTimeOnly(sunset);
+      }
+      if (this.$.wallpaperSunDayLength) {
+        const dayLengthHours = Math.floor(dayMs / 3600000);
+        const dayLengthMins = Math.floor((dayMs % 3600000) / 60000);
+        this.$.wallpaperSunDayLength.textContent = `${dayLengthHours}h ${dayLengthMins}m`;
+      }
+    }
+
+    // Moon phase
+    const moonPhase = WeatherService.getMoonPhase(new Date());
+    if (this.$.wallpaperMoonLitPath) {
+      // Upper limb arc from the top of the circle, swept by the phase fraction.
+      const phase = moonPhase.phase;
+      const largeArc = phase > 0.5 ? 1 : 0;
+      const endAngle = phase * 2 * Math.PI;
+      // Circle center (30,30), radius 27, top point (30,3)
+      const x2 = 30 + 27 * Math.sin(endAngle);
+      const y2 = 30 - 27 * Math.cos(endAngle);
+      this.$.wallpaperMoonLitPath.setAttribute(
+        "d",
+        `M 30 3 A 27 27 0 ${largeArc} 1 ${x2.toFixed(2)} ${y2.toFixed(2)} L 30 30 Z`
+      );
+    }
+    if (this.$.wallpaperMoonPhaseLabel) {
+      this.$.wallpaperMoonPhaseLabel.textContent = moonPhase.label;
+    }
+    if (this.$.wallpaperMoonPhasePercent) {
+      const illumination = Math.round((1 - Math.cos(moonPhase.phase * 2 * Math.PI)) / 2 * 100);
+      this.$.wallpaperMoonPhasePercent.textContent = `${illumination}% lit`;
+    }
+  }
+
+  /**
+   * Gets the moon phase fraction for the current date.
+   */
+  getMoonPhaseFraction() {
+    const moonPhase = WeatherService.getMoonPhase(new Date());
+    return moonPhase.phase;
+  }
+
+  // ================================================================
+  //  WALLPAPER FORECAST STRIPS
+  // ================================================================
+
+  /**
+   * Renders the 7-day forecast strip in the wallpaper.
+   */
+  renderWallpaperDailyStrip() {
+    if (!this.wallpaperWeatherData?.daily?.time || !this.$.wallpaperDailyStrip) return;
+
+    const daily = this.wallpaperWeatherData.daily;
+    this.$.wallpaperDailyStrip.innerHTML = "";
+
+    daily.time.slice(0, 7).forEach((date, i) => {
+      const code = daily.weather_code?.[i] ?? 0;
+      const info = WeatherService.getWeatherInfo(code, true);
+      const maxTemp = daily.temperature_2m_max?.[i];
+      const minTemp = daily.temperature_2m_min?.[i];
+      const precipProb = daily.precipitation_probability_max?.[i];
+
+      const dayEl = document.createElement("div");
+      dayEl.className = "flex-shrink-0 w-[72px] flex flex-col items-center gap-1.5 py-2.5 rounded-xl bg-white/5 hover:bg-white/10 border border-white/5 transition-colors";
+
+      // Day label
+      const dayLabel = document.createElement("span");
+      dayLabel.className = `text-[11px] font-bold ${i === 0 ? "text-primary" : "text-slate-400"}`;
+      dayLabel.textContent = WeatherService.formatDayLabel(date);
+      dayEl.appendChild(dayLabel);
+
+      // Icon
+      const icon = document.createElement("span");
+      icon.className = "text-xl";
+      icon.textContent = info.icon;
+      dayEl.appendChild(icon);
+
+      // Temps
+      const temps = document.createElement("span");
+      temps.className = "text-[11px] font-semibold text-slate-200";
+      temps.textContent = `${maxTemp != null ? Math.round(maxTemp) : "--"}° / ${minTemp != null ? Math.round(minTemp) : "--"}°`;
+      dayEl.appendChild(temps);
+
+      // Precip probability
+      const precip = document.createElement("span");
+      precip.className = `text-[9px] font-medium ${precipProb > 30 ? "text-blue-400" : "text-slate-500"}`;
+      precip.textContent = precipProb != null ? `💧 ${precipProb}%` : "💧 --%";
+      dayEl.appendChild(precip);
+
+      this.$.wallpaperDailyStrip.appendChild(dayEl);
+    });
+  }
+
+  /**
+   * Renders the hourly forecast strip (next 24h) in the wallpaper.
+   */
+  renderWallpaperHourlyStrip() {
+    if (!this.wallpaperWeatherData?.hourly?.time || !this.$.wallpaperHourlyStrip) return;
+
+    const hourly = this.wallpaperWeatherData.hourly;
+    const startIdx = this.wallpaperCurrentHourIndex;
+    const endIdx = Math.min(startIdx + 24, hourly.time.length);
+    this.$.wallpaperHourlyStrip.innerHTML = "";
+
+    for (let i = startIdx; i < endIdx; i++) {
+      const code = hourly.weather_code?.[i] ?? 0;
+      const isDay = hourly.is_day?.[i] === 1;
+      const info = WeatherService.getWeatherInfo(code, isDay);
+      const temp = hourly.temperature_2m?.[i];
+      const precipProb = hourly.precipitation_probability?.[i];
+      const time = hourly.time[i];
+
+      const hourEl = document.createElement("div");
+      hourEl.className = "flex-shrink-0 w-[60px] flex flex-col items-center gap-1 py-2.5 rounded-xl bg-white/5 hover:bg-white/10 border border-white/5 transition-colors";
+
+      // Time label
+      const timeLabel = document.createElement("span");
+      timeLabel.className = `text-[10px] font-bold ${i === startIdx ? "text-primary" : "text-slate-400"}`;
+      timeLabel.textContent = WeatherService.formatHourLabel(time);
+      hourEl.appendChild(timeLabel);
+
+      // Icon
+      const icon = document.createElement("span");
+      icon.className = "text-base";
+      icon.textContent = info.icon;
+      hourEl.appendChild(icon);
+
+      // Temp
+      const tempLabel = document.createElement("span");
+      tempLabel.className = "text-[11px] font-semibold text-slate-200";
+      tempLabel.textContent = WeatherService.formatTemp(temp);
+      hourEl.appendChild(tempLabel);
+
+      // Precip probability
+      const precip = document.createElement("span");
+      precip.className = `text-[9px] font-medium ${precipProb > 30 ? "text-blue-400" : "text-slate-500"}`;
+      precip.textContent = precipProb != null ? `${precipProb}%` : "--%";
+      hourEl.appendChild(precip);
+
+      this.$.wallpaperHourlyStrip.appendChild(hourEl);
+    }
+  }
+
+  // ================================================================
+  //  WALLPAPER FULLSCREEN + WAKE LOCK
+  // ================================================================
+
+  /**
+   * Toggles true browser fullscreen (kiosk/ambient mode — hides browser chrome).
+   */
+  async toggleWallpaperFullscreen() {
+    try {
+      if (document.fullscreenElement) {
+        await document.exitFullscreen();
+      } else {
+        await this.$.wallpaperOverlay?.requestFullscreen();
+      }
+      // fullscreenchange listener updates state + button UI
+    } catch (e) {
+      console.warn("Fullscreen toggle failed:", e);
+      this.showToast("Fullscreen not available", "error");
+    }
+  }
+
+  /**
+   * Updates the fullscreen button UI.
+   */
+  updateFullscreenButtonUI() {
+    if (this.$.wallpaperFullscreenBtn) {
+      this.$.wallpaperFullscreenBtn.setAttribute("aria-pressed", this.wallpaperFullscreenActive);
+      this.$.wallpaperFullscreenBtn.classList.toggle("bg-primary/30", this.wallpaperFullscreenActive);
+      this.$.wallpaperFullscreenBtn.classList.toggle("text-primary", this.wallpaperFullscreenActive);
+      this.$.wallpaperFullscreenBtn.title = this.wallpaperFullscreenActive ? "Exit fullscreen" : "Fullscreen mode";
+    }
+  }
+
+  /**
+   * Requests a Wake Lock so the screen stays awake in wallpaper/kiosk mode
+   * (great for bedside displays). The system can release it automatically —
+   * re-request on visibility change when enabled.
+   */
+  async requestWallpaperWakeLock() {
+    if (!("wakeLock" in navigator)) {
+      this.showToast("Wake Lock not supported in this browser", "info");
+      if (this.$.wallpaperWakeLockToggle) this.$.wallpaperWakeLockToggle.checked = false;
+      this.wallpaperWakeLockEnabled = false;
+      return;
+    }
+    try {
+      this.wallpaperWakeLock = await navigator.wakeLock.request("screen");
+      this.wallpaperWakeLock.addEventListener("release", () => {
+        this.wallpaperWakeLock = null;
+      });
+      this.showToast("Screen will stay awake", "success");
+    } catch (e) {
+      console.warn("Wake Lock request failed:", e);
+      if (this.$.wallpaperWakeLockToggle) this.$.wallpaperWakeLockToggle.checked = false;
+      this.wallpaperWakeLockEnabled = false;
+    }
+  }
+
+  /**
+   * Releases the Wake Lock.
+   */
+  async releaseWallpaperWakeLock() {
+    if (this.wallpaperWakeLock) {
+      try {
+        await this.wallpaperWakeLock.release();
+      } catch (_) {}
+      this.wallpaperWakeLock = null;
+    }
+  }
+
+  // ================================================================
+  //  WALLPAPER SOUNDSCAPE INTEGRATION
+  // ================================================================
+
+  /**
+   * Toggles the wallpaper ambient soundscape. Reuses the app's existing
+   * procedural audio synthesizer but drives it from the wallpaper's weather.
+   */
+  setWallpaperSoundscape(enabled) {
+    this.wallpaperSoundEnabled = enabled;
+    if (enabled) {
+      // Remember the app soundscape state so leaving wallpaper restores it
+      this.wallpaperSoundWasPlayingBefore = this.audioActive;
+      this.audioActive = true;
+      if (!this.audioContext) {
+        this.audioContext = new (window.AudioContext || window.webkitAudioContext)();
+      }
+      if (this.audioContext.state === "suspended") {
+        this.audioContext.resume().catch(() => {});
+      }
+      // Drive the synthesizer from the wallpaper's weather
+      if (this.wallpaperWeatherData) {
+        const weather = WeatherService.getHourlyAtIndex(
+          this.wallpaperWeatherData,
+          this.wallpaperCurrentHourIndex,
+        );
+        if (weather) {
+          this.updateAmbientSoundscapeSynthesizer(weather.weatherCode, weather.windSpeed);
+        }
+      }
+      this.showToast("Wallpaper soundscape active", "success");
+    } else {
+      this.stopAllSounds();
+      this.activeSoundType = null;
+      // Restore the app soundscape state it had before wallpaper mode
+      this.audioActive = this.wallpaperSoundWasPlayingBefore;
+      if (this.$.settingsSoundToggle) {
+        this.$.settingsSoundToggle.checked = this.audioActive;
+      }
+      this.showToast("Wallpaper soundscape stopped", "info");
+    }
+    this._haptic('selection');
+  }
+
+  // ================================================================
+  //  WALLPAPER TITLE + THEME-COLOR SYNC
+  // ================================================================
+
+  /**
+   * Syncs the document title and browser theme-color to the wallpaper
+   * location's current conditions.
+   */
+  syncWallpaperTitle() {
+    if (!this.wallpaperWeatherData || !this.wallpaperLocations.length) return;
+    const weather = WeatherService.getHourlyAtIndex(
+      this.wallpaperWeatherData,
+      this.wallpaperCurrentHourIndex,
+    );
+    const activeTab = this.wallpaperLocations[this.activeWallpaperIndex];
+    if (!weather || !activeTab) return;
+
+    document.title = `${WeatherService.formatTemp(weather.temperature)} ${weather.icon} ${activeTab.name.split(",")[0]} — Aurafisky Wallpaper`;
+
+    // Theme-color matches the wallpaper theme (browser chrome on mobile)
+    const THEME_COLORS = {
+      "theme-sunny": "#b45309",
+      "theme-rainy": "#1e40af",
+      "theme-cloudy": "#334155",
+      "theme-stormy": "#4c1d95",
+      "theme-snowy": "#1e40af",
+      "theme-night": "#020617",
+    };
+    const themeClasses = Array.from(this.$.wallpaperOverlay?.classList || []);
+    const themeClass = themeClasses.find((c) => THEME_COLORS[c]);
+    const meta = document.querySelector('meta[name="theme-color"]');
+    if (meta) meta.content = THEME_COLORS[themeClass] || "#0f172a";
+  }
+
+  // ================================================================
+  //  WALLPAPER PERSISTENCE (opt-in)
+  // ================================================================
+
+  /**
+   * Saves the wallpaper tabs + settings to localStorage (opt-in).
+   */
+  saveWallpaperToStorage() {
+    try {
+      localStorage.setItem("aurafisky_wallpaper", JSON.stringify({
+        locations: this.wallpaperLocations,
+        activeIndex: this.activeWallpaperIndex,
+        refreshInterval: this.wallpaperRefreshInterval,
+        autoRotateEnabled: this.wallpaperAutoRotateEnabled,
+        autoRotateInterval: this.wallpaperAutoRotateInterval,
+        soundEnabled: this.wallpaperSoundEnabled,
+        photoEnabled: this.wallpaperPhotoEnabled,
+        brandEnabled: this.wallpaperBrandEnabled,
+        wakeLockEnabled: this.wallpaperWakeLockEnabled,
+        thresholds: this.wallpaperNotificationThresholds,
+        highContrast: this.wallpaperHighContrast,
+      }));
+    } catch (e) {
+      console.warn("Wallpaper save failed:", e);
+    }
+  }
+
+  /**
+   * Clears the persisted wallpaper from localStorage.
+   */
+  clearWallpaperStorage() {
+    try {
+      localStorage.removeItem("aurafisky_wallpaper");
+    } catch (_) {}
+  }
+
+  /**
+   * Restores the wallpaper from localStorage on startup (opt-in).
+   */
+  restoreWallpaperFromStorage() {
+    try {
+      const raw = localStorage.getItem("aurafisky_wallpaper");
+      if (!raw) return false;
+      const data = JSON.parse(raw);
+      if (!Array.isArray(data.locations) || data.locations.length === 0) return false;
+
+      this.wallpaperLocations = data.locations;
+      this.activeWallpaperIndex = Math.min(data.activeIndex || 0, this.wallpaperLocations.length - 1);
+      if (data.refreshInterval) this.wallpaperRefreshInterval = data.refreshInterval;
+      this.wallpaperAutoRotateEnabled = !!data.autoRotateEnabled;
+      if (data.autoRotateInterval) this.wallpaperAutoRotateInterval = data.autoRotateInterval;
+      this.wallpaperSoundEnabled = !!data.soundEnabled;
+      this.wallpaperPhotoEnabled = data.photoEnabled !== false;
+      this.wallpaperBrandEnabled = !!data.brandEnabled;
+      this.wallpaperWakeLockEnabled = !!data.wakeLockEnabled;
+      if (data.thresholds) this.wallpaperNotificationThresholds = { ...this.wallpaperNotificationThresholds, ...data.thresholds };
+      this.wallpaperHighContrast = !!data.highContrast;
+
+      // Sync settings UI
+      this.syncWallpaperSettingsUI();
+      return true;
+    } catch (e) {
+      console.warn("Wallpaper restore failed:", e);
+      return false;
+    }
+  }
+
+  /**
+   * Syncs the wallpaper settings panel UI from current state.
+   */
+  syncWallpaperSettingsUI() {
+    if (this.$.wallpaperRefreshIntervalSelect) {
+      this.$.wallpaperRefreshIntervalSelect.value = String(this.wallpaperRefreshInterval);
+    }
+    if (this.$.wallpaperAutoRotateToggle) {
+      this.$.wallpaperAutoRotateToggle.checked = this.wallpaperAutoRotateEnabled;
+    }
+    if (this.$.wallpaperRotateIntervalSelect) {
+      this.$.wallpaperRotateIntervalSelect.value = String(this.wallpaperAutoRotateInterval);
+    }
+    if (this.$.wallpaperSoundToggle) {
+      this.$.wallpaperSoundToggle.checked = this.wallpaperSoundEnabled;
+    }
+    if (this.$.wallpaperBrandToggle) {
+      this.$.wallpaperBrandToggle.checked = this.wallpaperBrandEnabled;
+    }
+    if (this.$.wallpaperNotifyRain) {
+      this.$.wallpaperNotifyRain.checked = !!this.wallpaperNotificationThresholds.rain;
+    }
+    if (this.$.wallpaperNotifyTempDrop) {
+      this.$.wallpaperNotifyTempDrop.value = this.wallpaperNotificationThresholds.tempDrop;
+    }
+    if (this.$.wallpaperNotifyUV) {
+      this.$.wallpaperNotifyUV.value = this.wallpaperNotificationThresholds.uvHigh;
+    }
+    if (this.$.wallpaperNotifyWind) {
+      this.$.wallpaperNotifyWind.value = this.wallpaperNotificationThresholds.windHigh;
+    }
+    if (this.$.wallpaperHCSetting) {
+      this.$.wallpaperHCSetting.checked = this.wallpaperHighContrast;
+    }
+    if (this.$.wallpaperPhotoToggle) {
+      this.$.wallpaperPhotoToggle.checked = this.wallpaperPhotoEnabled;
+    }
+    if (this.$.wallpaperPersistToggle) {
+      this.$.wallpaperPersistToggle.checked = this.wallpaperPersistEnabled;
+    }
+    if (this.$.wallpaperWakeLockToggle) {
+      this.$.wallpaperWakeLockToggle.checked = this.wallpaperWakeLockEnabled;
+    }
+    if (this.$.wallpaperGeofenceToggle) {
+      this.$.wallpaperGeofenceToggle.checked = this.wallpaperGeofenceEnabled;
+    }
+    if (this.$.wallpaperHighContrastBtn) {
+      this.$.wallpaperHighContrastBtn.classList.toggle("bg-primary/30", this.wallpaperHighContrast);
+      this.$.wallpaperHighContrastBtn.classList.toggle("text-primary", this.wallpaperHighContrast);
+      this.$.wallpaperHighContrastBtn.setAttribute("aria-pressed", this.wallpaperHighContrast);
+    }
+  }
+
+  // ================================================================
+  //  WALLPAPER PHOTO BACKGROUND (DYNAMIC WEATHER CROSSFADE)
+  // ================================================================
+
+  /**
+   * Resolves an online scenic weather wallpaper suited to current conditions.
+   * Uses deterministic hashing to keep the wallpaper stable per location and condition.
+   */
+  getWeatherWallpaperUrl(weatherCode = 0, isDay = true, lat = 0, lng = 0) {
+    let category = "clear_day";
+    const code = Number(weatherCode);
+
+    if (WeatherService.isStormCode(code)) {
+      category = "storm";
+    } else if (WeatherService.isSnowCode(code)) {
+      category = "snow";
+    } else if (WeatherService.isRainCode(code)) {
+      category = "rain";
+    } else if (code === 45 || code === 48) {
+      category = "fog";
+    } else if (code === 2 || code === 3) {
+      category = isDay ? "cloudy_day" : "cloudy_night";
+    } else {
+      category = isDay ? "clear_day" : "clear_night";
+    }
+
+    const list = WEATHER_WALLPAPERS[category] || WEATHER_WALLPAPERS.clear_day;
+    const hash = Math.abs(Math.round((Number(lat) * 100) + (Number(lng) * 100))) % list.length;
+    return list[hash] || list[0];
+  }
+
+  /**
+   * Silky dual-layer crossfade between wallpaperPhotoA and wallpaperPhotoB.
+   * Preloads incoming photo so there is never a white or black flash.
+   */
+  transitionWallpaperPhoto(targetUrl) {
+    if (!targetUrl || targetUrl === this._currentWallpaperUrl) return;
+    this._currentWallpaperUrl = targetUrl;
+
+    const layerA = this.$.wallpaperPhotoA || document.getElementById("wallpaperPhotoA");
+    const layerB = this.$.wallpaperPhotoB || document.getElementById("wallpaperPhotoB");
+    if (!layerA || !layerB) {
+      if (this.$.wallpaperPhotoBg) {
+        this.$.wallpaperPhotoBg.style.backgroundImage = `url("${targetUrl}")`;
+      }
+      return;
+    }
+
+    const currentLayer = (this._activePhotoLayer === "B") ? layerB : layerA;
+    const nextLayer = (this._activePhotoLayer === "B") ? layerA : layerB;
+    const nextLayerName = (this._activePhotoLayer === "B") ? "A" : "B";
+
+    // Immediate display if initial load or neither layer has an image yet
+    if (!layerA.style.backgroundImage && !layerB.style.backgroundImage) {
+      layerA.style.backgroundImage = `url("${targetUrl}")`;
+      layerA.classList.add("active");
+      layerB.classList.remove("active");
+      this._activePhotoLayer = "A";
+      return;
+    }
+
+    const img = new Image();
+    img.onload = () => {
+      nextLayer.style.backgroundImage = `url("${targetUrl}")`;
+      nextLayer.classList.add("active");
+      currentLayer.classList.remove("active");
+      this._activePhotoLayer = nextLayerName;
+    };
+    img.onerror = () => {
+      nextLayer.style.backgroundImage = `url("${targetUrl}")`;
+      nextLayer.classList.add("active");
+      currentLayer.classList.remove("active");
+      this._activePhotoLayer = nextLayerName;
+    };
+    img.src = targetUrl;
+  }
+
+  /**
+   * Shows a curated online scenic photo wallpaper suited to the active tab's
+   * weather conditions with smooth dual-layer crossfade.
+   */
+  showWallpaperPhotoBg() {
+    if (!this.wallpaperPhotoEnabled || !this.$.wallpaperPhotoBg) return;
+    const activeTab = this.wallpaperLocations[this.activeWallpaperIndex] || {
+      lat: this.currentLat ?? 13.2803,
+      lng: this.currentLng ?? 78.2909,
+    };
+
+    this.$.wallpaperPhotoBg.classList.remove("hidden");
+
+    let code = 0;
+    let isDay = true;
+    const weatherSource = this.wallpaperWeatherData || this.weatherData;
+    if (weatherSource) {
+      const idx = this.wallpaperWeatherData ? this.wallpaperCurrentHourIndex : this.currentHourIndex;
+      const weather = WeatherService.getHourlyAtIndex(weatherSource, idx);
+      if (weather) {
+        code = weather.weatherCode;
+        isDay = weather.isDay;
+      }
+    }
+
+    const targetUrl = this.getWeatherWallpaperUrl(code, isDay, activeTab.lat, activeTab.lng);
+    this.transitionWallpaperPhoto(targetUrl);
+  }
+
+  /**
+   * Hides the scenic photo background.
+   */
+  hideWallpaperPhotoBg() {
+    this.$.wallpaperPhotoBg?.classList.add("hidden");
+    const layerA = this.$.wallpaperPhotoA || document.getElementById("wallpaperPhotoA");
+    const layerB = this.$.wallpaperPhotoB || document.getElementById("wallpaperPhotoB");
+    if (layerA) layerA.classList.remove("active");
+    if (layerB) layerB.classList.remove("active");
+    this._currentWallpaperUrl = "";
+  }
+
+  /**
+   * Opens the modern Add Location modal for wallpaper tabs.
+   */
+  openWallpaperAddTabModal() {
+    const modal = this.$.wallpaperAddTabModal || document.getElementById("wallpaperAddTabModal");
+    if (!modal) return;
+    modal.classList.remove("hidden");
+    modal.classList.add("flex");
+
+    const input = this.$.wallpaperTabSearchInput || document.getElementById("wallpaperTabSearchInput");
+    if (input) {
+      input.value = "";
+      input.focus();
+    }
+    const results = this.$.wallpaperTabSearchResults || document.getElementById("wallpaperTabSearchResults");
+    if (results) {
+      results.innerHTML = "";
+      results.classList.add("hidden");
+    }
+
+    // Populate saved bookmarks section if any
+    const bookmarksSection = this.$.wallpaperSavedBookmarksSection || document.getElementById("wallpaperSavedBookmarksSection");
+    const bookmarksList = this.$.wallpaperSavedBookmarks || document.getElementById("wallpaperSavedBookmarks");
+    if (bookmarksSection && bookmarksList) {
+      if (this.bookmarks && this.bookmarks.length > 0) {
+        bookmarksList.innerHTML = "";
+        this.bookmarks.forEach((b) => {
+          const btn = document.createElement("button");
+          btn.type = "button";
+          btn.className = "text-xs px-3 py-1.5 rounded-full bg-amber-500/15 hover:bg-amber-500/25 text-amber-200 border border-amber-500/30 transition-all active:scale-95 cursor-pointer";
+          const shortName = (b.name || "").split(",")[0].trim();
+          btn.textContent = `⭐ ${shortName}`;
+          btn.addEventListener("click", () => {
+            this.addWallpaperTab(b.lat, b.lng, b.name);
+            this.closeWallpaperAddTabModal();
+            this._haptic('success');
+          });
+          bookmarksList.appendChild(btn);
+        });
+        bookmarksSection.classList.remove("hidden");
+      } else {
+        bookmarksSection.classList.add("hidden");
+      }
+    }
+  }
+
+  /**
+   * Closes the Add Location modal.
+   */
+  closeWallpaperAddTabModal() {
+    const modal = this.$.wallpaperAddTabModal || document.getElementById("wallpaperAddTabModal");
+    if (!modal) return;
+    modal.classList.add("hidden");
+    modal.classList.remove("flex");
+  }
+
+  /**
+   * Shows the Aurafisky brand wallpaper background.
+   */
+  showWallpaperBrandBg() {
+    this.$.wallpaperBrandBg?.classList.remove("hidden");
+  }
+
+  /**
+   * Hides the Aurafisky brand wallpaper background.
+   */
+  hideWallpaperBrandBg() {
+    this.$.wallpaperBrandBg?.classList.add("hidden");
+  }
+
+  /**
+   * Mini radar snapshot removed per user request.
+   */
+  async renderWallpaperMiniRadar() {
+    return;
+  }
+
+  // ================================================================
+  //  WALLPAPER GEOFENCE TRIGGERS
+  // ================================================================
+
+  /**
+   * Toggles geofence triggers: watches the device location and auto-shows
+   * the wallpaper when the user arrives within ~500m of a wallpaper tab.
+   */
+  toggleWallpaperGeofence() {
+    this.wallpaperGeofenceEnabled = !this.wallpaperGeofenceEnabled;
+    if (this.wallpaperGeofenceEnabled) {
+      this.startWallpaperGeofence();
+      this.showToast("Geofence triggers enabled — arrive at a wallpaper location to auto-show it", "success", 5000);
+    } else {
+      this.stopWallpaperGeofence();
+      this.showToast("Geofence triggers disabled", "info");
+    }
+  }
+
+  /**
+   * Starts watching the device location for geofence triggers.
+   */
+  startWallpaperGeofence() {
+    this.stopWallpaperGeofence();
+    if (!navigator.geolocation) {
+      this.showToast("Geolocation not supported", "error");
+      this.wallpaperGeofenceEnabled = false;
+      return;
+    }
+    this._wallpaperGeofenceWatchId = navigator.geolocation.watchPosition(
+      (pos) => this._checkWallpaperGeofence(pos.coords.latitude, pos.coords.longitude),
+      () => {},
+      { enableHighAccuracy: false, timeout: 30000, maximumAge: 60000 }
+    );
+  }
+
+  /**
+   * Stops the geofence watcher.
+   */
+  stopWallpaperGeofence() {
+    if (this._wallpaperGeofenceWatchId != null) {
+      navigator.geolocation.clearWatch(this._wallpaperGeofenceWatchId);
+      this._wallpaperGeofenceWatchId = null;
+    }
+  }
+
+  /**
+   * Checks whether the device is within the geofence radius of any wallpaper
+   * tab and auto-shows that tab's wallpaper. ~500m ≈ 0.0045° — coarse but
+   * appropriate for "arrived in this area".
+   */
+  _checkWallpaperGeofence(lat, lng) {
+    if (!this.wallpaperGeofenceEnabled || !this.wallpaperLocations.length) return;
+
+    const GEOFENCE_DEG = 0.0045; // ~500m
+    const idx = this.wallpaperLocations.findIndex(
+      (w) => Math.abs(w.lat - lat) < GEOFENCE_DEG && Math.abs(w.lng - lng) < GEOFENCE_DEG
+    );
+    if (idx < 0) return;
+    // Already showing this tab — nothing to do
+    if (this.isWallpaperMode && this.activeWallpaperIndex === idx) return;
+
+    this.switchWallpaperTab(idx);
+    this.isWallpaperMode = true;
+    this.showWallpaperOverlay();
+    this.showToast(`📍 Arrived at ${this.wallpaperLocations[idx].name} — wallpaper shown`, "success");
+  }
+
+  // ================================================================
+  //  WALLPAPER TIME-BASED LAYOUT
+  // ================================================================
+
+  /**
+   * Reorders the wallpaper content sections by time of day, surfacing what
+   * matters most right now: astronomy + stargazing first at night, metrics
+   * + precip in the morning commute window, forecast strips in the evening.
+   */
+  applyTimeBasedLayout() {
+    const content = this.$.wallpaperOverlay?.querySelector(":scope > .flex-1");
+    if (!content) return;
+
+    // Sections keyed by their content identity
+    const sectionMap = {};
+    Array.from(content.children).forEach((child) => {
+      if (child.id === "wallpaperInlineAlert") return;
+      if (child.querySelector?.("#wallpaperIcon")) sectionMap.hero = child;
+      else if (child.querySelector?.("#wallpaperHumidity")) sectionMap.metrics = child;
+      else if (child.querySelector?.("#wallpaperAQI")) sectionMap.analysis = child;
+      else if (child.querySelector?.("#wallpaperSunArc")) sectionMap.astronomy = child;
+      else if (child.querySelector?.("#wallpaperHourlyStrip")) sectionMap.hourly = child;
+      else if (child.querySelector?.("#wallpaperDailyStrip")) sectionMap.daily = child;
+    });
+
+    const hour = new Date().getHours();
+    let order;
+    if (hour >= 20 || hour < 6) {
+      // Night (8 PM - 6 AM): Hero -> Metrics -> Astronomy -> Hourly -> Daily -> Analysis
+      order = [
+        sectionMap.hero,
+        sectionMap.metrics,
+        sectionMap.astronomy,
+        sectionMap.hourly,
+        sectionMap.daily,
+        sectionMap.analysis,
+      ];
+    } else {
+      // Daytime: Hero -> Metrics -> Hourly -> Daily -> Analysis -> Astronomy
+      order = [
+        sectionMap.hero,
+        sectionMap.metrics,
+        sectionMap.hourly,
+        sectionMap.daily,
+        sectionMap.analysis,
+        sectionMap.astronomy,
+      ];
+    }
+
+    // Re-append in the new order; inline alert stays pinned at the top
+    order.forEach((section) => {
+      if (section) content.appendChild(section);
+    });
+  }
+
+  // ================================================================
+  //  WALLPAPER SCREENSHOT / EXPORT
+  // ================================================================
+
+  /**
+   * Renders the wallpaper's current conditions + key metrics + 7-day strip
+   * onto a canvas and downloads it as a PNG. Self-contained draw (no
+   * html2canvas dependency) so it works offline.
+   */
+  exportWallpaperImage() {
+    if (!this.wallpaperWeatherData || !this.wallpaperLocations.length) {
+      this.showToast("No wallpaper data to export", "info");
+      return;
+    }
+    const activeTab = this.wallpaperLocations[this.activeWallpaperIndex];
+    const weather = WeatherService.getHourlyAtIndex(
+      this.wallpaperWeatherData,
+      this.wallpaperCurrentHourIndex,
+    );
+    if (!weather || !activeTab) return;
+
+    const W = 1080;
+    const H = 1080;
+    const canvas = document.createElement("canvas");
+    canvas.width = W;
+    canvas.height = H;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) {
+      this.showToast("Could not render the image.", "error");
+      return;
+    }
+
+    // Background gradient (stormy-purple → near-black, matches the overlay)
+    const bg = ctx.createLinearGradient(0, 0, W, H);
+    bg.addColorStop(0, "#1e1b3a");
+    bg.addColorStop(1, "#0a0a14");
+    ctx.fillStyle = bg;
+    ctx.fillRect(0, 0, W, H);
+
+    // Header: location + coords + time
+    ctx.fillStyle = "#94a3b8";
+    ctx.font = "600 26px Inter, sans-serif";
+    ctx.fillText(`${activeTab.lat.toFixed(4)}° ${activeTab.lat >= 0 ? "N" : "S"}, ${activeTab.lng.toFixed(4)}° ${activeTab.lng >= 0 ? "E" : "W"}`, 60, 90);
+    ctx.fillStyle = "#ffffff";
+    ctx.font = "800 64px Inter, sans-serif";
+    ctx.fillText(activeTab.name, 60, 170);
+
+    // Big temp + description
+    ctx.font = "800 220px Inter, sans-serif";
+    ctx.fillText(WeatherService.formatTemp(weather.temperature), 60, 430);
+    ctx.font = "500 40px Inter, sans-serif";
+    ctx.fillStyle = "#cbd5e1";
+    ctx.fillText(weather.description, 64, 500);
+    ctx.font = "400 30px Inter, sans-serif";
+    ctx.fillStyle = "#94a3b8";
+    ctx.fillText(`Feels like ${WeatherService.formatTemp(weather.feelsLike)}`, 64, 550);
+
+    // Key metrics row (4 cards)
+    const metrics = [
+      { label: "HUMIDITY", value: `${weather.humidity ?? "--"}%` },
+      { label: "WIND", value: WeatherService.formatWind(weather.windSpeed) },
+      { label: "PRESSURE", value: WeatherService.formatPressure(weather.pressure) },
+      { label: "UV INDEX", value: weather.uvIndex != null ? weather.uvIndex.toFixed(1) : "--" },
+    ];
+    // ctx.roundRect is Chrome 99+/Safari 16+ only — fall back to a plain rect
+    const roundedRect = (x, y, w, h, r) => {
+      if (typeof ctx.roundRect === "function") {
+        ctx.roundRect(x, y, w, h, r);
+      } else {
+        ctx.rect(x, y, w, h);
+      }
+    };
+    const cardW = (W - 60 * 2 - 24 * 3) / 4;
+    metrics.forEach((m, i) => {
+      const x = 60 + i * (cardW + 24);
+      ctx.fillStyle = "rgba(255,255,255,0.06)";
+      ctx.beginPath();
+      roundedRect(x, 620, cardW, 150, 20);
+      ctx.fill();
+      ctx.fillStyle = "#94a3b8";
+      ctx.font = "600 20px Inter, sans-serif";
+      ctx.fillText(m.label, x + 24, 665);
+      ctx.fillStyle = "#ffffff";
+      ctx.font = "700 40px Inter, sans-serif";
+      ctx.fillText(m.value, x + 24, 720);
+    });
+
+    // 7-day strip
+    const daily = this.wallpaperWeatherData.daily;
+    if (daily?.time?.length) {
+      ctx.fillStyle = "#94a3b8";
+      ctx.font = "600 22px Inter, sans-serif";
+      ctx.fillText("7-DAY FORECAST", 60, 860);
+      const dayW = (W - 60 * 2 - 16 * 6) / 7;
+      daily.time.slice(0, 7).forEach((date, i) => {
+        const code = daily.weather_code?.[i] ?? 0;
+        const info = WeatherService.getWeatherInfo(code, true);
+        const maxTemp = daily.temperature_2m_max?.[i];
+        const minTemp = daily.temperature_2m_min?.[i];
+        const x = 60 + i * (dayW + 16);
+        ctx.fillStyle = "rgba(255,255,255,0.06)";
+        ctx.beginPath();
+        roundedRect(x, 890, dayW, 130, 16);
+        ctx.fill();
+        ctx.fillStyle = i === 0 ? "#14b8a6" : "#94a3b8";
+        ctx.font = "700 22px Inter, sans-serif";
+        ctx.textAlign = "center";
+        ctx.fillText(WeatherService.formatDayLabel(date), x + dayW / 2, 930);
+        ctx.fillStyle = "#ffffff";
+        ctx.font = "600 26px Inter, sans-serif";
+        ctx.fillText(`${maxTemp != null ? Math.round(maxTemp) : "--"}° ${minTemp != null ? Math.round(minTemp) : "--"}°`, x + dayW / 2, 970);
+        ctx.textAlign = "left";
+      });
+    }
+
+    // Footer: brand
+    ctx.fillStyle = "#64748b";
+    ctx.font = "500 22px Inter, sans-serif";
+    ctx.textAlign = "right";
+    ctx.fillText("Aurafisky · Open-Meteo", W - 60, H - 50);
+    ctx.textAlign = "left";
+
+    // Download
+    try {
+      const finish = (blobOrUrl) => {
+        const url = typeof blobOrUrl === "string" ? blobOrUrl : URL.createObjectURL(blobOrUrl);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = `aurafisky-wallpaper-${(activeTab.name || "location").split(",")[0].trim().replace(/[^\w-]+/g, "-").toLowerCase()}.png`;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        if (typeof blobOrUrl !== "string") setTimeout(() => URL.revokeObjectURL(url), 4000);
+        this.showToast("Wallpaper image saved", "success");
+      };
+      if (canvas.toBlob) {
+        canvas.toBlob((blob) => finish(blob), "image/png");
+      } else {
+        finish(canvas.toDataURL("image/png"));
+      }
+    } catch (e) {
+      this.showToast("Could not save the image.", "error");
+    }
+    this._haptic('medium');
+  }
+
   destroy() {
     if (this._rebindCleanups) {
       this._rebindCleanups.forEach((fn) => fn());
@@ -4252,6 +6992,12 @@ class AurafiskyApp {
     this.biasMap = null;
     if (this._alertPollTimer) clearInterval(this._alertPollTimer);
     if (this.tempOverlayTimer) clearInterval(this.tempOverlayTimer);
+    if (this.wallpaperTimer) clearInterval(this.wallpaperTimer);
+    if (this.wallpaperAutoRotateTimer) clearInterval(this.wallpaperAutoRotateTimer);
+    if (this._wallpaperClockTick) clearInterval(this._wallpaperClockTick);
+    if (this.wallpaperBgAnimationId) cancelAnimationFrame(this.wallpaperBgAnimationId);
+    if (this._wallpaperGeofenceWatchId != null) navigator.geolocation.clearWatch(this._wallpaperGeofenceWatchId);
+    if (this.wallpaperWakeLock) this.wallpaperWakeLock.release().catch(() => {});
     if (this._resizeRAF) {
       cancelAnimationFrame(this._resizeRAF);
       this._resizeRAF = null;
@@ -4497,6 +7243,10 @@ class AurafiskyApp {
 
   async initFirebase() {
     try {
+      if (!this.firebaseConfig?.apiKey) {
+        console.warn("Firebase API key not configured. Cloud sync and auth are disabled.");
+        return;
+      }
       // Lazy-load Firebase only when needed
       const fbApp =
         await import("https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js");
@@ -5371,10 +8121,18 @@ class AurafiskyApp {
 // already fired by the time this evaluates. Instantiate immediately
 // if the DOM is ready, otherwise wait for it.
 function bootAurafisky() {
-  window.app = new AurafiskyApp();
-  window.addEventListener("beforeunload", () => {
-    if (window.app?.destroy) window.app.destroy();
-  });
+  try {
+    window.app = new AurafiskyApp();
+    window.addEventListener("beforeunload", () => {
+      if (window.app?.destroy) window.app.destroy();
+    });
+  } catch (err) {
+    console.error("Failed to boot Aurafisky:", err);
+    const ov = document.getElementById("loadingOverlay");
+    if (ov) {
+      ov.innerHTML = `<div class="text-center p-6 bg-white dark:bg-slate-900 rounded-2xl shadow-xl max-w-sm mx-4"><p class="text-rose-500 font-semibold mb-2">Startup Error</p><p class="text-sm text-slate-600 dark:text-slate-400 mb-4">${err.message || 'An error occurred during startup.'}</p><button onclick="location.reload()" class="px-4 py-2 bg-primary text-white rounded-lg text-sm font-medium hover:opacity-90">Retry</button></div>`;
+    }
+  }
 }
 if (document.readyState === "loading") {
   document.addEventListener("DOMContentLoaded", bootAurafisky);

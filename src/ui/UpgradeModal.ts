@@ -42,4 +42,14 @@ export default class UpgradeModal {
     // Handle upgrade confirmation
     this.close();
   }
+
+  destroy() {
+    this.closeBtn?.removeEventListener('click', () => this.close());
+    this.confirmBtn?.removeEventListener('click', () => this.confirm());
+    this.container?.removeEventListener('click', () => {});
+    this.container = null;
+    this.contentEl = null;
+    this.closeBtn = null;
+    this.confirmBtn = null;
+  }
 }

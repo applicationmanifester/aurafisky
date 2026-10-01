@@ -321,6 +321,17 @@ export class LocalSyncService {
     }
     this.#refreshAllSubscriptions();
   }
+
+  destroy(): void {
+    window.removeEventListener('online', this.#scheduleFlush);
+    window.removeEventListener('offline', () => {});
+    if (this.#flushTimer) clearTimeout(this.#flushTimer);
+    this.#pendingWrites.forEach(w => w.reject(new Error('Service destroyed')));
+    this.#pendingWrites = [];
+    this.#statusListeners.clear();
+    this.#subscriptions.clear();
+    this.#docSubscriptions.clear();
+  }
 }
 
 export const localSyncService = new LocalSyncService();

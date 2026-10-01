@@ -20,3 +20,10 @@ export async function getMessagingInstance() {
   }
   return messagingPromise;
 }
+
+export function destroyFirebaseCore(): void {
+  messagingPromise = null;
+  // Note: Firebase app deletion is async and typically not needed for SPA lifecycle
+  // import { deleteApp } from 'firebase/app';
+  // await deleteApp(app);
+}

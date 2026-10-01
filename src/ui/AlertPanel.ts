@@ -13,4 +13,9 @@ export default class AlertPanel {
     if (!this.container) return;
     this.listEl = document.getElementById('alertList');
   }
+
+  destroy() {
+    this.listEl = null;
+    this.container = null;
+  }
 }

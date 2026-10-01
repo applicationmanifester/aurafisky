@@ -1,30 +1,53 @@
 // src/controllers/MapController.ts
-import L from 'leaflet';
+import { MapManager } from '../modules/MapManager.js';
+import { HtmlMarker } from '../modules/ol-marker.js';
 import { MAP_DEFAULT_ZOOM, MAP_DEFAULT_COORDS } from '../config/constants.ts';
 import { log } from '../utils/logger.ts';
 import { cancelAllForecasts, getForecast, type WeatherData } from '../services/WeatherService.ts';
+import { fromLonLat } from 'ol/proj.js';
 
 let debounceTimer: ReturnType<typeof setTimeout> | null = null;
 let currentRequestId = 0;
 
+let mapManagerInstance: MapManager | null = null;
+let markerInstance: HtmlMarker | null = null;
+
+function createMapManager(containerId: string): MapManager {
+  if (mapManagerInstance) {
+    mapManagerInstance.destroy();
+  }
+  mapManagerInstance = new MapManager(containerId, {
+    viewOptions: {
+      center: fromLonLat([MAP_DEFAULT_COORDS.lon, MAP_DEFAULT_COORDS.lat]),
+      zoom: MAP_DEFAULT_ZOOM,
+    },
+  });
+  return mapManagerInstance;
+}
+
 export interface MapController {
-  init(containerId: string): L.Map;
-  setView(map: L.Map, lat: number, lon: number, zoom?: number): void;
-  panTo(map: L.Map, lat: number, lon: number): void;
-  addMarker(map: L.Map, lat: number, lon: number, options?: L.MarkerOptions): L.Marker;
-  destroy(map: L.Map): void;
+  init(containerId: string): MapManager;
+  setView(lat: number, lon: number, zoom?: number): void;
+  panTo(lat: number, lon: number): void;
+  addMarker(lat: number, lon: number, htmlContent?: string): HtmlMarker | null;
+  destroy(): void;
   onWeatherUpdate: ((data: WeatherData, center: { lat: number; lon: number }) => void) | null;
 }
 
-async function handleMoveEnd(map: L.Map) {
-  const center = map.getCenter();
+async function handleMoveEnd(mapManager: MapManager) {
+  const map = mapManager.getMap();
+  if (!map) return;
+  const view = map.getView();
+  const center = view.getCenter();
+  if (!center) return;
+  const [lon, lat] = center; // OpenLayers uses [lon, lat]
   const requestId = ++currentRequestId;
   cancelAllForecasts();
 
   try {
-    const data = await getForecast(center.lat, center.lng);
+    const data = await getForecast(lat, lon);
     if (requestId !== currentRequestId) return;
-    mapControllerInstance.onWeatherUpdate?.(data, { lat: center.lat, lon: center.lng });
+    mapControllerInstance.onWeatherUpdate?.(data, { lat, lon });
   } catch (err) {
     if (requestId !== currentRequestId) return;
     log('Weather fetch error', err);
@@ -34,47 +57,52 @@ async function handleMoveEnd(map: L.Map) {
 const mapControllerInstance: MapController = {
   onWeatherUpdate: null,
 
-  init(containerId: string): L.Map {
-    const map = L.map(containerId, {
-      center: [MAP_DEFAULT_COORDS.lat, MAP_DEFAULT_COORDS.lon],
-      zoom: MAP_DEFAULT_ZOOM,
-      zoomControl: false,
-    });
+  init(containerId: string): MapManager {
+    const manager = createMapManager(containerId);
+    const map = manager.getMap();
+    
+    if (map) {
+      map.on('moveend', () => {
+        if (debounceTimer) clearTimeout(debounceTimer);
+        debounceTimer = setTimeout(() => handleMoveEnd(manager), 300);
+      });
+    }
 
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-      maxZoom: 19,
-      attribution: '© OpenStreetMap contributors',
-    }).addTo(map);
-
-    L.control.zoom({ position: 'bottomright' }).addTo(map);
-
-    map.on('moveend', () => {
-      if (debounceTimer) clearTimeout(debounceTimer);
-      debounceTimer = setTimeout(() => handleMoveEnd(map), 300);
-    });
-
-    log('Map initialized');
-    return map;
+    log('Map initialized (OpenLayers)');
+    return manager;
   },
 
-  setView(map: L.Map, lat: number, lon: number, zoom = MAP_DEFAULT_ZOOM) {
+  setView(lat: number, lon: number, zoom = MAP_DEFAULT_ZOOM) {
+    if (!mapManagerInstance) return;
     cancelAllForecasts();
-    map.setView([lat, lon], zoom);
+    mapManagerInstance.setView({
+      center: fromLonLat([lon, lat]),
+      zoom,
+    });
   },
 
-  panTo(map: L.Map, lat: number, lon: number) {
+  panTo(lat: number, lon: number) {
+    if (!mapManagerInstance) return;
     cancelAllForecasts();
-    map.panTo([lat, lon]);
+    mapManagerInstance.setView({
+      center: fromLonLat([lon, lat]),
+    });
   },
 
-  addMarker(map: L.Map, lat: number, lon: number, options: L.MarkerOptions = {}) {
-    return L.marker([lat, lon], options).addTo(map);
+  addMarker(lat: number, lon: number, htmlContent = '<div class="marker">📍</div>') {
+    if (!mapManagerInstance) return null;
+    markerInstance = mapManagerInstance.createMarker(lon, lat, htmlContent);
+    return markerInstance;
   },
 
-  destroy(map: L.Map) {
+  destroy() {
     if (debounceTimer) clearTimeout(debounceTimer);
     cancelAllForecasts();
-    map.remove();
+    if (mapManagerInstance) {
+      mapManagerInstance.destroy();
+      mapManagerInstance = null;
+    }
+    markerInstance = null;
   },
 };
 

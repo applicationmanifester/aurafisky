@@ -7,8 +7,8 @@ import XYZ from "ol/source/XYZ.js";
 import { defaults as defaultInteractions } from "ol/interaction/defaults.js";
 import { fromLonLat, toLonLat } from "ol/proj.js";
 import { apply as applyMapboxStyle, applyStyle as applyMapboxLayerStyle, getLayers as getMapboxLayers } from "ol-mapbox-style";
-import { HtmlMarker } from "./ol-marker.js";
-import { localizeGlStyle } from "./map-language.js";
+import { HtmlMarker } from "../modules/ol-marker.js";
+import { localizeGlStyle } from "../modules/map-language.js";
 
 export class MapManager {
   constructor(containerId, options = {}) {

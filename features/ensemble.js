@@ -19,11 +19,14 @@ export function init(app) {
   ensureSection();
   if (typeof window !== "undefined" && "Worker" in window) {
     try {
+      // Use Vite's ?worker import for proper bundling in Electron + web
+      // @vite-ignore - Vite handles this import specially
       worker = new Worker(
-        new URL("../workers/compute.worker.js", import.meta.url),
+        new URL("../workers/compute.worker.js?worker", import.meta.url),
         { type: "module" }
       );
     } catch (e) {
+      console.warn('Ensemble worker failed to load:', e);
       worker = null;
     }
   }

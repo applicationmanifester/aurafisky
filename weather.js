@@ -56,6 +56,7 @@ const WeatherService = (() => {
         _requestCache.delete(key);
         throw err;
       });
+    // Store the promise itself as cached data so concurrent callers receive the same promise
     _setCache(key, { data: promise, ts: Date.now() });
     return promise;
   }

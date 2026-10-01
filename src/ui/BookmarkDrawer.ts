@@ -65,4 +65,12 @@ export default class BookmarkDrawer {
     this.container.style.display = this.isOpen ? 'block' : 'none';
     if (this.isOpen) this.renderBookmarks();
   }
+
+  destroy() {
+    if (this.container) this.container.innerHTML = '';
+    this.listEl = null;
+    this.mapController = null;
+    this.weatherService = null;
+    this.bookmarkModule = null;
+  }
 }

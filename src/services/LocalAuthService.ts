@@ -215,6 +215,13 @@ class LocalAuthService extends EventEmitter {
     return !!this.#currentUser;
   }
 
+  destroy(): void {
+    this.#events.clear();
+    this.#currentUser = null;
+    this.#isInitialized = false;
+    this.#initPromise = null;
+  }
+
   get isPro(): boolean {
     return this.#currentUser?.tier === 'pro' || this.#currentUser?.tier === 'team';
   }

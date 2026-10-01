@@ -17,4 +17,9 @@ export default class InsightsPanel {
   updateLocations() {
     // Update insights based on bookmarked locations
   }
+
+  destroy() {
+    this.contentEl = null;
+    this.container = null;
+  }
 }

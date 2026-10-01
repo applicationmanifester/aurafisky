@@ -67,4 +67,18 @@ export default class SearchBar {
     if (typeof (window as any).showToast === 'function') (window as any).showToast(msg, { type: 'error' });
     else console.warn(msg);
   }
+
+  destroy() {
+    if (this.input) {
+      this.input.onkeypress = null;
+      this.input.disabled = false;
+    }
+    if (this.button) {
+      this.button.onclick = null;
+      this.button.disabled = false;
+    }
+    this.mapController = null;
+    this.searchModule = null;
+    this.weatherService = null;
+  }
 }

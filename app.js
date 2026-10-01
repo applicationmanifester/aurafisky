@@ -116,7 +116,7 @@ class AurafiskyApp {
       storageBucket: "aurafisky.firebasestorage.app",
       // Injected at build time from VITE_FIREBASE_API_KEY (see vite.config.js
       // `define` + .env.example)
-      apiKey: (typeof __FIREBASE_API_KEY__ !== "undefined" && __FIREBASE_API_KEY__) ? __FIREBASE_API_KEY__ : "",
+      apiKey: typeof __FIREBASE_API_KEY__ !== "undefined" ? __FIREBASE_API_KEY__ : "",
       authDomain: "aurafisky.firebaseapp.com",
       messagingSenderId: "206842187982",
       // Web Push VAPID key from Firebase Console → Project Settings → Cloud Messaging.

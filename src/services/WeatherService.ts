@@ -95,3 +95,8 @@ export const weatherService = {
   toFahrenheit,
   toCelsius,
 };
+
+export function destroyWeatherService(): void {
+  cancelAllForecasts();
+  // weatherCache.destroy() is called by App.destroy()
+}

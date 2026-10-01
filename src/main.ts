@@ -17,12 +17,14 @@ import AlertPanel from './ui/AlertPanel.ts';
 import InsightsPanel from './ui/InsightsPanel.ts';
 import UpgradeModal from './ui/UpgradeModal.ts';
 import { initViewportResizeListener } from './modules/viewportHeight.ts';
-import * as L from 'leaflet';
-
+import { destroyWeatherService } from './services/WeatherService.ts';
+import { destroyGeocodeService } from './services/GeocodeService.ts';
+import { destroyFirebaseCore } from './services/FirebaseCore.ts';
+import { weatherCache } from './services/CacheService.ts';
 /* ──────────────────────────────────────────────────────────────
  *  Utility helpers (together with imports) that were missing
  *  in the original code.
- * ────────────────────────────────────────────────────────────── */
+ *  ────────────────────────────────────────────────────────────── */
 
 function updateUserUI(user: any): void {
   // TODO: implement UI updates based on user state
@@ -41,8 +43,8 @@ function updateProFeatures(): void {
  * ────────────────────────────────────────────────────────────── */
 
 class App {
-  private map: L.Map | null = null;
-  private forecast: any | null = null;
+  private mapManager: import('../modules/MapManager.js').MapManager | null = null;
+  private forecast: import('../services/WeatherService.ts').WeatherData | null = null;
   private currentLocation: { lat: number; lon: number } | null = null;
   private user: any | null = null;
 
@@ -87,14 +89,25 @@ class App {
 
     await initPWA(); // No VAPID key needed for local mode
 
-    this.map = mapController.init('mapContainer');
+    this.mapManager = mapController.init('mapContainer');
     mapController.onWeatherUpdate = this.handleWeatherUpdate.bind(this);
     this.setupMapEvents();
 
     await this.initUI();
 
-    const center = this.map.getCenter();
-    await this.refreshWeather(center.lat, center.lng);
+    const map = this.mapManager?.getMap();
+    if (map) {
+      const view = map.getView();
+      const center = view.getCenter();
+      if (center) {
+        const [lon, lat] = center;
+        await this.refreshWeather(lat, lon);
+      }
+    }
+
+    // Initialize services that need explicit init
+    await historyService.initialize();
+    alertService.loadLocal();
 
     log('App initialized');
   }
@@ -125,10 +138,15 @@ class App {
   }
 
   private setupMapEvents(): void {
-    if (!this.map) return;
-    this.map.on('click', (e: L.LeafletMouseEvent) => {
-      if (e.originalEvent.shiftKey) {
-        this.addBookmarkAtLocation(e.latlng.lat, e.latlng.lng);
+    const map = this.mapManager?.getMap();
+    if (!map) return;
+    map.on('click', (e: any) => {
+      if (e.originalEvent?.shiftKey) {
+        const coord = map.getCoordinateFromPixel(e.pixel);
+        if (coord) {
+          const [lon, lat] = coord;
+          this.addBookmarkAtLocation(lat, lon);
+        }
       }
     });
   }
@@ -207,7 +225,7 @@ class App {
         return;
       }
       const { lat, lon, display_name } = results[0];
-      if (this.map) mapController.setView(this.map, lat, lon);
+      mapController.setView(lat, lon);
       await this.refreshWeather(lat, lon);
       showToast(`Found: ${display_name.split(',')[0]}`);
     } catch (e) {
@@ -267,6 +285,47 @@ class App {
   private handleWeatherUpdate(data: any): void {
     this.renderForecast(data);
   }
+
+  /**
+   * Clean up all resources, timers, listeners, and subscriptions.
+   * Call when the app is being torn down (e.g., page unload, auth change).
+   */
+  public destroy(): void {
+    log('Destroying Aurafisky app...');
+
+    // Destroy UI components
+    this.bookmarkDrawer?.destroy();
+    this.searchBar?.destroy();
+    this.alertPanel?.destroy();
+    this.insightsPanel?.destroy();
+    this.upgradeModal?.destroy();
+
+    // Destroy map controller (which destroys MapManager)
+    mapController.destroy();
+
+    // Destroy services
+    localAuthService.destroy();
+    localSyncService.destroy();
+    alertService.destroy();
+    historyService.destroy();
+    weatherCache.destroy(); // from CacheService
+    destroyGeocodeService();
+    destroyWeatherService();
+    destroyFirebaseCore();
+
+    // Clear references
+    this.mapManager = null;
+    this.forecast = null;
+    this.currentLocation = null;
+    this.user = null;
+    this.bookmarkDrawer = null;
+    this.searchBar = null;
+    this.alertPanel = null;
+    this.insightsPanel = null;
+    this.upgradeModal = null;
+
+    log('App destroyed');
+  }
 }
 
 /* -------------------------------------------------------------------- */
@@ -274,3 +333,6 @@ class App {
 /* -------------------------------------------------------------------- */
 const appInstance = new App();
 appInstance.init().catch((e) => log('Fatal init error', e));
+
+// Expose for debugging and cleanup
+(window as any).AurafiskyApp = appInstance;

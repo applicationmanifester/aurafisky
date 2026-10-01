@@ -281,6 +281,7 @@ export class AlertService {
     if (this.#dailyBriefingTimer) clearTimeout(this.#dailyBriefingTimer);
     this.#listeners.clear();
     this.#alerts = [];
+    this.#lastEvaluated.clear();
   }
 }
 

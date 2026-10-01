@@ -39,7 +39,7 @@ export async function geocode(query: string): Promise<GeocodeResult[]> {
 
     const url = `${GEOCODING_BASE_URL}?q=${encodeURIComponent(sanitized)}&format=json&limit=5&addressdetails=1`;
     const res = await fetch(url, {
-      headers: { 'User-Agent': 'Aurafisky/11.0.0', 'Accept': 'application/json' }
+      headers: { 'User-Agent': 'Aurafisky/12.0.0', 'Accept': 'application/json' }
     });
     if (!res.ok) throw new Error(`Geocode error: ${res.status}`);
 
@@ -53,4 +53,11 @@ export async function geocode(query: string): Promise<GeocodeResult[]> {
       admin1: r.address?.state || r.address?.province || '',
     }));
   });
+}
+
+export function destroyGeocodeService(): void {
+  // Clear the rate limiter state
+  limiter.tokens = 1;
+  limiter.lastRefill = Date.now();
+  // The cache is managed by CacheService which has its own destroy()
 }

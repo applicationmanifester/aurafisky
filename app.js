@@ -2719,6 +2719,24 @@ class AurafiskyApp {
     }
   }
 
+  _clearUrlParams() {
+    try {
+      const url = new URL(window.location.href);
+      let changed = false;
+      for (const key of ["lat", "lng", "name"]) {
+        if (url.searchParams.has(key)) {
+          url.searchParams.delete(key);
+          changed = true;
+        }
+      }
+      if (changed) {
+        window.history.replaceState(null, "", url.toString());
+      }
+    } catch (e) {
+      console.warn("Could not clear URL search params:", e);
+    }
+  }
+
   _checkUrlParamsOnStartup() {
     try {
       const params = new URLSearchParams(window.location.search);
@@ -3326,6 +3344,9 @@ class AurafiskyApp {
     return `
         <div class="weather-marker relative bg-white dark:bg-slate-800 rounded-2xl px-3.5 py-2.5 shadow-lg
                     border border-slate-200/60 dark:border-slate-600/30 text-center min-w-[80px]">
+          <button type="button" class="marker-close-btn absolute -top-1.5 -right-1.5 w-5 h-5 rounded-full bg-slate-100 hover:bg-rose-500 dark:bg-slate-700 dark:hover:bg-rose-500 text-slate-400 hover:text-white dark:text-slate-300 dark:hover:text-white flex items-center justify-center shadow-md transition-all border border-slate-200/80 dark:border-slate-600/80 cursor-pointer z-20" title="Close location" aria-label="Close location">
+            <svg class="w-3 h-3 pointer-events-none" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
+          </button>
           <div class="text-2xl leading-none mb-1">${weather.icon}</div>
           <div class="text-lg font-bold text-slate-800 dark:text-white leading-tight">
             ${WeatherService.formatTemp(weather.temperature)}
@@ -3376,6 +3397,12 @@ class AurafiskyApp {
         tooltipClassName: "location-tooltip",
         onClick: (domEvent) => {
           if (this._isDragGesture({ originalEvent: domEvent })) return;
+          if (domEvent.target.closest(".marker-close-btn")) {
+            domEvent.stopPropagation();
+            this.hideWeatherPanel();
+            this._haptic('selection');
+            return;
+          }
           this.showWeatherPanel();
         },
       });
@@ -7048,6 +7075,26 @@ class AurafiskyApp {
     if (this.ctx && this.canvas) {
       this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
     }
+    // Remove the selected location marker and popup from the map
+    if (this.marker) {
+      this.marker.remove();
+      this.marker = null;
+    }
+    this.selectedLat = null;
+    this.selectedLng = null;
+    this.selectedName = "";
+    this.weatherData = null;
+    if (typeof this.updateHomeButton === "function") {
+      this.updateHomeButton();
+    }
+    if (this.$.searchInput) {
+      this.$.searchInput.value = "";
+    }
+    if (this.$.searchClearBtn) {
+      this.$.searchClearBtn.classList.add("hidden");
+    }
+    this._clearUrlParams();
+    localforage.removeItem("_lastSession").catch(() => {});
   }
 
   toggleMinimizeWeatherPanel() {

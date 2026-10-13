@@ -274,6 +274,116 @@ html, body {
   }
 }
 
+/* ── Mobile Bottom Navigation Bar ────────────────────────────── */
+@media (max-width: 639px) {
+  #mobileBottomNav {
+    display: flex !important;
+    padding-bottom: calc(0.5rem + env(safe-area-inset-bottom, 0px));
+    height: calc(3.5rem + env(safe-area-inset-bottom, 0px));
+  }
+  
+  .mobile-nav-btn {
+    min-height: 44px; /* Minimum touch target */
+    min-width: 44px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 2px;
+    border-radius: 0.75rem;
+    padding: 0.5rem;
+    transition: all 0.2s ease;
+  }
+  
+  .mobile-nav-btn.active {
+    color: var(--primary);
+    background: rgba(20, 184, 166, 0.1);
+  }
+  
+  .mobile-nav-btn:active {
+    transform: scale(0.95);
+  }
+  
+  .mobile-nav-btn svg {
+    transition: transform 0.2s ease;
+  }
+  
+  .mobile-nav-btn.active svg {
+    transform: scale(1.1);
+  }
+  
+  /* Ensure map has bottom padding for the nav bar */
+  #map {
+    padding-bottom: calc(3.5rem + env(safe-area-inset-bottom, 0px));
+  }
+  
+  /* Toast container above bottom nav */
+  #toastContainer {
+    bottom: calc(3.5rem + env(safe-area-inset-bottom, 0px) + 1rem);
+  }
+}
+
+/* ── Mobile Touch Targets - Ensure 44x44 minimum ─────────────── */
+@media (max-width: 639px) {
+  button,
+  [role="button"],
+  input[type="checkbox"],
+  input[type="radio"],
+  select,
+  .compact-btn {
+    min-height: 44px;
+    min-width: 44px;
+  }
+  
+  /* Range sliders - larger thumb */
+  input[type="range"] {
+    height: 2rem;
+  }
+  
+  input[type="range"]::-webkit-slider-thumb {
+    width: 24px;
+    height: 24px;
+  }
+  
+  input[type="range"]::-moz-range-thumb {
+    width: 24px;
+    height: 24px;
+  }
+}
+
+/* ── iOS Safe Areas & Edge-to-Edge ───────────────────────────── */
+@supports (padding: max(0px)) {
+  .safe-area-inset-top { padding-top: env(safe-area-inset-top); }
+  .safe-area-inset-bottom { padding-bottom: env(safe-area-inset-bottom); }
+  .safe-area-inset-left { padding-left: env(safe-area-inset-left); }
+  .safe-area-inset-right { padding-right: env(safe-area-inset-right); }
+}
+
+/* ── Reduced Motion Support ──────────────────────────────────── */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* ── High Contrast Mode Support ──────────────────────────────── */
+@media (prefers-contrast: high) {
+  :root {
+    --glass-border: rgba(0, 0, 0, 0.8);
+    --glass-bg: rgba(255, 255, 255, 0.98);
+  }
+  .dark {
+    --glass-border: rgba(255, 255, 255, 0.8);
+    --glass-bg: rgba(15, 23, 42, 0.98);
+  }
+  .glass {
+    border-width: 2px;
+  }
+}
+
 /* ── Weather Panel Minimized State ─────────────────────────── */
 .weather-panel.minimized #weatherPanelContent,
 .weather-panel.minimized #weatherPanelSkeleton,
@@ -1619,7 +1729,9 @@ button, a, input, select, textarea, [role="button"] {
   #compareCloseBtn,
   #navCancelPreviewBtn,
   #navMuteBtn,
-  #navStopBtn {
+  #navStopBtn,
+  #panelMinimizeBtn,
+  #panelCloseBtn {
     min-width: 44px;
     min-height: 44px;
     display: inline-flex;
@@ -1628,6 +1740,43 @@ button, a, input, select, textarea, [role="button"] {
   }
   #navStartBtn {
     min-height: 48px;
+  }
+
+  /* On mobile when weather card is open and full, compact the on-map weather marker bubble so it doesn't obstruct the remaining visible map area */
+  .weather-panel.open:not(.minimized) ~ #map .weather-marker,
+  body:has(.weather-panel.open:not(.minimized)) .weather-marker,
+  body.weather-panel-expanded .weather-marker {
+    min-width: 0 !important;
+    padding: 0.35rem 0.65rem !important;
+    border-radius: 9999px !important;
+    display: inline-flex !important;
+    align-items: center !important;
+    gap: 0.35rem !important;
+    box-shadow: 0 4px 14px rgba(0, 0, 0, 0.18) !important;
+  }
+  .weather-panel.open:not(.minimized) ~ #map .weather-marker .marker-close-btn,
+  body:has(.weather-panel.open:not(.minimized)) .weather-marker .marker-close-btn,
+  body.weather-panel-expanded .weather-marker .marker-close-btn {
+    display: none !important;
+  }
+  .weather-panel.open:not(.minimized) ~ #map .weather-marker div:nth-child(4),
+  body:has(.weather-panel.open:not(.minimized)) .weather-marker div:nth-child(4),
+  body.weather-panel-expanded .weather-marker div:nth-child(4) {
+    display: none !important;
+  }
+  .weather-panel.open:not(.minimized) ~ #map .weather-marker div:nth-child(2),
+  body:has(.weather-panel.open:not(.minimized)) .weather-marker div:nth-child(2),
+  body.weather-panel-expanded .weather-marker div:nth-child(2) {
+    font-size: 1.1rem !important;
+    margin-bottom: 0 !important;
+    line-height: 1 !important;
+  }
+  .weather-panel.open:not(.minimized) ~ #map .weather-marker div:nth-child(3),
+  body:has(.weather-panel.open:not(.minimized)) .weather-marker div:nth-child(3),
+  body.weather-panel-expanded .weather-marker div:nth-child(3) {
+    font-size: 0.85rem !important;
+    font-weight: 700 !important;
+    line-height: 1 !important;
   }
 
   /* Search dropdown results: minimum 44px height for comfortable touch tapping */
@@ -1647,6 +1796,44 @@ button, a, input, select, textarea, [role="button"] {
     background-color: var(--primary, #0ea5e9) !important;
     transform: scaleX(1.2);
     transition: transform 0.15s ease, background-color 0.15s ease;
+  }
+
+  /* Settings panel mobile bottom sheet */
+  #settingsPanel > div:nth-child(2) {
+    top: auto !important;
+    bottom: 0 !important;
+    left: 0 !important;
+    right: 0 !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    height: auto !important;
+    max-height: calc(88vh - env(safe-area-inset-bottom, 0px)) !important;
+    border-radius: 1.5rem 1.5rem 0 0 !important;
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+    box-shadow: 0 -8px 32px rgba(0, 0, 0, 0.25) !important;
+  }
+
+  /* Share modal mobile bottom sheet */
+  #shareModal {
+    align-items: flex-end !important;
+  }
+  #shareModal > div {
+    border-radius: 1.5rem 1.5rem 0 0 !important;
+    max-width: 100% !important;
+    width: 100% !important;
+    margin: 0 !important;
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+    box-shadow: 0 -8px 32px rgba(0, 0, 0, 0.25) !important;
+  }
+
+  /* Timeline slider touch optimization on mobile */
+  #timelineSlider {
+    touch-action: pan-x !important;
+    height: 36px !important;
+  }
+  #timelineSlider::-webkit-slider-thumb {
+    width: 28px !important;
+    height: 28px !important;
   }
 }
 

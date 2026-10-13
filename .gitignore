@@ -13,3 +13,4 @@ aurafisky-desktop/
 .env
 .env.*
 !.env.example
+.ai_backups/

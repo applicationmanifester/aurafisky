@@ -1233,6 +1233,14 @@ class AurafiskyApp {
       this.map.on("click", async (e) => {
         if (this._mapClickDebounce) return;
 
+        // Dismiss virtual keyboard and search dropdown on map tap
+        if (this.$.searchInput) {
+          this.$.searchInput.blur();
+        }
+        if (this.$.searchDropdown) {
+          this.$.searchDropdown.classList.remove("open");
+        }
+
         // Dismiss open terms, info, or shortcuts modals on map click
         if (this.$.termsModal && this.$.termsModal.style.display !== "none" && !this.$.termsModal.classList.contains("hidden")) {
           this.hideTermsModal();
@@ -2478,7 +2486,7 @@ class AurafiskyApp {
       { passive: true },
     );
 
-    // ── Swipe-down to dismiss weather panel (mobile) ─────────────
+    // ── Mobile pull-down on weather panel to minimize (peek mode) ──
     this._panelTouchStartY = 0;
     this._panelTouchActive = false;
     const panel = this.$.weatherPanel;
@@ -2486,50 +2494,27 @@ class AurafiskyApp {
       panel.addEventListener(
         "touchstart",
         (e) => {
-          if (e.touches.length !== 1) return;
+          if (window.innerWidth >= 640 || e.touches.length !== 1) return;
           this._panelTouchStartY = e.touches[0].clientY;
           this._panelTouchActive = true;
         },
         { passive: true },
       );
       panel.addEventListener(
-        "touchmove",
-        (e) => {
-          if (!this._panelTouchActive || e.touches.length !== 1) return;
-          const dy = e.touches[0].clientY - this._panelTouchStartY;
-          // Don't drag if panel is minimized
-          if (this.$.weatherPanel.classList.contains("minimized")) return;
-          // Only handle if panel is open and at top of scroll
-          if (
-            this.$.weatherPanel.classList.contains("open") &&
-            this.$.weatherPanelContent.scrollTop === 0 &&
-            dy > 0
-          ) {
-            e.preventDefault();
-            this.$.weatherPanel.style.transform = `translateY(${dy}px)`;
-            this.$.weatherPanel.style.transition = "none";
-            // Add dragging class for visual feedback
-            if (dy > 20) {
-              this.$.weatherPanel.classList.add("dragging");
-            }
-          }
-        },
-        { passive: false },
-      );
-      panel.addEventListener(
         "touchend",
         (e) => {
-          if (!this._panelTouchActive) return;
-          const dy = e.changedTouches[0].clientY - this._panelTouchStartY;
+          if (!this._panelTouchActive || window.innerWidth >= 640) return;
           this._panelTouchActive = false;
-          this.$.weatherPanel.style.transition = "";
-          this.$.weatherPanel.classList.remove("dragging");
-          // If minimized, don't apply drag-to-dismiss
           if (this.$.weatherPanel.classList.contains("minimized")) return;
-          if (dy > 100) {
-            this.hideWeatherPanel();
-          } else {
-            this.$.weatherPanel.style.transform = "";
+          const dy = e.changedTouches[0].clientY - this._panelTouchStartY;
+          // If pulled down > 60px while scrolled at the top, snap into minimized peek mode
+          if (
+            this.$.weatherPanel.classList.contains("open") &&
+            this.$.weatherPanelContent?.scrollTop === 0 &&
+            dy > 60
+          ) {
+            this.toggleMinimizeWeatherPanel();
+            this._haptic("light");
           }
         },
         { passive: true },
@@ -4656,6 +4641,7 @@ class AurafiskyApp {
         this.$.searchDropdown.classList.remove("open");
         this.$.searchInput.value = r.displayName;
         this.$.searchClearBtn.classList.remove("hidden");
+        if (this.$.searchInput) this.$.searchInput.blur();
         this.selectLocation(r.latitude, r.longitude, r.displayName);
       });
       container.appendChild(btn);
@@ -4800,6 +4786,7 @@ class AurafiskyApp {
     this.$.searchDropdown.classList.remove("open");
     this.$.searchInput.value = result.displayName;
     this.$.searchClearBtn.classList.remove("hidden");
+    if (this.$.searchInput) this.$.searchInput.blur();
 
     if (result.latitude && result.longitude) {
       this.addToSearchHistory(result);
@@ -7055,6 +7042,7 @@ class AurafiskyApp {
     this.$.weatherPanel.classList.add("open");
     this.$.weatherPanel.classList.remove("minimized");
     this.$.weatherPanel.removeAttribute("inert");
+    document.body.classList.add("weather-panel-expanded");
     if (this.$.panelMinimizeBtn) {
       this.$.panelMinimizeBtn.classList.remove("chevron-flipped");
     }
@@ -7062,6 +7050,7 @@ class AurafiskyApp {
       this.$.mobileNavWeatherBtn.classList.add("active");
       this.$.mobileNavMapBtn?.classList.remove("active");
     }
+    this.syncMobileBottomNavState();
     // Mobile: collapse radar panel to avoid overlap
     if (
       window.innerWidth < 640 &&
@@ -7076,10 +7065,12 @@ class AurafiskyApp {
   hideWeatherPanel() {
     this.$.weatherPanel.classList.remove("open", "minimized");
     this.$.weatherPanel.setAttribute("inert", "");
+    document.body.classList.remove("weather-panel-expanded");
     if (this.$.mobileNavMapBtn) {
       this.$.mobileNavMapBtn.classList.add("active");
       this.$.mobileNavWeatherBtn?.classList.remove("active");
     }
+    this.syncMobileBottomNavState();
     // NOTE: 'compact' class on <html> is a persistent user preference — do not remove it here.
     if (this.$.panelMinimizeBtn) {
       this.$.panelMinimizeBtn.classList.remove("chevron-flipped");
@@ -7123,6 +7114,7 @@ class AurafiskyApp {
   toggleMinimizeWeatherPanel() {
     this.$.weatherPanel.classList.toggle("minimized");
     const isMin = this.$.weatherPanel.classList.contains("minimized");
+    document.body.classList.toggle("weather-panel-expanded", !isMin);
     if (this.$.panelMinimizeBtn) {
       this.$.panelMinimizeBtn.classList.toggle(
         "chevron-flipped",
@@ -7133,6 +7125,7 @@ class AurafiskyApp {
       this.$.mobileNavWeatherBtn.classList.toggle("active", !isMin);
       this.$.mobileNavMapBtn.classList.toggle("active", isMin);
     }
+    this.syncMobileBottomNavState();
   }
 
   // ================================================================
@@ -7336,6 +7329,37 @@ class AurafiskyApp {
     }
     if (this.$.overviewHumidityChip && weather) {
       this.$.overviewHumidityChip.textContent = `${weather.humidity ?? "--"}%`;
+    }
+  }
+
+  /**
+   * Synchronizes mobile bottom navigation tab active indicators with actual UI state.
+   */
+  syncMobileBottomNavState() {
+    const mapBtn = this.$.mobileNavMapBtn;
+    const weatherBtn = this.$.mobileNavWeatherBtn;
+    const routeBtn = this.$.mobileNavRouteBtn;
+    const savedBtn = this.$.mobileNavSavedBtn;
+    const layersBtn = this.$.mobileNavLayersBtn;
+    if (!mapBtn) return;
+
+    const routePanelOpen = document.getElementById("routePanel") && !document.getElementById("routePanel").classList.contains("hidden");
+    const savedOpen = this.$.bookmarksDropdown && !this.$.bookmarksDropdown.classList.contains("hidden");
+    const layersOpen = this.$.mapLayersFlyout && !this.$.mapLayersFlyout.classList.contains("hidden");
+    const weatherOpen = this.$.weatherPanel?.classList.contains("open") && !this.$.weatherPanel?.classList.contains("minimized");
+
+    [mapBtn, weatherBtn, routeBtn, savedBtn, layersBtn].forEach((btn) => btn?.classList.remove("active"));
+
+    if (routePanelOpen && routeBtn) {
+      routeBtn.classList.add("active");
+    } else if (savedOpen && savedBtn) {
+      savedBtn.classList.add("active");
+    } else if (layersOpen && layersBtn) {
+      layersBtn.classList.add("active");
+    } else if (weatherOpen && weatherBtn) {
+      weatherBtn.classList.add("active");
+    } else if (mapBtn) {
+      mapBtn.classList.add("active");
     }
   }
 

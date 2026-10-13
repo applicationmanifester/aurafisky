@@ -155,6 +155,51 @@ describe('Mobile Tabs & Navigation Layout', () => {
     expect(css).toContain('#weatherPanelTabs {');
     expect(css).toContain('-webkit-overflow-scrolling: touch;');
   });
+
+  it('compacts on-map weather marker bubble when mobile bottom sheet is open', () => {
+    const css = fs.readFileSync('styles.css', 'utf-8');
+    expect(css).toContain('.weather-panel.open:not(.minimized) ~ #map .weather-marker');
+    expect(css).toContain('body.weather-panel-expanded .weather-marker');
+    expect(css).toContain('border-radius: 9999px !important;');
+  });
+
+  it('ensures weather panel header controls meet 44px minimum touch targets', () => {
+    const css = fs.readFileSync('styles.css', 'utf-8');
+    expect(css).toContain('#panelMinimizeBtn');
+    expect(css).toContain('#panelCloseBtn');
+  });
+
+  it('syncs mobile navigation state and dismisses virtual keyboard on search selection in app.js', () => {
+    const appCode = fs.readFileSync('app.js', 'utf-8');
+    expect(appCode).toContain('syncMobileBottomNavState()');
+    expect(appCode).toContain('this.$.searchInput.blur()');
+  });
+
+  it('styles settings panel and share modal as mobile bottom sheets in styles.css', () => {
+    const css = fs.readFileSync('styles.css', 'utf-8');
+    expect(css).toContain('#settingsPanel > div:nth-child(2) {');
+    expect(css).toContain('#shareModal {');
+    expect(css).toContain('align-items: flex-end !important;');
+    expect(css).toContain('border-radius: 1.5rem 1.5rem 0 0 !important;');
+  });
+
+  it('provides dedicated touch-action and thumb sizing for mobile timeline slider in styles.css', () => {
+    const css = fs.readFileSync('styles.css', 'utf-8');
+    expect(css).toContain('#timelineSlider {');
+    expect(css).toContain('touch-action: pan-x !important;');
+  });
+
+  it('includes PWA install button in index.html for settings and mobile integration', () => {
+    const installBtn = doc.getElementById('installBtn');
+    expect(installBtn).not.toBeNull();
+    const installLabel = doc.getElementById('installBtnLabel');
+    expect(installLabel).not.toBeNull();
+  });
+
+  it('throttles weather particle canvas loop during mobile map drag in features/canvasEffects.js', () => {
+    const effectsCode = fs.readFileSync('features/canvasEffects.js', 'utf-8');
+    expect(effectsCode).toContain('window.innerWidth < 640 && this._mapWasDragged');
+  });
 });
 
 

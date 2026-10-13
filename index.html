@@ -64,14 +64,12 @@
 <body class="bg-surface-light dark:bg-surface-dark text-slate-800 dark:text-slate-200 font-sans antialiased">
   <!-- Skip link for keyboard users -->
   <a href="#main-content" class="sr-only focus:not-sr-only focus:absolute focus:top-4 focus:left-4 z-[9999] bg-primary text-white px-4 py-2 rounded-lg shadow-lg font-medium">Skip to main content</a>
-
-  <!-- Live region for dynamic announcements -->
+n  <!-- Live region for dynamic announcements -->
   <div id="a11y-live-region" aria-live="polite" aria-atomic="true" class="sr-only"></div>
-
-  <!-- ============================================================ -->
+n  <!-- ============================================================ -->
   <!-- TOP BAR — Logo + Search + Controls                           -->
   <!-- ============================================================ -->
-  <div class="fixed top-0 left-0 right-0 z-[1002] p-3 sm:p-4 pointer-events-none" role="banner">
+  <div class="fixed top-0 left-0 right-0 z-[1002] p-3 sm:p-4 pointer-events-none" role="banner" style="padding-top: env(safe-area-inset-top, 0px); padding-bottom: env(safe-area-inset-top, 0px);">
     <div class="max-w-2xl mx-auto flex flex-wrap items-center gap-2 sm:gap-3">
 
       <!-- Brand Logo -->
@@ -1791,6 +1789,14 @@
         </div>
 
         <div class="space-y-2">
+          <!-- Install PWA Button (toggled when install prompt is available or on iOS) -->
+          <button id="installBtn" class="hidden w-full flex items-center justify-between p-3 rounded-2xl bg-primary/10 hover:bg-primary/20 border border-primary/30 transition-all group shadow-sm text-primary">
+            <div class="flex items-center gap-3">
+              <span class="w-8 h-8 rounded-xl bg-primary text-white flex items-center justify-center text-sm font-bold">📲</span>
+              <span id="installBtnLabel" class="text-sm font-semibold text-primary">Install Aurafisky App</span>
+            </div>
+            <span class="text-primary group-hover:translate-x-0.5 transition-transform text-xs">→</span>
+          </button>
           <button id="settingsClearCacheBtn" class="w-full flex items-center justify-between p-3 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/60 dark:border-slate-800/50 hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-all group shadow-sm">
             <div class="flex items-center gap-3">
               <span class="w-8 h-8 rounded-xl bg-amber-500/10 text-amber-500 flex items-center justify-center text-sm">🧹</span>

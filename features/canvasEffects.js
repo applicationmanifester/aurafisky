@@ -123,6 +123,12 @@ function runWeatherCanvasLoop() {
         return;
       }
 
+      // Throttle canvas particle animation during mobile map dragging for battery & GPU savings
+      if (typeof window !== "undefined" && window.innerWidth < 640 && this._mapWasDragged) {
+        this.animationFrameId = requestAnimationFrame(draw);
+        return;
+      }
+
       const ctx = this.ctx;
       const w = this.canvasCssWidth ?? this.canvas.width;
       const h = this.canvasCssHeight ?? this.canvas.height;

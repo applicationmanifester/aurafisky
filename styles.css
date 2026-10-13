@@ -248,6 +248,7 @@ html, body {
   transform: translateX(-110%);
   transition: transform 0.4s cubic-bezier(0.22, 1, 0.36, 1);
   contain: paint;
+  will-change: transform;
 }
 .weather-panel.open {
   transform: translateX(0);
@@ -1642,8 +1643,9 @@ button, a, input, select, textarea, [role="button"] {
     -webkit-overflow-scrolling: touch;
   }
 
-  /* Weather panel scrollable content: momentum scroll on iOS */
+  /* Weather panel scrollable content: momentum scroll on iOS and paint/layout isolation */
   #weatherPanelContent {
+    contain: content;
     -webkit-overflow-scrolling: touch;
     overscroll-behavior-y: contain;
   }

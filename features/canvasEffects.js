@@ -19,6 +19,15 @@ function initWeatherCanvas() {
       this.canvas.style.opacity = "1";
     });
 
+    // Restart loop when returning to tab/app
+    if (typeof document !== "undefined") {
+      document.addEventListener("visibilitychange", () => {
+        if (!document.hidden && this.activeEffectType && this.activeEffectType !== "none" && !this.animationFrameId) {
+          this.runWeatherCanvasLoop();
+        }
+      });
+    }
+
     // Start the animation loop
     this.runWeatherCanvasLoop();
   }
@@ -119,6 +128,12 @@ function runWeatherCanvasLoop() {
     const TWO_PI = Math.PI * 2;
     const draw = (now) => {
       if (this.activeEffectType === "none" && this.lightningFlash === 0) {
+        this.animationFrameId = null;
+        return;
+      }
+
+      // Conserve 100% battery & CPU when page/tab is hidden or phone screen is locked
+      if (typeof document !== "undefined" && document.hidden) {
         this.animationFrameId = null;
         return;
       }

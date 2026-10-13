@@ -319,6 +319,16 @@ class AurafiskyApp {
       offlineBanner: document.getElementById("offlineBanner"),
       weatherPanelSkeleton: document.getElementById("weatherPanelSkeleton"),
       weatherPanelContent: document.getElementById("weatherPanelContent"),
+      weatherPanelTabs: document.getElementById("weatherPanelTabs"),
+      overviewAQIChip: document.getElementById("overviewAQIChip"),
+      overviewWindChip: document.getElementById("overviewWindChip"),
+      overviewHumidityChip: document.getElementById("overviewHumidityChip"),
+      mobileBottomNav: document.getElementById("mobileBottomNav"),
+      mobileNavMapBtn: document.getElementById("mobileNavMapBtn"),
+      mobileNavWeatherBtn: document.getElementById("mobileNavWeatherBtn"),
+      mobileNavRouteBtn: document.getElementById("mobileNavRouteBtn"),
+      mobileNavSavedBtn: document.getElementById("mobileNavSavedBtn"),
+      mobileNavLayersBtn: document.getElementById("mobileNavLayersBtn"),
 
       // Turn-by-turn navigation
       navigateHereBtn: document.getElementById("navigateHereBtn"),
@@ -797,6 +807,8 @@ class AurafiskyApp {
     // Bind event handlers
     this.bindEvents();
     this.initKeyboardShortcuts();
+    this.initWeatherPanelTabs();
+    this.initMobileBottomNav();
 
     // Initialize Firebase integrations & bind user profile / settings triggers
     this.initFirebase();
@@ -3527,6 +3539,9 @@ class AurafiskyApp {
     const aqiVal = this.airQualityData?.hourly?.us_aqi[hourIndex];
     const advisories = WeatherService.getAdvisories(weather, aqiVal);
     this.renderAdvisoryBanner(advisories);
+
+    // Sync Overview Quick Stats Chips
+    this._updateOverviewChips(weather, aqiVal);
 
     // Comfort Index
     const comfortScore = WeatherService.getComfortIndex(weather, aqiVal);
@@ -7043,6 +7058,10 @@ class AurafiskyApp {
     if (this.$.panelMinimizeBtn) {
       this.$.panelMinimizeBtn.classList.remove("chevron-flipped");
     }
+    if (this.$.mobileNavWeatherBtn) {
+      this.$.mobileNavWeatherBtn.classList.add("active");
+      this.$.mobileNavMapBtn?.classList.remove("active");
+    }
     // Mobile: collapse radar panel to avoid overlap
     if (
       window.innerWidth < 640 &&
@@ -7057,6 +7076,10 @@ class AurafiskyApp {
   hideWeatherPanel() {
     this.$.weatherPanel.classList.remove("open", "minimized");
     this.$.weatherPanel.setAttribute("inert", "");
+    if (this.$.mobileNavMapBtn) {
+      this.$.mobileNavMapBtn.classList.add("active");
+      this.$.mobileNavWeatherBtn?.classList.remove("active");
+    }
     // NOTE: 'compact' class on <html> is a persistent user preference — do not remove it here.
     if (this.$.panelMinimizeBtn) {
       this.$.panelMinimizeBtn.classList.remove("chevron-flipped");
@@ -7099,12 +7122,181 @@ class AurafiskyApp {
 
   toggleMinimizeWeatherPanel() {
     this.$.weatherPanel.classList.toggle("minimized");
+    const isMin = this.$.weatherPanel.classList.contains("minimized");
     if (this.$.panelMinimizeBtn) {
       this.$.panelMinimizeBtn.classList.toggle(
         "chevron-flipped",
-        this.$.weatherPanel.classList.contains("minimized"),
+        isMin,
       );
     }
+    if (this.$.mobileNavWeatherBtn && this.$.mobileNavMapBtn) {
+      this.$.mobileNavWeatherBtn.classList.toggle("active", !isMin);
+      this.$.mobileNavMapBtn.classList.toggle("active", isMin);
+    }
+  }
+
+  // ================================================================
+  //  WEATHER PANEL TABS & MOBILE NAVIGATION
+  // ================================================================
+
+  /**
+   * Initializes tab switching on the left-side weather card.
+   */
+  initWeatherPanelTabs() {
+    this.activeWeatherTab = "overview";
+    const tabBtns = document.querySelectorAll(".weather-tab-btn");
+
+    tabBtns.forEach((btn) => {
+      btn.addEventListener("click", () => {
+        const tabName = btn.dataset.tab;
+        if (tabName) {
+          this.switchWeatherTab(tabName);
+          this._haptic('selection');
+        }
+      });
+    });
+
+    // Quick summary jump chips on overview tab
+    const quickChips = document.querySelectorAll(".quick-chip-btn");
+    quickChips.forEach((chip) => {
+      chip.addEventListener("click", () => {
+        const targetTab = chip.dataset.targetTab;
+        if (targetTab) {
+          this.switchWeatherTab(targetTab);
+          this._haptic('selection');
+        }
+      });
+    });
+  }
+
+  /**
+   * Switches the active section tab in the weather card.
+   * @param {string} tabName - 'overview' | 'hourly' | 'daily' | 'metrics' | 'astronomy'
+   */
+  switchWeatherTab(tabName) {
+    this.activeWeatherTab = tabName;
+    const tabBtns = document.querySelectorAll(".weather-tab-btn");
+    const panels = document.querySelectorAll(".weather-tab-panel");
+
+    tabBtns.forEach((btn) => {
+      const isTarget = btn.dataset.tab === tabName;
+      btn.classList.toggle("active", isTarget);
+      btn.setAttribute("aria-selected", isTarget ? "true" : "false");
+    });
+
+    const targetPanelIdMap = {
+      overview: "weatherTabOverview",
+      hourly: "weatherTabHourly",
+      daily: "weatherTabDaily",
+      metrics: "weatherTabMetrics",
+      astronomy: "weatherTabAstronomy",
+    };
+
+    const targetPanelId = targetPanelIdMap[tabName] || "weatherTabOverview";
+    panels.forEach((p) => {
+      const isTarget = p.id === targetPanelId;
+      p.classList.toggle("active", isTarget);
+    });
+
+    const activeBtn = document.querySelector(`.weather-tab-btn[data-tab="${tabName}"]`);
+    if (activeBtn) {
+      activeBtn.scrollIntoView({ behavior: "smooth", block: "nearest", inline: "center" });
+    }
+  }
+
+  /**
+   * Updates quick statistics chips on the Overview tab (AQI, Wind, Humidity).
+   * @param {Object} weather - Hourly weather point
+   * @param {number|null} aqiVal - US AQI value
+   */
+  _updateOverviewChips(weather, aqiVal) {
+    if (this.$.overviewAQIChip) {
+      if (aqiVal != null) {
+        const info = WeatherService.getAQIInfo(aqiVal);
+        this.$.overviewAQIChip.textContent = `${Math.round(aqiVal)} · ${info.label}`;
+      } else {
+        this.$.overviewAQIChip.textContent = "--";
+      }
+    }
+    if (this.$.overviewWindChip && weather) {
+      this.$.overviewWindChip.textContent = `${WeatherService.formatWind(weather.windSpeed)} ${WeatherService.getWindDirection(weather.windDirection)}`;
+    }
+    if (this.$.overviewHumidityChip && weather) {
+      this.$.overviewHumidityChip.textContent = `${weather.humidity ?? "--"}%`;
+    }
+  }
+
+  /**
+   * Sets up touch-friendly mobile bottom navigation bar listeners.
+   */
+  initMobileBottomNav() {
+    const mapBtn = this.$.mobileNavMapBtn;
+    const weatherBtn = this.$.mobileNavWeatherBtn;
+    const routeBtn = this.$.mobileNavRouteBtn;
+    const savedBtn = this.$.mobileNavSavedBtn;
+    const layersBtn = this.$.mobileNavLayersBtn;
+
+    const setActiveBtn = (targetBtn) => {
+      [mapBtn, weatherBtn, routeBtn, savedBtn, layersBtn].forEach((btn) => {
+        if (btn) btn.classList.toggle("active", btn === targetBtn);
+      });
+    };
+
+    mapBtn?.addEventListener("click", () => {
+      setActiveBtn(mapBtn);
+      if (this.$.weatherPanel?.classList.contains("open") && !this.$.weatherPanel?.classList.contains("minimized")) {
+        this.toggleMinimizeWeatherPanel();
+      }
+      this.$.bookmarksDropdown?.classList.add("hidden");
+      this.hideComparePanel();
+      this._haptic('light');
+    });
+
+    weatherBtn?.addEventListener("click", () => {
+      setActiveBtn(weatherBtn);
+      if (!this.$.weatherPanel?.classList.contains("open")) {
+        this.showWeatherPanel();
+      } else if (this.$.weatherPanel?.classList.contains("minimized")) {
+        this.toggleMinimizeWeatherPanel();
+      } else {
+        this.switchWeatherTab("overview");
+        const content = this.$.weatherPanelContent;
+        if (content) content.scrollTop = 0;
+      }
+      this._haptic('light');
+    });
+
+    routeBtn?.addEventListener("click", () => {
+      setActiveBtn(routeBtn);
+      this.$.routeBtn?.click();
+      this._haptic('light');
+    });
+
+    savedBtn?.addEventListener("click", (e) => {
+      e.stopPropagation();
+      const isHidden = this.$.bookmarksDropdown?.classList.contains("hidden");
+      if (isHidden) {
+        setActiveBtn(savedBtn);
+        this.$.bookmarksDropdown?.classList.remove("hidden");
+      } else {
+        this.$.bookmarksDropdown?.classList.add("hidden");
+        setActiveBtn(this.$.weatherPanel?.classList.contains("open") && !this.$.weatherPanel?.classList.contains("minimized") ? weatherBtn : mapBtn);
+      }
+      this._haptic('light');
+    });
+
+    layersBtn?.addEventListener("click", (e) => {
+      e.stopPropagation();
+      const isHidden = this.$.mapLayersFlyout?.classList.contains("hidden");
+      if (isHidden) {
+        setActiveBtn(layersBtn);
+        this.toggleMapLayersFlyout(true);
+      } else {
+        this.toggleMapLayersFlyout(false);
+        setActiveBtn(this.$.weatherPanel?.classList.contains("open") && !this.$.weatherPanel?.classList.contains("minimized") ? weatherBtn : mapBtn);
+      }
+      this._haptic('light');
+    });
   }
 
   // ================================================================
@@ -8130,6 +8322,7 @@ class AurafiskyApp {
     const open = force !== undefined ? force : isHidden;
     this.$.mapLayersFlyout.classList.toggle("hidden", !open);
     this.$.mapLayersBtn?.setAttribute("aria-expanded", open ? "true" : "false");
+    this.$.mobileNavLayersBtn?.classList.toggle("active", open);
     if (open) {
       this._updateMapStyleUI();
     }

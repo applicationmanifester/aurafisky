@@ -4,10 +4,10 @@
 OpenFreeMap vector tiles, with Open-Meteo weather, RainViewer radar, a time-travel timeline
 (3 days back → 7 days ahead), bookmarks, and optional Firebase auth + Firestore settings sync.
 
-- **Version:** 12.1.0 · **Stack:** vanilla ES modules + Vite 5 + Tailwind 4 + OpenLayers 10
+- **Version:** 13.0.0 · **Stack:** vanilla ES modules + Vite 5 + Tailwind 4 + OpenLayers 10
   (`ol` + `ol-mapbox-style` 12)
 - **Hosting:** Firebase Hosting (`public: dist`) · project `aurafisky`
-- **Tests:** Vitest — 93 passing (`tests/weather.test.ts`, `tests/modules.test.ts`, `tests/unit.test.mjs`)
+- **Tests:** Vitest — 178 passing across 12 test suites
 - **Build:** `npm run build` succeeds — `vendor-map` 511 kB, `app-core` 207 kB,
   `features` 74 kB, 58 precache entries
 

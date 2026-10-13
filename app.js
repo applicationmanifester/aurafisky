@@ -504,6 +504,9 @@ class AurafiskyApp {
       // Install & Auto-refresh buttons
       installBtn: document.getElementById("installBtn"),
       installBtnLabel: document.getElementById("installBtnLabel"),
+      pwaInstallBanner: document.getElementById("pwaInstallBanner"),
+      pwaInstallBannerBtn: document.getElementById("pwaInstallBannerBtn"),
+      pwaInstallBannerCloseBtn: document.getElementById("pwaInstallBannerCloseBtn"),
 
       // New Features
       comfortIndex: document.getElementById("comfortIndex"),
@@ -2391,25 +2394,66 @@ class AurafiskyApp {
     this._isInStandalone =
       window.matchMedia &&
       window.matchMedia("(display-mode: standalone)").matches;
+
+    const showMobileInstallBanner = () => {
+      if (
+        window.innerWidth < 640 &&
+        !this._isInStandalone &&
+        localStorage.getItem("aurafisky_dismiss_install_banner") !== "true" &&
+        this.$.pwaInstallBanner
+      ) {
+        this.$.pwaInstallBanner.classList.remove("hidden");
+      }
+    };
+
     this._boundBeforeInstall = (e) => {
       e.preventDefault(); // store prompt for manual trigger from Settings
       this.deferredPrompt = e;
       this.$.installBtn?.classList.remove("hidden");
       if (this.$.installBtnLabel) this.$.installBtnLabel.textContent = "Install Aurafisky App";
+      setTimeout(showMobileInstallBanner, 2500);
     };
     window.addEventListener("beforeinstallprompt", this._boundBeforeInstall);
 
     // iOS Safari has no beforeinstallprompt — surface the manual
     // "Add to Home Screen" instruction instead so iPhone/iPad users
     // can still install the app.
-    if (this._isIOS && !this._isInStandalone && this.$.installBtn) {
-      this.$.installBtn.classList.remove("hidden");
-      if (this.$.installBtnLabel) this.$.installBtnLabel.textContent = "Add to Home Screen";
+    if (this._isIOS && !this._isInStandalone) {
+      if (this.$.installBtn) {
+        this.$.installBtn.classList.remove("hidden");
+        if (this.$.installBtnLabel) this.$.installBtnLabel.textContent = "Add to Home Screen";
+      }
+      setTimeout(showMobileInstallBanner, 3000);
     }
+
+    this.$.pwaInstallBannerBtn?.addEventListener("click", () => {
+      if (this.deferredPrompt) {
+        this.deferredPrompt.prompt();
+        this.deferredPrompt.userChoice.then(() => {
+          this.deferredPrompt = null;
+          this.$.pwaInstallBanner?.classList.add("hidden");
+        });
+      } else if (this._isIOS) {
+        this.showToast("Tap Share (⎋) below then 'Add to Home Screen' (+)", "info", 6000);
+        this.$.pwaInstallBanner?.classList.add("hidden");
+        localStorage.setItem("aurafisky_dismiss_install_banner", "true");
+      } else {
+        this.showToast("Install option available in browser menu (⋮)", "info");
+        this.$.pwaInstallBanner?.classList.add("hidden");
+      }
+    });
+
+    this.$.pwaInstallBannerCloseBtn?.addEventListener("click", () => {
+      this.$.pwaInstallBanner?.classList.add("hidden");
+      localStorage.setItem("aurafisky_dismiss_install_banner", "true");
+      this._haptic("selection");
+    });
 
     window.addEventListener("appinstalled", () => {
       this.deferredPrompt = null;
       this.$.installBtn?.classList.add("hidden");
+      this.$.pwaInstallBanner?.classList.add("hidden");
+      localStorage.setItem("aurafisky_dismiss_install_banner", "true");
     });
 
     // ── Document click (close overlays) ─────────────────────

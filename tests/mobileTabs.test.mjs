@@ -200,6 +200,21 @@ describe('Mobile Tabs & Navigation Layout', () => {
     const effectsCode = fs.readFileSync('features/canvasEffects.js', 'utf-8');
     expect(effectsCode).toContain('window.innerWidth < 640 && this._mapWasDragged');
   });
+
+  it('renders mobile pwaInstallBanner and wires up install and close triggers', () => {
+    const banner = doc.getElementById('pwaInstallBanner');
+    expect(banner).not.toBeNull();
+    expect(banner.className).toContain('sm:hidden');
+
+    const bannerBtn = doc.getElementById('pwaInstallBannerBtn');
+    expect(bannerBtn).not.toBeNull();
+    const closeBtn = doc.getElementById('pwaInstallBannerCloseBtn');
+    expect(closeBtn).not.toBeNull();
+
+    const appCode = fs.readFileSync('app.js', 'utf-8');
+    expect(appCode).toContain('pwaInstallBannerBtn?.addEventListener');
+    expect(appCode).toContain('pwaInstallBannerCloseBtn?.addEventListener');
+  });
 });
 
 

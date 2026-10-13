@@ -1496,12 +1496,13 @@ button, a, input, select, textarea, [role="button"] {
     padding: 0.55rem;
   }
 
-  /* Zoom controls: smaller buttons, safely spaced from the right edge */
+  /* Zoom controls: smaller buttons, centered on the right edge on mobile map view */
   #zoomControls {
     right: 0.75rem;
     gap: 0.35rem;
-    /* Keep away from iPhone home indicator */
-    bottom: calc(50vh - 80px);
+    top: 50% !important;
+    bottom: auto !important;
+    transform: translateY(-50%) !important;
   }
 
   #zoomControls > button,
@@ -1585,6 +1586,33 @@ button, a, input, select, textarea, [role="button"] {
   }
   #timelineBar {
     transition: opacity 0.25s cubic-bezier(0.16, 1, 0.3, 1), transform 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+  }
+
+  /* When the weather panel or comparison panel is open on mobile,
+     hide zoom & map floating controls so they don't cover card content or action buttons */
+  .weather-panel.open:not(.minimized) ~ #zoomControls,
+  #comparePanel.open ~ #zoomControls,
+  body:has(.weather-panel.open:not(.minimized)) #zoomControls,
+  body:has(#comparePanel.open) #zoomControls,
+  body:has(#routePanel:not(.hidden)) #zoomControls {
+    opacity: 0 !important;
+    pointer-events: none !important;
+    transform: translateY(-50%) translateX(36px) scale(0.9) !important;
+  }
+  #zoomControls {
+    transition: opacity 0.22s cubic-bezier(0.16, 1, 0.3, 1), transform 0.22s cubic-bezier(0.16, 1, 0.3, 1);
+  }
+
+  /* Responsive weather tabs on mobile so all tabs fit and scroll gracefully */
+  .weather-tab-btn {
+    padding: 0.35rem 0.65rem !important;
+    font-size: 0.72rem !important;
+    letter-spacing: -0.01em;
+  }
+  #weatherPanelTabs {
+    -webkit-overflow-scrolling: touch;
+    scroll-behavior: smooth;
+    overscroll-behavior-x: contain;
   }
 
   /* Compare & Turn-by-turn touch target optimizations (>= 44px) */

@@ -141,6 +141,20 @@ describe('Mobile Tabs & Navigation Layout', () => {
     expect(css).toContain('#panelDragHandle {');
     expect(css).toContain('#panelDragHandle:active > div');
   });
+
+  it('hides zoomControls when full-height weather or compare panels are open on mobile', () => {
+    const css = fs.readFileSync('styles.css', 'utf-8');
+    expect(css).toContain('.weather-panel.open:not(.minimized) ~ #zoomControls');
+    expect(css).toContain('#comparePanel.open ~ #zoomControls');
+    expect(css).toContain('pointer-events: none !important;');
+  });
+
+  it('styles weather tabs with compact mobile sizing and touch scrolling', () => {
+    const css = fs.readFileSync('styles.css', 'utf-8');
+    expect(css).toContain('.weather-tab-btn {');
+    expect(css).toContain('#weatherPanelTabs {');
+    expect(css).toContain('-webkit-overflow-scrolling: touch;');
+  });
 });
 
 

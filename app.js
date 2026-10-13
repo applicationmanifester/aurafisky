@@ -7167,6 +7167,119 @@ class AurafiskyApp {
         }
       });
     });
+
+    // Mobile touch gestures: horizontal swipe across tabs & pull-to-minimize
+    this.initMobileWeatherGestures();
+  }
+
+  /**
+   * Initializes mobile touch gestures: horizontal swiping to cycle tabs,
+   * and pull-down on header to toggle minimize.
+   */
+  initMobileWeatherGestures() {
+    const content = this.$.weatherPanelContent;
+    const tabNames = ["overview", "hourly", "daily", "metrics", "astronomy"];
+
+    if (content) {
+      let touchStartX = 0;
+      let touchStartY = 0;
+      let touchStartTime = 0;
+
+      content.addEventListener(
+        "touchstart",
+        (e) => {
+          if (window.innerWidth >= 640 || e.touches.length !== 1) return;
+          const touch = e.touches[0];
+          touchStartX = touch.clientX;
+          touchStartY = touch.clientY;
+          touchStartTime = Date.now();
+        },
+        { passive: true }
+      );
+
+      content.addEventListener(
+        "touchend",
+        (e) => {
+          if (window.innerWidth >= 640 || e.changedTouches.length !== 1) return;
+          const touch = e.changedTouches[0];
+          const dx = touch.clientX - touchStartX;
+          const dy = touch.clientY - touchStartY;
+          const dt = Date.now() - touchStartTime;
+
+          // Horizontal swipe: dx > 48px, horizontal dominance > 1.4x, duration < 500ms
+          if (Math.abs(dx) > 48 && Math.abs(dx) > Math.abs(dy) * 1.4 && dt < 500) {
+            const currentIndex = tabNames.indexOf(this.activeWeatherTab || "overview");
+            if (currentIndex !== -1) {
+              if (dx < 0 && currentIndex < tabNames.length - 1) {
+                // Swipe Left -> Next tab
+                this.switchWeatherTab(tabNames[currentIndex + 1]);
+                this._haptic("selection");
+              } else if (dx > 0 && currentIndex > 0) {
+                // Swipe Right -> Prev tab
+                this.switchWeatherTab(tabNames[currentIndex - 1]);
+                this._haptic("selection");
+              }
+            }
+          }
+        },
+        { passive: true }
+      );
+    }
+
+    // Pull-to-minimize & tap handle
+    const header = this.$.weatherPanel?.querySelector(".flex-shrink-0");
+    if (header) {
+      let pullStartY = 0;
+      let pullStartX = 0;
+      let pullStartTime = 0;
+
+      header.addEventListener(
+        "touchstart",
+        (e) => {
+          if (window.innerWidth >= 640 || e.touches.length !== 1) return;
+          if (e.target.closest("button, a, select, input, [role='tab']")) return;
+          const touch = e.touches[0];
+          pullStartY = touch.clientY;
+          pullStartX = touch.clientX;
+          pullStartTime = Date.now();
+        },
+        { passive: true }
+      );
+
+      header.addEventListener(
+        "touchend",
+        (e) => {
+          if (window.innerWidth >= 640 || e.changedTouches.length !== 1) return;
+          if (e.target.closest("button, a, select, input, [role='tab']")) return;
+          const touch = e.changedTouches[0];
+          const dy = touch.clientY - pullStartY;
+          const dx = touch.clientX - pullStartX;
+          const dt = Date.now() - pullStartTime;
+
+          // Quick tap on handle/header toggles minimize
+          if (Math.abs(dy) < 10 && Math.abs(dx) < 10 && dt < 300) {
+            this.toggleMinimizeWeatherPanel();
+            this._haptic("selection");
+            return;
+          }
+
+          // Pull down gesture (> 48px)
+          if (dy > 48 && Math.abs(dy) > Math.abs(dx)) {
+            if (!this.$.weatherPanel?.classList.contains("minimized")) {
+              this.toggleMinimizeWeatherPanel();
+              this._haptic("light");
+            }
+          } else if (dy < -40 && Math.abs(dy) > Math.abs(dx)) {
+            // Pull up gesture (< -40px)
+            if (this.$.weatherPanel?.classList.contains("minimized")) {
+              this.toggleMinimizeWeatherPanel();
+              this._haptic("light");
+            }
+          }
+        },
+        { passive: true }
+      );
+    }
   }
 
   /**

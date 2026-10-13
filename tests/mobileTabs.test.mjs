@@ -125,6 +125,22 @@ describe('Mobile Tabs & Navigation Layout', () => {
     expect(css).toContain('#shareWeatherBtn');
     expect(css).toContain('#setWallpaperBtn');
     expect(css).toContain('#navigateHereBtn');
+    expect(css).toContain('#compareCloseBtn');
+    expect(css).toContain('#navCancelPreviewBtn');
+  });
+
+  it('hides timelineBar when full-height mobile panels are open', () => {
+    const css = fs.readFileSync('styles.css', 'utf-8');
+    expect(css).toContain('.weather-panel.open:not(.minimized) ~ #timelineBar');
+    expect(css).toContain('#comparePanel.open ~ #timelineBar');
+    expect(css).toContain('pointer-events: none !important;');
+  });
+
+  it('styles mobile drag handle with active touch interaction feedback', () => {
+    const css = fs.readFileSync('styles.css', 'utf-8');
+    expect(css).toContain('#panelDragHandle {');
+    expect(css).toContain('#panelDragHandle:active > div');
   });
 });
+
 

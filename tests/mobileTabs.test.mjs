@@ -215,6 +215,36 @@ describe('Mobile Tabs & Navigation Layout', () => {
     expect(appCode).toContain('pwaInstallBannerBtn?.addEventListener');
     expect(appCode).toContain('pwaInstallBannerCloseBtn?.addEventListener');
   });
+
+  it('contains floating mobileLocationFab GPS button in index.html', () => {
+    const fab = doc.getElementById('mobileLocationFab');
+    expect(fab).not.toBeNull();
+    expect(fab.className).toContain('sm:hidden');
+    expect(fab.getAttribute('aria-label')).toBe('Find my location');
+  });
+
+  it('renders high-visibility location pin with ground beacon pulse in app.js and styles.css', () => {
+    const appCode = fs.readFileSync('app.js', 'utf-8');
+    expect(appCode).toContain('aurafisky-location-pin');
+    expect(appCode).toContain('pin-stem');
+    expect(appCode).toContain('pin-ground-anchor');
+    expect(appCode).toContain('pin-ground-pulse');
+    expect(appCode).toContain('pin-ground-dot');
+
+    const css = fs.readFileSync('styles.css', 'utf-8');
+    expect(css).toContain('.aurafisky-location-pin');
+    expect(css).toContain('.pin-stem');
+    expect(css).toContain('.pin-ground-anchor');
+    expect(css).toContain('.pin-ground-pulse');
+  });
+
+  it('styles bookmarksDropdown, mapLayersFlyout, and routePanel as mobile bottom sheets in styles.css', () => {
+    const css = fs.readFileSync('styles.css', 'utf-8');
+    expect(css).toContain('#bookmarksDropdown {');
+    expect(css).toContain('#mapLayersFlyout {');
+    expect(css).toContain('#routePanel {');
+    expect(css).toContain('#routeStudioHud {');
+  });
 });
 
 

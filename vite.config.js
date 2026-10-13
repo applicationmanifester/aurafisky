@@ -100,6 +100,8 @@ export default defineConfig(({ mode }) => {
         ]
       },
       workbox: {
+        clientsClaim: true,
+        skipWaiting: true,
         importScripts: ['sw-widgets.js'],
         globPatterns: ['**/*.{js,css,html,ico,png,svg,woff2,json}'],
         runtimeCaching: [

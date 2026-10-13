@@ -199,6 +199,87 @@ html, body {
 /* On mobile (<640px), the search box is only ~60% wide. Make the
    dropdown span the full viewport so result text doesn't cramp. */
 @media (max-width: 639px) {
+  /* ── Mobile Bottom Sheets & Floating FABs ─────────────────── */
+  /* Floating GPS Locate Me Button */
+  #mobileLocationFab {
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.18), 0 0 0 1px rgba(20, 184, 166, 0.2);
+  }
+  #mobileLocationFab:active {
+    transform: scale(0.92);
+  }
+
+  /* Saved Places Bottom Sheet */
+  #bookmarksDropdown {
+    position: fixed !important;
+    left: 0 !important;
+    right: 0 !important;
+    bottom: calc(3.5rem + env(safe-area-inset-bottom, 0px)) !important;
+    top: auto !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    max-height: 65vh !important;
+    border-radius: 1.5rem 1.5rem 0 0 !important;
+    margin: 0 !important;
+    padding: 1rem 1.25rem !important;
+    z-index: 1040 !important;
+    box-shadow: 0 -10px 40px rgba(0, 0, 0, 0.25) !important;
+    border-bottom: none !important;
+    background: var(--glass-bg);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+  }
+
+  /* Map Layers Bottom Sheet */
+  #mapLayersFlyout {
+    position: fixed !important;
+    left: 0 !important;
+    right: 0 !important;
+    bottom: calc(3.5rem + env(safe-area-inset-bottom, 0px)) !important;
+    top: auto !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    max-height: 65vh !important;
+    border-radius: 1.5rem 1.5rem 0 0 !important;
+    margin: 0 !important;
+    padding: 1.25rem !important;
+    transform: none !important;
+    z-index: 1040 !important;
+    box-shadow: 0 -10px 40px rgba(0, 0, 0, 0.25) !important;
+    border-bottom: none !important;
+    background: var(--glass-bg);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+  }
+
+  /* Route Studio Panel Bottom Sheet */
+  #routePanel {
+    position: fixed !important;
+    left: 0 !important;
+    right: 0 !important;
+    bottom: calc(3.5rem + env(safe-area-inset-bottom, 0px)) !important;
+    top: auto !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    max-height: 75vh !important;
+    border-radius: 1.5rem 1.5rem 0 0 !important;
+    margin: 0 !important;
+    z-index: 1040 !important;
+    box-shadow: 0 -10px 40px rgba(0, 0, 0, 0.25) !important;
+  }
+
+  /* Route Studio Floating HUD below top bar */
+  #routeStudioHud {
+    position: fixed !important;
+    left: 0.75rem !important;
+    right: 0.75rem !important;
+    top: calc(4.25rem + env(safe-area-inset-top, 0px)) !important;
+    transform: none !important;
+    max-width: calc(100vw - 1.5rem) !important;
+    border-radius: 1.25rem !important;
+    z-index: 1030 !important;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2) !important;
+  }
+
   .search-dropdown {
     position: fixed;
     left: 0.75rem;
@@ -413,6 +494,104 @@ html, body {
 .custom-weather-marker-icon {
   background: transparent !important;
   border: none !important;
+}
+
+
+/* ── High-Visibility Location Pin & Ground Beacon ────────────── */
+.aurafisky-location-pin {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  cursor: pointer;
+  filter: drop-shadow(0 8px 16px rgba(0, 0, 0, 0.22));
+  animation: pinDrop 0.35s cubic-bezier(0.34, 1.56, 0.64, 1);
+  will-change: transform;
+  user-select: none;
+}
+
+@keyframes pinDrop {
+  from {
+    opacity: 0;
+    transform: translateY(-24px) scale(0.6);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.aurafisky-location-pin:active {
+  transform: scale(0.95);
+}
+
+.aurafisky-location-pin .weather-marker {
+  transition: transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.2s ease;
+  min-width: 90px;
+}
+
+.aurafisky-location-pin:hover .weather-marker {
+  transform: translateY(-2px);
+  box-shadow: 0 14px 28px -4px rgba(0, 0, 0, 0.25), 0 0 0 2px rgba(20, 184, 166, 0.6);
+}
+
+.aurafisky-location-pin .weather-marker::after {
+  display: none !important;
+}
+
+/* Pin needle stem pointing directly at ground coordinate */
+.pin-stem {
+  width: 0;
+  height: 0;
+  border-left: 8px solid transparent;
+  border-right: 8px solid transparent;
+  border-top: 14px solid white;
+  margin-top: -1px;
+  filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.25));
+  z-index: 1;
+}
+.dark .pin-stem {
+  border-top-color: #1e293b;
+}
+
+/* Ground Anchor Pulse Ring (Unmistakable GPS Beacon) */
+.pin-ground-anchor {
+  position: absolute;
+  bottom: -10px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 28px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+  z-index: 2;
+}
+
+.pin-ground-pulse {
+  position: absolute;
+  width: 28px;
+  height: 28px;
+  border-radius: 9999px;
+  background: rgba(20, 184, 166, 0.45);
+  animation: pinPulseRing 1.8s cubic-bezier(0, 0.2, 0.8, 1) infinite;
+}
+
+.pin-ground-dot {
+  position: relative;
+  width: 10px;
+  height: 10px;
+  border-radius: 9999px;
+  background: #14b8a6;
+  border: 2px solid #ffffff;
+  box-shadow: 0 0 6px rgba(0, 0, 0, 0.5);
+}
+
+@keyframes pinPulseRing {
+  0% { transform: scale(0.2); opacity: 0.95; }
+  70% { transform: scale(1.6); opacity: 0; }
+  100% { transform: scale(1.6); opacity: 0; }
 }
 
 /* ── Weather Marker (on-map widget) ─────────────────────────── */

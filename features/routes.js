@@ -627,6 +627,7 @@ function getActiveUnits() {
 
 export function init(app) {
   appRef = app;
+  app.toggleRoute = toggleRoute;
   btn = document.getElementById("routeBtn");
   if (btn) {
     btn.title = "Route Studio (Trip Weather Planner)";
@@ -657,7 +658,12 @@ export function toggleRoute() {
 
     if (targetEl) targetEl.style.cursor = "crosshair";
 
-    hidePanel();
+    if (pts.length >= 2) {
+      showPanel();
+      fetchAndRenderRoutePlan();
+    } else {
+      hidePanel();
+    }
     showHUD();
     updateHUD();
 

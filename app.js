@@ -3382,18 +3382,23 @@ class AurafiskyApp {
    * Single source of truth for the marker template (#4/#9).
    */
   _buildMarkerHtml(weather) {
+    const cityName = this.selectedName ? this.selectedName.split(",")[0].trim() : (weather.description || "");
     return `
-        <div class="weather-marker relative bg-white dark:bg-slate-800 rounded-2xl px-3.5 py-2.5 shadow-lg
-                    border border-slate-200/60 dark:border-slate-600/30 text-center min-w-[80px]">
-          <button type="button" class="marker-close-btn absolute -top-1.5 -right-1.5 w-5 h-5 rounded-full bg-slate-100 hover:bg-rose-500 dark:bg-slate-700 dark:hover:bg-rose-500 text-slate-400 hover:text-white dark:text-slate-300 dark:hover:text-white flex items-center justify-center shadow-md transition-all border border-slate-200/80 dark:border-slate-600/80 cursor-pointer z-20" title="Close location" aria-label="Close location">
-            <svg class="w-3 h-3 pointer-events-none" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
-          </button>
-          <div class="text-2xl leading-none mb-1">${weather.icon}</div>
-          <div class="text-lg font-bold text-slate-800 dark:text-white leading-tight">
-            ${WeatherService.formatTemp(weather.temperature)}
+        <div class="aurafisky-location-pin group" role="button" tabindex="0" aria-label="${cityName}">
+          <div class="weather-marker relative bg-white/95 dark:bg-slate-800/95 backdrop-blur-md rounded-2xl px-3 py-2 shadow-2xl border border-slate-200/80 dark:border-slate-700/80 flex items-center gap-2 select-none min-w-[84px]">
+            <button type="button" class="marker-close-btn absolute -top-1.5 -right-1.5 w-5 h-5 rounded-full bg-slate-100 hover:bg-rose-500 dark:bg-slate-700 dark:hover:bg-rose-500 text-slate-400 hover:text-white dark:text-slate-300 dark:hover:text-white flex items-center justify-center shadow-md transition-all border border-slate-200/80 dark:border-slate-600/80 cursor-pointer z-20" title="Close location" aria-label="Close location">
+              <svg class="w-3 h-3 pointer-events-none" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
+            </button>
+            <div class="text-2xl leading-none flex-shrink-0">${weather.icon}</div>
+            <div class="flex flex-col text-left leading-none min-w-0">
+              <span class="text-sm font-extrabold text-slate-800 dark:text-white leading-tight">${WeatherService.formatTemp(weather.temperature)}</span>
+              <span class="text-[10px] font-medium text-slate-500 dark:text-slate-400 truncate max-w-[85px] mt-0.5">${cityName}</span>
+            </div>
           </div>
-          <div class="text-[10px] text-slate-500 dark:text-slate-400 mt-0.5 truncate max-w-[90px]">
-            ${weather.description}
+          <div class="pin-stem"></div>
+          <div class="pin-ground-anchor">
+            <div class="pin-ground-pulse"></div>
+            <div class="pin-ground-dot"></div>
           </div>
         </div>
       `;
@@ -3432,8 +3437,8 @@ class AurafiskyApp {
         lng,
         html: this._buildMarkerHtml(weather),
         className: "custom-weather-marker-icon",
-        size: [90, 60],
-        anchor: [45, 68],
+        size: [110, 68],
+        anchor: [55, 68],
         tooltip: this.selectedName || undefined,
         tooltipClassName: "location-tooltip",
         onClick: (domEvent) => {
@@ -7423,20 +7428,36 @@ class AurafiskyApp {
       });
     };
 
+    // Mobile Floating GPS FAB
+    const mobileLocationFab = document.getElementById("mobileLocationFab");
+    mobileLocationFab?.addEventListener("click", () => {
+      this._haptic("selection");
+      this.getMyLocation();
+    });
+
     mapBtn?.addEventListener("click", () => {
       setActiveBtn(mapBtn);
       if (this.$.weatherPanel?.classList.contains("open") && !this.$.weatherPanel?.classList.contains("minimized")) {
         this.toggleMinimizeWeatherPanel();
       }
       this.$.bookmarksDropdown?.classList.add("hidden");
+      this.toggleMapLayersFlyout(false);
       this.hideComparePanel();
-      this._haptic('light');
+      this._haptic("light");
     });
 
     weatherBtn?.addEventListener("click", () => {
       setActiveBtn(weatherBtn);
+      this.$.bookmarksDropdown?.classList.add("hidden");
+      this.toggleMapLayersFlyout(false);
       if (!this.$.weatherPanel?.classList.contains("open")) {
-        this.showWeatherPanel();
+        if (this.selectedLat != null && this.selectedLng != null) {
+          this.showWeatherPanel();
+        } else if (this.defaultLocation && this.defaultLocation.lat != null) {
+          this.selectLocation(this.defaultLocation.lat, this.defaultLocation.lng, this.defaultLocation.name);
+        } else {
+          this.getMyLocation();
+        }
       } else if (this.$.weatherPanel?.classList.contains("minimized")) {
         this.toggleMinimizeWeatherPanel();
       } else {
@@ -7444,39 +7465,48 @@ class AurafiskyApp {
         const content = this.$.weatherPanelContent;
         if (content) content.scrollTop = 0;
       }
-      this._haptic('light');
+      this._haptic("light");
     });
 
     routeBtn?.addEventListener("click", () => {
       setActiveBtn(routeBtn);
-      this.$.routeBtn?.click();
-      this._haptic('light');
+      this.$.bookmarksDropdown?.classList.add("hidden");
+      this.toggleMapLayersFlyout(false);
+      if (typeof this.toggleRoute === "function") {
+        this.toggleRoute();
+      } else {
+        this.$.routeBtn?.click();
+      }
+      this._haptic("light");
     });
 
     savedBtn?.addEventListener("click", (e) => {
       e.stopPropagation();
+      this.toggleMapLayersFlyout(false);
       const isHidden = this.$.bookmarksDropdown?.classList.contains("hidden");
       if (isHidden) {
         setActiveBtn(savedBtn);
+        if (typeof this.renderBookmarks === "function") this.renderBookmarks();
         this.$.bookmarksDropdown?.classList.remove("hidden");
       } else {
         this.$.bookmarksDropdown?.classList.add("hidden");
-        setActiveBtn(this.$.weatherPanel?.classList.contains("open") && !this.$.weatherPanel?.classList.contains("minimized") ? weatherBtn : mapBtn);
+        this.syncMobileBottomNavState();
       }
-      this._haptic('light');
+      this._haptic("light");
     });
 
     layersBtn?.addEventListener("click", (e) => {
       e.stopPropagation();
+      this.$.bookmarksDropdown?.classList.add("hidden");
       const isHidden = this.$.mapLayersFlyout?.classList.contains("hidden");
       if (isHidden) {
         setActiveBtn(layersBtn);
         this.toggleMapLayersFlyout(true);
       } else {
         this.toggleMapLayersFlyout(false);
-        setActiveBtn(this.$.weatherPanel?.classList.contains("open") && !this.$.weatherPanel?.classList.contains("minimized") ? weatherBtn : mapBtn);
+        this.syncMobileBottomNavState();
       }
-      this._haptic('light');
+      this._haptic("light");
     });
   }
 

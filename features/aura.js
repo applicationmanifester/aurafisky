@@ -53,10 +53,10 @@ const INTENT_DEFS = [
   { id: 'air', priority: 52, phrases: ['air quality', 'aqi', 'pollution', 'polluted', 'smog', 'smoke', 'breathe', 'breathing', 'lungs', 'asthma', 'air safe', 'safe to breathe', 'safe outside', 'is the air', 'air is bad'] },
   { id: 'hazard', priority: 49, phrases: ['flood', 'flooding', 'flash flood', 'cyclone', 'typhoon', 'hurricane', 'tornado', 'blizzard', 'heatwave', 'cold wave', 'extreme weather', 'hail', 'hailstorm'] },
   { id: 'visibility', priority: 48, phrases: ['visibility', 'fog', 'foggy', 'haze', 'hazy', 'mist', 'murky'] },
-  { id: 'rain', priority: 46, phrases: ['rain', 'raining', 'rainy', 'shower', 'showers', 'wet', 'precipitation', 'umbrella', 'drizzle', 'monsoon', 'pour', 'pouring'] },
-  { id: 'wind', priority: 44, phrases: ['wind', 'windy', 'breeze', 'breezy', 'gale', 'storm', 'gust', 'gusts'] },
-  { id: 'humidity', priority: 42, phrases: ['humidity', 'humid', 'sticky', 'muggy', 'damp', 'moisture', 'dew point', 'dewpoint'] },
-  { id: 'temperature', priority: 40, phrases: ['temperature', 'how hot', 'how cold', 'hot', 'cold', 'warm', 'chilly', 'degrees', 'freezing', 'freeze', 'heat', 'weather like', 'feels hotter', 'feels colder'] },
+  { id: 'rain', priority: 46, phrases: ['rain', 'raining', 'rainy', 'shower', 'showers', 'wet', 'precipitation', 'umbrella', 'drizzle', 'monsoon', 'pour', 'pouring', 'barish', 'baarish', 'barsaat', 'paani gir'] },
+  { id: 'wind', priority: 44, phrases: ['wind', 'windy', 'breeze', 'breezy', 'gale', 'storm', 'gust', 'gusts', 'hawa', 'tez hawa'] },
+  { id: 'humidity', priority: 42, phrases: ['humidity', 'humid', 'sticky', 'muggy', 'damp', 'moisture', 'dew point', 'dewpoint', 'chipchipa'] },
+  { id: 'temperature', priority: 40, phrases: ['temperature', 'how hot', 'how cold', 'hot', 'cold', 'warm', 'chilly', 'degrees', 'freezing', 'freeze', 'heat', 'weather like', 'feels hotter', 'feels colder', 'thand', 'garmi', 'sardi', 'kitni thand', 'kitni garmi'] },
   { id: 'overview', priority: 20, phrases: ['weather now', 'right now', 'current conditions', 'conditions', 'how is the weather', "what's the weather", 'summary', 'brief me', 'nice out', 'is it nice', 'worth going out'] },
   { id: 'greeting', priority: 18, phrases: ['hi', 'hello', 'hey', 'good morning', 'good afternoon', 'good evening', 'yo', 'sup', 'howdy'] },
 ];
@@ -80,8 +80,7 @@ const INTENTS = INTENT_DEFS.map((def) => ({
 }));
 
 /** Scores every intent against a query and returns the winner. */
-export function classify(query) {
-  let best = null;
+export function classify(query) {  let best = null;
   let bestScore = 0;
   for (const intent of INTENTS) {
     let score = 0;
@@ -101,14 +100,115 @@ export function classify(query) {
 export function extractPlace(query) {
   const m =
     query.match(/\b(?:weather|forecast)\s+(?:in|at|for)\s+([a-zA-Z][a-zA-Z\s.'-]{1,40}?)(?=\s+(?:tomorrow|today|tonight|right\s+now|now|this\s+\w+)\b|[?!.]?$)/i) ||
-    query.match(/\b(?:how(?:'s| is)|what(?:'s| is))\s+(?:it\s+)?(?:like\s+)?in\s+([a-zA-Z][a-zA-Z\s.'-]{1,40}?)(?=\s+(?:tomorrow|today|tonight|right\s+now|now)\b|[?!.]?$)/i);
-  return m ? m[1].trim() : null;
+    query.match(/\b(?:how(?:'s| is)|what(?:'s| is))\s+(?:it\s+)?(?:like\s+)?in\s+([a-zA-Z][a-zA-Z\s.'-]{1,40}?)(?=\s+(?:tomorrow|today|tonight|right\s+now|now)\b|[?!.]?$)/i) ||
+    // Conversational follow-up: "what about Tokyo?", "how about Paris".
+    // Time words are guarded below so "what about tomorrow" never becomes
+    // a place called "tomorrow".
+    query.match(/\b(?:what|how)\s+about\s+([a-zA-Z][a-zA-Z\s.'-]{1,40}?)[?!.]?$/i);
+  if (!m) return null;
+  const name = m[1].trim();
+  // "what about tomorrow / tonight / the weekend" is a time follow-up,
+  // not a place lookup.
+  if (/^(tomorrow|today|tonight|tonite|morning|afternoon|evening|night|weekend|now|later|the\s+weekend|this\s+\w+)$/i.test(name)) return null;
+  return name || null;
+}
+
+// ── Time scope ────────────────────────────────────────────────────
+//
+// Lets a question target part of the forecast: "will it rain tonight?",
+// "how windy tomorrow?", and — combined with conversation memory — bare
+// follow-ups like "and tomorrow?" that re-run the previous intent.
+const TIME_WORDS = new Set([
+  'tonight', 'tonite', 'tomorrow', 'morning', 'afternoon', 'evening',
+  'night', 'weekend', 'today', 'saturday', 'sunday', 'sat', 'sun',
+  'this', 'next',
+]);
+const FILLER_WORDS = new Set([
+  'and', 'then', 'also', 'what', 'about', 'how', 'for', 'in', 'on',
+  'at', 'the', 'a', 'is', 'it', 'will', 'be', 'do', 'does', 's',
+  'there', 'here', 'that', 'this', '?',
+]);
+
+/**
+ * Detects a time scope in a query. Order matters: weekend outranks
+ * tomorrow, tonight outranks evening — the most specific window wins.
+ * @returns {{kind:string,label:string}|null}
+ */
+export function detectTimeScope(query) {
+  const q = ` ${(query || '').toLowerCase()} `;
+  if (/\b(this\s+weekend|weekend|on\s+sat|saturday|on\s+sun|sunday)\b/.test(q)) {
+    return { kind: 'weekend', label: 'this weekend' };
+  }
+  if (/\btomorrow\b|\b2morrow\b|\btmrw\b/.test(q)) {
+    return { kind: 'tomorrow', label: 'tomorrow' };
+  }
+  if (/\btonight\b|\btonite\b|\bthis\s+evening\b|\bthis\s+night\b/.test(q)) {
+    return { kind: 'tonight', label: 'tonight' };
+  }
+  if (/\bthis\s+morning\b|\bmorning\b/.test(q)) {
+    return { kind: 'morning', label: 'this morning' };
+  }
+  if (/\bthis\s+afternoon\b|\bafternoon\b/.test(q)) {
+    return { kind: 'afternoon', label: 'this afternoon' };
+  }
+  if (/\bevening\b/.test(q)) {
+    return { kind: 'evening', label: 'this evening' };
+  }
+  return null;
+}
+
+/**
+ * True when a query carries nothing but a time scope plus conversational
+ * filler — "and tomorrow?", "what about tonight", "tomorrow?".
+ * These re-run the previous intent instead of classifying fresh.
+ */
+export function isBareTimeQuery(query) {
+  const tokens = (query || '')
+    .toLowerCase()
+    .replace(/[?!.…,]/g, ' ')
+    .split(/\s+/)
+    .filter(Boolean);
+  if (!tokens.length) return false;
+  let timeWords = 0;
+  for (const t of tokens) {
+    if (TIME_WORDS.has(t)) timeWords++;
+    else if (!FILLER_WORDS.has(t)) return false;
+  }
+  return timeWords > 0;
+}
+
+// ── Precipitation type ────────────────────────────────────────────
+//
+// WMO codes tell rain from snow; near-freezing temperatures turn rain
+// codes into a mix. Used so answers say "snow" instead of "rain" when
+// the model actually shows frozen precipitation.
+
+/**
+ * @param {number|null} code - WMO weather code
+ * @param {number|null} tempC - air temperature in °C
+ * @returns {'snow'|'mix'|'rain'|'storm'|'none'}
+ */
+export function precipTypeFor(code, tempC) {
+  if (code == null) return 'none';
+  if (code >= 95 && code <= 99) return 'storm';
+  if ((code >= 71 && code <= 77) || code === 85 || code === 86) return 'snow';
+  if ((code >= 51 && code <= 67) || (code >= 80 && code <= 82)) {
+    return tempC != null && tempC <= 1.5 ? 'mix' : 'rain';
+  }
+  return 'none';
 }
 
 // ── Action registry ─────────────────────────────────────────────────
 //
 // Each entry is a real, already-implemented app capability. `silent` actions
 // skip the confirmation toast (used when the answer already says what happened).
+
+// Intents that a bare time follow-up ("and tomorrow?") may re-run.
+// Place/alert/help/greeting answers don't benefit from a time shift.
+const RERUNNABLE = new Set([
+  'rain', 'temperature', 'wind', 'outdoor', 'forecast', 'humidity',
+  'uv', 'overview', 'commute', 'astronomy', 'thunderstorm',
+]);
 export const ACTIONS = {
   radar: { label: 'Show rain radar', icon: '🌧️', run: (app) => app.toggleRadar?.() },
   isobars: { label: 'Pressure map', icon: '📈', run: (app) => app.toggleIsobars?.() },
@@ -146,6 +246,9 @@ export class AuraAssistant {
     this.isOpen = false;
     this._streamToken = 0;
     this._lastLocation = '';
+    // Conversation memory: the last answerable intent, so bare follow-ups
+    // like "and tomorrow?" re-run it instead of classifying fresh.
+    this._lastIntent = null;
 
     if (typeof document !== 'undefined') {
       if (document.readyState === 'loading') {
@@ -162,6 +265,7 @@ export class AuraAssistant {
       chat: document.getElementById('auraChat'),
       input: document.getElementById('auraInput'),
       send: document.getElementById('auraSendBtn'),
+      mic: document.getElementById('auraMicBtn'),
       close: document.getElementById('auraCloseBtn'),
       reset: document.getElementById('auraResetBtn'),
       presets: document.getElementById('auraPresets'),
@@ -209,6 +313,7 @@ export class AuraAssistant {
         this._submit();
       }
     });
+    this._setupVoice();
 
     // Chat history is a live region so screen readers announce new answers.
     this._els.chat?.setAttribute('aria-live', 'polite');
@@ -228,7 +333,7 @@ export class AuraAssistant {
     const nameEl = document.getElementById('panelLocationName');
     if (!nameEl) return;
     const observer = new MutationObserver(() => {
-      const name = nameEl.textContent?.trim();
+      const name = nameEl.textContent?.replace(/🏠\s*Home/g, '')?.trim();
       if (!name || name === this._lastLocation || name === 'Select location') return;
       this._lastLocation = name;
       if (this._chatIsEmpty()) {
@@ -238,6 +343,7 @@ export class AuraAssistant {
       this._streamToken++; // abandon any answer still streaming
       const { chat } = this._els;
       chat.innerHTML = '';
+      this._lastIntent = null; // new place, new thread
       this._greeting();
       this._systemNote(`Switched to ${name} — cleared the answers for the previous location.`);
       this._renderPresets();
@@ -274,6 +380,7 @@ export class AuraAssistant {
 
   reset() {
     this._streamToken++;
+    this._lastIntent = null; // fresh transcript, no thread to continue
     const { chat } = this._els;
     if (!chat) return;
     chat.innerHTML = '';
@@ -306,6 +413,68 @@ export class AuraAssistant {
     this.ask(q);
   }
 
+  /**
+   * Voice input via the Web Speech API. The mic button stays hidden unless
+   * the browser implements recognition (Chrome/Edge desktop + Android).
+   * Everything is guarded: no support, no permission, or no speech all
+   * degrade to the keyboard with no toast spam.
+   */
+  _setupVoice() {
+    const btn = this._els.mic;
+    const input = this._els.input;
+    if (!btn || !input) return;
+    let SR = null;
+    try {
+      SR = window.SpeechRecognition || window.webkitSpeechRecognition || null;
+    } catch { SR = null; }
+    if (!SR) return; // unsupported — button stays hidden
+    // `hidden` + `items-center` conflict: drop hidden, keep flex layout.
+    btn.classList.remove('hidden');
+    btn.classList.add('flex');
+
+    let rec = null;
+    let listening = false;
+    const setLive = (on) => {
+      listening = on;
+      btn.classList.toggle('animate-pulse', on);
+      btn.classList.toggle('text-teal-600', on);
+      btn.setAttribute('aria-pressed', on ? 'true' : 'false');
+      btn.setAttribute('aria-label', on ? 'Stop listening' : 'Ask Aura by voice');
+    };
+
+    btn.addEventListener('click', () => {
+      if (listening) {
+        try { rec?.stop(); } catch { /* already stopped */ }
+        return;
+      }
+      try {
+        rec = new SR();
+      } catch { return; }
+      rec.lang = (navigator.language || 'en-US');
+      rec.interimResults = true;
+      rec.maxAlternatives = 1;
+      rec.onresult = (e) => {
+        let interim = '';
+        let final = '';
+        for (const r of e.results) {
+          if (r.isFinal) final += r[0]?.transcript ?? '';
+          else interim += r[0]?.transcript ?? '';
+        }
+        input.value = (final || interim).trim();
+        if (final.trim()) {
+          try { rec?.stop(); } catch { /* noop */ }
+          this._submit();
+        }
+      };
+      rec.onend = () => { setLive(false); rec = null; };
+      rec.onerror = () => { setLive(false); rec = null; };
+      try {
+        rec.start();
+        setLive(true);
+      } catch { setLive(false); rec = null; }
+    });
+  }
+
   _scrollToEnd() {
     const { chat } = this._els;
     if (chat) chat.scrollTop = chat.scrollHeight;
@@ -327,6 +496,7 @@ export class AuraAssistant {
         <div class="aura-bubble">
           <p>Hi, I'm <strong>Aura</strong>${loc ? `, reading live data for <strong>${esc(loc)}</strong>` : ''}.</p>
           <p class="mt-1">Ask me about rain timing, your commute, outdoor windows, air quality, UV, sunset and stargazing — or tell me to <em>"notify me when it rains"</em> and I'll set the alert.</p>
+          <p class="mt-1">I remember the thread, so follow up with <em>"and tomorrow?"</em> or <em>"what about tonight?"</em> — in English or Hinglish (<em>barish, thand, hawa</em> all work).</p>
         </div>
       </div>`;
     this._els.chat.appendChild(row);
@@ -785,13 +955,34 @@ export class AuraAssistant {
     this._renderPresets();
   }
 
+  /**
+   * Resolves what to answer: a fresh classification, or — when the query
+   * is just a time scope plus filler ("and tomorrow?") — the previous
+   * intent re-run against that scope. Testable without a DOM.
+   * @returns {{match: {id:string,score:number}|null, scope: {kind:string,label:string}|null}}
+   */
+  _resolveIntent(q) {
+    const scope = detectTimeScope(q);
+    if (isBareTimeQuery(q) && this._lastIntent && RERUNNABLE.has(this._lastIntent)) {
+      return { match: { id: this._lastIntent, score: 1, viaMemory: true }, scope };
+    }
+    return { match: classify(q), scope };
+  }
+
   async _answer(query, ctx) {
     const q = query.toLowerCase();
+    const { match, scope } = this._resolveIntent(q);
+
+    // Remember the thread for bare follow-ups ("and tomorrow?").
+    if (match && RERUNNABLE.has(match.id)) this._lastIntent = match.id;
 
     // Place lookups need the network and a location switch, so they run first
     // and short-circuit into a fresh overview of the new place.
     const place = extractPlace(query);
-    if (place) return this._answerPlace(place, ctx);
+    if (place) {
+      this._lastIntent = null; // new place, new thread
+      return this._answerPlace(place, ctx);
+    }
 
     if (!ctx.ready) {
       return {
@@ -804,9 +995,7 @@ export class AuraAssistant {
       };
     }
 
-    const match = classify(q);
-    switch (match?.id) {
-      case 'help': return this._answerHelp(ctx);
+    switch (match?.id) {      case 'help': return this._answerHelp(ctx);
       case 'greeting': return this._answerGreeting(ctx);
       case 'alert': return this._answerAlert(q, ctx);
       case 'place': return this._answerPlace(null, ctx);
@@ -826,7 +1015,7 @@ export class AuraAssistant {
       case 'air': return this._answerAir(ctx);
       case 'uv': return this._answerUV(ctx);
       case 'visibility': return this._answerVisibility(ctx);
-      case 'rain': return this._answerRain(ctx);
+      case 'rain': return this._answerRain(ctx, scope);
       case 'wind': return this._answerWind(ctx);
       case 'humidity': return this._answerHumidity(ctx);
       case 'temperature': return this._answerTemperature(ctx);
@@ -851,6 +1040,7 @@ export class AuraAssistant {
         { k: 'Decisions', v: 'Commute safety, outdoor workout windows, outdoor dining, visibility' },
         { k: 'Health', v: 'Air quality, pollen, UV exposure and heat stress' },
         { k: 'Sky', v: 'Sunset, golden hour, moon phase and stargazing score' },
+        { k: 'Time scopes', v: 'Add "tonight", "tomorrow" or "this weekend" — or follow up with "and tomorrow?"' },
         { k: 'Actions', v: 'Rain radar, pressure map, jump to the rain hour, save places' },
         { k: 'Alerts', v: 'Try "notify me if the rain chance goes above 60%"' },
       ],
@@ -880,9 +1070,54 @@ export class AuraAssistant {
     };
   }
 
-  _answerRain(ctx) {
+  _answerRain(ctx, scope = null) {
     const f = this._fmt();
     const { curr, h, idx } = ctx;
+    const type = precipTypeFor(curr.weatherCode, curr.temperature);
+    const frozen = type === 'snow' || type === 'mix';
+    const precipNoun = type === 'snow' ? 'snow' : type === 'mix' ? 'wintry mix' : 'rain';
+    const coverNoun = type === 'snow' ? '❄️ Take warm layers and allow extra travel time' : 'Take an umbrella';
+
+    // ── Time-scoped variant ("will it rain tonight?") ──────────────
+    const window = this._scopedIndices(ctx, scope);
+    if (window && window.indices.length) {
+      const ii = window.indices;
+      const probs = ii.map((i) => h.precipitation_probability?.[i] ?? 0);
+      const amounts = ii.map((i) => h.precipitation?.[i] ?? 0);
+      const peak = Math.max(...probs);
+      const total = amounts.reduce((a, b) => a + b, 0);
+      const wetIdx = ii.find((i) => (h.precipitation?.[i] ?? 0) > 0.1 || (h.precipitation_probability?.[i] ?? 0) > 60);
+      const label = window.label[0].toUpperCase() + window.label.slice(1);
+
+      return {
+        icon: type === 'snow' ? '❄️' : '🌧️',
+        tone: peak >= 50 ? 'warn' : 'good',
+        title: `${label} ${precipNoun} outlook · ${ctx.loc}`,
+        bullets: [
+          { k: label, v: `${this._fmtHour(h.time[ii[0]])} – ${this._fmtHour(h.time[ii[ii.length - 1]])}` },
+          { k: `Peak ${precipNoun} chance`, v: `${Math.round(peak)}%`, tone: peak >= 50 ? 'warn' : 'good' },
+          { k: `Expected total`, v: f.precip(total) },
+          wetIdx != null
+            ? { k: `First wet hour`, v: `${this._fmtHour(h.time[wetIdx])}`, tone: wetIdx - idx <= 3 ? 'warn' : undefined }
+            : { k: 'First wet hour', v: `None ${window.label}`, tone: 'good' },
+        ],
+        note: wetIdx != null
+          ? `${label} brings ${precipNoun} — ${coverNoun.toLowerCase()}${type === 'snow' ? '' : ' if you head out'}.`
+          : `No ${precipNoun} expected ${window.label} — you're clear.`,
+        actions: [
+          { id: 'radar', label: 'Live rain radar', icon: '🌧️' },
+          { id: 'alert', label: 'Alert me above 60%', icon: '🔔', payload: { type: 'precipProb', condition: 'above', value: 60 } },
+        ],
+        followups: ['Driving conditions right now', 'Best outdoor window today?', 'Plan my day'],
+      };
+    }
+
+  // A scope that resolves to an empty window (e.g. "tonight" asked at
+    // 11pm) falls through to the standard outlook with a one-line note.
+    const scopeNote = scope && scope.label
+      ? ` ${scope.label[0].toUpperCase() + scope.label.slice(1)} is nearly over — showing the standard outlook.`
+      : '';
+
     const soon = ctx.rainSoon;
     const nextIn = ctx.nextRainIdx != null ? ctx.nextRainIdx - idx : null;
 
@@ -891,13 +1126,20 @@ export class AuraAssistant {
       k: 'Now',
       v: `${curr.icon} ${f.precip(curr.precipitation)} falling · ${f.temp(curr.temperature)}`,
     });
+    if (frozen) {
+      bullets.push({
+        k: 'Precipitation type',
+        v: type === 'snow' ? 'Snow — frozen precipitation on the radar' : 'Wintry mix — rain falling through freezing air',
+        tone: 'warn',
+      });
+    }
     bullets.push({ k: 'Next 3 hours', v: `Peak chance ${ctx.maxProb3h}%`, tone: ctx.maxProb3h >= 60 ? 'warn' : ctx.maxProb3h >= 30 ? 'warn' : 'good' });
     bullets.push({ k: 'Next 6 hours', v: `Peak chance ${ctx.maxProb6h}%` });
     bullets.push({ k: 'Next 24 hours', v: `${ctx.maxProb24h}% peak · ${f.precip(ctx.precip24h)} total` });
 
     if (ctx.cumProb?.length) {
       const end = ctx.cumProb[ctx.cumProb.length - 1];
-      bullets.push({ k: 'Chance of any rain in 12h', v: `${end.cumProb}%`, tone: end.cumProb >= 50 ? 'warn' : 'good' });
+      bullets.push({ k: `Chance of any ${precipNoun} in 12h`, v: `${end.cumProb}%`, tone: end.cumProb >= 50 ? 'warn' : 'good' });
     }
 
     if (ctx.nextRainIdx != null) {
@@ -910,18 +1152,20 @@ export class AuraAssistant {
       bullets.push({ k: 'First wet hour', v: 'None in the next 48 hours', tone: 'good' });
     }
 
+    const gear = type === 'snow' ? 'Warm layers and waterproof boots' : 'an umbrella';
+    const verb = type === 'snow' ? 'snow' : 'rain';
     const verdict = soon
       ? nextIn <= 0
-        ? 'It is raining right now — take an umbrella.'
-        : `Take an umbrella — rain is expected within ${nextIn}h.`
+        ? `It is ${verb === 'snow' ? 'snowing' : 'raining'} right now — ${type === 'snow' ? 'warm layers on, drive gently' : 'take an umbrella'}.`
+        : `${type === 'snow' ? 'Snow' : 'Rain'} expected within ${nextIn}h — take ${gear}.`
       : ctx.maxProb6h >= 30
-        ? `Keep an umbrella handy; ${ctx.maxProb6h}% is the peak risk in the next 6 hours.`
-        : `You can probably leave the umbrella — peak risk is only ${ctx.maxProb6h}% over the next 6 hours.`;
+        ? `Keep ${gear} handy; ${ctx.maxProb6h}% is the peak risk in the next 6 hours.`
+        : `You can probably leave the umbrella — peak risk is only ${ctx.maxProb6h}% over the next 6 hours.${scopeNote}`;
 
     return {
-      icon: '🌧️',
+      icon: type === 'snow' ? '❄️' : '🌧️',
       tone: soon ? 'warn' : 'good',
-      title: `Rain outlook · ${ctx.loc}`,
+      title: `${type === 'snow' ? 'Snow' : type === 'mix' ? 'Wintry mix' : 'Rain'} outlook · ${ctx.loc}`,
       bullets,
       note: verdict,
       actions: [
@@ -935,14 +1179,16 @@ export class AuraAssistant {
   _answerCommute(ctx) {
     const f = this._fmt();
     const { curr } = ctx;
+    const type = precipTypeFor(curr.weatherCode, curr.temperature);
     const wet = (curr.precipitation ?? 0) > 0.1 || ctx.maxProb6h >= 50;
+    const icy = (curr.temperature ?? 10) <= 1.5 && ((curr.precipitation ?? 0) > 0.05 || ctx.maxProb6h >= 40 || type === 'snow' || type === 'mix');
     const fog = (curr.visibility ?? 10000) < 2000;
     const crosswind = (curr.windGusts ?? 0) >= 40;
 
     const bullets = [
       { k: 'Live conditions', v: `${curr.icon} ${f.temp(curr.temperature)} (${curr.description}), feels like ${f.temp(curr.feelsLike)}` },
       { k: 'Rain risk', v: `${ctx.maxProb3h}% in 3h · ${ctx.maxProb6h}% in 6h`, tone: ctx.maxProb6h >= 50 ? 'warn' : 'good' },
-      { k: 'Road surface', v: wet ? 'Wet — braking distance up ~30%, double your gap' : 'Dry — normal traction', tone: wet ? 'warn' : 'good' },
+      { k: 'Road surface', v: icy ? 'Snow/ice risk — bridges freeze first, expect black ice' : wet ? 'Wet — braking distance up ~30%, double your gap' : 'Dry — normal traction', tone: icy || wet ? 'warn' : 'good' },
       { k: 'Wind', v: `${f.wind(curr.windSpeed)} ${f.dir(curr.windDirection)}${curr.windGusts != null ? ` · gusting ${f.wind(curr.windGusts)}` : ''}`, tone: crosswind ? 'warn' : undefined },
       { k: 'Visibility', v: f.vis(curr.visibility), tone: fog ? 'warn' : undefined },
     ];
@@ -950,7 +1196,8 @@ export class AuraAssistant {
     if (ctx.windShift) bullets.push({ k: 'Wind shift', v: ctx.windShift.label, tone: 'warn' });
 
     let verdict;
-    if (wet && fog) verdict = 'Take it slow: wet roads plus low visibility. Lights on, extra following distance.';
+    if (icy) verdict = 'Freezing temperatures with precipitation risk — expect ice on bridges and shaded stretches. Winter tyres, gentle inputs, triple your gap.';
+    else if (wet && fog) verdict = 'Take it slow: wet roads plus low visibility. Lights on, extra following distance.';
     else if (wet && (curr.precipitation ?? 0) > 0.1) verdict = 'It is raining right now — wipers on, headlights on, double your following gap.';
     else if (wet) verdict = `Dry at the moment but ${ctx.maxProb6h}% rain risk within 6 hours — you will want the wipers before you leave.`;
     else if (crosswind) verdict = 'No rain, but gusts are strong. Watch crosswinds on exposed stretches.';
@@ -959,7 +1206,7 @@ export class AuraAssistant {
 
     return {
       icon: '🚗',
-      tone: wet || fog || crosswind ? 'warn' : 'good',
+      tone: icy || wet || fog || crosswind ? 'warn' : 'good',
       title: `Commute & road weather · ${ctx.loc}`,
       bullets,
       note: verdict,
@@ -1816,7 +2063,7 @@ export class AuraAssistant {
         { k: 'Wind', v: `${f.wind(curr.windSpeed)} ${f.dir(curr.windDirection)}` },
         { k: 'Air', v: ctx.aqi != null ? `US AQI ${ctx.aqi}` : 'Not available' },
       ],
-      note: 'I match on keywords, so try asking about rain, your commute, a workout, air quality, UV, sunset, stargazing, or say "notify me when…".',
+      note: 'I match on keywords, so try asking about rain, your commute, a workout, air quality, UV, sunset, stargazing — with "tonight" or "tomorrow" to scope it — or say "notify me when…".',
       actions: [{ id: 'briefing', label: 'Give me a briefing', icon: '📝' }],
       followups: ['What can you do?', 'Plan my day', 'When does the rain start?'],
     };
@@ -1827,6 +2074,65 @@ export class AuraAssistant {
   /** ISO timestamp of the hour `offset` hours from now, for block labelling. */
   _timeAt(ctx, offset) {
     return ctx.h?.time?.[Math.min(ctx.idx + offset, (ctx.h?.time?.length ?? 1) - 1)];
+  }
+
+  /**
+   * Hourly indices covered by a time scope, using the location-local ISO
+   * timestamps ("YYYY-MM-DDTHH:MM") so no timezone conversion is needed.
+   * @returns {{indices:number[], label:string}|null} null when no scope.
+   */
+  _scopedIndices(ctx, scope) {
+    if (!scope || !ctx.h?.time?.length) return null;
+    const times = ctx.h.time;
+    const baseDate = (times[ctx.idx] || '').slice(0, 10);
+    if (!baseDate) return null;
+
+    const weekdayOf = (dateStr) => {
+      const d = new Date(`${dateStr}T12:00:00`);
+      return Number.isNaN(d.getTime()) ? -1 : d.getDay();
+    };
+    const hourOf = (iso) => parseInt((iso || '').slice(11, 13), 10);
+
+    // Tomorrow's date = the first date after the current one present in data.
+    let tomorrowDate = null;
+    for (let i = ctx.idx; i < times.length; i++) {
+      const dt = (times[i] || '').slice(0, 10);
+      if (dt && dt > baseDate) { tomorrowDate = dt; break; }
+    }
+
+    const indices = [];
+    for (let i = ctx.idx; i < times.length; i++) {
+      const t = times[i] || '';
+      const dt = t.slice(0, 10);
+      const hh = hourOf(t);
+      if (!dt || Number.isNaN(hh)) continue;
+      switch (scope.kind) {
+        case 'morning':
+          if (dt === baseDate && hh >= 5 && hh < 12) indices.push(i);
+          break;
+        case 'afternoon':
+          if (dt === baseDate && hh >= 12 && hh < 17) indices.push(i);
+          break;
+        case 'evening':
+          if (dt === baseDate && hh >= 17 && hh < 22) indices.push(i);
+          break;
+        case 'tonight':
+          if (dt === baseDate && hh >= 18) indices.push(i);
+          break;
+        case 'tomorrow':
+          if (tomorrowDate && dt === tomorrowDate) indices.push(i);
+          break;
+        case 'weekend': {
+          const wd = weekdayOf(dt);
+          if ((wd === 0 || wd === 6) && dt >= baseDate) indices.push(i);
+          break;
+        }
+        default:
+          break;
+      }
+      if (indices.length >= 48) break;
+    }
+    return { indices, label: scope.label };
   }
 
   _eveningSummary(ctx) {

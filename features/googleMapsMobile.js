@@ -4,6 +4,7 @@
 // live rain radar, outdoor fitness decisions, interactive bottom sheet, and Material navigation.
 
 import { shortPlaceName } from '../modules/geo.js';
+import { isMobileLayout } from './breakpoints.js';
 
 export function init(app) {
   const controller = new AuraMobileController(app);
@@ -47,12 +48,30 @@ export class AuraMobileController {
     }
   }
 
+  /**
+   * True when the bottom-sheet / mobile-chrome layout should apply.
+   *
+   * This deliberately mirrors the media query used in styles.css:
+   *   (max-width: 639px), (max-height: 500px) and (pointer: coarse)
+   *
+   * The second clause is what landscape phones need. A rotated iPhone is
+   * ~844px wide, so a width-only check classified it as a desktop and took
+   * away the bottom nav, the FABs, the map controls, the draggable sheet and
+   * the 44px touch targets — all of which the user still needs with one hand
+   * on a short screen. Requiring `pointer: coarse` keeps genuine desktop
+   * windows (however short) on the desktop card.
+   */
+  _isMobileLayout() {
+    return isMobileLayout();
+  }
+
   // ── Auto-Sync Observer: Never Get Stuck on a Stale Location ───────
   initLocationObserver() {
     const locEl = document.getElementById('panelLocationName');
     if (!locEl) return;
     const observer = new MutationObserver(() => {
-      const text = locEl.textContent?.trim();
+      if (this._isSyncingLocation) return;
+      const text = locEl.textContent?.replace(/🏠\s*Home/g, '')?.trim();
       if (text && text !== this.currentLocationName && text !== 'Select location') {
         this.currentLocationName = text;
         this.syncCurrentLocationInfo(null, text);
@@ -234,16 +253,9 @@ export class AuraMobileController {
 
   // ── Right Side Floating Controls ─────────────────────────────────
   initFloatingActions() {
-    const layersBtn = document.getElementById('mobileFloatingLayersBtn');
     const shareBtn = document.getElementById('mobileFloatingShareBtn');
     const compassBtn = document.getElementById('mobileFloatingCompassBtn');
     const directionsFab = document.getElementById('mobileDirectionsFab');
-
-    layersBtn?.addEventListener('click', (e) => {
-      e.stopPropagation();
-      this._haptic('light');
-      this.app.toggleMapLayersFlyout?.();
-    });
 
     shareBtn?.addEventListener('click', (e) => {
       e.stopPropagation();
@@ -288,21 +300,17 @@ export class AuraMobileController {
     if (!panel || !dragHandle) return;
 
     // ── CANCEL / CLOSE BUTTON FIX ─────────────────────────────────
-    // If half or full: collapse down to peek.
-    // If peek: dismiss offscreen with a restore pill.
+    // Close button dismisses the weather card entirely on mobile and desktop
     closeBtn?.addEventListener('click', (e) => {
       e.stopPropagation();
       this._haptic('selection');
-      if (this.sheetState === 'full' || this.sheetState === 'half') {
-        this.snapSheet('peek');
-      } else {
-        this.dismissSheet();
-      }
+      this.dismissSheet();
+      this.app?.hideWeatherPanel?.();
     });
 
     // Chevron minimize button: toggle peek <-> half on mobile, toggle minimize on desktop
     minBtn?.addEventListener('click', (e) => {
-      if (window.innerWidth >= 640) {
+      if (!isMobileLayout()) {
         // On desktop, allow normal app.toggleMinimizeWeatherPanel to run without interference
         return;
       }
@@ -324,7 +332,7 @@ export class AuraMobileController {
     ];
     expandTargets.forEach(el => {
       el?.addEventListener('click', (e) => {
-        if (window.innerWidth >= 640) return;
+        if (!isMobileLayout()) return;
         if (this.sheetState === 'peek') {
           if (e.target.closest('#panelCloseBtn, #panelMinimizeBtn')) return;
           e.stopPropagation();
@@ -337,7 +345,7 @@ export class AuraMobileController {
     // On desktop, clicking the weather & AQI pill toggles minimize or selects overview
     const weatherAqiBadge = document.getElementById('sheetWeatherAqiBadge');
     weatherAqiBadge?.addEventListener('click', () => {
-      if (window.innerWidth >= 640) {
+      if (!isMobileLayout()) {
         if (panel.classList.contains('minimized')) {
           this.app.toggleMinimizeWeatherPanel?.();
         } else {
@@ -352,7 +360,7 @@ export class AuraMobileController {
     let startTime = 0;
 
     const onTouchStart = (e) => {
-      if (window.innerWidth >= 640) return;
+      if (!isMobileLayout()) return;
       isDragging = true;
       startY = e.touches[0].clientY;
       initialHeight = panel.getBoundingClientRect().height;
@@ -413,14 +421,14 @@ export class AuraMobileController {
     window.addEventListener('touchend', onTouchEnd, { passive: true });
 
     dragHandle.addEventListener('click', () => {
-      if (window.innerWidth >= 640) return;
+      if (!isMobileLayout()) return;
       this._haptic('selection');
       if (this.sheetState === 'peek') this.snapSheet('half');
       else if (this.sheetState === 'half') this.snapSheet('full');
       else this.snapSheet('peek');
     });
 
-    if (window.innerWidth < 640) {
+    if (isMobileLayout()) {
       panel.classList.add('aura-sheet', 'google-maps-sheet');
       panel.classList.add('open');
       // If a location is currently selected, snap to 'half' so user immediately sees weather details!
@@ -444,7 +452,7 @@ export class AuraMobileController {
 
     // Window resize handler: seamlessly switch between mobile bottom sheet and desktop sidebar
     window.addEventListener('resize', () => {
-      if (window.innerWidth >= 640) {
+      if (!isMobileLayout()) {
         panel.classList.remove('google-maps-sheet', 'sheet-peek', 'sheet-half', 'sheet-full');
         panel.style.height = '';
         panel.style.maxHeight = '';
@@ -462,7 +470,7 @@ export class AuraMobileController {
 
     const mapEl = document.getElementById('map');
     mapEl?.addEventListener('click', (e) => {
-      if (window.innerWidth < 640 && this.sheetState !== 'peek' && this.sheetState !== 'dismissed') {
+      if (isMobileLayout() && this.sheetState !== 'peek' && this.sheetState !== 'dismissed') {
         if (!e.target.closest('#weatherPanel, #mobileBottomNav, #mobileQuickChips, .mobile-floating-control')) {
           this.snapSheet('peek');
         }
@@ -474,7 +482,7 @@ export class AuraMobileController {
     const panel = document.getElementById('weatherPanel');
     if (!panel) return;
 
-    if (window.innerWidth >= 640) {
+    if (!isMobileLayout()) {
       // On desktop, keep normal floating card with full content visible
       panel.style.height = '';
       panel.style.maxHeight = '';
@@ -522,12 +530,9 @@ export class AuraMobileController {
     const panel = document.getElementById('weatherPanel');
     if (!panel) return;
 
-    if (window.innerWidth >= 640) {
-      this.app.hideWeatherPanel?.();
-      return;
-    }
-
     this.sheetState = 'dismissed';
+    panel.classList.remove('open', 'sheet-peek', 'sheet-half', 'sheet-full');
+    panel.setAttribute('inert', '');
     panel.style.transition = 'transform 0.35s cubic-bezier(0.2, 0.9, 0.3, 1), opacity 0.25s ease';
     panel.style.transform = 'translateY(calc(100% + 120px))';
     panel.style.opacity = '0';
@@ -547,11 +552,14 @@ export class AuraMobileController {
     } else {
       pill.classList.remove('hidden');
     }
+    this.app?.hideWeatherPanel?.();
   }
 
   restoreSheet(state = 'half') {
     const panel = document.getElementById('weatherPanel');
     if (!panel) return;
+    panel.removeAttribute('inert');
+    panel.classList.add('open');
     const pill = document.getElementById('restoreSheetPill');
     if (pill) pill.classList.add('hidden');
     this.snapSheet(state);
@@ -1081,95 +1089,108 @@ export class AuraMobileController {
 
   // ── Sync Active Location Header & AQI Badge (Never Stuck on Stale Location) ─
   syncCurrentLocationInfo(weather, name, weatherData) {
-    const rawName = name || this.app.selectedName || (this.app.selectedLat != null ? `${this.app.selectedLat.toFixed(2)}, ${this.app.selectedLng.toFixed(2)}` : '');
-    if (!rawName && !this.currentLocationName) return;
+    if (this._isSyncingLocation) return;
+    this._isSyncingLocation = true;
+    try {
+      const rawName = (name || this.app.selectedName || (this.app.selectedLat != null ? `${this.app.selectedLat.toFixed(2)}, ${this.app.selectedLng.toFixed(2)}` : ''))?.replace(/🏠\s*Home/g, '')?.trim();
+      if (!rawName && !this.currentLocationName) return;
 
-    const locName = rawName || this.currentLocationName;
-    this.currentLocationName = locName;
-    const shortName = shortPlaceName(locName) || 'Selected Location';
+      const locName = rawName || this.currentLocationName;
+      this.currentLocationName = locName;
+      const shortName = shortPlaceName(locName) || 'Selected Location';
 
-    // Update primary location header
-    const locEl = document.getElementById('panelLocationName');
-    if (locEl) {
-      const homeBadge = locEl.querySelector('.home-badge');
-      locEl.textContent = shortName;
-      locEl.title = locName;
-      if (homeBadge) locEl.appendChild(homeBadge);
-    }
-
-    const aliasEl = document.getElementById('auraLocationTitle') || document.getElementById('googleLocationTitle');
-    if (aliasEl) aliasEl.textContent = shortName;
-
-    // Update restore pill if visible
-    const restorePill = document.getElementById('restoreSheetPill');
-    if (restorePill) {
-      restorePill.innerHTML = `<span>📍</span><span>${shortName} Weather</span><span class="text-teal-500 font-bold">▲ Show</span>`;
-    }
-
-    // Update the prompt chip in the Aura banner card
-    const promptChipText = document.querySelector('#auraPromptChip span:last-child');
-    if (promptChipText) {
-      promptChipText.textContent =
-        this.app?.aura?.bannerPrompt?.(shortName) || `Will it rain in ${shortName}?`;
-    }
-
-    // Aura's suggestions depend on the forecast, so refresh them once it lands.
-    this.app?.aura?.refreshPresets?.();
-
-    // Update discoveries header
-    const discHeader = document.getElementById('discoveriesHeaderTitle');
-    if (discHeader) {
-      discHeader.textContent = `Live Weather Intelligence • ${shortName}`;
-    }
-
-    // Weather & AQI badge
-    const badge = document.getElementById('sheetWeatherAqiBadge');
-    const curr = weather || this.app?.currentWeather || null;
-    const hourIdx = this.app?.currentHourIndex || 0;
-    const tempVal = curr?.temperature ?? (this.app?.weatherData?.hourly?.temperature_2m?.[hourIdx]);
-    const iconVal = curr?.icon 
-      || this.app?.currentWeather?.icon 
-      || document.getElementById('panelIcon')?.textContent?.trim() 
-      || (tempVal != null ? '⛅' : '☁️');
-
-    let aqi = this.app?.currentAqi;
-    if (aqi == null && this.app?.airQualityData?.hourly?.us_aqi?.[hourIdx] != null) {
-      aqi = Math.round(this.app.airQualityData.hourly.us_aqi[hourIdx]);
-    }
-    if (aqi == null) {
-      const panelAqiText = document.getElementById('panelAQIBadge')?.textContent?.trim();
-      if (panelAqiText && panelAqiText !== '--' && !isNaN(parseInt(panelAqiText, 10))) {
-        aqi = parseInt(panelAqiText, 10);
+      // Update primary location header
+      const locEl = document.getElementById('panelLocationName');
+      if (locEl) {
+        const homeBadge = locEl.querySelector('.home-badge');
+        if (homeBadge) homeBadge.remove();
+        locEl.textContent = shortName;
+        locEl.title = locName;
       }
-    }
 
-    if (badge) {
-      if (tempVal != null) {
-        const tempFormatted = Math.round(tempVal);
-        const aqiDot = aqi == null
-          ? 'bg-slate-400'
-          : aqi <= 50 ? 'bg-emerald-400' 
-          : aqi <= 100 ? 'bg-amber-400' 
-          : aqi <= 150 ? 'bg-orange-400' 
-          : 'bg-rose-400';
-        const aqiDisplay = aqi != null ? `AQI ${aqi}` : 'AQI --';
-
-        badge.innerHTML = `
-          <span class="text-sm">${iconVal}</span>
-          <span class="font-bold text-xs">${tempFormatted}°</span>
-          <span class="text-slate-400 text-[10px]">•</span>
-          <span class="w-2 h-2 rounded-full ${aqiDot} inline-block"></span>
-          <span class="text-[10px] font-semibold text-slate-400">${aqiDisplay}</span>
-        `;
-        badge.classList.remove('hidden');
-      } else {
-        badge.classList.add('hidden');
+      const homeBadge = document.getElementById('panelHomeBadge');
+      if (homeBadge && this.app?.defaultLocation && this.app?.selectedLat != null) {
+        const isHome = Math.abs(this.app.defaultLocation.lat - this.app.selectedLat) < 0.0001 &&
+                       Math.abs(this.app.defaultLocation.lng - this.app.selectedLng) < 0.0001;
+        homeBadge.classList.toggle('hidden', !isHome);
       }
-    }
 
-    // Regenerate location-based weather use cases
-    this.placesData = this._getInitialWeatherUseCases(shortName, tempVal != null ? Math.round(tempVal) : 22);
-    this.renderPlaces();
+      const aliasEl = document.getElementById('auraLocationTitle') || document.getElementById('googleLocationTitle');
+      if (aliasEl) aliasEl.textContent = shortName;
+
+      // Update restore pill if visible
+      const restorePill = document.getElementById('restoreSheetPill');
+      if (restorePill) {
+        restorePill.innerHTML = `<span>📍</span><span>${shortName} Weather</span><span class="text-teal-500 font-bold">▲ Show</span>`;
+      }
+
+      // Update the prompt chip in the Aura banner card
+      const promptChipText = document.querySelector('#auraPromptChip span:last-child');
+      if (promptChipText) {
+        promptChipText.textContent =
+          this.app?.aura?.bannerPrompt?.(shortName) || `Will it rain in ${shortName}?`;
+      }
+
+      // Aura's suggestions depend on the forecast, so refresh them once it lands.
+      this.app?.aura?.refreshPresets?.();
+
+      // Update discoveries header
+      const discHeader = document.getElementById('discoveriesHeaderTitle');
+      if (discHeader) {
+        discHeader.textContent = `Live Weather Intelligence • ${shortName}`;
+      }
+
+      // Weather & AQI badge
+      const badge = document.getElementById('sheetWeatherAqiBadge');
+      const curr = weather || this.app?.currentWeather || null;
+      const hourIdx = this.app?.currentHourIndex || 0;
+      const tempVal = curr?.temperature ?? (this.app?.weatherData?.hourly?.temperature_2m?.[hourIdx]);
+      const iconVal = curr?.icon 
+        || this.app?.currentWeather?.icon 
+        || document.getElementById('panelIcon')?.textContent?.trim() 
+        || (tempVal != null ? '⛅' : '☁️');
+
+      let aqi = this.app?.currentAqi;
+      if (aqi == null && this.app?.airQualityData?.hourly?.us_aqi?.[hourIdx] != null) {
+        aqi = Math.round(this.app.airQualityData.hourly.us_aqi[hourIdx]);
+      }
+      if (aqi == null) {
+        const panelAqiText = document.getElementById('panelAQIBadge')?.textContent?.trim();
+        if (panelAqiText && panelAqiText !== '--' && !isNaN(parseInt(panelAqiText, 10))) {
+          aqi = parseInt(panelAqiText, 10);
+        }
+      }
+
+      if (badge) {
+        if (tempVal != null) {
+          const tempFormatted = Math.round(tempVal);
+          const aqiDot = aqi == null
+            ? 'bg-slate-400'
+            : aqi <= 50 ? 'bg-emerald-400' 
+            : aqi <= 100 ? 'bg-amber-400' 
+            : aqi <= 150 ? 'bg-orange-400' 
+            : 'bg-rose-400';
+          const aqiDisplay = aqi != null ? `AQI ${aqi}` : 'AQI --';
+
+          badge.innerHTML = `
+            <span class="text-sm">${iconVal}</span>
+            <span class="font-bold text-xs">${tempFormatted}°</span>
+            <span class="text-slate-400 text-[10px]">•</span>
+            <span class="w-2 h-2 rounded-full ${aqiDot} inline-block"></span>
+            <span class="text-[10px] font-semibold text-slate-400">${aqiDisplay}</span>
+          `;
+          badge.classList.remove('hidden');
+        } else {
+          badge.classList.add('hidden');
+        }
+      }
+
+      // Regenerate location-based weather use cases
+      this.placesData = this._getInitialWeatherUseCases(shortName, tempVal != null ? Math.round(tempVal) : 22);
+      this.renderPlaces();
+    } finally {
+      this._isSyncingLocation = false;
+    }
   }
 }
 

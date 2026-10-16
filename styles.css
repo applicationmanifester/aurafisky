@@ -198,7 +198,7 @@ html, body {
 }
 /* On mobile (<640px), the search box is only ~60% wide. Make the
    dropdown span the full viewport so result text doesn't cramp. */
-@media (max-width: 639px) {
+@media (max-width: 639px), (max-height: 500px) and (pointer: coarse) {
   /* ── Mobile Bottom Sheets & Floating FABs ─────────────────── */
   /* Floating GPS Locate Me Button */
   #mobileLocationFab {
@@ -243,7 +243,7 @@ html, body {
     margin: 0 !important;
     padding: 1.25rem !important;
     transform: none !important;
-    z-index: 1040 !important;
+    z-index: 1200 !important;
     box-shadow: 0 -10px 40px rgba(0, 0, 0, 0.25) !important;
     border-bottom: none !important;
     background: var(--glass-bg);
@@ -336,7 +336,7 @@ html, body {
 }
 
 /* Mobile: slide up from bottom above mobile bottom navigation */
-@media (max-width: 639px) {
+@media (max-width: 639px), (max-height: 500px) and (pointer: coarse) {
   .weather-panel {
     transform: translateY(110%);
     /* Use env() to sit above the native bottom nav + safe area */
@@ -357,7 +357,7 @@ html, body {
 }
 
 /* ── Mobile Bottom Navigation Bar ────────────────────────────── */
-@media (max-width: 639px) {
+@media (max-width: 639px), (max-height: 500px) and (pointer: coarse) {
   #mobileBottomNav {
     display: flex !important;
     padding-bottom: calc(0.5rem + env(safe-area-inset-bottom, 0px));
@@ -406,7 +406,7 @@ html, body {
 }
 
 /* ── Mobile Touch Targets - Ensure 44x44 minimum ─────────────── */
-@media (max-width: 639px) {
+@media (max-width: 639px), (max-height: 500px) and (pointer: coarse) {
   button,
   [role="button"],
   input[type="checkbox"],
@@ -482,7 +482,7 @@ html, body {
 }
 
 /* Mobile minimized anchoring */
-@media (max-width: 639px) {
+@media (max-width: 639px), (max-height: 500px) and (pointer: coarse) {
   .weather-panel.minimized {
     bottom: calc(3.5rem + env(safe-area-inset-bottom, 0px)) !important;
     top: auto !important;
@@ -833,7 +833,7 @@ input[type='range'].timeline-slider::-moz-range-thumb {
 }
 
 /* ── Responsive helpers ─────────────────────────────────────── */
-@media (max-width: 639px) {
+@media (max-width: 639px), (max-height: 500px) and (pointer: coarse) {
   .timeline-day-labels {
     font-size: 10px;
   }
@@ -1178,7 +1178,7 @@ input[type='range'].timeline-slider::-moz-range-thumb {
   transform: translateX(0);
 }
 
-@media (max-width: 639px) {
+@media (max-width: 639px), (max-height: 500px) and (pointer: coarse) {
   #comparePanel {
     transform: translateY(110%);
     /* Sit above mobile bottom nav + device safe area */
@@ -1539,6 +1539,23 @@ input[type='range'].timeline-slider::-moz-range-thumb {
 
 .aura-panel { transform-origin: bottom center; }
 
+/* The chat region flexes to whatever the panel has left, and only takes a
+   floor on screens tall enough to afford one. Landscape phones (~390px tall)
+   have no room for a 240px floor plus a 85vh cap, so the input bar was
+   pushed out of view and the assistant became unusable. */
+#auraChat {
+  min-height: 0;
+  max-height: min(46vh, 22rem);
+  overscroll-behavior: contain;
+}
+@media (max-height: 560px) {
+  #auraChat { max-height: none; padding-top: 0.5rem; padding-bottom: 0.5rem; }
+  .aura-panel { max-height: 94vh; }
+  .aura-panel .aura-head { margin-bottom: 0.125rem; }
+  .aura-list { gap: 0.125rem; }
+  .aura-note { margin-top: 0.25rem; padding-top: 0.25rem; }
+}
+
 /* Message rows ------------------------------------------------------------ */
 .aura-msg { display: flex; gap: 0.5rem; align-items: flex-start; }
 .aura-msg-user { justify-content: flex-end; }
@@ -1850,7 +1867,7 @@ button, a, input, select, textarea, [role="button"] {
   opacity: 1;
 }
 
-@media (max-width: 639px) {
+@media (max-width: 639px), (max-height: 500px) and (pointer: coarse) {
   /* Timeline bar sits above mobile bottom nav + safe area */
   #timelineBar {
     bottom: calc(3.5rem + env(safe-area-inset-bottom, 0px));
@@ -1914,18 +1931,22 @@ button, a, input, select, textarea, [role="button"] {
     bottom: calc(3.5rem + env(safe-area-inset-bottom, 0px) + 0.25rem);
   }
 
-  /* Map layers flyout: on mobile, anchor below the button instead of to the left */
+  /* Map layers flyout: on mobile, anchor cleanly above all panels with z-index 1200 */
   #mapLayersFlyout {
     position: fixed !important;
-    right: 0.75rem !important;
-    left: 0.75rem !important;
+    right: 1rem !important;
+    left: 1rem !important;
     top: auto !important;
-    bottom: calc(3.5rem + env(safe-area-inset-bottom, 0px) + 3.5rem) !important;
+    bottom: calc(4.5rem + env(safe-area-inset-bottom, 0px)) !important;
     transform: none !important;
     width: auto !important;
-    max-height: 60vh;
+    max-width: 320px !important;
+    margin: 0 auto !important;
+    z-index: 1200 !important;
+    max-height: 70vh;
     overflow-y: auto;
     -webkit-overflow-scrolling: touch;
+    box-shadow: 0 16px 48px rgba(0, 0, 0, 0.45) !important;
   }
 
   /* Weather panel scrollable content: momentum scroll on iOS and paint/layout isolation */
@@ -2271,7 +2292,7 @@ button, a, input, select, textarea, [role="button"] {
 }
 
 /* Mobile adjustments */
-@media (max-width: 639px) {
+@media (max-width: 639px), (max-height: 500px) and (pointer: coarse) {
   /* Timeline bar position now controlled by main mobile media block above */
   #toastContainer {
     bottom: calc(3.5rem + env(safe-area-inset-bottom, 0px) + 0.75rem) !important;
@@ -2402,7 +2423,7 @@ button, a, input, select, textarea, [role="button"] {
 }
 
 /* Draggable Bottom Sheet Styling on Mobile */
-@media (max-width: 639px) {
+@media (max-width: 639px), (max-height: 500px) and (pointer: coarse) {
   .weather-panel.aura-sheet,
   .weather-panel.google-maps-sheet {
     position: fixed !important;

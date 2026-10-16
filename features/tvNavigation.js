@@ -137,8 +137,13 @@ function moveFocus(dir) {
 }
 
 export function init(app) {
-  const isTV = document.documentElement.dataset.device === "tv";
-  if (!isTV) return;
+  // Chromium TVs are often only identified by an async UA-Client-Hints lookup
+  // that resolves *after* this module initialises. Reading dataset.device once
+  // and returning meant those devices got the TV stylesheet but no way to
+  // operate the app with a remote — the worst possible half-result. So the
+  // handlers are always installed and gate themselves on the current tier,
+  // and the devicechange event flips them live.
+  let enabled = document.documentElement.dataset.device === "tv";
 
   const KEYMAP = {
     ArrowLeft: "left",
@@ -147,11 +152,68 @@ export function init(app) {
     ArrowDown: "down",
   };
 
+  /**
+   * A modal overlay is open. Focus must stay inside it — the D-pad otherwise
+   * walks straight out of a dialog and into the weather card behind, which is
+   * unreachable in practice because there is no way back.
+   */
+  function activeModal() {
+    const dialogs = document.querySelectorAll('[role="dialog"][aria-modal="true"]');
+    for (const d of dialogs) {
+      if (d.classList.contains("hidden")) continue;
+      if (d.offsetParent === null && getComputedStyle(d).position !== "fixed") continue;
+      return d;
+    }
+    return null;
+  }
+
   document.addEventListener(
     "keydown",
     (e) => {
+      if (!enabled) return;
+
+      // Remote "Back". Tizen, webOS and Android TV report it under different
+      // keys and some report none at all, so the common ones are all handled.
+      // Without this, Back exits or kills the app instead of closing a panel.
+      const isBack =
+        e.key === "BrowserBack" ||
+        e.key === "GoBack" ||
+        e.key === "Escape" ||
+        e.key === "Backspace" ||
+        e.keyCode === 4 ||
+        e.keyCode === 10009; // Tizen remote BACK
+      if (isBack) {
+        if (closeTopmostLayer()) {
+          e.preventDefault();
+          e.stopPropagation();
+        }
+        return;
+      }
+
       const dir = KEYMAP[e.key];
       if (dir) {
+        // While a modal is open, let focus move inside it only.
+        const modal = activeModal();
+        if (modal && !modal.contains(document.activeElement)) {
+          const inside = pickCandidate(
+            document.activeElement && document.activeElement !== document.body
+              ? document.activeElement
+              : modal,
+            dir,
+            getFocusables().filter((el) => modal.contains(el)),
+          );
+          if (inside) {
+            inside.focus();
+            inside.scrollIntoView({ block: "nearest", inline: "nearest" });
+            e.preventDefault();
+            e.stopPropagation();
+          } else if (!modal.contains(document.activeElement)) {
+            (modal.querySelector(FOCUSABLE_SELECTOR) || modal).focus?.();
+            e.preventDefault();
+            e.stopPropagation();
+          }
+          return;
+        }
         if (moveFocus(dir)) {
           e.preventDefault();
           e.stopPropagation();
@@ -175,9 +237,58 @@ export function init(app) {
     true,
   ); // capture: beat page-level scroll handlers
 
+  // Pick up a TV that is only identified after first paint.
+  const onDeviceChange = (e) => {
+    if (e?.detail?.device === "tv") enabled = true;
+  };
+  window.addEventListener("aura:devicechange", onDeviceChange);
+  // And one more chance in case the event already fired.
+  if (document.documentElement.dataset.device === "tv") enabled = true;
+
   // Convenience hook for other features (e.g. closing panels on Back).
   app.tvNavigation = {
     moveFocus,
+    isEnabled: () => enabled,
     refresh: () => getFocusables().length,
   };
+}
+
+/**
+ * Closes whatever is stacked on top, returning true if something was closed.
+ * Ordered outermost-first is not needed here because Aura's modal and the
+ * wallpaper overlay are the only true modals; the rest close by id.
+ */
+function closeTopmostLayer() {
+  const openModal = [...document.querySelectorAll('[role="dialog"][aria-modal="true"]')]
+    .filter((d) => !d.classList.contains("hidden"))
+    .pop();
+  if (openModal) {
+    const close = openModal.querySelector(
+      'button[aria-label^="Close"], button[aria-label*="close"], #auraCloseBtn, #wallpaperCloseBtn',
+    );
+    if (close) {
+      close.click();
+      return true;
+    }
+  }
+  for (const [id, btn] of [
+    ["shareModal", "shareCloseBtn"],
+    ["bookmarksDropdown", "closeBookmarksBtn"],
+    ["mapLayersFlyout", null],
+    ["settingsPanel", null],
+  ]) {
+    const panel = document.getElementById(id);
+    if (panel && !panel.classList.contains("hidden")) {
+      const target = btn ? document.getElementById(btn) : panel;
+      if (target) {
+        if (btn) target.click();
+        else {
+          panel.classList.add("hidden");
+          return true;
+        }
+        return true;
+      }
+    }
+  }
+  return false;
 }

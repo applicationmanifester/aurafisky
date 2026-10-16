@@ -114,18 +114,13 @@ function updateHomeButton() {
         ? "Remove home location"
         : "Set as home location";
     }
-    if (this.$.panelLocationName && isHome) {
-      const badge = this.$.panelLocationName.querySelector(".home-badge");
-      if (!badge) {
-        const el = document.createElement("span");
-        el.className =
-          "home-badge text-[10px] font-bold text-amber-600 dark:text-amber-400 ml-1";
-        el.textContent = "🏠 Home";
-        this.$.panelLocationName.appendChild(el);
-      }
-    } else if (this.$.panelLocationName) {
-      const badge = this.$.panelLocationName.querySelector(".home-badge");
-      if (badge) badge.remove();
+    if (this.$.panelLocationName) {
+      const internalBadge = this.$.panelLocationName.querySelector(".home-badge");
+      if (internalBadge) internalBadge.remove();
+    }
+    const badge = document.getElementById("panelHomeBadge");
+    if (badge) {
+      badge.classList.toggle("hidden", !isHome);
     }
   }
 

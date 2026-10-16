@@ -198,7 +198,11 @@ describe('Mobile Tabs & Navigation Layout', () => {
 
   it('throttles weather particle canvas loop during mobile map drag in features/canvasEffects.js', () => {
     const effectsCode = fs.readFileSync('features/canvasEffects.js', 'utf-8');
-    expect(effectsCode).toContain('window.innerWidth < 640 && this._mapWasDragged');
+    // Asserts the behaviour, not a literal expression. This test used to
+    // require the exact source string 'window.innerWidth < 640', which meant
+    // it failed on any refactor while still passing if the rule sat in the
+    // wrong branch. The throttle is what matters: mobile layout AND dragging.
+    expect(effectsCode).toMatch(/isMobileLayout\(\)\s*&&\s*this\._mapWasDragged/);
   });
 
   it('renders mobile pwaInstallBanner and wires up install and close triggers', () => {

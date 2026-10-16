@@ -51,6 +51,8 @@ import {
   describeCoordinates,
 } from "./modules/geo.js";
 import { reverseUrls, labelFromReverse } from "./modules/reverseGeocode.js";
+import { applyViewportHeight, watchViewport } from "./modules/viewport.js";
+import { isMobileLayout } from "./features/breakpoints.js";
 import localforage from "localforage";
 import DOMPurify from "dompurify";
 
@@ -113,6 +115,29 @@ const POPULAR_LOCATIONS = [
   { name: "Sydney", admin1: "New South Wales", country: "Australia", countryCode: "AU", latitude: -33.8688, longitude: 151.2093, population: 5312000, featureCode: "PPL", displayName: "Sydney, New South Wales, Australia" },
   { name: "Mumbai", admin1: "Maharashtra", country: "India", countryCode: "IN", latitude: 19.076, longitude: 72.8777, population: 12440000, featureCode: "PPL", displayName: "Mumbai, Maharashtra, India" },
 ];
+
+/**
+ * localStorage keys this app owns, beyond the weathermap_cache_* family.
+ * Used by "Clear local cache" so the button's promise is true.
+ */
+const LOCAL_DATA_KEYS = new Set([
+  "last_weather_notification_time",
+  "aurafisky_theme",
+  "aurafisky_wallpaper",
+  "aurafisky_wallpaper_photo",
+  "aurafisky_saved_routes",
+  "aurafisky_alert_rules",
+  "aurafisky_alert_fired",
+  "aurafisky_terminator",
+  "aurafisky_map_style",
+  "aurafisky_show_bookmarks_map",
+  "aurafisky_dismiss_install_banner",
+  "aurafisky_desktop_panel_pos",
+  "aurafisky_timeline_24h",
+  "aurafisky_tv_hint_dismissed",
+  "mapLanguage",
+  "weathermap_search_history",
+]);
 
 class AurafiskyApp {
   // Helper to set innerHTML safely using DOMPurify
@@ -823,6 +848,14 @@ class AurafiskyApp {
     // Setup OpenLayers map viewport
     this.initMap();
 
+    // Keep --app-height tracking the visible viewport. Must start before the
+    // panel styles resolve: ten rules across the stylesheets are sized as
+    // var(--app-height, 100vh), and the 100vh fallback is wrong on iOS Safari
+    // where 100vh includes the space behind the collapsing address bar.
+    this._stopViewportWatch = watchViewport({
+      onResize: () => this.map?.updateSize(),
+    });
+
     // Setup Particle Canvas Overlay
     this.initWeatherCanvas();
 
@@ -907,14 +940,15 @@ class AurafiskyApp {
 
   // Set --app-height to the true visible viewport height so layout using
   // var(--app-height, 100vh) is never clipped behind mobile browser chrome.
+  //
+  // The measurement itself lives in modules/viewport.js, which is started in
+  // initMapViewportTracking() below. This method remains as the single-shot
+  // entry point (and so map updates stay in one place) rather than being a
+  // second, subtly different implementation.
   _updateAppHeight() {
-    const h = window.visualViewport
-      ? window.visualViewport.height
-      : window.innerHeight;
-    document.documentElement.style.setProperty("--app-height", `${h}px`);
-    // Also set visual viewport height for search dropdown
-    document.documentElement.style.setProperty("--visual-viewport-height", `${h}px`);
+    const h = applyViewportHeight();
     this.map?.updateSize();
+    return h;
   }
 
   // ================================================================
@@ -1353,18 +1387,12 @@ class AurafiskyApp {
       setTimeout(() => this.map && this.map.updateSize(), 500);
       setTimeout(() => this.map && this.map.updateSize(), 1500);
 
-      // Re-fit the map when the mobile URL bar shows/hides (visual viewport)
-      if (window.visualViewport) {
-        const onVV = () => {
-          this.map && this.map.updateSize();
-          // Update CSS variable for search dropdown positioning
-          document.documentElement.style.setProperty('--visual-viewport-height', `${window.visualViewport.height}px`);
-        };
-        window.visualViewport.addEventListener("resize", onVV);
-        window.visualViewport.addEventListener("scroll", onVV);
-        // Initial set
-        onVV();
-      }
+      // Re-fit the map when the mobile URL bar shows/hides. The visual-viewport
+      // resize/scroll wiring itself now lives in initMapViewportTracking()
+      // (modules/viewport.js), started from init() — keeping it in one place
+      // is what stops the two copies drifting, which is how --app-height ended
+      // up written but never read.
+      this._updateAppHeight();
     } catch (error) {
       console.error("Map initialization failed:", error);
       this.hideLoadingOverlay();
@@ -1917,6 +1945,12 @@ class AurafiskyApp {
       });
     });
 
+    document.getElementById("closeMapLayersBtn")?.addEventListener("click", (e) => {
+      e.stopPropagation();
+      this.toggleMapLayersFlyout(false);
+      this._haptic?.('selection');
+    });
+
     document.addEventListener("click", (e) => {
       if (
         this.$.mapLayersFlyout &&
@@ -2416,7 +2450,7 @@ class AurafiskyApp {
 
     const showMobileInstallBanner = () => {
       if (
-        window.innerWidth < 640 &&
+        isMobileLayout() &&
         !this._isInStandalone &&
         localStorage.getItem("aurafisky_dismiss_install_banner") !== "true" &&
         this.$.pwaInstallBanner
@@ -2557,7 +2591,7 @@ class AurafiskyApp {
       panel.addEventListener(
         "touchstart",
         (e) => {
-          if (window.innerWidth >= 640 || e.touches.length !== 1) return;
+          if (!isMobileLayout() || e.touches.length !== 1) return;
           this._panelTouchStartY = e.touches[0].clientY;
           this._panelTouchActive = true;
         },
@@ -2566,7 +2600,7 @@ class AurafiskyApp {
       panel.addEventListener(
         "touchend",
         (e) => {
-          if (!this._panelTouchActive || window.innerWidth >= 640) return;
+          if (!this._panelTouchActive || !isMobileLayout()) return;
           this._panelTouchActive = false;
           if (this.$.weatherPanel.classList.contains("minimized")) return;
           const dy = e.changedTouches[0].clientY - this._panelTouchStartY;
@@ -3009,11 +3043,16 @@ class AurafiskyApp {
 
     if (this.$.panelLocationName) {
       const existingBadge = this.$.panelLocationName.querySelector(".home-badge");
+      if (existingBadge) existingBadge.remove();
       this.$.panelLocationName.textContent = targetName;
       this.$.panelLocationName.title = targetName;
-      if (existingBadge) {
-        this.$.panelLocationName.appendChild(existingBadge);
-      }
+    }
+
+    const homeBadge = document.getElementById("panelHomeBadge");
+    if (homeBadge && this.defaultLocation && targetLat != null) {
+      const isHome = Math.abs(this.defaultLocation.lat - targetLat) < 0.0001 &&
+                     Math.abs(this.defaultLocation.lng - targetLng) < 0.0001;
+      homeBadge.classList.toggle("hidden", !isHome);
     }
 
     const titleAlias = document.getElementById("auraLocationTitle") || document.getElementById("googleLocationTitle");
@@ -3352,9 +3391,15 @@ class AurafiskyApp {
     try {
       for (let i = localStorage.length - 1; i >= 0; i--) {
         const key = localStorage.key(i);
-        if (key && key.startsWith("weathermap_cache_")) localStorage.removeItem(key);
+        if (!key) continue;
+        // The button says it clears local data, so it clears all of it. It
+        // previously removed only weathermap_cache_* and one timestamp, which
+        // left ~12 other keys behind — including the wallpaper photo, saved
+        // routes, alert rules and the terminator toggle.
+        if (key.startsWith("weathermap_cache_") || LOCAL_DATA_KEYS.has(key)) {
+          localStorage.removeItem(key);
+        }
       }
-      localStorage.removeItem("last_weather_notification_time");
     } catch (_) { /* localStorage may be unavailable; ignore */ }
 
     try { await localforage.clear(); } catch (_) {}
@@ -7157,6 +7202,10 @@ class AurafiskyApp {
       this.animationFrameId = null;
     }
     this.stopAllSounds();
+    if (this._stopViewportWatch) {
+      this._stopViewportWatch();
+      this._stopViewportWatch = null;
+    }
     if (this.thunderInterval) clearInterval(this.thunderInterval);
     if (this.birdsInterval) clearInterval(this.birdsInterval);
     this.clearRadarLayers();
@@ -7187,7 +7236,7 @@ class AurafiskyApp {
     this.$.weatherPanel.classList.add("open");
     this.$.weatherPanel.classList.remove("minimized");
     this.$.weatherPanel.removeAttribute("inert");
-    if (window.innerWidth >= 640) {
+    if (!isMobileLayout()) {
       this.$.weatherPanel.style.height = '';
       this.$.weatherPanel.style.maxHeight = '';
       this.$.weatherPanel.style.transform = '';
@@ -7206,7 +7255,7 @@ class AurafiskyApp {
     this.syncMobileBottomNavState();
     // Mobile: collapse radar panel to avoid overlap
     if (
-      window.innerWidth < 640 &&
+      isMobileLayout() &&
       this.$.radarExpandedPanel &&
       !this.$.radarExpandedPanel.classList.contains("hidden")
     ) {
@@ -7267,7 +7316,7 @@ class AurafiskyApp {
   toggleMinimizeWeatherPanel() {
     this.$.weatherPanel.classList.toggle("minimized");
     const isMin = this.$.weatherPanel.classList.contains("minimized");
-    if (window.innerWidth >= 640) {
+    if (!isMobileLayout()) {
       this.$.weatherPanel.style.height = '';
       this.$.weatherPanel.style.maxHeight = '';
       this.$.weatherPanel.style.transform = '';
@@ -7342,7 +7391,7 @@ class AurafiskyApp {
       content.addEventListener(
         "touchstart",
         (e) => {
-          if (window.innerWidth >= 640 || e.touches.length !== 1) return;
+          if (!isMobileLayout() || e.touches.length !== 1) return;
           const touch = e.touches[0];
           touchStartX = touch.clientX;
           touchStartY = touch.clientY;
@@ -7354,7 +7403,7 @@ class AurafiskyApp {
       content.addEventListener(
         "touchend",
         (e) => {
-          if (window.innerWidth >= 640 || e.changedTouches.length !== 1) return;
+          if (!isMobileLayout() || e.changedTouches.length !== 1) return;
           const touch = e.changedTouches[0];
           const dx = touch.clientX - touchStartX;
           const dy = touch.clientY - touchStartY;
@@ -7390,7 +7439,7 @@ class AurafiskyApp {
       header.addEventListener(
         "touchstart",
         (e) => {
-          if (window.innerWidth >= 640 || e.touches.length !== 1) return;
+          if (!isMobileLayout() || e.touches.length !== 1) return;
           if (e.target.closest("button, a, select, input, [role='tab']")) return;
           const touch = e.touches[0];
           pullStartY = touch.clientY;
@@ -7403,7 +7452,7 @@ class AurafiskyApp {
       header.addEventListener(
         "touchend",
         (e) => {
-          if (window.innerWidth >= 640 || e.changedTouches.length !== 1) return;
+          if (!isMobileLayout() || e.changedTouches.length !== 1) return;
           if (e.target.closest("button, a, select, input, [role='tab']")) return;
           const touch = e.changedTouches[0];
           const dy = touch.clientY - pullStartY;
@@ -8144,6 +8193,22 @@ class AurafiskyApp {
           this.notifyIntervalMin = 60;
         }
 
+        // Alert rules — the cloud half of the promise features/alerts.js makes.
+        // normalizeRules() is the same validator the local path uses, so a
+        // malformed document can't inject rules the engine can't describe.
+        if (Array.isArray(data.alertRules)) {
+          const normalized = typeof this.normalizeAlertRules === "function"
+            ? this.normalizeAlertRules(data.alertRules)
+            : data.alertRules;
+          this.alertRules = normalized;
+          if (typeof this.persistAlertRules === "function") {
+            this.persistAlertRules();
+          }
+          if (typeof this.renderAlertsPanel === "function") {
+            this.renderAlertsPanel();
+          }
+        }
+
         this.setupHourlyNotifications();
 
         await Promise.all([
@@ -8199,6 +8264,11 @@ class AurafiskyApp {
       defaultLocation: this.defaultLocation,
       defaultLocationNotify: this.defaultLocationNotify,
       notifyIntervalMin: this.notifyIntervalMin || 60,
+      // Alert rules. features/alerts.js has always claimed these "follow the
+      // account across devices" and has always called this method after a
+      // change — but the field was never included, so rules were silently
+      // device-local despite the documented promise.
+      alertRules: Array.isArray(this.alertRules) ? this.alertRules : [],
       updatedAt: new Date().toISOString(),
     };
 

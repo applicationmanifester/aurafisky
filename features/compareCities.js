@@ -1,5 +1,6 @@
 // -- COMPARE CITIES VIEW --
 import { shortPlaceName } from "../modules/geo.js";
+import { isMobileLayout } from "./breakpoints.js";
 
 async function compareWeatherWithActive(favLocation) {
     if (!this.weatherData || !this.selectedLat || !this.selectedLng) {
@@ -76,7 +77,7 @@ function showComparePanel() {
     setTimeout(() => {
       this.$.comparePanel.classList.add("open");
       if (
-        window.innerWidth < 640 &&
+        isMobileLayout() &&
         this.$.radarExpandedPanel &&
         !this.$.radarExpandedPanel.classList.contains("hidden")
       ) {

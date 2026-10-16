@@ -4,7 +4,15 @@
 // These run without a DOM or the WeatherService global because everything under
 // test is deliberately side-effect free.
 import { test, expect, describe } from "vitest";
-import { classify, extractPlace, ACTIONS } from "../features/aura.js";
+import {
+  classify,
+  extractPlace,
+  detectTimeScope,
+  isBareTimeQuery,
+  precipTypeFor,
+  ACTIONS,
+  AuraAssistant,
+} from "../features/aura.js";
 
 // ── Intent classification ───────────────────────────────────────────
 
@@ -105,6 +113,14 @@ describe("classify", () => {
     // "storm" is a wind keyword, not a thunderstorm one.
     expect(classify("is there a storm coming")?.id).toBe("wind");
   });
+
+  test("understands Hinglish weather words", () => {
+    expect(classify("kya barish hogi")?.id).toBe("rain");
+    expect(classify("baarish kab hogi")?.id).toBe("rain");
+    expect(classify("kitni thand hai")?.id).toBe("temperature");
+    expect(classify("garmi kitni hai")?.id).toBe("temperature");
+    expect(classify("tez hawa chal rahi hai")?.id).toBe("wind");
+  });
 });
 
 // ── Place extraction ────────────────────────────────────────────────
@@ -132,6 +148,18 @@ describe("extractPlace", () => {
   test("does not swallow a trailing time word", () => {
     expect(extractPlace("weather in Tokyo tomorrow")).not.toContain("tomorrow");
   });
+
+  test("understands conversational follow-ups", () => {
+    expect(extractPlace("what about Tokyo")).toBe("Tokyo");
+    expect(extractPlace("what about Tokyo?")).toBe("Tokyo");
+    expect(extractPlace("how about Paris")).toBe("Paris");
+  });
+
+  test("never mistakes a time word for a place", () => {
+    expect(extractPlace("what about tomorrow")).toBeNull();
+    expect(extractPlace("how about tonight?")).toBeNull();
+    expect(extractPlace("what about the weekend")).toBeNull();
+  });
 });
 
 // ── Action registry ─────────────────────────────────────────────────
@@ -156,5 +184,109 @@ describe("ACTIONS", () => {
     const app = { addAlertRule: (...args) => calls.push(args) };
     ACTIONS.alert.run(app, { type: "precipProb", condition: "above", value: 60 }, {});
     expect(calls).toEqual([["precipProb", "above", 60]]);
+  });
+});
+
+// ── Time scope ────────────────────────────────────────────────────
+
+describe("detectTimeScope", () => {
+  test("finds the most specific window", () => {
+    expect(detectTimeScope("will it rain tomorrow")?.kind).toBe("tomorrow");
+    expect(detectTimeScope("stargazing tonight")?.kind).toBe("tonight");
+    expect(detectTimeScope("plan my weekend")?.kind).toBe("weekend");
+    expect(detectTimeScope("how windy this morning")?.kind).toBe("morning");
+    expect(detectTimeScope("uv this afternoon")?.kind).toBe("afternoon");
+    expect(detectTimeScope("dinner in the evening")?.kind).toBe("evening");
+  });
+
+  test("weekend outranks vaguer scopes in the same query", () => {
+    expect(detectTimeScope("tomorrow or this weekend")?.kind).toBe("weekend");
+  });
+
+  test("tonight outranks a bare evening mention", () => {
+    expect(detectTimeScope("tonight or this evening")?.kind).toBe("tonight");
+  });
+
+  test("returns null when no time language is present", () => {
+    expect(detectTimeScope("will it rain")).toBeNull();
+    expect(detectTimeScope("plan my day")).toBeNull();
+    expect(detectTimeScope("")).toBeNull();
+  });
+});
+
+describe("isBareTimeQuery", () => {
+  test("spots follow-ups that carry only a time scope", () => {
+    expect(isBareTimeQuery("and tomorrow?")).toBe(true);
+    expect(isBareTimeQuery("what about tonight")).toBe(true);
+    expect(isBareTimeQuery("tomorrow")).toBe(true);
+    expect(isBareTimeQuery("how about this weekend?")).toBe(true);
+  });
+
+  test("rejects queries with real content or nothing at all", () => {
+    expect(isBareTimeQuery("will it rain tomorrow")).toBe(false);
+    expect(isBareTimeQuery("hi")).toBe(false);
+    expect(isBareTimeQuery("")).toBe(false);
+    expect(isBareTimeQuery("and the wind?")).toBe(false);
+  });
+});
+
+// ── Precipitation type ────────────────────────────────────────────
+
+describe("precipTypeFor", () => {
+  test("reads WMO codes before temperature", () => {
+    expect(precipTypeFor(71, 5)).toBe("snow");
+    expect(precipTypeFor(85, 2)).toBe("snow");
+    expect(precipTypeFor(95, 20)).toBe("storm");
+    expect(precipTypeFor(61, 20)).toBe("rain");
+    expect(precipTypeFor(0, 20)).toBe("none");
+  });
+
+  test("calls rain near freezing a wintry mix", () => {
+    expect(precipTypeFor(61, 0)).toBe("mix");
+    expect(precipTypeFor(80, -2)).toBe("mix");
+  });
+
+  test("handles missing data without throwing", () => {
+    expect(precipTypeFor(null, 20)).toBe("none");
+    expect(precipTypeFor(undefined, undefined)).toBe("none");
+    expect(precipTypeFor(61, null)).toBe("rain");
+  });
+});
+
+// ── Conversation memory ───────────────────────────────────────────
+
+describe("_resolveIntent", () => {
+  // Bypass the constructor (it touches the DOM in jsdom) — the method
+  // under test only reads this._lastIntent.
+  const assistant = (lastIntent) =>
+    Object.assign(Object.create(AuraAssistant.prototype), { _lastIntent: lastIntent });
+
+  test("re-runs the previous intent for bare time follow-ups", () => {
+    const r = assistant("rain")._resolveIntent("and tomorrow?");
+    expect(r.match.id).toBe("rain");
+    expect(r.match.viaMemory).toBe(true);
+    expect(r.scope?.kind).toBe("tomorrow");
+  });
+
+  test("classifies fresh when there is no thread to continue", () => {
+    const r = assistant(null)._resolveIntent("and tomorrow?");
+    expect(r.match.id).toBe("forecast"); // "tomorrow" is a forecast phrase
+    expect(r.match.viaMemory).toBeUndefined();
+  });
+
+  test("classifies fresh when the query has real content", () => {
+    const r = assistant("rain")._resolveIntent("how windy is it");
+    expect(r.match.id).toBe("wind");
+  });
+
+  test("does not re-run intents that gain nothing from a scope", () => {
+    const r = assistant("help")._resolveIntent("and tomorrow?");
+    expect(r.match.id).toBe("forecast");
+  });
+
+  test("still reports the scope alongside a fresh classification", () => {
+    const r = assistant(null)._resolveIntent("will it rain tonight");
+    expect(r.match.id).toBe("rain");
+    expect(r.scope?.kind).toBe("tonight");
   });
 });

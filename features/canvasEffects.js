@@ -1,4 +1,5 @@
 // -- MAP CANVAS WEATHER EFFECTS (Rain, Snow, Windy, Storm animations) --
+import { isMobileLayout } from "./breakpoints.js";
 
 function initWeatherCanvas() {
     this.canvas = document.getElementById("weatherCanvas");
@@ -139,7 +140,7 @@ function runWeatherCanvasLoop() {
       }
 
       // Throttle canvas particle animation during mobile map dragging for battery & GPU savings
-      if (typeof window !== "undefined" && window.innerWidth < 640 && this._mapWasDragged) {
+      if (typeof window !== "undefined" && isMobileLayout() && this._mapWasDragged) {
         this.animationFrameId = requestAnimationFrame(draw);
         return;
       }

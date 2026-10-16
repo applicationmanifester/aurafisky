@@ -10,7 +10,9 @@
 //
 // Rules are persisted in localStorage and (when the user is signed in) pushed
 // through the app's existing saveUserDataToCloud() path so they follow the
-// account across devices.
+// account across devices. Both halves of that are real as of this change:
+// app.js now writes `alertRules` into the Firestore document and hydrates them
+// back on sign-in.
 //
 // Design notes:
 //   * Evaluation is *pull* based: it runs whenever a fresh forecast lands
@@ -620,6 +622,15 @@ export function init(app) {
   app.toggleAlertRule = toggleAlertRule;
   app.toggleAlertsPanel = toggleAlertsPanel;
   app.requestAlertPermission = requestAlertPermission;
+  // Exposed so app.js can hydrate rules arriving from Firestore, and so the
+  // same validation runs on the local and cloud paths.
+  app.persistAlertRules = function () {
+    persistAlertRules(this);
+  };
+  app.renderAlertsPanel = function () {
+    renderAlertsPanel(this);
+  };
+  app.normalizeAlertRules = normalizeRules;
 
   // Load persisted rules + cooldown bookkeeping.
   app.alertRules = loadAlertRules();

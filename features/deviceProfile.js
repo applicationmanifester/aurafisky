@@ -21,11 +21,60 @@
  * ============================================================
  */
 
+// Sony/Philips set-top boxes identify with an "AFT" model prefix, but only in
+// upper case and with at least one character after it. This used to be
+// `AFT[A-Z0-9]*` inside an /i alternation, which collapsed to "any UA
+// containing the substring 'aft'" and misclassified unrelated devices. It is
+// therefore a separate, case-sensitive test.
+export const TV_UA_PATTERN =
+  /(?:SmartTV|Smart-TV|SMART-TV|GoogleTV|CrKey|AppleTV|Apple\s?TV|Tizen|Web0S|WebOS|NetCast|BRAVIA|HbbTV|Viera|FireTV|Shield|Android\s?TV|Google\s?TV|Xbox|PlayStation|Nintendo|Roku|DVP-\d|VIDAA|Titan OS|Philips TV|Hisense|Opera TV Store)/i;
+export const TV_UA_CASEFUL = /AFT[A-Z0-9]+/;
+
+/**
+ * Pure device classification.
+ *
+ * Exported (rather than only reachable through init()) so the rules can be
+ * unit-tested against real device sizes without a DOM. init() supplies live
+ * browser values; a test supplies an object of the same shape.
+ *
+ * @param {object} env
+ * @param {number} env.width  @param {number} env.height
+ * @param {boolean} env.coarse  - (pointer: coarse): the primary input is touch
+ * @param {boolean} env.fine    - (any-pointer: fine): a mouse/trackpad exists
+ * @param {string} [env.userAgent]
+ * @param {number} [env.maxTouchPoints]
+ * @returns {"tv"|"phone"|"tablet"|"desktop"}
+ */
+export function classifyDevice({
+  width,
+  height,
+  coarse,
+  fine,
+  userAgent = "",
+  maxTouchPoints = 0,
+} = {}) {
+  if (TV_UA_PATTERN.test(userAgent) || TV_UA_CASEFUL.test(userAgent)) return "tv";
+
+  const minDim = Math.min(width || 0, height || 0);
+
+  // Phone first. A phone is small in its *shortest* dimension; testing the
+  // minimum rather than the width is what makes landscape phones (844x390)
+  // classify as phones rather than tablets.
+  if (coarse && minDim < 600) return "phone";
+
+  // Tablet: touch-primary, roomier than a phone, and not a hybrid. A Surface
+  // Pro has a mouse and a trackpad and wants the desktop layout.
+  if (coarse && minDim >= 600 && !fine) return "tablet";
+
+  // iPad with a trackpad reports a fine pointer alongside touch, so the
+  // branch above misses it; the UA still identifies it.
+  if (/Macintosh/i.test(userAgent) && maxTouchPoints > 1) return "tablet";
+
+  return "desktop";
+}
+
 export function init(app) {
   const html = document.documentElement;
-
-  const TV_UA_PATTERN =
-    /(?:SmartTV|Smart-TV|SMART-TV|GoogleTV|CrKey|AppleTV|Apple\s?TV|Tizen|Web0S|WebOS|NetCast|BRAVIA|HbbTV|Viera|AFT[A-Z0-9]*|FireTV|Shield|Android\s?TV|Google\s?TV|Xbox|PlayStation|Nintendo)/i;
 
   const state = {
     device: "desktop", // tv | tablet | phone | desktop
@@ -38,54 +87,44 @@ export function init(app) {
     vh: 0,
   };
 
-  /** Internal: coarse classification used before measurements. */
+  /**
+   * Reads the live browser signals and delegates to the shared classifier.
+   * The rules live in classifyDevice() so they can be tested directly.
+   */
   function detectDevice() {
     const ua = navigator.userAgent || "";
     const maxTouch = navigator.maxTouchPoints || 0;
     state.touchPoints = maxTouch;
 
-    // 1) TVs / consoles / set-top boxes (most explicit signal first)
-    if (TV_UA_PATTERN.test(ua)) return "tv";
-
-    // 2) UA-Client-Hints form factor when available (Chromium)
-    try {
-      if (navigator.userAgentData?.getHighEntropyValuesSync) {
-        // Not async here — only use it if the sync API exists (rare);
-        // the async path below refines the value after init.
-      }
-    } catch (_) {
-      /* ignore */
-    }
-
-    const w = window.innerWidth || screen.width;
-    const h = window.innerHeight || screen.height;
-    const minDim = Math.min(w, h);
-    const maxDim = Math.max(w, h);
-
-    const hasTouch = maxTouch > 0;
-    const hasFinePointer =
-      window.matchMedia?.("(pointer: fine)").matches ?? true;
+    // (pointer: coarse) is the *primary* input. `any-pointer: coarse` would
+    // also be true for a hybrid laptop that has a touchscreen, and calling
+    // those "has touch" is what previously misclassified them. This is the
+    // same query the stylesheet breakpoint uses, so JS and CSS agree.
+    const coarse = window.matchMedia?.("(pointer: coarse)")?.matches === true;
+    const fine = window.matchMedia?.("(any-pointer: fine)")?.matches === true;
 
     // Hybrid devices (Surface, Yoga, iPad with trackpad...)
-    state.input = hasTouch && hasFinePointer ? "hybrid" : hasTouch ? "touch" : "pointer";
+    state.input = coarse && fine ? "hybrid" : coarse ? "touch" : "pointer";
 
-    // 3) Tablets: touch-first, generous diagonal, no TV signature
-    if (hasTouch && !hasFinePointer && minDim >= 600 && maxDim >= 960) {
-      return "tablet";
-    }
-
-    // 4) Big-screen no-touch displays that aren't known TVs still
-    //    behave like desktops (projectors, kiosks with mice, etc.)
-    if (hasTouch && minDim < 600) return "phone";
-
-    // iPad specifically reports as Macintosh in modern Safari;
-    // treat "Mac with touch" as tablet.
-    if (/Macintosh/i.test(ua) && maxTouch > 1) return "tablet";
-
-    return "desktop";
+    return classifyDevice({
+      width: window.innerWidth || screen.width,
+      height: window.innerHeight || screen.height,
+      coarse,
+      fine,
+      userAgent: ua,
+      maxTouchPoints: maxTouch,
+    });
   }
 
-  /** Async refinement via UA-Client-Hints (Chromium) when available. */
+  /**
+   * Async refinement via UA-Client-Hints (Chromium) when available.
+   *
+   * Chromium TVs are the case that matters here: many report a plain desktop
+   * UA string, so `formFactor: "TV"` is often the only signal. Because this
+   * resolves after init, it must dispatch aura:devicechange — otherwise
+   * listeners (notably tvNavigation) never learn the device turned out to be
+   * a TV and the app renders the TV layout with no way to operate it.
+   */
   async function refineWithClientHints() {
     try {
       if (!navigator.userAgentData?.getHighEntropyValues) return;
@@ -93,8 +132,11 @@ export function init(app) {
         "formFactor",
         "platform",
       ]);
-      if (hints.formFactor === "TV" || hints.formFactors?.includes("TV")) {
-        apply("tv");
+      // `formFactor` is the requested key; `formFactors` (plural) was never
+      // requested, so reading it here could only ever be undefined.
+      if (hints?.formFactor === "TV") {
+        if (state.device === "tv") return;
+        refreshDeviceProfile({ forceDevice: "tv", dispatch: true });
       }
     } catch (_) {
       /* not supported — desktop detection stands */
@@ -133,9 +175,15 @@ export function init(app) {
   }
 
   /** Public refresh — re-detect and re-apply everything. */
-  function refreshDeviceProfile() {
+  function refreshDeviceProfile(opts = {}) {
     apply(detectDevice());
+    if (opts.forceDevice) state.device = opts.forceDevice;
+    if (opts.dispatch) emitChange();
     return state;
+  }
+
+  function emitChange() {
+    window.dispatchEvent(new CustomEvent("aura:devicechange", { detail: state }));
   }
 
   // Initial detection runs synchronously so CSS hooks are correct
@@ -163,9 +211,7 @@ export function init(app) {
         f: state.foldable,
       });
       if (prev !== next) {
-        window.dispatchEvent(
-          new CustomEvent("aura:devicechange", { detail: state }),
-        );
+        emitChange();
       }
     });
   };

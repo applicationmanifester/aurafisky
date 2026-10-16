@@ -52,16 +52,21 @@ describe('Weather Panel Header & Wallpaper DOM Layout', () => {
     expect(locName).not.toBeNull();
   });
 
-  it('has dual-layer photo background and scrim', () => {
+  it('has a generated scene canvas and scrim (no stock photos)', () => {
     const photoBg = doc.getElementById('wallpaperPhotoBg');
     expect(photoBg).not.toBeNull();
 
-    const layerA = doc.getElementById('wallpaperPhotoA');
-    const layerB = doc.getElementById('wallpaperPhotoB');
-    expect(layerA).not.toBeNull();
-    expect(layerB).not.toBeNull();
-    expect(layerA.className).toContain('wallpaper-photo-layer');
-    expect(layerB.className).toContain('wallpaper-photo-layer');
+    // The background is now painted procedurally on a canvas rather than
+    // cross-fading two <img>/background-image layers. This is what makes the
+    // wallpaper work offline, leak nothing to a CDN, and let the PNG export
+    // reuse the exact same renderer.
+    const scene = doc.getElementById('wallpaperSceneCanvas');
+    expect(scene).not.toBeNull();
+    expect(scene.tagName).toBe('CANVAS');
+
+    // The retired dual-layer photo stack must not creep back in.
+    expect(doc.getElementById('wallpaperPhotoA')).toBeNull();
+    expect(doc.getElementById('wallpaperPhotoB')).toBeNull();
 
     const scrim = photoBg.querySelector('.wallpaper-scrim');
     expect(scrim).not.toBeNull();

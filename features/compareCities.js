@@ -1,4 +1,5 @@
 // -- COMPARE CITIES VIEW --
+import { shortPlaceName } from "../modules/geo.js";
 
 async function compareWeatherWithActive(favLocation) {
     if (!this.weatherData || !this.selectedLat || !this.selectedLng) {
@@ -42,7 +43,7 @@ async function compareWeatherWithActive(favLocation) {
       const aqiB = airQualityB?.hourly?.us_aqi[idxB] ?? "--";
 
       // Populate text comparisons
-      this.$.compareHeading.textContent = `${this.selectedName.split(",")[0]} vs ${favLocation.name.split(",")[0]}`;
+      this.$.compareHeading.textContent = `${shortPlaceName(this.selectedName)} vs ${shortPlaceName(favLocation.name)}`;
       this.$.compareTempA.textContent = WeatherService.formatTemp(
         wA.temperature,
       );

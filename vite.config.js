@@ -28,12 +28,10 @@ export default defineConfig(({ mode }) => {
           // of app-core (they change far less often than app.js) and so the
           // main bundle doesn't trip the >500kB chunk-size warning.
           'vendor-map': ['ol', 'ol-mapbox-style'],
-          'features': [
+          'features-core': [
             './features/ensemble.js',
-            './features/routes.js',
             './features/radar.js',
             './features/bookmarks.js',
-            './features/compareCities.js',
             './features/units.js',
             './features/share.js',
             './features/hourlyStrip.js',
@@ -42,7 +40,6 @@ export default defineConfig(({ mode }) => {
             './features/canvasEffects.js',
             './features/audio.js',
             './features/myLocation.js',
-            './features/timeMachine.js',
             './features/astronomy.js',
             './features/advisories.js',
             './features/appToggles.js',
@@ -52,7 +49,16 @@ export default defineConfig(({ mode }) => {
             './features/isobars.js',
             './features/stargazing.js',
             './features/extremes.js',
+            './features/deviceProfile.js',
+            './features/tvNavigation.js',
             './features/navigation.js',
+            './features/googleMapsMobile.js',
+          ],
+          'features-heavy': [
+            './features/routes.js',
+            './features/timeMachine.js',
+            './features/compareCities.js',
+            './features/aura.js',
           ],
           'app-core': ['./app.js']
         },
@@ -66,6 +72,7 @@ export default defineConfig(({ mode }) => {
         }
       }
     },
+    chunkSizeWarningLimit: 600,
     cssCodeSplit: true,
     modulePreload: { polyfill: false }
   },

@@ -40,6 +40,17 @@ import { fromLonLat, toLonLat } from "ol/proj.js";
 import { apply as applyMapboxStyle, applyStyle as applyMapboxLayerStyle, getLayers as getMapboxLayers } from "ol-mapbox-style";
 import { HtmlMarker } from "./modules/ol-marker.js";
 import { localizeGlStyle } from "./modules/map-language.js";
+import {
+  formatPlaceName,
+  shortPlaceName,
+  mediumPlaceName,
+  formatCoordinates,
+  formatCoordinateAccuracy,
+  haversineMeters,
+  describeProximity,
+  describeCoordinates,
+} from "./modules/geo.js";
+import { reverseUrls, labelFromReverse } from "./modules/reverseGeocode.js";
 import localforage from "localforage";
 import DOMPurify from "dompurify";
 
@@ -60,43 +71,48 @@ import './modules/toast.js';
 import './src/icons.js';
 import { initFeatures } from './features/registry.js';
 
-const WEATHER_WALLPAPERS = {
-  clear_day: [
-    "https://images.unsplash.com/photo-1506744038136-46273834b3fb?auto=format&fit=crop&w=1920&q=80",
-    "https://images.unsplash.com/photo-1470240731273-7821a6eeb6bd?auto=format&fit=crop&w=1920&q=80",
-    "https://images.unsplash.com/photo-1507525428034-b723cf961d3e?auto=format&fit=crop&w=1920&q=80",
-  ],
-  clear_night: [
-    "https://images.unsplash.com/photo-1519681393784-d120267933ba?auto=format&fit=crop&w=1920&q=80",
-    "https://images.unsplash.com/photo-1509773896068-7fd415d91e2e?auto=format&fit=crop&w=1920&q=80",
-  ],
-  cloudy_day: [
-    "https://images.unsplash.com/photo-1534088568595-a066f410bcda?auto=format&fit=crop&w=1920&q=80",
-    "https://images.unsplash.com/photo-1499346030926-9a72daac6c63?auto=format&fit=crop&w=1920&q=80",
-  ],
-  cloudy_night: [
-    "https://images.unsplash.com/photo-1532978379173-523e16f371f2?auto=format&fit=crop&w=1920&q=80",
-    "https://images.unsplash.com/photo-1509114397022-ed747cca3f65?auto=format&fit=crop&w=1920&q=80",
-  ],
-  rain: [
-    "https://images.unsplash.com/photo-1515694346937-94d85e41e6f0?auto=format&fit=crop&w=1920&q=80",
-    "https://images.unsplash.com/photo-1534274988757-a28bf1a57c17?auto=format&fit=crop&w=1920&q=80",
-  ],
-  storm: [
-    "https://images.unsplash.com/photo-1605727216801-e27ce1d0cc28?auto=format&fit=crop&w=1920&q=80",
-    "https://images.unsplash.com/photo-1509114397022-ed747cca3f65?auto=format&fit=crop&w=1920&q=80",
-  ],
-  snow: [
-    "https://images.unsplash.com/photo-1483921020237-2ff51e8e4b22?auto=format&fit=crop&w=1920&q=80",
-    "https://images.unsplash.com/photo-1491002052546-bf38f186af56?auto=format&fit=crop&w=1920&q=80",
-    "https://images.unsplash.com/photo-1516431883659-655d41c09bf9?auto=format&fit=crop&w=1920&q=80",
-  ],
-  fog: [
-    "https://images.unsplash.com/photo-1487621167305-5d248087c724?auto=format&fit=crop&w=1920&q=80",
-    "https://images.unsplash.com/photo-1485236715568-ddc5ee6ca227?auto=format&fit=crop&w=1920&q=80",
-    "https://images.unsplash.com/photo-1542601906990-b4d3fb778b09?auto=format&fit=crop&w=1920&q=80",
-  ],
-};
+// Wallpaper backgrounds are generated procedurally on a canvas by
+// features/wallpaper.js rather than pulled from a stock-photo CDN. That
+// keeps the wallpaper working offline, stops leaking visitor IPs to a third
+// party, and lets the PNG export reuse the exact same renderer so the saved
+// image matches the screen.
+
+
+
+/**
+ * Soft gradient used behind the weather panel, keyed off the WMO code.
+ * A gradient rather than a photograph: it must paint before any network
+ * response arrives, and it keeps the panel on the same offline-first,
+ * no-third-party footing as the wallpaper.
+ */
+function weatherPanelGradient(code, isDay) {
+  let pair;
+  if (code >= 95) pair = ["#312e81", "#0f172a"];
+  else if (code >= 71 && code <= 77) pair = ["#e2e8f0", "#94a3b8"];
+  else if (code >= 85) pair = ["#e2e8f0", "#94a3b8"];
+  else if (code >= 51 && code <= 67) pair = ["#1e3a8a", "#0f172a"];
+  else if (code >= 80 && code <= 82) pair = ["#1e3a8a", "#0f172a"];
+  else if (code === 45 || code === 48) pair = ["#64748b", "#94a3b8"];
+  else if (code === 2 || code === 3) pair = isDay ? ["#7dd3fc", "#e2e8f0"] : ["#1e293b", "#0f172a"];
+  else pair = isDay ? ["#fbbf24", "#7dd3fc"] : ["#1e293b", "#020617"];
+  return `linear-gradient(135deg, ${pair[0]} 0%, ${pair[1]} 100%)`;
+}
+
+/**
+ * Curated popular destinations shown in the search dropdown when the
+ * user focuses the (empty) field and has no search history yet.
+ * Instant access with zero network — coordinates are well-known.
+ */
+const POPULAR_LOCATIONS = [
+  { name: "New York", admin1: "New York", country: "United States", countryCode: "US", latitude: 40.7128, longitude: -74.006, population: 8808000, featureCode: "PPL", displayName: "New York, New York, United States" },
+  { name: "London", admin1: "England", country: "United Kingdom", countryCode: "GB", latitude: 51.5072, longitude: -0.1276, population: 8908000, featureCode: "PPLC", displayName: "London, England, United Kingdom" },
+  { name: "Tokyo", admin1: "Tokyo", country: "Japan", countryCode: "JP", latitude: 35.6895, longitude: 139.6917, population: 14047000, featureCode: "PPLC", displayName: "Tokyo, Tokyo, Japan" },
+  { name: "Paris", admin1: "Île-de-France", country: "France", countryCode: "FR", latitude: 48.8566, longitude: 2.3522, population: 2161000, featureCode: "PPLC", displayName: "Paris, Île-de-France, France" },
+  { name: "Dubai", admin1: "Dubai", country: "United Arab Emirates", countryCode: "AE", latitude: 25.2048, longitude: 55.2708, population: 3478000, featureCode: "PPLC", displayName: "Dubai, Dubai, United Arab Emirates" },
+  { name: "Singapore", admin1: "", country: "Singapore", countryCode: "SG", latitude: 1.3521, longitude: 103.8198, population: 5686000, featureCode: "PPLC", displayName: "Singapore, Singapore" },
+  { name: "Sydney", admin1: "New South Wales", country: "Australia", countryCode: "AU", latitude: -33.8688, longitude: 151.2093, population: 5312000, featureCode: "PPL", displayName: "Sydney, New South Wales, Australia" },
+  { name: "Mumbai", admin1: "Maharashtra", country: "India", countryCode: "IN", latitude: 19.076, longitude: 72.8777, population: 12440000, featureCode: "PPL", displayName: "Mumbai, Maharashtra, India" },
+];
 
 class AurafiskyApp {
   // Helper to set innerHTML safely using DOMPurify
@@ -264,9 +280,7 @@ class AurafiskyApp {
     this.wallpaperWakeLockEnabled = false;
     this.wallpaperFullscreenActive = false;
     this.wallpaperSoundEnabled = false; // Ambient soundscape in wallpaper mode
-    this.wallpaperPhotoEnabled = true; // Scenic photo background (enabled by default with silky transitions)
-    this._activePhotoLayer = "A"; // Active cross-fade photo layer ("A" or "B")
-    this._currentWallpaperUrl = ""; // Current wallpaper URL to prevent redundant transitions
+    this.wallpaperPhotoEnabled = true; // Procedurally generated scene background
     this.wallpaperBrandEnabled = false; // Aurafisky brand wallpaper background
     this.wallpaperGeofenceEnabled = false; // Geofence triggers
     this._wallpaperGeofenceWatchId = null;
@@ -615,8 +629,10 @@ class AurafiskyApp {
       wallpaperFullscreenIcon: document.getElementById("wallpaperFullscreenIcon"),
       wallpaperExportBtn: document.getElementById("wallpaperExportBtn"),
       wallpaperPhotoBg: document.getElementById("wallpaperPhotoBg"),
-      wallpaperPhotoA: document.getElementById("wallpaperPhotoA"),
-      wallpaperPhotoB: document.getElementById("wallpaperPhotoB"),
+      wallpaperSceneCanvas: document.getElementById("wallpaperSceneCanvas"),
+      wallpaperPickPhotoBtn: document.getElementById("wallpaperPickPhotoBtn"),
+      wallpaperClearPhotoBtn: document.getElementById("wallpaperClearPhotoBtn"),
+      wallpaperDeviceBtn: document.getElementById("wallpaperDeviceBtn"),
       panelWeatherBg: document.getElementById("panelWeatherBg"),
       wallpaperBrandBg: document.getElementById("wallpaperBrandBg"),
       // Mini radar
@@ -1544,6 +1560,18 @@ class AurafiskyApp {
     });
     this.$.wallpaperSettingsBtn?.addEventListener("click", () => {
       this.showWallpaperSettings();
+      this._haptic('selection');
+    });
+    this.$.wallpaperPickPhotoBtn?.addEventListener("click", () => {
+      this.wallpaper?.pickPhoto?.();
+      this._haptic('selection');
+    });
+    this.$.wallpaperClearPhotoBtn?.addEventListener("click", () => {
+      this.wallpaper?.clearPhoto?.();
+      this._haptic('selection');
+    });
+    this.$.wallpaperDeviceBtn?.addEventListener("click", () => {
+      this.wallpaper?.setDeviceWallpaper?.();
       this._haptic('selection');
     });
     this.$.wallpaperAlertDismiss?.addEventListener("click", () => {
@@ -2885,34 +2913,8 @@ class AurafiskyApp {
     }
   }
 
-  /**
-   * Coarse geographic descriptor for a coordinate with no reverse-geocode
-   * result — open ocean, ice sheet, empty desert.
-   *
-   * Deliberately coarse. Without a coastline dataset we cannot tell ice shelf
-   * from sea at 85°S, so the polar cases say "Region" rather than inventing a
-   * landmass, and the ocean basins use the rough IHO longitude boundaries.
-   * The goal is a readable label, not a survey-grade one.
-   *
-   * @param {number} lat
-   * @param {number} lng
-   * @returns {string}
-   */
   _describeCoordinates(lat, lng) {
-    if (lat <= -60) return "Antarctic Region";
-    if (lat >= 66.5) return "Arctic Region";
-
-    // Normalise to -180..180 — the view is multiWorld, so a click three
-    // worlds to the right arrives here as lng 900.
-    const lon = ((((lng + 180) % 360) + 360) % 360) - 180;
-
-    let basin;
-    if (lon >= -70 && lon < 20) basin = "Atlantic Ocean";
-    else if (lon >= 20 && lon < (lat < 0 ? 147 : 100)) basin = "Indian Ocean";
-    else basin = "Pacific Ocean";
-
-    if (basin === "Indian Ocean") return basin;
-    return `${lat >= 0 ? "North" : "South"} ${basin}`;
+    return describeCoordinates(lat, lng);
   }
 
   async handleMapClick(lat, lng) {
@@ -2931,46 +2933,69 @@ class AurafiskyApp {
         // Nominatim serves permissive CORS headers, so call it directly. Routing
         // through a third-party proxy both violates our connect-src CSP and hands
         // the user's coordinates to an unaffiliated service.
-        const response = await fetch(
-          `https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${lat}&lon=${lng}&accept-language=en`,
-          { signal: controller.signal },
-        );
+        // zoom=18 + addressdetails=1 is what unlocks the full administrative
+        // ladder (suburb / quarter / neighbourhood / city_district). Without
+        // it Nominatim only returns the city level, which is why every point
+        // inside a city used to be labelled with the city name.
+        // Localized reverse geocoding: names come back in the user's
+        // device language (updated, official names) instead of English.
+        const userLang = (() => {
+          try {
+            return (navigator.language || "en").split(/[-_,]/)[0] || "en";
+          } catch (e) {
+            return "en";
+          }
+        })();
+        // Two zoom levels, because Nominatim's answer depends on the detail level
+        // in a way that produces genuinely wrong labels at the extremes.
+        //
+        // At zoom 18 it walks down to the nearest *address* node — often a
+        // road or a school — and reports whatever administrative boundary
+        // contains that node. When a point sits just outside a small
+        // settlement's polygon, that boundary is a different, larger village
+        // entirely: clicking 13.5146,78.2258 (which IS Gaunipalli, whose own
+        // centroid is 7 m away) returns "Kottahudya" at zoom 16/17/18 but the
+        // correct "Gaunipalli" at zoom 14.
+        //
+        // Zoom 14 resolves to the settlement level — the thing a person means
+        // by "where am I" — so it is the primary answer. Zoom 18 is kept only
+        // for the finer levels (suburb/quarter/neighbourhood) that matter
+        // inside cities, which zoom 14 does not carry. When the two disagree
+        // about the *settlement*, the coarser one wins.
+        const urls = reverseUrls(lat, lng, userLang);
+
+        const fetchReverse = async (url) => {
+          try {
+            const res = await fetch(url, { signal: controller.signal });
+            return res.ok ? await res.json() : null;
+          } catch (e) {
+            return null;
+          }
+        };
+
+        const [coarseLevel, fineLevel] = await Promise.all([
+          fetchReverse(urls.coarse),
+          fetchReverse(urls.fine),
+        ]);
         clearTimeout(timeoutId);
-        if (response.ok) {
-          const data = await response.json();
-          const addr = data.address;
-          const sanitize = (str) => {
-            if (typeof DOMPurify !== "undefined" && DOMPurify.sanitize)
-              return DOMPurify.sanitize(String(str || ""));
-            return String(str || "").replace(/[<>&]/g, "");
-          };
 
-          let locationName = "";
-          if (addr) {
-            const city = sanitize(
-              addr.city ||
-                addr.town ||
-                addr.village ||
-                addr.municipality ||
-                addr.suburb ||
-                addr.hamlet,
-            );
-            const state = sanitize(addr.state || addr.region || addr.county);
-            const country = sanitize(addr.country);
-            locationName =
-              [city, state, country].filter(Boolean).join(", ") ||
-              sanitize(data.display_name);
-          }
+        const sanitize = (str) => {
+          if (typeof DOMPurify !== "undefined" && DOMPurify.sanitize)
+            return DOMPurify.sanitize(String(str || ""));
+          return String(str || "").replace(/[<>&]/g, "");
+        };
 
-          // Two thirds of the planet has no street address. Nominatim returns
-          // nothing at all for open ocean and most of Antarctica, and the old
-          // code just left the raw decimals in place — so the header, the
-          // page title and the search bar all read "-85.0272, 52.8210". Fall
-          // back to the geographic region so the location at least reads as a
-          // place.
-          if (!locationName) {
-            locationName = sanitize(data.name) || this._describeCoordinates(lat, lng);
-          }
+        if (coarseLevel || fineLevel) {
+          // Merge policy lives in modules/reverseGeocode.js so it can be
+          // tested without the network.
+          const { name: locationName } = labelFromReverse(coarseLevel, fineLevel, {
+            sanitize,
+            // Two thirds of the planet has no street address. Nominatim returns
+            // nothing for open ocean and most of Antarctica, and the old code
+            // left raw decimals in the header. Fall back to the geographic
+            // region so the location at least reads as a place.
+            describeFallback: this._describeCoordinates(lat, lng),
+          });
 
           if (locationName && this.selectedLat === lat && this.selectedLng === lng) {
             this.selectedName = locationName;
@@ -3000,13 +3025,21 @@ class AurafiskyApp {
       }
     }
 
+    const titleAlias = document.getElementById("auraLocationTitle") || document.getElementById("googleLocationTitle");
+    if (titleAlias) {
+      titleAlias.textContent = shortPlaceName(targetName) || targetName;
+    }
+    if (this.googleMapsMobile) {
+      this.googleMapsMobile.syncCurrentLocationInfo(null, targetName);
+    }
+
     if (this.$.panelCoordinates && targetLat != null && targetLng != null && !isNaN(targetLat) && !isNaN(targetLng)) {
-      const latDir = targetLat >= 0 ? "N" : "S";
-      const lngDir = targetLng >= 0 ? "E" : "W";
-      const latFormatted = Math.abs(targetLat).toFixed(4);
-      const lngFormatted = Math.abs(targetLng).toFixed(4);
-      this.$.panelCoordinates.textContent = `📍 ${latFormatted}° ${latDir}, ${lngFormatted}° ${lngDir}`;
-      this.$.panelCoordinates.title = `Latitude: ${targetLat}, Longitude: ${targetLng}`;
+      const decimals = 4;
+      this.$.panelCoordinates.textContent = `📍 ${formatCoordinates(targetLat, targetLng, { precision: decimals })}`;
+      // The tooltip explains what the precision actually means, because four
+      // decimal places is ~11 m in latitude but only ~5 m in longitude at 60°N.
+      const accuracy = formatCoordinateAccuracy(targetLat, decimals);
+      this.$.panelCoordinates.title = `${targetLat.toFixed(6)}, ${targetLng.toFixed(6)} — resolution ${accuracy}`;
     }
   }
 
@@ -3278,17 +3311,23 @@ class AurafiskyApp {
   }
 
   getNearestCachedLocation(lat, lng) {
+    // Great-circle metres, not degrees. The old `Math.hypot(dLat, dLng)`
+    // compared one degree of latitude against one of longitude as if they were
+    // the same unit: 0.05° of longitude is ~5.5 km at the equator but only
+    // ~2.8 km at 60°N, so the effective search radius swung by 2x depending on
+    // latitude and rejected valid cached forecasts for high-latitude cities.
+    const MAX_MATCH_METERS = 6000;
     let nearestKey = null;
-    let minDistance = 0.05;
+    let nearestMeters = MAX_MATCH_METERS;
 
     const cacheKeys = this._getCacheKeyList();
     for (const key of cacheKeys) {
       const parts = key.replace("weathermap_cache_", "").split("_");
       const cLat = parseFloat(parts[0]);
       const cLng = parseFloat(parts[1]);
-      const distance = Math.hypot(cLat - lat, cLng - lng);
-      if (distance < minDistance) {
-        minDistance = distance;
+      const meters = haversineMeters(cLat, cLng, lat, lng);
+      if (meters < nearestMeters) {
+        nearestMeters = meters;
         nearestKey = key;
       }
     }
@@ -3382,7 +3421,7 @@ class AurafiskyApp {
    * Single source of truth for the marker template (#4/#9).
    */
   _buildMarkerHtml(weather) {
-    const cityName = this.selectedName ? this.selectedName.split(",")[0].trim() : (weather.description || "");
+    const cityName = this.selectedName ? shortPlaceName(this.selectedName).trim() : (weather.description || "");
     return `
         <div class="aurafisky-location-pin group" role="button" tabindex="0" aria-label="${cityName}">
           <div class="weather-marker relative bg-white/95 dark:bg-slate-800/95 backdrop-blur-md rounded-2xl px-3 py-2 shadow-2xl border border-slate-200/80 dark:border-slate-700/80 flex items-center gap-2 select-none min-w-[84px]">
@@ -3483,6 +3522,8 @@ class AurafiskyApp {
     );
     if (!weather) return;
 
+    this.currentWeather = weather;
+
     // Header labels
     this._updateHeaderLocationAndCoords(this.selectedName, this.selectedLat, this.selectedLng);
     // Use the weather data's time for the selected hour, not current time
@@ -3571,6 +3612,9 @@ class AurafiskyApp {
 
     // Scan for weather alerts & advisories
     const aqiVal = this.airQualityData?.hourly?.us_aqi[hourIndex];
+    if (aqiVal != null) {
+      this.currentAqi = Math.round(aqiVal);
+    }
     const advisories = WeatherService.getAdvisories(weather, aqiVal);
     this.renderAdvisoryBanner(advisories);
 
@@ -3696,7 +3740,7 @@ class AurafiskyApp {
 
     // Update browser tab favicon + title dynamically
     this.updateWeatherFavicon(weather.weatherCode, weather.isDay);
-    document.title = `${WeatherService.formatTemp(weather.temperature)} ${weather.icon} ${this.selectedName.split(",")[0]} — Aurafisky`;
+    document.title = `${WeatherService.formatTemp(weather.temperature)} ${weather.icon} ${shortPlaceName(this.selectedName)} — Aurafisky`;
 
     // Draw Astronomy Widget (Solar Arc + Moon Phase)
     this.updateAstronomyWidget(weather, hourIndex);
@@ -3709,6 +3753,11 @@ class AurafiskyApp {
 
     // Apply smooth color gradient theme depending on climate
     this.applyPanelWeatherTheme(weather.weatherCode, weather.isDay);
+
+    // Sync mobile bottom sheet weather and location-based use cases
+    if (this.googleMapsMobile) {
+      this.googleMapsMobile.syncCurrentLocationInfo(weather, this.selectedName, this.weatherData);
+    }
 
     // Draw interactive SVG Sparkline Trend line
     this.drawHourlySparkline(hourIndex);
@@ -3738,6 +3787,9 @@ class AurafiskyApp {
 
     // UV Index Forecast Chart
     this.renderUVChart();
+
+    // Extended device-adaptive metrics, daily summary & rain-chance strip
+    this.updateExtendedWeatherInfo(weather, hourIndex);
 
     // Update bottom slider indicators — sync knob to hourIndex
     const nowIdx = WeatherService.getCurrentHourIndex(
@@ -3796,6 +3848,156 @@ class AurafiskyApp {
 
     // Keep the 🏠 Home badge in sync (panelLocationName text was reset above)
     this.updateHomeButton();
+
+    // Keep mobile header badge & real-time cards in exact sync with current weather & AQI
+    if (this.googleMapsMobile) {
+      this.googleMapsMobile.syncCurrentLocationInfo(weather, this.selectedName, this.weatherData);
+    }
+  }
+
+  /**
+   * Sums an hourly Open-Meteo variable across all hours of a given date
+   * ("YYYY-MM-DD"). Used for daily totals the API only exposes hourly
+   * (e.g. sunshine_duration).
+   */
+  _sumHourlyForDate(hourly, key, dateKey) {
+    const times = hourly?.time;
+    const values = hourly?.[key];
+    if (!Array.isArray(times) || !Array.isArray(values)) return null;
+    let total = null;
+    for (let i = 0; i < times.length; i++) {
+      if (!times[i]?.startsWith(dateKey)) continue;
+      const v = values[i];
+      if (v != null && isFinite(v)) total = (total ?? 0) + v;
+    }
+    return total;
+  }
+
+  /**
+   * Populates the extended weather-card surfaces introduced by the
+   * device-adaptive upgrade:
+   *   • extra metric cards (rain chance, wind bearing, sunshine,
+   *     storm potential/CAPE, freezing level, daylight)
+   *   • "Today at a Glance" daily summary chips
+   *   • 12-hour rain-probability strip (Hourly tab)
+   * Every write is guarded so a missing element or missing API field
+   * can never disturb the existing rendering pipeline.
+   */
+  updateExtendedWeatherInfo(weather, hourIndex) {
+    const d = this.weatherData;
+    if (!d?.hourly || !d?.daily) return;
+    const h = d.hourly;
+    const daily = d.daily;
+    const utcOffset = d.utc_offset_seconds || 0;
+
+    // Resolve which daily entry corresponds to the displayed hour.
+    const dateKey = (h.time?.[hourIndex] || "").slice(0, 10);
+    let dayIdx = daily.time ? daily.time.indexOf(dateKey) : -1;
+    if (dayIdx < 0) dayIdx = 0;
+
+    const setText = (id, text) => {
+      const el = document.getElementById(id);
+      if (el) el.textContent = text;
+    };
+
+    // ── Extended metric cards (Details & AQI tab) ──────────────
+    setText(
+      "panelPrecipProb",
+      weather.precipProb != null
+        ? `${Math.round(weather.precipProb)}%`
+        : "--",
+    );
+    const bearing = weather.windDirection;
+    setText(
+      "panelWindDir",
+      bearing != null
+        ? `${WeatherService.getWindDirection(bearing)} · ${Math.round(bearing)}°`
+        : "--",
+    );
+    setText("panelSunshine", WeatherService.formatDuration(
+      daily.sunshine_duration?.[dayIdx] != null
+        ? daily.sunshine_duration[dayIdx]
+        : this._sumHourlyForDate(h, "sunshine_duration", dateKey),
+    ));
+    setText("panelCAPE", WeatherService.formatCAPE(h.cape?.[hourIndex]));
+    setText("panelFreezingLevel", WeatherService.formatFreezingLevel(h.freezing_level_height?.[hourIndex]));
+    setText("panelDaylight", WeatherService.formatDuration(daily.daylight_duration?.[dayIdx]));
+
+    // ── Today at a Glance (Overview tab) ───────────────────────
+    setText(
+      "todaySunrise",
+      daily.sunrise?.[dayIdx]
+        ? WeatherService.formatHourLabel(daily.sunrise[dayIdx], utcOffset)
+        : "--",
+    );
+    setText(
+      "todaySunset",
+      daily.sunset?.[dayIdx]
+        ? WeatherService.formatHourLabel(daily.sunset[dayIdx], utcOffset)
+        : "--",
+    );
+    setText(
+      "todayRainChance",
+      WeatherService.formatPrecipProb(daily.precipitation_probability_max?.[dayIdx]),
+    );
+    const maxUV = daily.uv_index_max?.[dayIdx];
+    setText("todayMaxUV", maxUV != null ? maxUV.toFixed(1) : "--");
+    setText(
+      "todayMaxWind",
+      daily.wind_speed_10m_max?.[dayIdx] != null
+        ? WeatherService.formatWind(daily.wind_speed_10m_max[dayIdx])
+        : "--",
+    );
+    setText(
+      "todayPrecipSum",
+      daily.precipitation_sum?.[dayIdx] != null
+        ? WeatherService.formatPrecip(daily.precipitation_sum[dayIdx])
+        : "--",
+    );
+
+    // ── Rain-chance strip (Hourly tab, next 12h) ───────────────
+    const strip = document.getElementById("rainChanceStrip");
+    const stripLabels = document.getElementById("rainChanceLabels");
+    const stripSection = document.getElementById("rainChanceSection");
+    if (strip && stripLabels && stripSection) {
+      const probs = h.precipitation_probability || [];
+      const start = Math.max(0, hourIndex);
+      const buckets = [];
+      for (let i = start; i < Math.min(start + 12, probs.length); i++) {
+        buckets.push({ time: h.time?.[i], prob: probs[i] });
+      }
+      if (buckets.length) {
+        stripSection.classList.remove("hidden");
+        // Build bars via DOM + CSSOM (CSP forbids inline style attributes)
+        strip.innerHTML = "";
+        stripLabels.innerHTML = "";
+        buckets.forEach(({ time, prob }, i) => {
+          const pct = Math.max(4, Math.min(100, Math.round(prob ?? 0)));
+          const color =
+            pct >= 70
+              ? "bg-blue-600"
+              : pct >= 40
+                ? "bg-blue-400"
+                : pct >= 15
+                  ? "bg-blue-300 dark:bg-blue-700"
+                  : "bg-blue-200/80 dark:bg-blue-900";
+          const bar = document.createElement("div");
+          bar.className = `flex-1 ${color}`;
+          bar.title = `${pct}% rain chance`;
+          bar.style.height = `${pct}%`;
+          strip.appendChild(bar);
+
+          const label = document.createElement("span");
+          label.textContent =
+            i % 3 === 0 && time
+              ? WeatherService.formatHourLabel(time, utcOffset)
+              : "·";
+          stripLabels.appendChild(label);
+        });
+      } else {
+        stripSection.classList.add("hidden");
+      }
+    }
   }
 
   updateAirQualityDisplay(hourIndex) {
@@ -3869,12 +4071,11 @@ class AurafiskyApp {
       "theme-snowy",
     );
 
-    const lat = this.selectedLat ?? 0;
-    const lng = this.selectedLng ?? 0;
-    const bgUrl = this.getWeatherWallpaperUrl(code, isDay, lat, lng);
+    // The panel tint is a generated gradient rather than a stock photo, so it
+    // renders instantly, works offline, and sends nothing to a CDN.
     const panelBg = this.$.panelWeatherBg || document.getElementById("panelWeatherBg");
     if (panelBg) {
-      panelBg.style.backgroundImage = `url("${bgUrl}")`;
+      panelBg.style.backgroundImage = weatherPanelGradient(code, isDay);
       panelBg.style.opacity = this.isDark ? "0.22" : "0.16";
     }
 
@@ -4590,6 +4791,7 @@ class AurafiskyApp {
         i === this.searchHighlightIndex,
       );
     });
+    this._syncSearchAria();
   }
 
   getSearchHistory() {
@@ -4618,23 +4820,34 @@ class AurafiskyApp {
     this.searchHistory = this.searchHistory.filter(
       (h) => h.displayName !== result.displayName,
     );
-    // Add to front
+    // Add to front — keep the rich metadata so history rows render
+    // with flags, regions and population like live results do.
     this.searchHistory.unshift({
       displayName: result.displayName || result.name,
+      name: result.name || result.displayName,
       latitude: result.latitude || result.lat,
       longitude: result.longitude || result.lng,
+      countryCode: result.countryCode || "",
+      admin1: result.admin1 || "",
+      country: result.country || "",
+      population: result.population ?? null,
+      featureCode: result.featureCode || "",
     });
-    // Keep last 5
-    this.searchHistory = this.searchHistory.slice(0, 5);
+    // Keep last 8
+    this.searchHistory = this.searchHistory.slice(0, 8);
     this._saveSearchHistory();
   }
 
   showSearchHistory() {
     const history = this.getSearchHistory();
-    if (history.length === 0) return;
     const { createElement, clearElement } = window.domUtils;
     const container = this.$.searchResults;
     clearElement(container);
+
+    if (history.length === 0) {
+      this._showPopularLocations();
+      return;
+    }
 
     const svgEl = document.createElementNS("http://www.w3.org/2000/svg", "svg");
     svgEl.setAttribute("class", "w-3 h-3");
@@ -4669,22 +4882,7 @@ class AurafiskyApp {
     container.appendChild(header);
 
     history.forEach((r, i) => {
-      const btn = createElement(
-        "button",
-        {
-          className:
-            "search-result-item w-full text-left px-4 py-2.5 flex items-center gap-3 cursor-pointer",
-          "data-index": String(i),
-        },
-        createElement("span", {
-          className: "text-sm flex-shrink-0",
-          textContent: "🕐",
-        }),
-        createElement("span", {
-          className: "text-xs text-slate-700 dark:text-slate-200 truncate",
-          textContent: r.displayName,
-        }),
-      );
+      const btn = this._buildSearchResultRow(r, { index: i });
       btn.addEventListener("click", (e) => {
         e.stopPropagation();
         this.$.searchDropdown.classList.remove("open");
@@ -4698,6 +4896,149 @@ class AurafiskyApp {
 
     this.$.searchDropdown.classList.add("open");
     this.searchHighlightIndex = -1;
+    this._syncSearchAria();
+  }
+
+  /**
+   * "Popular places" — curated world cities shown when there is no
+   * search history. Zero network cost, works offline.
+   */
+  _showPopularLocations() {
+    const { createElement, clearElement } = window.domUtils;
+    const container = this.$.searchResults;
+    clearElement(container);
+
+    container.appendChild(
+      createElement("div", { className: "search-history-label" },
+        createElement("span", { textContent: "🌍 Popular places" })),
+    );
+
+    POPULAR_LOCATIONS.forEach((r, i) => {
+      const btn = this._buildSearchResultRow(r, { index: i });
+      btn.addEventListener("click", (e) => {
+        e.stopPropagation();
+        this.$.searchDropdown.classList.remove("open");
+        this.$.searchInput.value = r.displayName;
+        this.$.searchClearBtn.classList.remove("hidden");
+        if (this.$.searchInput) this.$.searchInput.blur();
+        this.addToSearchHistory(r);
+        this.selectLocation(r.latitude, r.longitude, r.displayName);
+      });
+      container.appendChild(btn);
+    });
+
+    this.$.searchDropdown.classList.add("open");
+    this.searchHighlightIndex = -1;
+    this._syncSearchAria();
+  }
+
+  /**
+   * Builds one rich search-row button: flag + highlighted name + type
+   * chip on line one, "region, country" on line two, population or
+   * elevation right-aligned. Shared by live results, history and the
+   * popular-places list. Uses only text nodes — XSS-safe by design.
+   *
+   * @param {Object} r - location result (Open-Meteo shape)
+   * @param {Object} [opts]
+   * @param {number} [opts.index] - data-index for keyboard nav
+   * @param {string} [opts.query] - query to highlight within the name
+   * @returns {HTMLButtonElement}
+   */
+  _buildSearchResultRow(r, { index = null, query = "" } = {}) {
+    const { createElement } = window.domUtils;
+    const flagEmoji = WeatherService.getCountryFlag(r.countryCode);
+    const typeLabel =
+      WeatherService.getFeatureLabel(r.featureCode) || r.type || "";
+
+    const meta = [];
+    if (r.admin1 && r.admin1 !== r.name) meta.push(r.admin1);
+    if (r.country) meta.push(r.country);
+    const metaText = meta.join(", ");
+
+    const stats = [];
+    const popLabel = WeatherService.formatPopulation(r.population);
+    if (popLabel) stats.push(`${popLabel} people`);
+    else if (r.elevation != null && isFinite(r.elevation))
+      stats.push(`${Math.round(r.elevation)} m`);
+    const statsText = stats.join(" · ");
+
+    const nameEl = createElement("span", {
+      className:
+        "text-xs font-semibold text-slate-800 dark:text-slate-100 truncate",
+    });
+    const nameStr = r.name || r.displayName || "";
+    const q = (query || "").toLowerCase();
+    if (q && nameStr.toLowerCase().includes(q)) {
+      const idx = nameStr.toLowerCase().indexOf(q);
+      if (idx > 0)
+        nameEl.appendChild(document.createTextNode(nameStr.slice(0, idx)));
+      nameEl.appendChild(
+        createElement("span", {
+          className: "text-primary dark:text-primary-light",
+          textContent: nameStr.slice(idx, idx + q.length),
+        }),
+      );
+      if (idx + q.length < nameStr.length)
+        nameEl.appendChild(
+          document.createTextNode(nameStr.slice(idx + q.length)),
+        );
+    } else {
+      nameEl.textContent = nameStr;
+    }
+
+    const row1 = createElement(
+      "div",
+      { className: "flex items-center gap-1.5 min-w-0" },
+      nameEl,
+    );
+    if (typeLabel) {
+      row1.appendChild(
+        createElement("span", {
+          className:
+            "text-[8px] font-bold uppercase tracking-wider px-1.5 py-px rounded bg-primary/10 text-primary dark:bg-primary/20 dark:text-primary-light flex-shrink-0",
+          textContent: typeLabel,
+        }),
+      );
+    }
+
+    const textBlock = createElement(
+      "div",
+      { className: "min-w-0 flex-1" },
+      row1,
+    );
+    if (metaText) {
+      textBlock.appendChild(
+        createElement("div", {
+          className:
+            "text-[10px] text-slate-400 dark:text-slate-500 truncate mt-px",
+          textContent: metaText,
+        }),
+      );
+    }
+
+    const btn = createElement(
+      "button",
+      {
+        className:
+          "search-result-item w-full text-left px-4 py-2 flex items-start gap-3 cursor-pointer",
+        role: "option",
+        "aria-selected": "false",
+      },
+      createElement("span", {
+        className: "text-sm leading-5 flex-shrink-0 mt-px",
+        textContent: flagEmoji,
+      }),
+      textBlock,
+      statsText
+        ? createElement("span", {
+            className:
+              "text-[9px] text-slate-400 dark:text-slate-500 flex-shrink-0 mt-0.5 whitespace-nowrap font-medium",
+            textContent: statsText,
+          })
+        : null,
+    );
+    if (index != null) btn.dataset.index = String(index);
+    return btn;
   }
 
   // ================================================================
@@ -4733,8 +5074,14 @@ class AurafiskyApp {
     }
 
     if (query.length < 2) {
-      this.$.searchDropdown.classList.remove("open");
-      this.$.searchResults.innerHTML = "";
+      if (query.length === 0) {
+        // Cleared: bring back recents / popular picks (Maps-style)
+        this.showSearchHistory();
+      } else {
+        this.$.searchDropdown.classList.remove("open");
+        this.$.searchResults.innerHTML = "";
+        this._syncSearchAria();
+      }
       return;
     }
 
@@ -4767,6 +5114,7 @@ class AurafiskyApp {
         }),
       );
       this.$.searchDropdown.classList.add("open");
+      this._syncSearchAria();
     } finally {
       this.$.searchSpinner.classList.add("hidden");
     }
@@ -4785,50 +5133,40 @@ class AurafiskyApp {
         }),
       );
       this.$.searchDropdown.classList.add("open");
+      this._syncSearchAria();
       return;
     }
 
     this.searchHighlightIndex = -1;
+    const query = this.$.searchInput.value.trim();
 
     results.forEach((r, i) => {
-      let flagEmoji = "📍";
-      if (r.country && r.country.length === 2) {
-        try {
-          const codePoints = r.country
-            .toUpperCase()
-            .split("")
-            .map((char) => 127397 + char.charCodeAt(0));
-          flagEmoji = String.fromCodePoint(...codePoints);
-        } catch {}
-      }
-
-      const btn = createElement(
-        "button",
-        {
-          className:
-            "search-result-item w-full text-left px-4 py-2.5 flex items-center gap-3 cursor-pointer",
-          "data-index": String(i),
-        },
-        createElement("span", {
-          className: "text-sm flex-shrink-0",
-          textContent: flagEmoji,
-        }),
-        createElement("span", {
-          className: "text-xs text-slate-700 dark:text-slate-200 truncate",
-          textContent: r.displayName,
-        }),
-      );
-
+      const btn = this._buildSearchResultRow(r, { index: i, query });
       btn.addEventListener("click", (e) => {
         e.stopPropagation();
         const idx = parseInt(btn.dataset.index, 10);
         this.selectSearchResult(results[idx]);
       });
-
       container.appendChild(btn);
     });
 
     this.$.searchDropdown.classList.add("open");
+    this._syncSearchAria();
+  }
+
+  /** Keeps the input's aria-expanded and options' aria-selected honest. */
+  _syncSearchAria() {
+    const input = this.$.searchInput;
+    if (!input) return;
+    const open = this.$.searchDropdown.classList.contains("open");
+    input.setAttribute("aria-expanded", open ? "true" : "false");
+    const items = this.$.searchResults.querySelectorAll('[role="option"]');
+    items.forEach((el, i) =>
+      el.setAttribute(
+        "aria-selected",
+        i === this.searchHighlightIndex ? "true" : "false",
+      ),
+    );
   }
 
   async selectSearchResult(result) {
@@ -4850,9 +5188,9 @@ class AurafiskyApp {
   clearSearch() {
     this.$.searchInput.value = "";
     this.$.searchClearBtn.classList.add("hidden");
-    this.$.searchDropdown.classList.remove("open");
     this.$.searchResults.innerHTML = "";
     this.$.searchInput.focus();
+    this.showSearchHistory();
   }
 
   // ================================================================
@@ -5076,7 +5414,7 @@ class AurafiskyApp {
       // Name label
       const nameSpan = document.createElement("span");
       nameSpan.className = "truncate max-w-[120px] pointer-events-none";
-      const shortName = (tab.name || "").split(",")[0].trim();
+      const shortName = shortPlaceName(tab.name || "");
       nameSpan.textContent = shortName;
       tabEl.appendChild(nameSpan);
 
@@ -5284,7 +5622,7 @@ class AurafiskyApp {
     if (this.weatherData && this.selectedLat != null) {
       const weather = WeatherService.getHourlyAtIndex(this.weatherData, this.currentHourIndex);
       if (weather) {
-        document.title = `${WeatherService.formatTemp(weather.temperature)} ${weather.icon} ${this.selectedName.split(",")[0]} — Aurafisky`;
+        document.title = `${WeatherService.formatTemp(weather.temperature)} ${weather.icon} ${shortPlaceName(this.selectedName)} — Aurafisky`;
       }
     }
     const meta = document.querySelector('meta[name="theme-color"]');
@@ -6441,7 +6779,7 @@ class AurafiskyApp {
     const activeTab = this.wallpaperLocations[this.activeWallpaperIndex];
     if (!weather || !activeTab) return;
 
-    document.title = `${WeatherService.formatTemp(weather.temperature)} ${weather.icon} ${activeTab.name.split(",")[0]} — Aurafisky Wallpaper`;
+    document.title = `${WeatherService.formatTemp(weather.temperature)} ${weather.icon} ${shortPlaceName(activeTab.name)} — Aurafisky Wallpaper`;
 
     // Theme-color matches the wallpaper theme (browser chrome on mobile)
     const THEME_COLORS = {
@@ -6586,119 +6924,30 @@ class AurafiskyApp {
    * Resolves an online scenic weather wallpaper suited to current conditions.
    * Uses deterministic hashing to keep the wallpaper stable per location and condition.
    */
-  getWeatherWallpaperUrl(weatherCode = 0, isDay = true, lat = 0, lng = 0) {
-    let category = "clear_day";
-    const code = Number(weatherCode);
-
-    if (WeatherService.isStormCode(code)) {
-      category = "storm";
-    } else if (WeatherService.isSnowCode(code)) {
-      category = "snow";
-    } else if (WeatherService.isRainCode(code)) {
-      category = "rain";
-    } else if (code === 45 || code === 48) {
-      category = "fog";
-    } else if (code === 2 || code === 3) {
-      category = isDay ? "cloudy_day" : "cloudy_night";
-    } else {
-      category = isDay ? "clear_day" : "clear_night";
-    }
-
-    const list = WEATHER_WALLPAPERS[category] || WEATHER_WALLPAPERS.clear_day;
-    const hash = Math.abs(Math.round((Number(lat) * 100) + (Number(lng) * 100))) % list.length;
-    return list[hash] || list[0];
-  }
-
   /**
-   * Silky dual-layer crossfade between wallpaperPhotoA and wallpaperPhotoB.
-   * Preloads incoming photo so there is never a white or black flash.
-   */
-  transitionWallpaperPhoto(targetUrl) {
-    if (!targetUrl || targetUrl === this._currentWallpaperUrl) return;
-    this._currentWallpaperUrl = targetUrl;
-
-    const layerA = this.$.wallpaperPhotoA || document.getElementById("wallpaperPhotoA");
-    const layerB = this.$.wallpaperPhotoB || document.getElementById("wallpaperPhotoB");
-    if (!layerA || !layerB) {
-      if (this.$.wallpaperPhotoBg) {
-        this.$.wallpaperPhotoBg.style.backgroundImage = `url("${targetUrl}")`;
-      }
-      return;
-    }
-
-    const currentLayer = (this._activePhotoLayer === "B") ? layerB : layerA;
-    const nextLayer = (this._activePhotoLayer === "B") ? layerA : layerB;
-    const nextLayerName = (this._activePhotoLayer === "B") ? "A" : "B";
-
-    // Immediate display if initial load or neither layer has an image yet
-    if (!layerA.style.backgroundImage && !layerB.style.backgroundImage) {
-      layerA.style.backgroundImage = `url("${targetUrl}")`;
-      layerA.classList.add("active");
-      layerB.classList.remove("active");
-      this._activePhotoLayer = "A";
-      return;
-    }
-
-    const img = new Image();
-    img.onload = () => {
-      nextLayer.style.backgroundImage = `url("${targetUrl}")`;
-      nextLayer.classList.add("active");
-      currentLayer.classList.remove("active");
-      this._activePhotoLayer = nextLayerName;
-    };
-    img.onerror = () => {
-      nextLayer.style.backgroundImage = `url("${targetUrl}")`;
-      nextLayer.classList.add("active");
-      currentLayer.classList.remove("active");
-      this._activePhotoLayer = nextLayerName;
-    };
-    img.src = targetUrl;
-  }
-
-  /**
-   * Shows a curated online scenic photo wallpaper suited to the active tab's
-   * weather conditions with smooth dual-layer crossfade.
+   * Paints the procedural scene behind the wallpaper overlay. All rendering
+   * lives in features/wallpaper.js; this stays as the app-level entry point
+   * the rest of the overlay code already calls.
    */
   showWallpaperPhotoBg() {
-    if (!this.wallpaperPhotoEnabled || !this.$.wallpaperPhotoBg) return;
-    const activeTab = this.wallpaperLocations[this.activeWallpaperIndex] || {
-      lat: this.currentLat ?? 13.2803,
-      lng: this.currentLng ?? 78.2909,
-    };
-
-    this.$.wallpaperPhotoBg.classList.remove("hidden");
-
-    let code = 0;
-    let isDay = true;
-    const weatherSource = this.wallpaperWeatherData || this.weatherData;
-    if (weatherSource) {
-      const idx = this.wallpaperWeatherData ? this.wallpaperCurrentHourIndex : this.currentHourIndex;
-      const weather = WeatherService.getHourlyAtIndex(weatherSource, idx);
-      if (weather) {
-        code = weather.weatherCode;
-        isDay = weather.isDay;
-      }
-    }
-
-    const targetUrl = this.getWeatherWallpaperUrl(code, isDay, activeTab.lat, activeTab.lng);
-    this.transitionWallpaperPhoto(targetUrl);
+    this.wallpaperPhotoEnabled && this.wallpaper?.show?.();
   }
 
   /**
-   * Hides the scenic photo background.
+   * Stops the render loop and releases the screen wake lock.
    */
   hideWallpaperPhotoBg() {
-    this.$.wallpaperPhotoBg?.classList.add("hidden");
-    const layerA = this.$.wallpaperPhotoA || document.getElementById("wallpaperPhotoA");
-    const layerB = this.$.wallpaperPhotoB || document.getElementById("wallpaperPhotoB");
-    if (layerA) layerA.classList.remove("active");
-    if (layerB) layerB.classList.remove("active");
-    this._currentWallpaperUrl = "";
+    this.wallpaper?.hide?.();
   }
 
   /**
-   * Opens the modern Add Location modal for wallpaper tabs.
+   * Re-renders the scene in place — used when the active wallpaper tab or the
+   * conditions change underneath an open overlay.
    */
+  refreshWallpaperPhotoBg() {
+    this.wallpaperPhotoEnabled && this.wallpaper?.refresh?.();
+  }
+
   openWallpaperAddTabModal() {
     const modal = this.$.wallpaperAddTabModal || document.getElementById("wallpaperAddTabModal");
     if (!modal) return;
@@ -6726,7 +6975,7 @@ class AurafiskyApp {
           const btn = document.createElement("button");
           btn.type = "button";
           btn.className = "text-xs px-3 py-1.5 rounded-full bg-amber-500/15 hover:bg-amber-500/25 text-amber-200 border border-amber-500/30 transition-all active:scale-95 cursor-pointer";
-          const shortName = (b.name || "").split(",")[0].trim();
+          const shortName = shortPlaceName(b.name || "");
           btn.textContent = `⭐ ${shortName}`;
           btn.addEventListener("click", () => {
             this.addWallpaperTab(b.lat, b.lng, b.name);
@@ -6905,141 +7154,17 @@ class AurafiskyApp {
    * onto a canvas and downloads it as a PNG. Self-contained draw (no
    * html2canvas dependency) so it works offline.
    */
+  /**
+   * Saves the wallpaper as a PNG. The scene, the user's photo and the
+   * typography are all painted by features/wallpaper.js using the same code
+   * path as the live overlay, so the download matches what is on screen.
+   */
   exportWallpaperImage() {
-    if (!this.wallpaperWeatherData || !this.wallpaperLocations.length) {
-      this.showToast("No wallpaper data to export", "info");
+    if (this.wallpaper?.exportPng) {
+      this.wallpaper.exportPng();
       return;
     }
-    const activeTab = this.wallpaperLocations[this.activeWallpaperIndex];
-    const weather = WeatherService.getHourlyAtIndex(
-      this.wallpaperWeatherData,
-      this.wallpaperCurrentHourIndex,
-    );
-    if (!weather || !activeTab) return;
-
-    const W = 1080;
-    const H = 1080;
-    const canvas = document.createElement("canvas");
-    canvas.width = W;
-    canvas.height = H;
-    const ctx = canvas.getContext("2d");
-    if (!ctx) {
-      this.showToast("Could not render the image.", "error");
-      return;
-    }
-
-    // Background gradient (stormy-purple → near-black, matches the overlay)
-    const bg = ctx.createLinearGradient(0, 0, W, H);
-    bg.addColorStop(0, "#1e1b3a");
-    bg.addColorStop(1, "#0a0a14");
-    ctx.fillStyle = bg;
-    ctx.fillRect(0, 0, W, H);
-
-    // Header: location + coords + time
-    ctx.fillStyle = "#94a3b8";
-    ctx.font = "600 26px Inter, sans-serif";
-    ctx.fillText(`${activeTab.lat.toFixed(4)}° ${activeTab.lat >= 0 ? "N" : "S"}, ${activeTab.lng.toFixed(4)}° ${activeTab.lng >= 0 ? "E" : "W"}`, 60, 90);
-    ctx.fillStyle = "#ffffff";
-    ctx.font = "800 64px Inter, sans-serif";
-    ctx.fillText(activeTab.name, 60, 170);
-
-    // Big temp + description
-    ctx.font = "800 220px Inter, sans-serif";
-    ctx.fillText(WeatherService.formatTemp(weather.temperature), 60, 430);
-    ctx.font = "500 40px Inter, sans-serif";
-    ctx.fillStyle = "#cbd5e1";
-    ctx.fillText(weather.description, 64, 500);
-    ctx.font = "400 30px Inter, sans-serif";
-    ctx.fillStyle = "#94a3b8";
-    ctx.fillText(`Feels like ${WeatherService.formatTemp(weather.feelsLike)}`, 64, 550);
-
-    // Key metrics row (4 cards)
-    const metrics = [
-      { label: "HUMIDITY", value: `${weather.humidity ?? "--"}%` },
-      { label: "WIND", value: WeatherService.formatWind(weather.windSpeed) },
-      { label: "PRESSURE", value: WeatherService.formatPressure(weather.pressure) },
-      { label: "UV INDEX", value: weather.uvIndex != null ? weather.uvIndex.toFixed(1) : "--" },
-    ];
-    // ctx.roundRect is Chrome 99+/Safari 16+ only — fall back to a plain rect
-    const roundedRect = (x, y, w, h, r) => {
-      if (typeof ctx.roundRect === "function") {
-        ctx.roundRect(x, y, w, h, r);
-      } else {
-        ctx.rect(x, y, w, h);
-      }
-    };
-    const cardW = (W - 60 * 2 - 24 * 3) / 4;
-    metrics.forEach((m, i) => {
-      const x = 60 + i * (cardW + 24);
-      ctx.fillStyle = "rgba(255,255,255,0.06)";
-      ctx.beginPath();
-      roundedRect(x, 620, cardW, 150, 20);
-      ctx.fill();
-      ctx.fillStyle = "#94a3b8";
-      ctx.font = "600 20px Inter, sans-serif";
-      ctx.fillText(m.label, x + 24, 665);
-      ctx.fillStyle = "#ffffff";
-      ctx.font = "700 40px Inter, sans-serif";
-      ctx.fillText(m.value, x + 24, 720);
-    });
-
-    // 7-day strip
-    const daily = this.wallpaperWeatherData.daily;
-    if (daily?.time?.length) {
-      ctx.fillStyle = "#94a3b8";
-      ctx.font = "600 22px Inter, sans-serif";
-      ctx.fillText("7-DAY FORECAST", 60, 860);
-      const dayW = (W - 60 * 2 - 16 * 6) / 7;
-      daily.time.slice(0, 7).forEach((date, i) => {
-        const code = daily.weather_code?.[i] ?? 0;
-        const info = WeatherService.getWeatherInfo(code, true);
-        const maxTemp = daily.temperature_2m_max?.[i];
-        const minTemp = daily.temperature_2m_min?.[i];
-        const x = 60 + i * (dayW + 16);
-        ctx.fillStyle = "rgba(255,255,255,0.06)";
-        ctx.beginPath();
-        roundedRect(x, 890, dayW, 130, 16);
-        ctx.fill();
-        ctx.fillStyle = i === 0 ? "#14b8a6" : "#94a3b8";
-        ctx.font = "700 22px Inter, sans-serif";
-        ctx.textAlign = "center";
-        ctx.fillText(WeatherService.formatDayLabel(date), x + dayW / 2, 930);
-        ctx.fillStyle = "#ffffff";
-        ctx.font = "600 26px Inter, sans-serif";
-        ctx.fillText(`${maxTemp != null ? Math.round(maxTemp) : "--"}° ${minTemp != null ? Math.round(minTemp) : "--"}°`, x + dayW / 2, 970);
-        ctx.textAlign = "left";
-      });
-    }
-
-    // Footer: brand
-    ctx.fillStyle = "#64748b";
-    ctx.font = "500 22px Inter, sans-serif";
-    ctx.textAlign = "right";
-    ctx.fillText("Aurafisky · Open-Meteo", W - 60, H - 50);
-    ctx.textAlign = "left";
-
-    // Download
-    try {
-      const finish = (blobOrUrl) => {
-        const url = typeof blobOrUrl === "string" ? blobOrUrl : URL.createObjectURL(blobOrUrl);
-        const a = document.createElement("a");
-        a.href = url;
-        a.download = `aurafisky-wallpaper-${(activeTab.name || "location").split(",")[0].trim().replace(/[^\w-]+/g, "-").toLowerCase()}.png`;
-        document.body.appendChild(a);
-        a.click();
-        a.remove();
-        if (typeof blobOrUrl !== "string") setTimeout(() => URL.revokeObjectURL(url), 4000);
-        this.showToast("Wallpaper image saved", "success");
-      };
-      if (canvas.toBlob) {
-        canvas.toBlob((blob) => finish(blob), "image/png");
-      } else {
-        finish(canvas.toDataURL("image/png"));
-      }
-    } catch (e) {
-      this.showToast("Could not save the image.", "error");
-    }
-    this._haptic('medium');
+    this.showToast("Wallpaper export is unavailable", "error");
   }
 
   destroy() {
@@ -7091,6 +7216,14 @@ class AurafiskyApp {
     this.$.weatherPanel.classList.add("open");
     this.$.weatherPanel.classList.remove("minimized");
     this.$.weatherPanel.removeAttribute("inert");
+    if (window.innerWidth >= 640) {
+      this.$.weatherPanel.style.height = '';
+      this.$.weatherPanel.style.maxHeight = '';
+      this.$.weatherPanel.style.transform = '';
+      this.$.weatherPanel.classList.remove("sheet-peek", "sheet-half", "sheet-full", "google-maps-sheet");
+    } else if (this.googleMapsMobile) {
+      this.googleMapsMobile.snapSheet('half');
+    }
     document.body.classList.add("weather-panel-expanded");
     if (this.$.panelMinimizeBtn) {
       this.$.panelMinimizeBtn.classList.remove("chevron-flipped");
@@ -7163,6 +7296,11 @@ class AurafiskyApp {
   toggleMinimizeWeatherPanel() {
     this.$.weatherPanel.classList.toggle("minimized");
     const isMin = this.$.weatherPanel.classList.contains("minimized");
+    if (window.innerWidth >= 640) {
+      this.$.weatherPanel.style.height = '';
+      this.$.weatherPanel.style.maxHeight = '';
+      this.$.weatherPanel.style.transform = '';
+    }
     document.body.classList.toggle("weather-panel-expanded", !isMin);
     if (this.$.panelMinimizeBtn) {
       this.$.panelMinimizeBtn.classList.toggle(
@@ -7209,6 +7347,9 @@ class AurafiskyApp {
         }
       });
     });
+
+    // Explicitly activate overview tab on initialization
+    this.switchWeatherTab("overview");
 
     // Mobile touch gestures: horizontal swipe across tabs & pull-to-minimize
     this.initMobileWeatherGestures();
@@ -7486,7 +7627,7 @@ class AurafiskyApp {
       const isHidden = this.$.bookmarksDropdown?.classList.contains("hidden");
       if (isHidden) {
         setActiveBtn(savedBtn);
-        if (typeof this.renderBookmarks === "function") this.renderBookmarks();
+        if (typeof this.renderBookmarksList === "function") this.renderBookmarksList();
         this.$.bookmarksDropdown?.classList.remove("hidden");
       } else {
         this.$.bookmarksDropdown?.classList.add("hidden");

@@ -37,8 +37,17 @@ import * as extremes from './extremes.js';
 import * as navigation from './navigation.js';
 import * as alerts from './alerts.js';
 import * as shareCard from './shareCard.js';
+import * as aura from './aura.js';
+import * as wallpaper from './wallpaper.js';
+import * as googleMapsMobile from './googleMapsMobile.js';
+import * as deviceProfile from './deviceProfile.js';
+import * as tvNavigation from './tvNavigation.js';
 
 const featureModules = {
+  // Device profile runs first so data-device attributes exist on <html>
+  // before any other feature (and before first panel paint) reads them.
+  deviceProfile,
+  tvNavigation,
   ensemble,
   routes,
   radar,
@@ -65,6 +74,9 @@ const featureModules = {
   navigation,
   alerts,
   shareCard,
+  aura,
+  wallpaper,
+  googleMapsMobile,
 };
 
 export function initFeatures(app) {

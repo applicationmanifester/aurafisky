@@ -208,49 +208,76 @@ const WeatherService = (() => {
       if (Date.now() - entry.ts < REQUEST_CACHE_TTL) return entry.data;
       _requestCache.delete(cacheKey);
     }
-    const params = new URLSearchParams({
-      latitude: round(lat),
-      longitude: round(lng),
-      hourly: [
-        "temperature_2m",
-        "relative_humidity_2m",
-        "apparent_temperature",
-        "precipitation_probability",
-        "precipitation",
-        "weather_code",
-        "cloud_cover",
-        "wind_speed_10m",
-        "wind_direction_10m",
-        "wind_gusts_10m",
-        "uv_index",
-        "pressure_msl",
-        "visibility",
-        "is_day",
-      ].join(","),
-      daily: [
-        "weather_code",
-        "temperature_2m_max",
-        "temperature_2m_min",
-        "apparent_temperature_max",
-        "apparent_temperature_min",
-        "sunrise",
-        "sunset",
-        "uv_index_max",
-        "precipitation_sum",
-        "precipitation_probability_max",
-        "wind_speed_10m_max",
-      ].join(","),
-      timezone: "auto",
-      past_days: PAST_DAYS,
-      forecast_days: FORECAST_DAYS,
-    });
+    // Extended variable set: everything the device-adaptive weather card
+    // displays (sunshine duration, storm potential, freezing level, gust
+    // maxima, dominant wind, daylight). If the API ever rejects an unknown
+    // variable we transparently fall back to the legacy set below.
+    const buildParams = (extended) =>
+      new URLSearchParams({
+        latitude: round(lat),
+        longitude: round(lng),
+        hourly: [
+          "temperature_2m",
+          "relative_humidity_2m",
+          "apparent_temperature",
+          "precipitation_probability",
+          "precipitation",
+          "weather_code",
+          "cloud_cover",
+          "wind_speed_10m",
+          "wind_direction_10m",
+          "wind_gusts_10m",
+          "uv_index",
+          "pressure_msl",
+          "visibility",
+          "is_day",
+          ...(extended
+            ? ["sunshine_duration", "cape", "freezing_level_height"]
+            : []),
+        ].join(","),
+        daily: [
+          "weather_code",
+          "temperature_2m_max",
+          "temperature_2m_min",
+          "apparent_temperature_max",
+          "apparent_temperature_min",
+          "sunrise",
+          "sunset",
+          "uv_index_max",
+          "precipitation_sum",
+          "precipitation_probability_max",
+          "wind_speed_10m_max",
+          ...(extended
+            ? [
+                "wind_gusts_10m_max",
+                "wind_direction_10m_dominant",
+                "daylight_duration",
+              ]
+            : []),
+        ].join(","),
+        timezone: "auto",
+        past_days: PAST_DAYS,
+        forecast_days: FORECAST_DAYS,
+      });
+
+    let params = buildParams(true);
+    let useExtended = true;
 
     for (let attempt = 0; attempt <= retries; attempt++) {
       try {
         const url = `${FORECAST_URL}?${params}`;
         const response = await fetch(url, { signal });
-        if (!response.ok)
+        if (!response.ok) {
+          // First rejection with the extended variable set: retry the same
+          // attempt with the legacy params (does not consume a backoff try).
+          if (useExtended) {
+            useExtended = false;
+            params = buildParams(false);
+            attempt--;
+            continue;
+          }
           throw new Error(`Weather API error: ${response.status}`);
+        }
         const data = await response.json();
         if (!data.hourly?.time || !data.daily)
           throw new Error("Unexpected format");
@@ -295,6 +322,8 @@ const WeatherService = (() => {
       uvIndex: h.uv_index[index],
       pressure: h.pressure_msl[index],
       visibility: h.visibility[index],
+      cape: h.cape?.[index],
+      freezingLevel: h.freezing_level_height?.[index],
       isDay: isDay,
       description: info.description,
       icon: info.icon,
@@ -482,6 +511,52 @@ const WeatherService = (() => {
   }
 
   /**
+   * Formats a duration given in seconds as a compact "Xh Ym" string.
+   * Used for daylight duration & sunshine duration displays.
+   */
+  function formatDuration(seconds) {
+    if (seconds == null || !isFinite(seconds)) return "--";
+    const totalMinutes = Math.round(seconds / 60);
+    const hours = Math.floor(totalMinutes / 60);
+    const minutes = totalMinutes % 60;
+    if (hours > 0) return `${hours}h ${minutes}m`;
+    return `${minutes}m`;
+  }
+
+  /**
+   * Formats CAPE (Convective Available Potential Energy, J/kg) into a
+   * human-friendly "storm potential" label. Higher = more unstable air.
+   */
+  function formatCAPE(cape) {
+    if (cape == null || !isFinite(cape)) return "--";
+    if (cape < 300) return `${Math.round(cape)} J/kg · Stable`;
+    if (cape < 1000) return `${Math.round(cape)} J/kg · Marginal`;
+    if (cape < 2500) return `${Math.round(cape)} J/kg · Moderate`;
+    return `${Math.round(cape)} J/kg · Strong`;
+  }
+
+  /**
+   * Formats the freezing level altitude (meters above sea level).
+   * Unit-aware: km (metric) or ft (imperial).
+   */
+  function formatFreezingLevel(meters) {
+    if (meters == null || !isFinite(meters)) return "--";
+    if (currentUnits === "imperial") {
+      const ft = meters * 3.28084;
+      return `${Math.round(ft / 100) * 100} ft`;
+    }
+    return `${(meters / 1000).toFixed(1)} km`;
+  }
+
+  /**
+   * Formats a precipitation probability (0-100) as a percentage string.
+   */
+  function formatPrecipProb(prob) {
+    if (prob == null || !isFinite(prob)) return "--";
+    return `${Math.round(prob)}%`;
+  }
+
+  /**
    * Calculates dew point from temperature (°C) and relative humidity (%).
    * Uses the Magnus formula approximation.
    */
@@ -505,9 +580,129 @@ const WeatherService = (() => {
     return COMPASS[idx];
   }
 
+  // ── Location Search (Geocoding) ─────────────────────────────
+  // GeoNames / OSM feature codes the app surfaces as human labels.
+  const FEATURE_LABELS = {
+    PPLC: "Capital",
+    PPLA: "Regional Capital",
+    PPLA2: "Regional Capital",
+    PPLX: "District",
+    PPL: "City",
+    PPLA3: "Town",
+    PPLA4: "Town",
+    PPLL: "Village",
+    PPLF: "Village",
+    PPLS: "Settlement",
+    PCLI: "Country",
+    ISL: "Island",
+    ISLS: "Islands",
+    MT: "Mountain",
+    MTS: "Mountains",
+    AIRP: "Airport",
+    PRT: "Port",
+    BCH: "Beach",
+    HBR: "Harbor",
+    RSTN: "Station",
+    LK: "Lake",
+    Reserve: "Reserve",
+    PARK: "Park",
+  };
+
+  /** Browser's preferred BCP-47 language, safe fallback to "en". */
+  function _getUserLanguage() {
+    try {
+      const lang = navigator.language || (navigator.languages && navigator.languages[0]) || "en";
+      return String(lang).split(/[-_,]/)[0] || "en";
+    } catch (e) {
+      return "en";
+    }
+  }
+
+  /**
+   * Converts an ISO-3166 alpha-2 country code into its flag emoji.
+   * Falls back to a pin for missing/invalid codes or full country names.
+   */
+  function getCountryFlag(countryOrCode) {
+    if (!countryOrCode || typeof countryOrCode !== "string") return "📍";
+    const code = countryOrCode.trim().toUpperCase();
+    if (!/^[A-Z]{2}$/.test(code)) return "📍";
+    try {
+      return String.fromCodePoint(
+        ...[...code].map((ch) => 127397 + ch.charCodeAt(0)),
+      );
+    } catch (e) {
+      return "📍";
+    }
+  }
+
+  /** Human label for a GeoNames/OSM feature code ("PPLC" → "Capital"). */
+  function getFeatureLabel(featureCode) {
+    if (!featureCode) return "";
+    return FEATURE_LABELS[featureCode] || "";
+  }
+
+  /** Compact population format: 8808000 → "8.8M", 940000 → "940k". */
+  function formatPopulation(population) {
+    if (population == null || !isFinite(population) || population < 1000)
+      return "";
+    if (population >= 1000000) {
+      const m = population / 1000000;
+      return `${m >= 10 ? Math.round(m) : m.toFixed(1)}M`;
+    }
+    return `${Math.round(population / 1000)}k`;
+  }
+
+  /**
+   * Ranks search results by relevance and removes duplicates.
+   * Scoring: exact name match > prefix match > substring match,
+   * then population (log-scaled) and capital-city status as tiebreakers.
+   */
+  function rankAndDedupeResults(results, query) {
+    const q = (query || "").trim().toLowerCase();
+    const seen = new Set();
+    const scored = [];
+    for (const r of results || []) {
+      if (!r || r.latitude == null || r.longitude == null) continue;
+      const key = [
+        (r.name || "").toLowerCase(),
+        (r.admin1 || "").toLowerCase(),
+        (r.country || "").toLowerCase(),
+      ].join("|");
+      if (seen.has(key)) continue;
+      seen.add(key);
+
+      let score = 0;
+      const n = (r.name || "").toLowerCase();
+      // Short queries (≤3 chars) are rarely complete words — "lon" should
+      // surface London, not the 424-person hamlet of "Lon" — so the exact
+      // bonus is deliberately weaker for them. Full-word queries keep a
+      // strong bonus that population prominence cannot override.
+      const exactBonus = q.length <= 3 ? 60 : 150;
+      if (q && n === q) score -= exactBonus;
+      else if (q && n.startsWith(q)) score -= 50;
+      else if (q && n.includes(q)) score -= 20;
+      // Population prominence (log-scaled, zero below 1k, capped): a prefix
+      // match on London must outrank an exact match on a tiny hamlet.
+      if (r.population && r.population >= 1000) {
+        score -= Math.min(100, Math.max(0, (Math.log10(r.population) - 3) * 30));
+      }
+      if (r.featureCode === "PPLC") score -= 15;
+      if (typeof r.importance === "number") score -= r.importance * 20;
+      scored.push({ r, score });
+    }
+    return scored.sort((a, b) => a.score - b.score).map((s) => s.r);
+  }
+
   /**
    * Searches for locations by name using Open-Meteo Geocoding.
    * This serves as a fallback when Google Places is unavailable.
+   *
+   * Enhancements over the original implementation:
+   *  • Results are localized to the user's language (updated names)
+   *  • ISO country codes → flag emojis for every result
+   *  • Rich metadata (population, elevation, timezone, feature type)
+   *  • Relevance ranking (exact/prefix match, population, capitals)
+   *  • Duplicate suppression (same city listed twice)
    *
    * @param {string} query - Search query (city name)
    * @returns {Promise<Array>} Array of location results
@@ -515,7 +710,28 @@ const WeatherService = (() => {
   async function searchLocations(query, signal, retries = 1) {
     if (!query || query.trim().length < 2) return [];
 
-    const cacheKey = query.trim().toLowerCase();
+    const rawQuery = query.trim();
+    const lang = _getUserLanguage();
+
+    // ── 1. Direct Lat/Lng coordinate search (e.g., "11.38, 77.89" or "11.38 77.89") ──
+    const coordMatch = rawQuery.match(/^(-?\d+(?:\.\d+)?)[,\s]+(-?\d+(?:\.\d+)?)$/);
+    if (coordMatch) {
+      const lat = parseFloat(coordMatch[1]);
+      const lng = parseFloat(coordMatch[2]);
+      if (lat >= -90 && lat <= 90 && lng >= -180 && lng <= 180) {
+        return [{
+          name: `${lat.toFixed(4)}°, ${lng.toFixed(4)}°`,
+          country: "Coordinates",
+          countryCode: "",
+          admin1: "",
+          latitude: lat,
+          longitude: lng,
+          displayName: `Location at ${lat.toFixed(4)}°, ${lng.toFixed(4)}°`,
+        }];
+      }
+    }
+
+    const cacheKey = `${lang}:${rawQuery.toLowerCase()}`;
     if (_geocodingCache.has(cacheKey)) {
       const cached = _geocodingCache.get(cacheKey);
       if (Date.now() - cached.ts < 300000) {
@@ -524,35 +740,91 @@ const WeatherService = (() => {
       _geocodingCache.delete(cacheKey);
     }
 
+    // ── 2. Primary: Open-Meteo Global Geocoding API ──
     const params = new URLSearchParams({
-      name: query.trim(),
-      count: 8,
-      language: "en",
+      name: rawQuery,
+      count: 10,
+      language: lang,
       format: "json",
     });
+
+    let results = [];
 
     for (let attempt = 0; attempt <= retries; attempt++) {
       try {
         const response = await fetch(`${GEOCODING_URL}?${params}`, { signal });
-        if (!response.ok) return [];
-        const data = await response.json();
-        const results = (data.results || []).map((r) => ({
-          name: r.name,
-          country: r.country || "",
-          admin1: r.admin1 || "",
-          latitude: r.latitude,
-          longitude: r.longitude,
-          displayName: [r.name, r.admin1, r.country].filter(Boolean).join(", "),
-        }));
-        _geocodingCache.set(cacheKey, { data: results, ts: Date.now() });
-        return results;
+        if (response.ok) {
+          const data = await response.json();
+          if (Array.isArray(data.results) && data.results.length > 0) {
+            results = data.results.map((r) => ({
+              name: r.name,
+              country: r.country || "",
+              countryCode: (r.country_code || "").toUpperCase(),
+              admin1: r.admin1 || "",
+              latitude: r.latitude,
+              longitude: r.longitude,
+              population: r.population ?? null,
+              elevation: r.elevation ?? null,
+              timezone: r.timezone || "",
+              featureCode: r.feature_code || "",
+              displayName: [r.name, r.admin1, r.country].filter(Boolean).join(", "),
+            }));
+            results = rankAndDedupeResults(results, rawQuery);
+            break;
+          }
+        }
       } catch (error) {
         if (attempt < retries) {
-          await new Promise((r) => setTimeout(r, 500 * Math.pow(2, attempt)));
+          await new Promise((r) => setTimeout(r, 400 * Math.pow(2, attempt)));
         }
       }
     }
-    return [];
+
+    // ── 3. High-Precision Fallback: OpenStreetMap Nominatim ──
+    // Enables finding small villages, remote islands, streets, landmarks, and postal codes worldwide
+    if (results.length === 0) {
+      try {
+        const nomUrl = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(rawQuery)}&format=jsonv2&addressdetails=1&limit=8&accept-language=${encodeURIComponent(lang)}`;
+        const nomRes = await fetch(nomUrl, { signal });
+        if (nomRes.ok) {
+          const nomData = await nomRes.json();
+          if (Array.isArray(nomData)) {
+            results = nomData.map((item) => {
+              const addr = item.address || {};
+              const placeName = addr.city || addr.town || addr.village || addr.hamlet || addr.suburb || item.name || rawQuery;
+              const region = addr.state || addr.county || addr.province || "";
+              const country = addr.country || "";
+              const isPrecise = !!(addr.road || addr.house_number || addr.postcode);
+              return {
+                name: placeName,
+                country: country,
+                countryCode: (addr.country_code || "").toUpperCase(),
+                admin1: region,
+                latitude: parseFloat(item.lat),
+                longitude: parseFloat(item.lon),
+                population: null,
+                elevation: null,
+                timezone: "",
+                featureCode: "",
+                type: isPrecise ? "Exact address" : item.type || "",
+                importance: typeof item.importance === "number" ? item.importance : undefined,
+                // Compose from parts instead of raw display_name — the raw
+                // string often embeds postal codes and road names.
+                displayName: [placeName, region, country].filter(Boolean).join(", ") || item.display_name || "",
+              };
+            });
+            results = rankAndDedupeResults(results, rawQuery);
+          }
+        }
+      } catch (e) {
+        // Quiet fallback if network or rate-limited
+      }
+    }
+
+    if (results.length > 0) {
+      _geocodingCache.set(cacheKey, { data: results, ts: Date.now() });
+    }
+    return results;
   }
 
   /**
@@ -2150,8 +2422,17 @@ const WeatherService = (() => {
     formatPrecip,
     formatPressure,
     formatVisibility,
+    formatDuration,
+    formatCAPE,
+    formatFreezingLevel,
+    formatPrecipProb,
     calculateDewPoint,
     getWindDirection,
+    getCountryFlag,
+    getFeatureLabel,
+    formatPopulation,
+    rankAndDedupeResults,
+    getUserLanguage: _getUserLanguage,
     searchLocations,
     parseIsoLocal,
     formatDayLabel,

@@ -9,6 +9,8 @@
 // conditionEmoji, buildStatItems, formatCardDate, buildCardModel) are exported
 // for unit testing; drawWeatherCard only needs a 2D context.
 
+import { shortPlaceName } from "../modules/geo.js";
+
 export const CARD_WIDTH = 1000;
 export const CARD_HEIGHT = 1250;
 
@@ -360,9 +362,7 @@ function downloadBlob(app, blob, filename) {
 }
 
 function cardFilename(app) {
-  const place = (app.selectedName || "weather")
-    .split(",")[0]
-    .trim()
+  const place = shortPlaceName(app.selectedName || "weather")
     .replace(/[^\w-]+/g, "-")
     .toLowerCase();
   return `aurafisky-${place || "weather"}.png`;

@@ -1396,6 +1396,21 @@ input[type='range'].timeline-slider::-moz-range-thumb {
   border-bottom-color: rgba(51, 65, 85, 0.4);
 }
 
+/* ── 7-Day Horizontal Forecast ────────────────────────────── */
+.daily-forecast-horizontal {
+  display: flex;
+  gap: 0.625rem;
+  overflow-x: auto;
+  scroll-snap-type: x mandatory;
+  -webkit-overflow-scrolling: touch;
+  padding-bottom: 0.625rem;
+  padding-top: 0.25rem;
+}
+
+.daily-card-horizontal {
+  scroll-snap-align: start;
+}
+
 /* ── Temporal Compression Grid ─────────────────────────────── */
 .temporal-grid {
   display: grid;

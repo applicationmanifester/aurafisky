@@ -18,41 +18,113 @@ function renderBestOutdoorWindow(startIdx) {
     this.$.bestWindowCard.classList.remove("hidden");
   }
 
-// -- TEMPORAL COMPRESSION GRID --
+// -- 7-DAY HORIZONTAL FORECAST & TEMPORAL GRID --
 
 function renderTemporalGrid(matrices) {
-    if (!matrices || !this.$.dailyForecast) return;
+    if (!this.$.dailyForecast) return;
+    const weatherData = this.weatherData;
+    if (!weatherData) return;
+
+    const dailyList = WeatherService.getDailyForecast ? WeatherService.getDailyForecast(weatherData) : [];
     const todayStr = new Date().toLocaleDateString("en-CA");
-    const future = matrices.filter((m) => m.date >= todayStr).slice(0, 7);
 
-    if (future.length === 0) return;
+    let daysToRender = [];
+    if (dailyList && dailyList.length > 0) {
+      const todayIdx = dailyList.findIndex((d) => d.date >= todayStr);
+      daysToRender = todayIdx >= 0 ? dailyList.slice(todayIdx, todayIdx + 7) : dailyList.slice(0, 7);
+    } else if (matrices && matrices.length > 0) {
+      daysToRender = matrices.filter((m) => m.date >= todayStr).slice(0, 7);
+    }
 
-    const gridRows = future
-      .map((day) => {
-        const isToday = day.date === todayStr;
-        const dayLabel = isToday
-          ? "Today"
-          : WeatherService.formatDayLabel(day.date);
-        const cols = day.blocks
-          .map(
-            (b) =>
-              `<div class="temporal-block" style="background:${this._blockColor(b.code, b.hour)}" title="${b.hour}:00 - ${b.hour + 3}:00">${b.icon}</div>`,
-          )
-          .join("");
+    if (daysToRender.length === 0) return;
+
+    const cardsHTML = daysToRender
+      .map((day, i) => {
+        const isToday = day.date === todayStr || i === 0;
+        const dayLabel = isToday ? "Today" : WeatherService.formatDayLabel(day.date);
+
+        let dateFormatted = "";
+        try {
+          const parsed = WeatherService.parseIsoLocal(day.date);
+          dateFormatted = parsed.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+        } catch {
+          dateFormatted = day.date || "";
+        }
+
+        const icon = day.icon || "🌤️";
+        const desc = day.description || "Fair";
+        const maxT = WeatherService.formatTemp(day.maxTemp);
+        const minT = WeatherService.formatTemp(day.minTemp);
+        const precipProb = day.precipProb != null && day.precipProb > 0 ? Math.round(day.precipProb) : 0;
+
+        // Mini 3-hour diurnal pattern strip from matrices
+        const matrixDay = matrices ? matrices.find((m) => m.date === day.date) : null;
+        let miniBlocksHTML = "";
+        if (matrixDay && matrixDay.blocks && matrixDay.blocks.length > 0) {
+          const blocks = matrixDay.blocks
+            .map(
+              (b) =>
+                `<span class="w-2.5 h-2.5 rounded-[2px] flex items-center justify-center text-[7px] select-none" style="background:${this._blockColor(b.code, b.hour)}" title="${b.hour}:00 - ${b.hour + 3}:00: ${b.icon}"></span>`,
+            )
+            .join("");
+          miniBlocksHTML = `<div class="flex items-center gap-[2px] mt-2 pt-1.5 border-t border-slate-200/50 dark:border-slate-700/40 w-full justify-center" title="3-hour diurnal pattern">${blocks}</div>`;
+        }
+
         return `
-        <div class="flex flex-col">
-          <div class="temporal-day-label">${dayLabel}</div>
-          <div class="temporal-grid">${cols}</div>
-          <div class="text-[8px] text-slate-400 text-center mt-0.5">${WeatherService.formatTemp(day.minTemp)}-${WeatherService.formatTemp(day.maxTemp)}</div>
+        <div class="daily-card-horizontal min-w-[110px] sm:min-w-[120px] max-w-[130px] flex-shrink-0 flex flex-col items-center justify-between p-3 rounded-2xl ${isToday ? "bg-primary/10 border-primary/30 ring-1 ring-primary/40" : "bg-slate-100/70 dark:bg-slate-800/60 hover:bg-slate-200/80 dark:hover:bg-slate-700/70 border-slate-200/60 dark:border-slate-700/50"} border shadow-xs transition-all select-none cursor-pointer active:scale-95 text-center snap-start group" data-date="${day.date}" aria-label="${dayLabel}, ${dateFormatted}: ${desc}, High ${maxT}, Low ${minT}">
+          <div class="flex flex-col items-center w-full">
+            <span class="text-xs font-bold ${isToday ? "text-primary dark:text-primary-light" : "text-slate-800 dark:text-slate-100"}">${dayLabel}</span>
+            <span class="text-[10px] font-medium text-slate-400 dark:text-slate-500">${dateFormatted}</span>
+          </div>
+
+          <div class="my-1.5 flex flex-col items-center">
+            <span class="text-3xl filter drop-shadow-xs transition-transform group-hover:scale-110 duration-200" aria-hidden="true">${icon}</span>
+            <span class="text-[10px] font-medium text-slate-600 dark:text-slate-300 mt-1 line-clamp-1 max-w-[95px]">${desc}</span>
+          </div>
+
+          <div class="h-4 flex items-center justify-center">
+            ${precipProb > 0 ? `<span class="text-[10px] font-semibold text-blue-500 dark:text-blue-400 bg-blue-50 dark:bg-blue-950/50 px-1.5 py-0.5 rounded-full">💧 ${precipProb}%</span>` : ""}
+          </div>
+
+          <div class="mt-1.5 w-full flex items-baseline justify-center gap-1.5 font-semibold">
+            <span class="text-xs sm:text-sm font-bold text-slate-900 dark:text-white">${maxT}</span>
+            <span class="text-[10px] text-slate-400 dark:text-slate-500 font-medium">${minT}</span>
+          </div>
+
+          ${miniBlocksHTML}
         </div>
       `;
       })
       .join("");
 
     const dailyHTML = `
-       <div class="flex gap-2 overflow-x-auto pb-2 custom-scrollbar">${gridRows}</div>
+       <div class="daily-forecast-horizontal flex gap-2.5 overflow-x-auto pb-2.5 pt-1 custom-scrollbar scroll-smooth snap-x w-full">${cardsHTML}</div>
      `;
     this.setSafeHTML(this.$.dailyForecast, dailyHTML);
+
+    // Bind interactive click handlers to scrub timeline to the selected day's noon
+    if (this.weatherData?.hourly?.time) {
+      this.$.dailyForecast.querySelectorAll(".daily-card-horizontal").forEach((card) => {
+        card.addEventListener("click", () => {
+          const date = card.dataset.date;
+          if (!date) return;
+          const times = this.weatherData.hourly.time;
+          let targetIdx = times.findIndex((t) => t.startsWith(date + "T12"));
+          if (targetIdx < 0) {
+            targetIdx = times.findIndex((t) => t.startsWith(date));
+          }
+          if (targetIdx >= 0) {
+            const timeOffset = this.timeline24hMode ? this._getTimelineOffset() : 0;
+            const sliderVal = targetIdx - timeOffset;
+            if (this.$.timelineSlider) {
+              this.$.timelineSlider.value = sliderVal;
+              this.handleTimelineChange(sliderVal);
+              this._haptic("light");
+            }
+          }
+        });
+      });
+    }
   }
 
 function _blockColor(code, hour) {

@@ -38,12 +38,12 @@ function ensureSection() {
   const anchor = document.getElementById("dailyForecast");
   const sec = document.createElement("div");
   sec.id = "ensembleSection";
-  sec.className = "mb-5";
+  sec.className = "mt-4 pt-4 border-t border-slate-200/60 dark:border-slate-700/60";
   sec.innerHTML =
     '<h4 class="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-2">Model Ensemble</h4>' +
     '<div id="ensembleBody" class="text-xs text-slate-500 dark:text-slate-400">Select a location to compare forecast models.</div>';
-  if (content && anchor && anchor.parentNode)
-    anchor.parentNode.insertBefore(sec, anchor);
+  if (anchor && anchor.parentNode)
+    anchor.parentNode.appendChild(sec);
   else if (content) content.appendChild(sec);
 }
 

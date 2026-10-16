@@ -42,7 +42,7 @@ function initKeyboardShortcuts() {
           break;
         case "m":
           e.preventDefault();
-          this.toggleMinimalMode();
+          this.getMyLocation();
           break;
         case "/":
           e.preventDefault();

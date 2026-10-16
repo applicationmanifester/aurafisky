@@ -218,8 +218,12 @@ class AurafiskyApp {
     this.thunderInterval = null;
     this.birdsInterval = null;
 
-    // Minimal mode
+    // Ensure compact mode class is never lingering
+    document.documentElement.classList.remove("compact");
     this.minimalMode = false;
+    this.toggleMinimalMode = () => {
+      document.documentElement.classList.remove("compact");
+    };
 
     // Advanced feature state
     this.showSignal = false; // Signal/noise toggle
@@ -308,7 +312,6 @@ class AurafiskyApp {
       closeBookmarksBtn: document.getElementById("closeBookmarksBtn"),
       weatherPanel: document.getElementById("weatherPanel"),
       panelCloseBtn: document.getElementById("panelCloseBtn"),
-      compactExpandBtn: document.getElementById("compactExpandBtn"),
       favoriteToggleBtn: document.getElementById("favoriteToggleBtn"),
       starOutlineIcon: document.getElementById("starOutlineIcon"),
       starFilledIcon: document.getElementById("starFilledIcon"),
@@ -672,6 +675,7 @@ class AurafiskyApp {
       profileBtn: document.getElementById("profileBtn"),
       profileIconGeneric: document.getElementById("profileIconGeneric"),
       profileAvatarImg: document.getElementById("profileAvatarImg"),
+      profileAvatarFallback: document.getElementById("profileAvatarFallback"),
       accountDialog: document.getElementById("accountDialog"),
       accountCloseBtn: document.getElementById("accountCloseBtn"),
       accountLoggedOut: document.getElementById("accountLoggedOut"),
@@ -687,7 +691,6 @@ class AurafiskyApp {
       settingsCloseBtn: document.getElementById("settingsCloseBtn"),
       settingsUnitsToggle: document.getElementById("settingsUnitsToggle"),
       settingsThemeToggle: document.getElementById("settingsThemeToggle"),
-      settingsCompactToggle: document.getElementById("settingsCompactToggle"),
       settingsMapLanguageToggle: document.getElementById("settingsMapLanguageToggle"),
       settingsSyncHistoryToggle: document.getElementById(
         "settingsSyncHistoryToggle",
@@ -1783,11 +1786,6 @@ class AurafiskyApp {
       this.toggleMinimizeWeatherPanel();
       this._haptic('selection');
     });
-    // Compact expand button — exits compact mode
-    this.$.compactExpandBtn?.addEventListener("click", () => {
-      this.toggleMinimalMode();
-      this._haptic('light');
-    });
     this.$.compareCloseBtn.addEventListener("click", () => {
       this.hideComparePanel();
       this._haptic('selection');
@@ -1871,13 +1869,6 @@ class AurafiskyApp {
     if (this.$.settingsThemeToggle) {
       this.$.settingsThemeToggle.addEventListener("change", () => {
         this.toggleDarkMode();
-        this.saveUserDataToCloud();
-        this._haptic('selection');
-      });
-    }
-    if (this.$.settingsCompactToggle) {
-      this.$.settingsCompactToggle.addEventListener("change", () => {
-        this.toggleMinimalMode();
         this.saveUserDataToCloud();
         this._haptic('selection');
       });
@@ -3532,9 +3523,6 @@ class AurafiskyApp {
       this.weatherData?.timezone,
       this.weatherData?.utc_offset_seconds
     );
-    // Sync compact widget date/time display
-    const compactDt = document.getElementById("compactDatetime");
-    if (compactDt) compactDt.textContent = this.$.panelTimeLabel.textContent;
 
     // Weather type display (emoji — consistent with share/hourly/bookmark surfaces)
     this.$.panelIcon.textContent = weather.icon;
@@ -3544,23 +3532,6 @@ class AurafiskyApp {
     this.$.panelTemp.className = `text-4xl font-extrabold ${WeatherService.getTempClass(weather.temperature)}`;
     this.$.panelDescription.textContent = weather.description;
     this.$.panelFeelsLike.textContent = `Feels like ${WeatherService.formatTemp(weather.feelsLike)}`;
-
-    // Sync compact mode stats chips
-    const highTemp = this.weatherData?.daily?.temperature_2m_max?.[0];
-    const lowTemp = this.weatherData?.daily?.temperature_2m_min?.[0];
-    const compactHighLow = document.getElementById("compactHighLow");
-    if (compactHighLow) {
-      if (highTemp != null && lowTemp != null) {
-        compactHighLow.textContent = `H: ${WeatherService.formatTemp(highTemp)} · L: ${WeatherService.formatTemp(lowTemp)}`;
-        compactHighLow.style.display = "";
-      } else {
-        compactHighLow.style.display = "none";
-      }
-    }
-    const compactQuickStats = document.getElementById("compactQuickStats");
-    if (compactQuickStats) {
-      compactQuickStats.textContent = `💧 ${weather.humidity ?? "--"}% · 💨 ${WeatherService.formatWind(weather.windSpeed)}`;
-    }
 
     // Grid panels (unit-aware)
     this.$.panelHumidity.textContent = `${weather.humidity ?? "--"}%`;
@@ -7253,7 +7224,7 @@ class AurafiskyApp {
       this.$.mobileNavWeatherBtn?.classList.remove("active");
     }
     this.syncMobileBottomNavState();
-    // NOTE: 'compact' class on <html> is a persistent user preference — do not remove it here.
+    document.documentElement.classList.remove("compact");
     if (this.$.panelMinimizeBtn) {
       this.$.panelMinimizeBtn.classList.remove("chevron-flipped");
     }
@@ -7944,11 +7915,46 @@ class AurafiskyApp {
   }
 
   async onUserSignIn() {
-    if (this.$.profileIconGeneric)
-      this.$.profileIconGeneric.classList.add("hidden");
-    if (this.$.profileAvatarImg) {
-      this.$.profileAvatarImg.src = this.user.photoURL || "";
-      this.$.profileAvatarImg.classList.remove("hidden");
+    const name = this.user.displayName || "";
+    const email = this.user.email || "";
+    const initials = this._computeInitials(name, email);
+    const photo = this.user.photoURL;
+
+    // Top search bar profile button
+    if (this.$.profileBtn) {
+      this.$.profileBtn.title = name || email || "User Profile";
+    }
+
+    if (this.$.profileAvatarFallback) {
+      this.$.profileAvatarFallback.textContent = initials;
+    }
+
+    const showInitialsBadge = () => {
+      this.$.profileIconGeneric?.classList.add("hidden");
+      this.$.profileAvatarImg?.classList.add("hidden");
+      if (this.$.profileAvatarFallback) {
+        this.$.profileAvatarFallback.classList.remove("hidden");
+      }
+      if (this.$.profileBtn) {
+        this.$.profileBtn.className = "w-8 h-8 sm:w-9 sm:h-9 rounded-full overflow-hidden flex items-center justify-center bg-gradient-to-tr from-teal-600 to-emerald-500 text-white font-bold text-xs ring-2 ring-primary/40 flex-shrink-0 cursor-pointer active:scale-95 transition-all shadow-xs";
+      }
+    };
+
+    if (photo && this.$.profileAvatarImg) {
+      this.$.profileAvatarImg.onload = () => {
+        this.$.profileIconGeneric?.classList.add("hidden");
+        this.$.profileAvatarFallback?.classList.add("hidden");
+        this.$.profileAvatarImg.classList.remove("hidden");
+        if (this.$.profileBtn) {
+          this.$.profileBtn.className = "w-8 h-8 sm:w-9 sm:h-9 rounded-full overflow-hidden flex items-center justify-center ring-2 ring-primary/40 flex-shrink-0 cursor-pointer active:scale-95 transition-all shadow-xs";
+        }
+      };
+      this.$.profileAvatarImg.onerror = () => {
+        showInitialsBadge();
+      };
+      this.$.profileAvatarImg.src = photo;
+    } else {
+      showInitialsBadge();
     }
 
     if (this.$.accountLoggedOut)
@@ -7960,29 +7966,51 @@ class AurafiskyApp {
 
     const initialsEl = document.getElementById("accountAvatarInitials");
     if (initialsEl) {
-      const name = this.user.displayName || "User";
-      initialsEl.textContent = name.charAt(0).toUpperCase();
+      initialsEl.textContent = initials;
     }
 
     if (this.$.accountAvatarImg) {
-      if (this.user.photoURL) {
-        this.$.accountAvatarImg.src = this.user.photoURL;
-        this.$.accountAvatarImg.onerror = () => {
-          this.$.accountAvatarImg.classList.add("hidden");
-        };
+      if (photo) {
         this.$.accountAvatarImg.onload = () => {
           this.$.accountAvatarImg.classList.remove("hidden");
         };
+        this.$.accountAvatarImg.onerror = () => {
+          this.$.accountAvatarImg.classList.add("hidden");
+        };
+        this.$.accountAvatarImg.src = photo;
       } else {
         this.$.accountAvatarImg.classList.add("hidden");
       }
     }
     if (this.$.accountName)
-      this.$.accountName.textContent = this.user.displayName || "Google User";
+      this.$.accountName.textContent = name || "Google User";
     if (this.$.accountEmail)
-      this.$.accountEmail.textContent = this.user.email || "";
+      this.$.accountEmail.textContent = email;
 
     await this.loadUserDataFromCloud();
+  }
+
+  _computeInitials(name, email) {
+    if (name && typeof name === "string" && name.trim()) {
+      const parts = name.trim().split(/\s+/).filter(Boolean);
+      if (parts.length >= 2) {
+        return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+      }
+      if (parts.length === 1) {
+        const single = parts[0].replace(/[^a-zA-Z]/g, "");
+        return single.length >= 2 ? single.slice(0, 2).toUpperCase() : single.toUpperCase() || "U";
+      }
+    }
+    if (email && typeof email === "string" && email.trim()) {
+      const userPart = email.split("@")[0].replace(/[^a-zA-Z]/g, "");
+      if (userPart.length >= 2) {
+        return userPart.slice(0, 2).toUpperCase();
+      }
+      if (userPart.length === 1) {
+        return userPart.toUpperCase();
+      }
+    }
+    return "U";
   }
 
   onUserSignOut() {
@@ -7991,6 +8019,14 @@ class AurafiskyApp {
     if (this.$.profileAvatarImg) {
       this.$.profileAvatarImg.src = "";
       this.$.profileAvatarImg.classList.add("hidden");
+    }
+    if (this.$.profileAvatarFallback) {
+      this.$.profileAvatarFallback.textContent = "";
+      this.$.profileAvatarFallback.classList.add("hidden");
+    }
+    if (this.$.profileBtn) {
+      this.$.profileBtn.title = "User Profile";
+      this.$.profileBtn.className = "w-8 h-8 sm:w-9 sm:h-9 rounded-full overflow-hidden flex items-center justify-center bg-slate-100/90 hover:bg-slate-200/80 dark:bg-slate-800/80 dark:hover:bg-slate-700/80 text-slate-600 dark:text-slate-300 border border-slate-200/80 dark:border-slate-700/80 flex-shrink-0 cursor-pointer active:scale-95 transition-all shadow-xs ring-1 ring-slate-900/5 dark:ring-white/10";
     }
 
     if (this.$.accountLoggedOut)
@@ -8053,10 +8089,7 @@ class AurafiskyApp {
           }
 
           if (prefs.compact != null) {
-            const wantCompact = prefs.compact;
-            if (wantCompact !== this.minimalMode) {
-              this.toggleMinimalMode();
-            }
+            document.documentElement.classList.remove("compact");
           }
 
           if (prefs.syncHistory != null) {
@@ -8149,14 +8182,11 @@ class AurafiskyApp {
   async saveUserDataToCloud() {
     const units = WeatherService.getUnits();
     const theme = this.isDark ? "dark" : "light";
-    const compact = this.minimalMode || false;
     const searchHist = this.syncHistory ? [...this.searchHistory] : [];
-
     const dataToSave = {
       preferences: {
         units,
         theme,
-        compact,
         syncHistory: this.syncHistory,
         soundscapes: this.audioActive || false,
         volume: this.volumeLevel || 0.5,
@@ -8261,9 +8291,6 @@ class AurafiskyApp {
     }
     if (this.$.settingsThemeToggle) {
       this.$.settingsThemeToggle.checked = this.isDark;
-    }
-    if (this.$.settingsCompactToggle) {
-      this.$.settingsCompactToggle.checked = this.minimalMode || false;
     }
     if (this.$.settingsSyncHistoryToggle) {
       this.$.settingsSyncHistoryToggle.checked = this.syncHistory;

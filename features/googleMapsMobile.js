@@ -316,8 +316,12 @@ export class AuraMobileController {
     closeBtn?.addEventListener('click', (e) => {
       e.stopPropagation();
       this._haptic('selection');
-      this.dismissSheet();
-      this.app?.hideWeatherPanel?.();
+      if (isMobileLayout()) {
+        this.dismissSheet();
+      } else {
+        this.sheetState = 'dismissed';
+        this.app?.hideWeatherPanel?.();
+      }
     });
 
     // Chevron minimize button: toggle peek <-> half on mobile, toggle minimize on desktop
@@ -494,12 +498,17 @@ export class AuraMobileController {
     const panel = document.getElementById('weatherPanel');
     if (!panel) return;
 
+    const restorePill = document.getElementById('restoreSheetPill');
+    if (restorePill) restorePill.classList.add('hidden');
+
     if (!isMobileLayout()) {
       // On desktop, keep normal floating card with full content visible
       panel.style.height = '';
       panel.style.maxHeight = '';
       panel.style.transform = '';
       panel.style.transition = '';
+      panel.style.opacity = '';
+      panel.style.pointerEvents = '';
       panel.classList.remove('minimized', 'sheet-peek', 'sheet-half', 'sheet-full', 'aura-sheet', 'google-maps-sheet');
       panel.classList.add('open');
       panel.removeAttribute('inert');
@@ -507,6 +516,8 @@ export class AuraMobileController {
     }
 
     this.sheetState = state;
+    panel.removeAttribute('inert');
+    panel.classList.add('open', 'aura-sheet', 'google-maps-sheet');
     panel.classList.remove('sheet-peek', 'sheet-half', 'sheet-full');
     panel.classList.add(`sheet-${state}`);
 
@@ -542,6 +553,14 @@ export class AuraMobileController {
     const panel = document.getElementById('weatherPanel');
     if (!panel) return;
 
+    if (!isMobileLayout()) {
+      this.sheetState = 'dismissed';
+      const pill = document.getElementById('restoreSheetPill');
+      if (pill) pill.classList.add('hidden');
+      this.app?.hideWeatherPanel?.();
+      return;
+    }
+
     this.sheetState = 'dismissed';
     panel.classList.remove('open', 'sheet-peek', 'sheet-half', 'sheet-full');
     panel.setAttribute('inert', '');
@@ -551,17 +570,18 @@ export class AuraMobileController {
     panel.style.pointerEvents = 'none';
 
     let pill = document.getElementById('restoreSheetPill');
+    const locName = (this.currentLocationName || this.app?.selectedName || 'Current Location').split(',')[0].trim();
     if (!pill) {
       pill = document.createElement('button');
       pill.id = 'restoreSheetPill';
       pill.className = 'fixed bottom-18 left-1/2 -translate-x-1/2 z-[1020] bg-white dark:bg-[#202124] text-slate-800 dark:text-slate-100 px-4 py-2 rounded-full shadow-2xl border border-slate-200/80 dark:border-slate-700/80 text-xs font-semibold flex items-center gap-2 active:scale-95 transition-all cursor-pointer animate-in fade-in duration-200';
-      const locName = (this.currentLocationName || this.app.selectedName || 'Current Location').split(',')[0].trim();
       pill.innerHTML = `<span>📍</span><span>${locName} Weather</span><span class="text-teal-500 font-bold">▲ Show</span>`;
       pill.addEventListener('click', () => {
         this.restoreSheet('half');
       });
       document.body.appendChild(pill);
     } else {
+      pill.innerHTML = `<span>📍</span><span>${locName} Weather</span><span class="text-teal-500 font-bold">▲ Show</span>`;
       pill.classList.remove('hidden');
     }
     this.app?.hideWeatherPanel?.();

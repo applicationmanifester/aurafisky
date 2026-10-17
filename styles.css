@@ -2076,20 +2076,54 @@ button, a, input, select, textarea, [role="button"] {
     padding: 0.55rem;
   }
 
-  /* Zoom controls: smaller buttons, centered on the right edge on mobile map view */
+  /* Zoom controls: compact, sleek buttons centered on the right edge on mobile map view */
   #zoomControls {
-    right: 0.75rem;
-    gap: 0.35rem;
+    right: 0.5rem !important;
+    gap: 0.25rem !important;
     top: 50% !important;
     bottom: auto !important;
     transform: translateY(-50%) !important;
   }
 
   #zoomControls > button,
-  #radarControls > button {
-    width: 2.75rem;
-    height: 2.75rem;
-    border-radius: 0.9rem;
+  #radarControls > button,
+  #mapLayersBtn,
+  #terminatorToggleBtn,
+  #extremesBtn {
+    width: 2.25rem !important;
+    height: 2.25rem !important;
+    min-width: 2.25rem !important;
+    min-height: 2.25rem !important;
+    border-radius: 0.75rem !important;
+    padding: 0 !important;
+  }
+
+  #zoomControls svg {
+    width: 1.15rem !important;
+    height: 1.15rem !important;
+  }
+
+  /* Horizontal quick action chips on mobile */
+  #mobileQuickChips {
+    padding-left: 0.25rem !important;
+    padding-right: 1.5rem !important;
+    -webkit-overflow-scrolling: touch;
+    scroll-behavior: smooth;
+  }
+  .mobile-quick-chip {
+    white-space: nowrap !important;
+    flex-shrink: 0 !important;
+  }
+
+  /* Mobile restore sheet pill: anchor above bottom nav with safe area */
+  #restoreSheetPill {
+    bottom: calc(4.25rem + env(safe-area-inset-bottom, 0px)) !important;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.25) !important;
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+  }
+  #restoreSheetPill.hidden {
+    display: none !important;
   }
 
   /* Radar expanded panel sits above mobile bottom nav */
@@ -2656,4 +2690,11 @@ button, a, input, select, textarea, [role="button"] {
 :is(.dark, [data-theme="dark"]) .google-place-card {
   background-color: #202124 !important;
   border-color: rgba(255, 255, 255, 0.1) !important;
+}
+
+/* Ensure restoreSheetPill never displays on desktop viewports */
+@media (min-width: 640px) {
+  #restoreSheetPill {
+    display: none !important;
+  }
 }

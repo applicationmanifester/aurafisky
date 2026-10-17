@@ -249,6 +249,22 @@ describe('Mobile Tabs & Navigation Layout', () => {
     expect(css).toContain('#routePanel {');
     expect(css).toContain('#routeStudioHud {');
   });
+
+  it('resets inline opacity and pointerEvents in showWeatherPanel so closed panel can always reopen', () => {
+    const appCode = fs.readFileSync('app.js', 'utf-8');
+    expect(appCode).toContain('this.$.weatherPanel.style.opacity = ""');
+    expect(appCode).toContain('this.$.weatherPanel.style.pointerEvents = ""');
+    expect(appCode).toContain('restorePill.classList.add("hidden")');
+  });
+
+  it('compacts mobile zoom controls and ensures quick chips touch scrolling in styles.css', () => {
+    const css = fs.readFileSync('styles.css', 'utf-8');
+    expect(css).toContain('#zoomControls {');
+    expect(css).toContain('width: 2.25rem !important;');
+    expect(css).toContain('height: 2.25rem !important;');
+    expect(css).toContain('#mobileQuickChips {');
+    expect(css).toContain('white-space: nowrap !important;');
+  });
 });
 
 

@@ -53,6 +53,7 @@ import {
 import { reverseUrls, labelFromReverse } from "./modules/reverseGeocode.js";
 import { applyViewportHeight, watchViewport } from "./modules/viewport.js";
 import { isMobileLayout } from "./features/breakpoints.js";
+import { t, setLocale, detectLocale, supportedLocales } from "./modules/i18n.js";
 import localforage from "localforage";
 import DOMPurify from "dompurify";
 
@@ -72,6 +73,7 @@ import './modules/dom-utils.js';
 import './modules/toast.js';
 import './src/icons.js';
 import { initFeatures } from './features/registry.js';
+import { initWebVitals } from './features/analytics.js';
 
 // Wallpaper backgrounds are generated procedurally on a canvas by
 // features/wallpaper.js rather than pulled from a stock-photo CDN. That
@@ -843,6 +845,27 @@ class AurafiskyApp {
     // before its handler method exists (see features/registry.js).
     initFeatures(this);
 
+    // Web Vitals tracking (LCP, FID/INP, CLS) — privacy-first, no network
+    // unless the user opts in to analytics sharing.
+    initWebVitals(this);
+
+    // Global error boundary — catch unhandled errors and show a friendly banner
+    // instead of a blank white screen.
+    window.addEventListener("error", (e) => {
+      console.error("Unhandled error:", e.error || e.message);
+      this.showError(
+        e.error?.message || "An unexpected error occurred.",
+        "Something went wrong"
+      );
+    });
+    window.addEventListener("unhandledrejection", (e) => {
+      console.error("Unhandled promise rejection:", e.reason);
+      this.showError(
+        e.reason?.message || "An unexpected error occurred.",
+        "Something went wrong"
+      );
+    });
+
     // Load bookmarks (in-memory until cloud sync)
     this.loadBookmarks();
     this.startBookmarkAlertPolling();
@@ -889,6 +912,17 @@ class AurafiskyApp {
         this.updateWallpaperButtonUI();
       }, 2000);
     }
+
+    // ── Error banner wiring ────────────────────────────────────────────
+    this.$.errorRetryBtn?.addEventListener("click", () => {
+      this.hideError();
+      if (this.selectedLat != null && this.selectedLng != null) {
+        this.selectLocation(this.selectedLat, this.selectedLng, this.selectedName);
+      } else {
+        window.location.reload();
+      }
+    });
+    this.$.errorDismissBtn?.addEventListener("click", () => this.hideError());
   }
 
   /**
@@ -2837,10 +2871,13 @@ class AurafiskyApp {
   updateOnlineStatus(isOnline) {
     this.isOffline = !isOnline;
     const banner = this.$.offlineBanner;
+    const offlinePanel = this.$.panelOfflineStatus;
+    const offlineText = this.$.panelOfflineText;
     if (banner) {
       if (isOnline) {
         banner.classList.add("hidden");
         banner.className = "hidden fixed top-20 left-0 right-0 z-[1004] bg-amber-600 text-white text-center py-2 px-4 text-sm font-medium shadow-lg";
+        if (offlinePanel) offlinePanel.classList.add("hidden");
         if (this.selectedLat != null && !this._isFetching) {
           this.showToast("⚡ Network reconnected — refreshing weather...", "info");
           this.selectLocation(this.selectedLat, this.selectedLng, this.selectedName);
@@ -2855,8 +2892,32 @@ class AurafiskyApp {
           banner.className = "fixed top-20 left-0 right-0 z-[1004] bg-amber-600 text-white text-center py-2 px-4 text-sm font-medium shadow-lg";
         }
         banner.classList.remove("hidden");
+        if (offlinePanel && offlineText) {
+          offlinePanel.classList.remove("hidden");
+          offlineText.textContent = "Offline";
+          offlinePanel.className = "flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-rose-500/10 text-rose-600 dark:bg-rose-500/20 dark:text-rose-400 border border-rose-500/20 dark:border-rose-500/30";
+        }
       }
     }
+  }
+
+  // ── Error handling ────────────────────────────────────────────────
+  showError(message, title = "Something went wrong") {
+    const banner = this.$.errorBanner;
+    const msgEl = this.$.errorMessage;
+    if (!banner || !msgEl) return;
+    msgEl.textContent = message;
+    const h3 = banner.querySelector("h3");
+    if (h3) h3.textContent = title;
+    banner.classList.remove("hidden");
+    // Announce to screen readers
+    const live = this.$.a11yLiveRegion;
+    if (live) live.textContent = `${title}: ${message}`;
+  }
+
+  hideError() {
+    const banner = this.$.errorBanner;
+    if (banner) banner.classList.add("hidden");
   }
 
   // ================================================================
@@ -2966,6 +3027,10 @@ class AurafiskyApp {
     // 3. Priority 3: Default Home location
     if (this.defaultLocation && this.defaultLocation.lat != null) {
       this.selectLocation(this.defaultLocation.lat, this.defaultLocation.lng, this.defaultLocation.name);
+      // Re-register periodic sync if notifications were previously enabled
+      if (this.defaultLocationNotify) {
+        this.setupHourlyNotifications();
+      }
       return;
     }
 
@@ -3620,6 +3685,20 @@ class AurafiskyApp {
       }
       this.$.offlineTimeMachineBadge.classList.add("hidden");
     }
+    // Update offline indicator panel
+    const offlinePanel = this.$.panelOfflineStatus;
+    const offlineText = this.$.panelOfflineText;
+    if (offlinePanel && offlineText) {
+      if (isCachedDisplay || this.isOffline) {
+        offlinePanel.classList.remove("hidden");
+        offlineText.textContent = this.isOffline ? "Offline" : "Cached";
+        offlinePanel.className = this.isOffline
+          ? "flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-rose-500/10 text-rose-600 dark:bg-rose-500/20 dark:text-rose-400 border border-rose-500/20 dark:border-rose-500/30"
+          : "flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-amber-500/10 text-amber-600 dark:bg-amber-500/20 dark:text-amber-400 border border-amber-500/20 dark:border-amber-500/30";
+      } else {
+        offlinePanel.classList.add("hidden");
+      }
+    }
   }
 
   /**
@@ -3892,11 +3971,21 @@ class AurafiskyApp {
     const importance = WeatherService.getParameterImportance(weather, aqiVal);
     this.updateParamImportance(importance);
 
-    // 9. Freshness
-    if (this.freshnessTimestamp && this.$.freshnessLabel) {
+    // 9. Freshness + sync time
+    if (this.freshnessTimestamp) {
       const fresh = WeatherService.getFreshnessLabel(this.freshnessTimestamp);
-      this.$.freshnessLabel.textContent = `📡 ${fresh.label}`;
-      this.$.freshnessLabel.style.opacity = fresh.opacity;
+      if (this.$.freshnessLabel) {
+        this.$.freshnessLabel.textContent = `📡 ${fresh.label}`;
+        this.$.freshnessLabel.style.opacity = fresh.opacity;
+      }
+      if (this.$.panelSyncText) {
+        const d = new Date(this.freshnessTimestamp);
+        this.$.panelSyncText.textContent = d.toLocaleTimeString([], {
+          hour: "2-digit",
+          minute: "2-digit",
+        });
+        this.$.panelSyncText.className = `text-[10px] font-medium text-slate-600 dark:text-slate-300`;
+      }
     }
 
     // 15. Phase-space regime classifier
@@ -7411,12 +7500,22 @@ class AurafiskyApp {
     this.$.weatherPanel.classList.add("open");
     this.$.weatherPanel.classList.remove("minimized");
     this.$.weatherPanel.removeAttribute("inert");
+    this.$.weatherPanel.style.opacity = "";
+    this.$.weatherPanel.style.pointerEvents = "";
+    this.$.weatherPanel.style.transform = "";
+    this.$.weatherPanel.style.transition = "";
+
+    const restorePill = document.getElementById("restoreSheetPill");
+    if (restorePill) {
+      restorePill.classList.add("hidden");
+    }
+
     if (!isMobileLayout()) {
       this.$.weatherPanel.style.height = '';
       this.$.weatherPanel.style.maxHeight = '';
-      this.$.weatherPanel.style.transform = '';
       this.$.weatherPanel.classList.remove("sheet-peek", "sheet-half", "sheet-full", "google-maps-sheet");
     } else if (this.googleMapsMobile) {
+      this.googleMapsMobile.sheetState = 'half';
       this.googleMapsMobile.snapSheet('half');
     }
     document.body.classList.add("weather-panel-expanded");
@@ -7442,6 +7541,14 @@ class AurafiskyApp {
   hideWeatherPanel() {
     this.$.weatherPanel.classList.remove("open", "minimized");
     this.$.weatherPanel.setAttribute("inert", "");
+    this.$.weatherPanel.style.opacity = "";
+    this.$.weatherPanel.style.pointerEvents = "";
+    this.$.weatherPanel.style.transform = "";
+    this.$.weatherPanel.style.transition = "";
+    if (!isMobileLayout()) {
+      this.$.weatherPanel.style.height = "";
+      this.$.weatherPanel.style.maxHeight = "";
+    }
     document.body.classList.remove("weather-panel-expanded");
     if (this.$.mobileNavMapBtn) {
       this.$.mobileNavMapBtn.classList.add("active");
@@ -7776,12 +7883,26 @@ class AurafiskyApp {
 
     mapBtn?.addEventListener("click", () => {
       setActiveBtn(mapBtn);
-      if (this.$.weatherPanel?.classList.contains("open") && !this.$.weatherPanel?.classList.contains("minimized")) {
-        this.toggleMinimizeWeatherPanel();
+      // Close Route Studio if open to return to Explore map view
+      if (this._routeModeActive || (typeof isRoutePanelOpen === "function" && isRoutePanelOpen())) {
+        if (typeof this.closeRouteStudio === "function") {
+          this.closeRouteStudio();
+        } else if (typeof window.closeRouteStudio === "function") {
+          window.closeRouteStudio();
+        }
       }
       this.$.bookmarksDropdown?.classList.add("hidden");
       this.toggleMapLayersFlyout(false);
       this.hideComparePanel();
+
+      // On mobile, if weather panel was dismissed or closed, restore it
+      if (isMobileLayout() && this.googleMapsMobile) {
+        if (!this.$.weatherPanel?.classList.contains("open") || this.googleMapsMobile.sheetState === 'dismissed') {
+          if (this.selectedLat != null || this.defaultLocation?.lat != null) {
+            this.showWeatherPanel();
+          }
+        }
+      }
       this._haptic("light");
     });
 
@@ -7811,6 +7932,9 @@ class AurafiskyApp {
       setActiveBtn(routeBtn);
       this.$.bookmarksDropdown?.classList.add("hidden");
       this.toggleMapLayersFlyout(false);
+      // Hide restore sheet pill while route studio is active so they don't collide
+      const pill = document.getElementById("restoreSheetPill");
+      if (pill) pill.classList.add("hidden");
       if (typeof this.toggleRoute === "function") {
         this.toggleRoute();
       } else {

@@ -497,6 +497,25 @@ input[type='range'].timeline-slider:focus-visible {
     min-height: var(--aura-tap);
   }
 }
+/* Mobile phones: sleek, compact map tool buttons */
+@media (max-width: 639px), (max-height: 500px) and (pointer: coarse) {
+  #zoomControls {
+    right: 0.5rem !important;
+    gap: 0.25rem !important;
+  }
+  #zoomControls > button,
+  #radarControls > button,
+  #mapLayersBtn,
+  #terminatorToggleBtn,
+  #extremesBtn {
+    min-width: 36px !important;
+    min-height: 36px !important;
+    width: 36px !important;
+    height: 36px !important;
+    border-radius: 10px !important;
+  }
+}
+
 /* Very small phones: density without losing info */
 @media (max-width: 359px) {
   #panelTemp {

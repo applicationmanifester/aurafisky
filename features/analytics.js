@@ -256,3 +256,70 @@ function hashCity(name) {
 
 // Exported for tests.
 export { ALLOWED_EVENTS, ALLOWED_PROPS, hashCity };
+
+// ── Web Vitals tracking ─────────────────────────────────────────────────
+//
+// Measures Core Web Vitals (LCP, FID/INP, CLS) and reports them as analytics
+// events. Uses the native PerformanceObserver API — no external library needed.
+//
+// Note: These are page-load metrics, so they're tracked once per page load.
+// They are NOT sent anywhere unless the user opts in to analytics sharing.
+
+export function initWebVitals(analytics) {
+  if (typeof window === "undefined" || typeof PerformanceObserver === "undefined")
+    return;
+
+  const report = (name, value) => {
+    analytics.track("web_vital", { name, value: Math.round(value) }, {
+      city: undefined, // no city context for page-load metrics
+    });
+  };
+
+  // Largest Contentful Paint
+  try {
+    new PerformanceObserver((entryList) => {
+      for (const entry of entryList.getEntries()) {
+        report("LCP", entry.startTime);
+      }
+    }).observe({ entryTypes: ["largest-contentful-paint"] });
+  } catch (e) {
+    /* LCP not supported in this browser */
+  }
+
+  // First Input Delay
+  try {
+    new PerformanceObserver((entryList) => {
+      for (const entry of entryList.getEntries()) {
+        report("FID", entry.processingStart - entry.startTime);
+      }
+    }).observe({ entryTypes: ["first-input"] });
+  } catch (e) {
+    /* FID not supported — try INP instead */
+    try {
+      new PerformanceObserver((entryList) => {
+        for (const entry of entryList.getEntries()) {
+          for (const e of entry.entries || [entry]) {
+            report("INP", e.duration);
+          }
+        }
+      }).observe({ entryTypes: ["event"] });
+    } catch (e2) {
+      /* neither supported */
+    }
+  }
+
+  // Cumulative Layout Shift
+  try {
+    let clsValue = 0;
+    new PerformanceObserver((entryList) => {
+      for (const entry of entryList.getEntries()) {
+        if (!entry.hadRecentInput) {
+          clsValue += entry.value;
+        }
+      }
+      report("CLS", clsValue);
+    }).observe({ entryTypes: ["layout-shift"] });
+  } catch (e) {
+    /* CLS not supported in this browser */
+  }
+}

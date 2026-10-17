@@ -689,6 +689,7 @@ export function closeRouteStudio() {
   hideHUD();
   hidePanel();
   syncRouteChipState(false);
+  appRef?.syncMobileBottomNavState?.();
 }
 
 /**
@@ -710,6 +711,10 @@ export function openRouteStudio() {
 
   // Synchronize with mobile quick chips and Google Maps Mobile controller
   syncRouteChipState(true);
+
+  // Hide mobile restoreSheetPill while route studio is open
+  const restorePill = document.getElementById("restoreSheetPill");
+  if (restorePill) restorePill.classList.add("hidden");
 
   // Open the merged Route Studio panel directly (hide the duplicate floating HUD)
   hideHUD();

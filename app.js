@@ -8168,22 +8168,46 @@ class AurafiskyApp {
     const initials = this._computeInitials(name, email);
     const photo = this.user.photoURL;
 
-    // Top search bar profile button - only keep clean person logo
+    // Top search bar profile button
     if (this.$.profileBtn) {
       this.$.profileBtn.title = name || email || "User Profile";
-      this.$.profileBtn.className = "w-8 h-8 sm:w-9 sm:h-9 rounded-full overflow-hidden flex items-center justify-center bg-slate-100/90 hover:bg-slate-200/80 dark:bg-slate-800/80 dark:hover:bg-slate-700/80 text-slate-600 dark:text-slate-300 border border-slate-200/80 dark:border-slate-700/80 flex-shrink-0 cursor-pointer active:scale-95 transition-all shadow-xs ring-1 ring-slate-900/5 dark:ring-white/10";
     }
 
-    if (this.$.profileIconGeneric) {
-      this.$.profileIconGeneric.classList.remove("hidden");
-    }
-    if (this.$.profileAvatarImg) {
-      this.$.profileAvatarImg.src = "";
-      this.$.profileAvatarImg.classList.add("hidden");
-    }
-    if (this.$.profileAvatarFallback) {
-      this.$.profileAvatarFallback.textContent = "";
-      this.$.profileAvatarFallback.classList.add("hidden");
+    const showPersonIcon = () => {
+      this.$.profileIconGeneric?.classList.remove("hidden");
+      this.$.profileAvatarImg?.classList.add("hidden");
+      if (this.$.profileAvatarImg) this.$.profileAvatarImg.src = "";
+      this.$.profileAvatarFallback?.classList.add("hidden");
+      if (this.$.profileBtn) {
+        this.$.profileBtn.className = "w-8 h-8 sm:w-9 sm:h-9 rounded-full overflow-hidden flex items-center justify-center bg-slate-100/90 hover:bg-slate-200/80 dark:bg-slate-800/80 dark:hover:bg-slate-700/80 text-slate-600 dark:text-slate-300 border border-slate-200/80 dark:border-slate-700/80 flex-shrink-0 cursor-pointer active:scale-95 transition-all shadow-xs ring-1 ring-slate-900/5 dark:ring-white/10";
+      }
+    };
+
+    if (photo && this.$.profileAvatarImg) {
+      // Preload user's Gmail profile picture
+      const preloader = new Image();
+      preloader.referrerPolicy = "no-referrer";
+      preloader.onload = () => {
+        if (preloader.naturalWidth > 0 && preloader.naturalHeight > 0) {
+          if (this.$.profileAvatarImg) {
+            this.$.profileAvatarImg.src = photo;
+            this.$.profileAvatarImg.classList.remove("hidden");
+          }
+          this.$.profileIconGeneric?.classList.add("hidden");
+          this.$.profileAvatarFallback?.classList.add("hidden");
+          if (this.$.profileBtn) {
+            this.$.profileBtn.className = "w-8 h-8 sm:w-9 sm:h-9 rounded-full overflow-hidden flex items-center justify-center border border-slate-200/80 dark:border-slate-700/80 ring-2 ring-teal-500/40 flex-shrink-0 cursor-pointer active:scale-95 transition-all shadow-xs";
+          }
+        } else {
+          showPersonIcon();
+        }
+      };
+      preloader.onerror = () => {
+        showPersonIcon();
+      };
+      preloader.src = photo;
+    } else {
+      showPersonIcon();
     }
 
     if (this.$.accountLoggedOut)

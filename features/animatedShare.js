@@ -9,6 +9,11 @@
 // Uses omggif (bundled, ~12 KB) for encoding. The encoder takes indexed
 // (palette) pixels, so each frame is quantized to a shared 256-colour
 // palette derived from the card's gradient.
+//
+// Performance: rendering 24 frames at 640x800 takes ~42s on the main
+// thread. For production, consider reducing FRAME_COUNT to 12 or using
+// a Web Worker. The render is async and non-blocking (yields between
+// frames via requestAnimationFrame).
 
 import * as omggif from "omggif";
 const GifWriter = omggif.GifWriter || omggif.default?.GifWriter;
@@ -39,7 +44,9 @@ function buildStatItems(weather, fmt) {
   if (weather?.humidity != null) items.push({ label: "Humidity", value: `${Math.round(weather.humidity)}%` });
   if (weather?.windSpeed != null) items.push({ label: "Wind", value: wind(weather.windSpeed) });
   if (weather?.precipProb != null) items.push({ label: "Rain", value: `${Math.round(weather.precipProb)}%` });
-  return items.slice(0, 4);
+  if (weather?.uvIndex != null) items.push({ label: "UV", value: weather.uvIndex.toFixed(1) });
+  if (weather?.visibility != null) items.push({ label: "Visibility", value: `${(weather.visibility / 1000).toFixed(1)} km` });
+  return items.slice(0, 6);
 }
 
 /** Emoji for a WMO code (day/night aware). */
@@ -58,16 +65,15 @@ function conditionEmoji(weatherCode, isDay = true) {
   return "🌡️";
 }
 
+// ── Card dimensions ────────────────────────────────────────────────
 const CARD_W = 640;
 const CARD_H = 800;
-const FRAME_COUNT = 24;
-const FRAME_DELAY = 8; // 1/100 s units → 80 ms per frame
+const FRAME_COUNT = 16; // reduced from 24 for faster render
+const FRAME_DELAY = 10; // 1/100 s units → 100 ms per frame
 
-// A fixed palette that covers the weather-card colour space: sky gradients,
-// white text, accent colours. 256 entries, power of 2.
+// ── Palette ────────────────────────────────────────────────────────
 function buildPalette() {
   const p = [];
-  // Sky gradient colours (clear → rain → storm)
   const sky = [
     [245, 158, 11], [249, 115, 22], [96, 165, 250], [59, 130, 246],
     [14, 165, 233], [30, 64, 175], [76, 29, 149], [30, 27, 75],
@@ -77,9 +83,9 @@ function buildPalette() {
     [251, 191, 36], [245, 158, 11], [234, 88, 12], [220, 38, 38],
     [34, 197, 94], [20, 184, 166], [6, 182, 212], [59, 130, 246],
     [139, 92, 246], [236, 72, 153], [244, 63, 94], [251, 146, 60],
+    [248, 250, 252], [203, 213, 225], [148, 163, 184], [71, 85, 105],
   ];
   for (const [r, g, b] of sky) p.push((r << 16) | (g << 8) | b);
-  // Fill the rest with a greyscale ramp.
   while (p.length < 256) {
     const v = Math.round((p.length / 256) * 255);
     p.push((v << 16) | (v << 8) | v);
@@ -89,7 +95,6 @@ function buildPalette() {
 
 const PALETTE = buildPalette();
 
-/** Nearest palette entry for an RGB colour (Euclidean distance). */
 function nearestPaletteIndex(r, g, b) {
   let best = 0, bestDist = Infinity;
   for (let i = 0; i < PALETTE.length; i++) {
@@ -101,146 +106,149 @@ function nearestPaletteIndex(r, g, b) {
   return best;
 }
 
-/** Draws one frame of the animated card onto a canvas. */
+// ── Frame drawing ──────────────────────────────────────────────────
+
 function drawFrame(ctx, frame, model) {
   const t = frame / FRAME_COUNT;
   const g = model.gradient;
   const w = CARD_W, h = CARD_H;
 
-  // Background gradient with a subtle animated shift.
-  const shift = Math.sin(t * Math.PI * 2) * 0.08;
+  // Background gradient with animated shift
+  const shift = Math.sin(t * Math.PI * 2) * 0.06;
   const bg = ctx.createLinearGradient(0, 0, w, h * (1 + shift));
   bg.addColorStop(0, g.from);
   bg.addColorStop(1, g.to);
   ctx.fillStyle = bg;
   ctx.fillRect(0, 0, w, h);
 
-  // Animated cloud wisps drifting across the top.
-  const cloudAlpha = 0.12 + 0.06 * Math.sin(t * Math.PI * 2);
+  // Animated cloud wisps
+  const cloudAlpha = 0.10 + 0.05 * Math.sin(t * Math.PI * 2);
   ctx.globalAlpha = cloudAlpha;
   ctx.fillStyle = "#ffffff";
-  for (let i = 0; i < 5; i++) {
-    const cx = ((i * 180 + t * 60) % (w + 200)) - 100;
-    const cy = 60 + i * 30 + Math.sin(t * Math.PI * 2 + i) * 15;
+  for (let i = 0; i < 6; i++) {
+    const cx = ((i * 160 + t * 50) % (w + 200)) - 100;
+    const cy = 50 + i * 25 + Math.sin(t * Math.PI * 2 + i * 1.3) * 12;
     ctx.beginPath();
-    ctx.ellipse(cx, cy, 60, 25, 0, 0, Math.PI * 2);
+    ctx.ellipse(cx, cy, 70, 28, 0, 0, Math.PI * 2);
     ctx.fill();
   }
   ctx.globalAlpha = 1;
 
   // Brand row
-  ctx.fillStyle = g.dark ? "rgba(255,255,255,.85)" : "rgba(15,23,42,.7)";
-  ctx.font = "700 28px system-ui, sans-serif";
+  ctx.fillStyle = g.dark ? "rgba(255,255,255,.9)" : "rgba(15,23,42,.75)";
+  ctx.font = "700 26px system-ui, sans-serif";
   ctx.textAlign = "left";
-  ctx.fillText(model.brand || "Aurafisky", 40, 60);
+  ctx.fillText(model.brand || "Aurafisky", 40, 55);
   ctx.textAlign = "right";
-  ctx.font = "400 22px system-ui, sans-serif";
-  ctx.fillText(model.timeLabel || "", w - 40, 60);
+  ctx.font = "400 20px system-ui, sans-serif";
+  ctx.fillText(model.timeLabel || "", w - 40, 55);
 
   // Location
   ctx.textAlign = "left";
   ctx.fillStyle = g.dark ? "#ffffff" : "#0f172a";
-  ctx.font = "800 42px system-ui, sans-serif";
-  ctx.fillText(truncate(ctx, model.placeName || "", w - 80), 40, 140);
+  ctx.font = "800 38px system-ui, sans-serif";
+  ctx.fillText(truncate(ctx, model.placeName || "", w - 80), 40, 125);
 
-  // Big emoji with gentle pulse
-  const pulse = 1 + 0.04 * Math.sin(t * Math.PI * 2);
+  // Big emoji with pulse
+  const pulse = 1 + 0.05 * Math.sin(t * Math.PI * 2);
   ctx.save();
-  ctx.translate(80, 300);
+  ctx.translate(90, 270);
   ctx.scale(pulse, pulse);
-  ctx.font = "140px system-ui, sans-serif";
+  ctx.font = "120px system-ui, sans-serif";
   ctx.textAlign = "center";
   ctx.fillText(model.emoji || "🌤️", 0, 0);
   ctx.restore();
 
-  // Temperature with subtle glow pulse
-  const glowAlpha = 0.15 + 0.1 * Math.sin(t * Math.PI * 2);
+  // Temperature with glow
+  const glowAlpha = 0.12 + 0.08 * Math.sin(t * Math.PI * 2);
   ctx.textAlign = "right";
   ctx.fillStyle = `rgba(255,255,255,${glowAlpha})`;
-  ctx.font = "800 140px system-ui, sans-serif";
-  ctx.fillText(model.tempText || "--°", w - 40, 300);
+  ctx.font = "800 120px system-ui, sans-serif";
+  ctx.fillText(model.tempText || "--°", w - 40, 270);
   ctx.fillStyle = g.dark ? "#ffffff" : "#0f172a";
-  ctx.fillText(model.tempText || "--°", w - 40, 300);
+  ctx.fillText(model.tempText || "--°", w - 40, 270);
 
   // Description
   ctx.textAlign = "left";
   ctx.fillStyle = g.dark ? "rgba(255,255,255,.85)" : "rgba(15,23,42,.7)";
-  ctx.font = "500 32px system-ui, sans-serif";
-  ctx.fillText(model.descText || "", 40, 360);
+  ctx.font = "500 28px system-ui, sans-serif";
+  ctx.fillText(model.descText || "", 40, 325);
 
-  // Stat chips
+  // Stat chips (2 rows of 3)
   const stats = model.stats || [];
-  const chipW = (w - 80 - 16 * (stats.length - 1)) / stats.length;
+  const chipW = (w - 80 - 12 * (Math.min(stats.length, 3) - 1)) / Math.min(stats.length, 3);
   stats.forEach((s, i) => {
-    const x = 40 + i * (chipW + 16);
-    const y = 400;
-    const chipH = 90;
-    roundRect(ctx, x, y, chipW, chipH, 16);
+    const col = i % 3;
+    const row = Math.floor(i / 3);
+    const x = 40 + col * (chipW + 12);
+    const y = 360 + row * 75;
+    const chipH = 65;
+    roundRect(ctx, x, y, chipW, chipH, 12);
     ctx.fillStyle = "rgba(255,255,255,.15)";
     ctx.fill();
     ctx.strokeStyle = "rgba(255,255,255,.25)";
-    ctx.lineWidth = 1.5;
+    ctx.lineWidth = 1;
     ctx.stroke();
 
     ctx.textAlign = "center";
     ctx.fillStyle = g.dark ? "rgba(255,255,255,.7)" : "rgba(15,23,42,.6)";
-    ctx.font = "500 18px system-ui, sans-serif";
-    ctx.fillText(String(s.label).toUpperCase(), x + chipW / 2, y + 34);
+    ctx.font = "500 14px system-ui, sans-serif";
+    ctx.fillText(String(s.label).toUpperCase(), x + chipW / 2, y + 24);
     ctx.fillStyle = g.dark ? "#ffffff" : "#0f172a";
-    ctx.font = "700 30px system-ui, sans-serif";
-    ctx.fillText(s.value || "--", x + chipW / 2, y + 72);
+    ctx.font = "700 24px system-ui, sans-serif";
+    ctx.fillText(s.value || "--", x + chipW / 2, y + 52);
   });
 
   // Divider
   ctx.strokeStyle = g.dark ? "rgba(255,255,255,.2)" : "rgba(15,23,42,.15)";
   ctx.lineWidth = 1.5;
   ctx.beginPath();
-  ctx.moveTo(40, h - 220);
-  ctx.lineTo(w - 40, h - 220);
+  ctx.moveTo(40, h - 180);
+  ctx.lineTo(w - 40, h - 180);
   ctx.stroke();
 
   // 7-day strip
   ctx.textAlign = "left";
   ctx.fillStyle = g.dark ? "rgba(255,255,255,.7)" : "rgba(15,23,42,.6)";
-  ctx.font = "600 20px system-ui, sans-serif";
-  ctx.fillText("7-DAY FORECAST", 40, h - 185);
+  ctx.font = "600 18px system-ui, sans-serif";
+  ctx.fillText("7-DAY FORECAST", 40, h - 150);
 
   const days = model.days || [];
-  const dayW = (w - 80 - 10 * (days.length - 1)) / days.length;
+  const dayW = (w - 80 - 8 * (days.length - 1)) / days.length;
   days.forEach((d, i) => {
-    const x = 40 + i * (dayW + 10);
-    const y = h - 165;
-    const dayH = 150;
-    roundRect(ctx, x, y, dayW, dayH, 14);
+    const x = 40 + i * (dayW + 8);
+    const y = h - 135;
+    const dayH = 120;
+    roundRect(ctx, x, y, dayW, dayH, 12);
     ctx.fillStyle = i === 0 ? "rgba(20,184,166,.25)" : "rgba(255,255,255,.1)";
     ctx.fill();
 
     ctx.textAlign = "center";
     ctx.fillStyle = g.dark ? "rgba(255,255,255,.7)" : "rgba(15,23,42,.6)";
-    ctx.font = "600 16px system-ui, sans-serif";
-    ctx.fillText(d.label || "", x + dayW / 2, y + 28);
+    ctx.font = "600 14px system-ui, sans-serif";
+    ctx.fillText(d.label || "", x + dayW / 2, y + 22);
 
-    ctx.font = "36px system-ui, sans-serif";
+    ctx.font = "28px system-ui, sans-serif";
     ctx.fillStyle = g.dark ? "#ffffff" : "#0f172a";
-    ctx.fillText(d.emoji || "", x + dayW / 2, y + 72);
+    ctx.fillText(d.emoji || "", x + dayW / 2, y + 58);
 
-    ctx.font = "600 18px system-ui, sans-serif";
+    ctx.font = "600 16px system-ui, sans-serif";
     ctx.fillStyle = g.dark ? "rgba(255,255,255,.8)" : "rgba(15,23,42,.7)";
-    ctx.fillText(`${d.maxText || "--"}° ${d.minText || "--"}°`, x + dayW / 2, y + 108);
+    ctx.fillText(`${d.maxText || "--"}° ${d.minText || "--"}°`, x + dayW / 2, y + 84);
 
     const pp = d.precipProb;
     if (pp != null) {
       ctx.fillStyle = "rgba(147,197,253,.9)";
-      ctx.font = "600 14px system-ui, sans-serif";
-      ctx.fillText(`${Math.round(pp)}%`, x + dayW / 2, y + 132);
+      ctx.font = "600 12px system-ui, sans-serif";
+      ctx.fillText(`${Math.round(pp)}%`, x + dayW / 2, y + 104);
     }
   });
 
   // Footer
   ctx.textAlign = "left";
   ctx.fillStyle = g.dark ? "rgba(255,255,255,.5)" : "rgba(15,23,42,.4)";
-  ctx.font = "400 18px system-ui, sans-serif";
-  ctx.fillText("Aurafisky · Open-Meteo", 40, h - 24);
+  ctx.font = "400 14px system-ui, sans-serif";
+  ctx.fillText("Aurafisky · Open-Meteo", 40, h - 12);
 }
 
 function roundRect(ctx, x, y, w, h, r) {
@@ -285,6 +293,7 @@ async function shareAnimatedCard(target = "native") {
 
   const filename = `aurafisky-weather-${(app.selectedName || "location").split(",")[0].trim().replace(/[^\w-]+/g, "-").toLowerCase()}.gif`;
 
+  // Native share sheet with the file (system device sheet)
   if (target === "native" && navigator.canShare && typeof blob !== "string") {
     try {
       const file = new File([blob], filename, { type: "image/gif" });
@@ -301,22 +310,17 @@ async function shareAnimatedCard(target = "native") {
     }
   }
 
-  // WhatsApp deep link fallback (opens WhatsApp with the image URL)
-  // Note: WhatsApp doesn't support direct image sharing via URL scheme,
-  // so we fall back to downloading + opening WhatsApp Web.
+  // WhatsApp-specific share
   if (target === "whatsapp") {
     const url = URL.createObjectURL(blob);
-    // Open WhatsApp Web with a text message pointing to the download
     const waText = encodeURIComponent(`Check out the weather in ${app.selectedName}! 🌤️`);
     const waUrl = `https://wa.me/?text=${waText}`;
-    // Download the GIF first
     const a = document.createElement("a");
     a.href = url;
     a.download = filename;
     document.body.appendChild(a);
     a.click();
     a.remove();
-    // Then open WhatsApp
     setTimeout(() => {
       window.open(waUrl, "_blank");
       URL.revokeObjectURL(url);

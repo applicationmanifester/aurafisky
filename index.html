@@ -137,7 +137,7 @@
           <!-- User Profile Avatar -->
           <button id="profileBtn" class="w-8 h-8 sm:w-9 sm:h-9 rounded-full overflow-hidden flex items-center justify-center bg-slate-100/90 hover:bg-slate-200/80 dark:bg-slate-800/80 dark:hover:bg-slate-700/80 text-slate-600 dark:text-slate-300 border border-slate-200/80 dark:border-slate-700/80 flex-shrink-0 cursor-pointer active:scale-95 transition-all shadow-xs ring-1 ring-slate-900/5 dark:ring-white/10" title="User Profile" aria-label="User Profile">
             <svg id="profileIconGeneric" class="w-4 h-4 text-slate-600 dark:text-slate-300" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" /></svg>
-            <img id="profileAvatarImg" class="w-full h-full object-cover hidden" style="display: none !important;" src="" alt="" referrerpolicy="no-referrer" onerror="this.classList.add('hidden');" />
+            <img id="profileAvatarImg" class="w-full h-full object-cover hidden" src="" alt="" referrerpolicy="no-referrer" onerror="this.classList.add('hidden'); document.getElementById('profileIconGeneric')?.classList.remove('hidden');" />
             <span id="profileAvatarFallback" class="hidden text-xs font-bold text-white tracking-wider select-none"></span>
           </button>
 

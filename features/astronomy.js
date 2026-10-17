@@ -222,26 +222,26 @@ function _renderMoonPhase(currentTime) {
     this.$.moonLitPath.setAttribute("d", this.getMoonSvgPath(moon.phase));
   }
 
-function getMoonSvgPath(p) {
-    const r = 18;
-
+function getMoonSvgPath(p, cx = 20, cy = 20, r = 18) {
     if (p <= 0.03 || p >= 0.97) {
       return ""; // New Moon - completely dark
     }
+    const topY = cy - r;
+    const botY = cy + r;
     if (p >= 0.47 && p <= 0.53) {
-      return `M 20 2 A 18 18 0 0 1 20 38 A 18 18 0 0 1 20 2`; // Full Moon
+      return `M ${cx} ${topY} A ${r} ${r} 0 0 1 ${cx} ${botY} A ${r} ${r} 0 0 1 ${cx} ${topY}`; // Full Moon
     }
 
     if (p < 0.5) {
       // Lit on the right side
       const rx = r - 4 * r * p;
       const sweep = rx < 0 ? 1 : 0;
-      return `M 20 2 A 18 18 0 0 1 20 38 A ${Math.abs(rx)} 18 0 0 ${sweep} 20 2`;
+      return `M ${cx} ${topY} A ${r} ${r} 0 0 1 ${cx} ${botY} A ${Math.abs(rx).toFixed(2)} ${r} 0 0 ${sweep} ${cx} ${topY}`;
     } else {
       // Lit on the left side
       const rx = r - 4 * r * (p - 0.5);
       const sweep = rx < 0 ? 0 : 1;
-      return `M 20 2 A 18 18 0 0 0 20 38 A ${Math.abs(rx)} 18 0 0 ${sweep} 20 2`;
+      return `M ${cx} ${topY} A ${r} ${r} 0 0 0 ${cx} ${botY} A ${Math.abs(rx).toFixed(2)} ${r} 0 0 ${sweep} ${cx} ${topY}`;
     }
   }
 

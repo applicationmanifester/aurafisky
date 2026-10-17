@@ -44,6 +44,14 @@ function createWindow() {
     });
   });
 
+  // Handle Geolocation permissions in Electron desktop window
+  mainWindow.webContents.session.setPermissionRequestHandler((webContents, permission, callback) => {
+    if (permission === 'geolocation') {
+      return callback(true);
+    }
+    callback(false);
+  });
+
   const indexPath = path.join(__dirname, '../dist/index.html');
   mainWindow.loadFile(indexPath);
 

@@ -654,10 +654,15 @@ input[type='range'].timeline-slider:focus-visible {
   border-radius: 10px;
   box-shadow: 0 0 0 6px rgba(45, 212, 191, 0.3);
 }
-[data-device='tv'] #timelineBar,
-[data-device='tv'] #zoomControls {
+[data-device='tv'] #timelineBar {
   transform: scale(1.08);
-  transform-origin: bottom right;
+  transform-origin: bottom center;
+}
+/* #zoomControls is also translated by the -translate-y-1/2 utility in
+   index.html, so the scale must compose with it rather than replace it. */
+[data-device='tv'] #zoomControls {
+  transform: translateY(-50%) scale(1.08);
+  transform-origin: center right;
 }
 @media (min-width: 1920px) and (min-height: 900px) and (pointer: coarse) {
   /* Heuristic big-screen TV browser without UA match */

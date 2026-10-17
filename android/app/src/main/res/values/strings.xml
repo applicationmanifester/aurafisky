@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">Aurafisky</string>
+    <string name="title_activity_main">Aurafisky</string>
+    <string name="package_name">com.aurafisky.app</string>
+    <string name="custom_url_scheme">com.aurafisky.app</string>
+</resources>

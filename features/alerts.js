@@ -176,6 +176,10 @@ function persistAlertRules(app) {
       /* ignore */
     }
   }
+  // Broadcast rule changes to sibling tabs so the alerts panel stays in sync.
+  if (typeof app.syncBus?.syncAlertRules === "function") {
+    app.syncBus.syncAlertRules(app.alertRules || []);
+  }
 }
 
 // ────────────────── evaluation ──────────────────
@@ -384,16 +388,21 @@ function ensureAlertsUI() {
   });
 
   const card = document.createElement("div");
+  card.className = "alerts-panel-card";
+  // Inline styles below are the fallback; the CSS layer (device-adaptive.css)
+  // is allowed to override them, including in dark mode, because the card is
+  // otherwise a hard-coded white rectangle in a dark panel.
+  const dark = !!app.isDark;
   styleEl(card, {
     width: "100%",
     maxWidth: "420px",
     maxHeight: "80vh",
     overflowY: "auto",
     borderRadius: "16px",
-    background: "#ffffff",
-    color: "#0f172a",
+    background: dark ? "#1e293b" : "#ffffff",
+    color: dark ? "#e2e8f0" : "#0f172a",
     boxShadow: "0 24px 48px rgba(0,0,0,.25)",
-    border: "1px solid rgba(148,163,184,.25)",
+    border: dark ? "1px solid #334155" : "1px solid rgba(148,163,184,.25)",
     fontFamily: "inherit",
   });
 
@@ -604,6 +613,11 @@ function installAlertsButton(app) {
   btn.setAttribute("aria-label", "Open weather alerts");
   // Reuse the header-button styling so it sits flush with its siblings.
   btn.className = app.$.shareWeatherBtn.className;
+  // The alerts dialog itself is a hard-coded #ffffff card (see §8 of the
+  // audit). In dark mode it therefore renders as a white rectangle inside a
+  // dark panel, which is a visible defect. Flag it via a class so the CSS
+  // layer can fix it without this module knowing about themes.
+  btn.classList.add("alerts-toggle-btn");
   btn.innerHTML =
     '<svg class="w-4 h-4 text-amber-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" aria-hidden="true">' +
     '<path stroke-linecap="round" stroke-linejoin="round" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"/></svg>';

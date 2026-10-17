@@ -328,37 +328,51 @@ async function startNavigationPreview() {
   }
   if (this.$.navStartBtn) this.$.navStartBtn.disabled = true;
 
-  navigator.geolocation.getCurrentPosition(
-    async (pos) => {
-      this._navOrigin = { lat: pos.coords.latitude, lng: pos.coords.longitude };
-      if (this.$.navPreviewStats) this.$.navPreviewStats.textContent = "Routing…";
+  const onNavOriginSuccess = async (pos) => {
+    this._navOrigin = { lat: pos.coords.latitude, lng: pos.coords.longitude };
+    if (this.$.navPreviewStats) this.$.navPreviewStats.textContent = "Routing…";
 
-      try {
-        const route = await this._fetchOsrmRoute(this._navOrigin, this._navDestination);
-        this._navRoute = route;
-        this._drawNavRoute(route.coords);
-        if (this.$.navPreviewStats) {
-          this.$.navPreviewStats.textContent = `${this._formatDistance(route.distanceM)} · ${this._formatDuration(route.durationS)} by car`;
-        }
-        if (this.$.navStartBtn) this.$.navStartBtn.disabled = false;
-      } catch (e) {
-        console.warn("Navigation route fetch failed:", e);
-        if (this.$.navPreviewStats) {
-          this.$.navPreviewStats.textContent =
-            "Couldn't reach the routing service. Try again shortly.";
-        }
+    try {
+      const route = await this._fetchOsrmRoute(this._navOrigin, this._navDestination);
+      this._navRoute = route;
+      this._drawNavRoute(route.coords);
+      if (this.$.navPreviewStats) {
+        this.$.navPreviewStats.textContent = `${this._formatDistance(route.distanceM)} · ${this._formatDuration(route.durationS)} by car`;
       }
-    },
-    (err) => {
-      console.warn("Geolocation failed:", err);
+      if (this.$.navStartBtn) this.$.navStartBtn.disabled = false;
+    } catch (e) {
+      console.warn("Navigation route fetch failed:", e);
       if (this.$.navPreviewStats) {
         this.$.navPreviewStats.textContent =
-          err.code === err.PERMISSION_DENIED
-            ? "Location permission is needed for directions."
-            : "Couldn't get your location.";
+          "Couldn't reach the routing service. Try again shortly.";
+      }
+    }
+  };
+
+  const onNavOriginError = (err) => {
+    console.warn("Geolocation failed:", err);
+    if (this.$.navPreviewStats) {
+      this.$.navPreviewStats.textContent =
+        err.code === err.PERMISSION_DENIED
+          ? "Location permission is needed for directions."
+          : "Couldn't get your location.";
+    }
+  };
+
+  navigator.geolocation.getCurrentPosition(
+    onNavOriginSuccess,
+    (err) => {
+      if (err.code === 2 || err.code === 3) {
+        navigator.geolocation.getCurrentPosition(
+          onNavOriginSuccess,
+          onNavOriginError,
+          { enableHighAccuracy: false, timeout: 10000, maximumAge: 60000 },
+        );
+      } else {
+        onNavOriginError(err);
       }
     },
-    { enableHighAccuracy: true, timeout: 15000, maximumAge: 30000 },
+    { enableHighAccuracy: true, timeout: 8000, maximumAge: 30000 },
   );
 }
 

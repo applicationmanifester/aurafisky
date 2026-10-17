@@ -163,6 +163,7 @@ class AurafiskyApp {
       // Web Push VAPID key from Firebase Console → Project Settings → Cloud Messaging.
       // Injected at build time from VITE_FCM_VAPID_KEY.
       vapidKey: typeof __FCM_VAPID_KEY__ !== "undefined" ? __FCM_VAPID_KEY__ : "",
+      measurementId: "G-1GLZ5WT63W",
     };
     this.fcmToken = null;
     this._fb = null; // Firebase modules (lazy-loaded)
@@ -611,6 +612,7 @@ class AurafiskyApp {
       wallpaperMoonLitPath: document.getElementById("wallpaperMoonLitPath"),
       wallpaperMoonPhaseLabel: document.getElementById("wallpaperMoonPhaseLabel"),
       wallpaperMoonPhasePercent: document.getElementById("wallpaperMoonPhasePercent"),
+      wallpaperMoonPhaseDesc: document.getElementById("wallpaperMoonPhaseDesc"),
       wallpaperStargazing: document.getElementById("wallpaperStargazing"),
       wallpaperStargazingLabel: document.getElementById("wallpaperStargazingLabel"),
       wallpaperLastUpdated: document.getElementById("wallpaperLastUpdated"),
@@ -1179,11 +1181,80 @@ class AurafiskyApp {
         ]
       });
 
+      // Additional basemaps (hillshade, opentopo, ocean, natgeo) are created
+      // below in the same style as the four above. Keeping them in a single
+      // object makes adding a new layer a one-line change.
+      this.hillshadeBasemap = new LayerGroup({
+        layers: [
+          new TileLayer({
+            source: new XYZ({
+              url: "https://server.arcgisonline.com/ArcGIS/rest/services/Elevation/World_Hillshade/MapServer/tile/{z}/{y}/{x}",
+              maxZoom: 18,
+              crossOrigin: "anonymous",
+              attributions: "Tiles &copy; Esri &mdash; USGS, NGA, NASA, CGIAR, NCEAS, NLS, OS, NMA, Geodatastyrelsen, GSA, GSI, GIS, NOAA, NOAA NGDC"
+            }),
+            preload: 1
+          })
+        ]
+      });
+      this.openTopoBasemap = new LayerGroup({
+        layers: [
+          new TileLayer({
+            source: new XYZ({
+              url: "https://{a-c}.tile.opentopomap.org/{z}/{x}/{y}.png",
+              maxZoom: 17,
+              crossOrigin: "anonymous",
+              attributions: "Map data &copy; OpenStreetMap contributors, SRTM | Map style &copy; OpenTopoMap (CC-BY-SA)"
+            }),
+            preload: 1
+          })
+        ]
+      });
+      this.oceanBasemap = new LayerGroup({
+        layers: [
+          new TileLayer({
+            source: new XYZ({
+              url: "https://server.arcgisonline.com/ArcGIS/rest/services/Ocean/World_Ocean_Base/MapServer/tile/{z}/{y}/{x}",
+              maxZoom: 18,
+              crossOrigin: "anonymous",
+              attributions: "Tiles &copy; Esri &mdash; Esri, GEBCO, NOAA, National Geographic, DeLorme, GEBCO, NOAA NGDC, and other contributors"
+            }),
+            preload: 1
+          }),
+          new TileLayer({
+            source: new XYZ({
+              url: "https://server.arcgisonline.com/ArcGIS/rest/services/Ocean/World_Ocean_Reference/MapServer/tile/{z}/{y}/{x}",
+              maxZoom: 18,
+              crossOrigin: "anonymous"
+            }),
+            opacity: 0.9,
+            preload: 1
+          })
+        ]
+      });
+      this.natGeoBasemap = new LayerGroup({
+        layers: [
+          new TileLayer({
+            source: new XYZ({
+              url: "https://server.arcgisonline.com/ArcGIS/rest/services/NatGeo_World_Map/MapServer/tile/{z}/{y}/{x}",
+              maxZoom: 18,
+              crossOrigin: "anonymous",
+              attributions: "Tiles &copy; Esri &mdash; National Geographic, Esri, DeLorme, NAVTEQ, UNEP-WCMC, USGS, NASA, ESA, METI, NRCAN, GEBCO, NOAA, iPC"
+            }),
+            preload: 1
+          })
+        ]
+      });
+
       const initialGroup = {
         street: this.lightBasemap,
         dark: this.darkBasemap,
         satellite: this.satelliteBasemap,
-        terrain: this.terrainBasemap
+        terrain: this.terrainBasemap,
+        hillshade: this.hillshadeBasemap,
+        opentopo: this.openTopoBasemap,
+        ocean: this.oceanBasemap,
+        natgeo: this.natGeoBasemap
       }[this.mapStyle] || (this.isDark ? this.darkBasemap : this.lightBasemap);
 
       this.map.addLayer(initialGroup);
@@ -1380,12 +1451,6 @@ class AurafiskyApp {
         });
         this._mapResizeObserver.observe(mapEl);
       }
-
-      // Belt-and-braces for browsers without ResizeObserver, and for CSS that
-      // lands between construction and the observer's first callback.
-      setTimeout(() => this.map && this.map.updateSize(), 100);
-      setTimeout(() => this.map && this.map.updateSize(), 500);
-      setTimeout(() => this.map && this.map.updateSize(), 1500);
 
       // Re-fit the map when the mobile URL bar shows/hides. The visual-viewport
       // resize/scroll wiring itself now lives in initMapViewportTracking()
@@ -1814,8 +1879,8 @@ class AurafiskyApp {
       this.toggleMinimizeWeatherPanel();
       this._haptic('selection');
     });
-    this.$.compareCloseBtn.addEventListener("click", () => {
-      this.hideComparePanel();
+    this.$.compareCloseBtn?.addEventListener("click", () => {
+      this.hideComparePanel?.();
       this._haptic('selection');
     });
 
@@ -1891,6 +1956,7 @@ class AurafiskyApp {
         if (this.weatherData)
           this.updateWeatherDisplay(parseInt(this.$.timelineSlider.value, 10));
         this.saveUserDataToCloud();
+        this.syncBus?.syncUnits(WeatherService.getUnits());
         this._haptic('selection');
       });
     }
@@ -2075,6 +2141,11 @@ class AurafiskyApp {
         this.updateHomeButton();
         this.updateHomeMarker();
         this.updateSettingsUIFromLocal();
+        this.syncBus?.syncDefaultLocation(
+          this.defaultLocation,
+          this.defaultLocationNotify,
+          this.notifyIntervalMin,
+        );
         await this.saveUserDataToCloud();
         this.showToast("Default location updated.", "success");
 
@@ -2286,8 +2357,8 @@ class AurafiskyApp {
     });
 
     // ── Climate Time Machine trigger ─────────────────────────
-    this.$.timeMachineTrigger.addEventListener("click", () => {
-      this.toggleClimateTimeMachine();
+    this.$.timeMachineTrigger?.addEventListener("click", () => {
+      this.toggleClimateTimeMachine?.();
       this._haptic('light');
     });
 
@@ -2838,6 +2909,25 @@ class AurafiskyApp {
       const lngStr = params.get("lng");
       const nameStr = params.get("name");
       const wallpaperStr = params.get("wallpaper");
+      const action = params.get("action");
+
+      // PWA shortcut / deep-link actions. Independent of lat/lng so a
+      // shortcut can act on the restored session location.
+      if (action) {
+        setTimeout(() => {
+          try {
+            if (action === "radar") this.toggleRadar?.();
+            else if (action === "aura") this.aura?.open?.();
+            else if (action === "briefing") {
+              this.showWeatherPanel?.();
+              this.switchWeatherTab?.("overview");
+              this.renderDailyBriefing?.(true);
+            }
+          } catch (e) {
+            console.warn("URL action failed:", action, e);
+          }
+        }, 1200); // let the map + panel finish mounting
+      }
 
       if (latStr != null && lngStr != null) {
         const lat = parseFloat(latStr);
@@ -3088,6 +3178,7 @@ class AurafiskyApp {
     this._isFetching = true;
     try {
       this._persistSession(lat, lng, name);
+      this.syncBus?.syncLocation(lat, lng, name);
 
       let weatherPopulated = false;
 
@@ -3130,19 +3221,71 @@ class AurafiskyApp {
       this.$.panelAQIBadge.className =
         "text-[10px] font-bold px-2.5 py-1.5 rounded-xl bg-slate-200 dark:bg-slate-800 text-slate-500 uppercase tracking-wider text-center min-w-[70px] flex-shrink-0";
 
-      // Show loading skeleton (#13)
-      if (this.$.weatherPanelSkeleton && this.$.weatherPanelContent) {
-        this.$.weatherPanelContent.classList.add("hidden");
-        this.$.weatherPanelSkeleton.classList.remove("hidden");
-      }
-
       this.showWeatherPanel();
       this.updateStarUI();
 
       // Close Time-Machine drawer when switching cities
-      this.closeClimateTimeMachine();
+      this.closeClimateTimeMachine?.();
 
       const cacheKey = `weathermap_cache_${lat.toFixed(3)}_${lng.toFixed(3)}`;
+
+      // ── Optimistic cache-first render ────────────────────────────
+      // If we have cached weather within 30 min, show it IMMEDIATELY at 0ms
+      // without flashing the loading skeleton. The network fetch below runs in
+      // the background (stale-while-revalidate) to update seamlessly.
+      const CACHE_STALE_MS = 30 * 60 * 1000; // 30 min
+      let cached = null;
+      try {
+        cached = this.getNearestCachedLocation(lat, lng);
+      } catch (e) {
+        /* cache read failed — proceed to network only */
+      }
+
+      const hasValidCache = Boolean(
+        cached &&
+        cached.forecast &&
+        Date.now() - (cached.ts || 0) < CACHE_STALE_MS
+      );
+
+      if (!hasValidCache) {
+        // Only show loading skeleton if we have no valid cache
+        if (this.$.weatherPanelSkeleton && this.$.weatherPanelContent) {
+          this.$.weatherPanelContent.classList.add("hidden");
+          this.$.weatherPanelSkeleton.classList.remove("hidden");
+        }
+      }
+
+      if (hasValidCache) {
+        this.weatherData = cached.forecast;
+        this.airQualityData = cached.airQuality || null;
+        this.currentHourIndex = WeatherService.getCurrentHourIndex(
+          cached.forecast,
+          cached.forecast?.utc_offset_seconds || 0,
+        );
+        this.freshnessTimestamp = cached.ts || 0;
+        this.biasMap = WeatherService.computeDiurnalBias(
+          cached.forecast,
+          cached.forecast?.utc_offset_seconds || 0,
+        );
+        // Reveal cached content instead of the skeleton
+        if (this.$.weatherPanelSkeleton && this.$.weatherPanelContent) {
+          this.$.weatherPanelContent.classList.remove("hidden");
+          this.$.weatherPanelSkeleton.classList.add("hidden");
+        }
+        this.initTimeline();
+        const timeOffset = this.timeline24hMode ? this._getTimelineOffset() : 0;
+        this.$.timelineSlider.value = this.currentHourIndex - timeOffset;
+        this.$.timelineSlider.disabled = false;
+        this.updateWeatherDisplay(this.currentHourIndex);
+        if (this._ensembleReady) this.renderEnsemble(lat, lng);
+        this.createWeatherMarker(lat, lng, this.currentHourIndex);
+        const fl = document.getElementById("freshnessLabel");
+        if (fl)
+          fl.textContent = `Cached ${Math.round(
+            (Date.now() - (cached.ts || 0)) / 60000,
+          )} min ago`;
+        this.updateOfflineBadge(false);
+      }
 
       try {
         if (this.isOffline) {
@@ -3150,10 +3293,20 @@ class AurafiskyApp {
         }
 
         // Fetch forecast and Air Quality in parallel
-        const [forecast, airQuality] = await Promise.all([
-          WeatherService.fetchForecast(lat, lng),
-          WeatherService.fetchAirQuality(lat, lng),
-        ]);
+        const forecastPromise = WeatherService.fetchForecast(lat, lng);
+        const airQualityPromise = WeatherService.fetchAirQuality(lat, lng).catch(() => null);
+
+        // Core forecast renders the weather card — don't block on air quality
+        const forecast = await forecastPromise;
+
+        // If air quality arrives concurrently, use it immediately
+        let airQuality = null;
+        try {
+          airQuality = await Promise.race([
+            airQualityPromise,
+            new Promise((resolve) => setTimeout(() => resolve(null), 100)),
+          ]);
+        } catch {}
 
         this.weatherData = forecast;
         this.airQualityData = airQuality;
@@ -3176,6 +3329,23 @@ class AurafiskyApp {
           ts: this.freshnessTimestamp,
           name,
         });
+
+        // If air quality resolves slightly later, update smoothly in background
+        if (!airQuality) {
+          airQualityPromise.then((aq) => {
+            if (aq && this.selectedLat === lat && this.selectedLng === lng) {
+              this.airQualityData = aq;
+              this.updateAirQualityDisplay(this.currentHourIndex);
+              this._updateOverviewChips(this.currentWeather, aq?.hourly?.us_aqi?.[this.currentHourIndex]);
+              this._persistWeatherCache(cacheKey, {
+                forecast,
+                airQuality: aq,
+                ts: this.freshnessTimestamp,
+                name,
+              });
+            }
+          });
+        }
 
         this.updateOfflineBadge(false);
         weatherPopulated = true;
@@ -3737,22 +3907,13 @@ class AurafiskyApp {
         "text-[10px] font-bold text-teal-500 dark:text-teal-400";
     }
 
-    // 14. Spatial gradient
-    const gradient = WeatherService.getSpatialGradient(
-      this.selectedLat,
-      this.selectedLng,
-      weather.windDirection,
-    );
-    if (gradient && this.$.spatialGradLabel) {
-      const warmDir = gradient.reduce((a, b) =>
-        a.estTemp > b.estTemp ? a : b,
-      );
-      const coldDir = gradient.reduce((a, b) =>
-        a.estTemp < b.estTemp ? a : b,
-      );
-      this.$.spatialGradLabel.textContent = `🌡️ ${warmDir.estTemp}°C ${warmDir.dir} → ${coldDir.estTemp}°C ${coldDir.dir} (est. gradient)`;
-      this.$.spatialGradLabel.className = "text-[10px] text-slate-400";
-    }
+    // 14. Spatial gradient — DELETED. getSpatialGradient() fabricated
+    // temperature values (20 - |lat| * 0.4) with no API call, which is a
+    // data-integrity violation: a weather app must never display a number it
+    // did not measure. The label is cleared rather than left showing a
+    // fabricated gradient. If a real gradient is wanted later, it should be
+    // computed from the forecast at upwind/downwind sample points (the
+    // WeatherService.getUpwindPoint() helper already exists and is real).
 
     // Update browser tab favicon + title dynamically
     this.updateWeatherFavicon(weather.weatherCode, weather.isDay);
@@ -5231,6 +5392,7 @@ class AurafiskyApp {
     if (meta) meta.content = this.isDark ? "#0f172a" : "#6366f1";
     this.updateSettingsUIFromLocal();
     this.saveUserDataToCloud();
+    this.syncBus?.syncTheme(this.isDark);
   }
 
   // ================================================================
@@ -6532,26 +6694,39 @@ class AurafiskyApp {
     }
 
     // Moon phase
-    const moonPhase = WeatherService.getMoonPhase(new Date());
+    const currentTime = this.weatherData ? new Date() : new Date();
+    const moonPhase = WeatherService.getMoonPhase(currentTime);
     if (this.$.wallpaperMoonLitPath) {
-      // Upper limb arc from the top of the circle, swept by the phase fraction.
-      const phase = moonPhase.phase;
-      const largeArc = phase > 0.5 ? 1 : 0;
-      const endAngle = phase * 2 * Math.PI;
-      // Circle center (30,30), radius 27, top point (30,3)
-      const x2 = 30 + 27 * Math.sin(endAngle);
-      const y2 = 30 - 27 * Math.cos(endAngle);
-      this.$.wallpaperMoonLitPath.setAttribute(
-        "d",
-        `M 30 3 A 27 27 0 ${largeArc} 1 ${x2.toFixed(2)} ${y2.toFixed(2)} L 30 30 Z`
-      );
+      if (typeof this.getMoonSvgPath === "function") {
+        this.$.wallpaperMoonLitPath.setAttribute(
+          "d",
+          this.getMoonSvgPath(moonPhase.phase, 30, 30, 27),
+        );
+      } else {
+        const r = 27, cx = 30, cy = 30, p = moonPhase.phase;
+        if (p <= 0.03 || p >= 0.97) {
+          this.$.wallpaperMoonLitPath.setAttribute("d", "");
+        } else if (p >= 0.47 && p <= 0.53) {
+          this.$.wallpaperMoonLitPath.setAttribute("d", "M 30 3 A 27 27 0 0 1 30 57 A 27 27 0 0 1 30 3");
+        } else if (p < 0.5) {
+          const rx = r - 4 * r * p;
+          const sweep = rx < 0 ? 1 : 0;
+          this.$.wallpaperMoonLitPath.setAttribute("d", `M 30 3 A 27 27 0 0 1 30 57 A ${Math.abs(rx).toFixed(2)} 27 0 0 ${sweep} 30 3`);
+        } else {
+          const rx = r - 4 * r * (p - 0.5);
+          const sweep = rx < 0 ? 0 : 1;
+          this.$.wallpaperMoonLitPath.setAttribute("d", `M 30 3 A 27 27 0 0 0 30 57 A ${Math.abs(rx).toFixed(2)} 27 0 0 ${sweep} 30 3`);
+        }
+      }
     }
     if (this.$.wallpaperMoonPhaseLabel) {
       this.$.wallpaperMoonPhaseLabel.textContent = moonPhase.label;
     }
     if (this.$.wallpaperMoonPhasePercent) {
-      const illumination = Math.round((1 - Math.cos(moonPhase.phase * 2 * Math.PI)) / 2 * 100);
-      this.$.wallpaperMoonPhasePercent.textContent = `${illumination}% lit`;
+      this.$.wallpaperMoonPhasePercent.textContent = `${Math.round(moonPhase.phase * 100)}%`;
+    }
+    if (this.$.wallpaperMoonPhaseDesc) {
+      this.$.wallpaperMoonPhaseDesc.textContent = `${moonPhase.icon} Phase fraction: ${moonPhase.phase.toFixed(2)}`;
     }
   }
 
@@ -7512,6 +7687,9 @@ class AurafiskyApp {
     panels.forEach((p) => {
       const isTarget = p.id === targetPanelId;
       p.classList.toggle("active", isTarget);
+      if (isTarget) {
+        p.classList.remove("hidden");
+      }
     });
 
     const activeBtn = document.querySelector(`.weather-tab-btn[data-tab="${tabName}"]`);
@@ -7679,7 +7857,28 @@ class AurafiskyApp {
   // ================================================================
   //  CLIMATE TIME-MACHINE
   // ================================================================
-  // (relocated to features/timeMachine.js -- see features/registry.js)
+  // (Full feature in features/timeMachine.js -- safe stubs provided here for startup)
+  closeClimateTimeMachine() {
+    if (this.$.timeMachineDrawer && this.$.timeMachineChevron) {
+      this.$.timeMachineDrawer.classList.add("hidden");
+      this.$.timeMachineChevron.classList.remove("rotate-180");
+    }
+  }
+
+  async toggleClimateTimeMachine() {
+    const mod = await import("./features/timeMachine.js");
+    if (typeof mod.init === "function") mod.init(this);
+    if (typeof this.toggleClimateTimeMachine === "function") {
+      this.toggleClimateTimeMachine();
+    }
+  }
+
+  hideComparePanel() {
+    if (this.$.comparePanel) {
+      this.$.comparePanel.classList.remove("open");
+      setTimeout(() => this.$.comparePanel?.classList.add("hidden"), 400);
+    }
+  }
 
   // ================================================================
   //  ASTRONOMY & DAY CYCLES
@@ -7969,41 +8168,22 @@ class AurafiskyApp {
     const initials = this._computeInitials(name, email);
     const photo = this.user.photoURL;
 
-    // Top search bar profile button
+    // Top search bar profile button - only keep clean person logo
     if (this.$.profileBtn) {
       this.$.profileBtn.title = name || email || "User Profile";
+      this.$.profileBtn.className = "w-8 h-8 sm:w-9 sm:h-9 rounded-full overflow-hidden flex items-center justify-center bg-slate-100/90 hover:bg-slate-200/80 dark:bg-slate-800/80 dark:hover:bg-slate-700/80 text-slate-600 dark:text-slate-300 border border-slate-200/80 dark:border-slate-700/80 flex-shrink-0 cursor-pointer active:scale-95 transition-all shadow-xs ring-1 ring-slate-900/5 dark:ring-white/10";
     }
 
+    if (this.$.profileIconGeneric) {
+      this.$.profileIconGeneric.classList.remove("hidden");
+    }
+    if (this.$.profileAvatarImg) {
+      this.$.profileAvatarImg.src = "";
+      this.$.profileAvatarImg.classList.add("hidden");
+    }
     if (this.$.profileAvatarFallback) {
-      this.$.profileAvatarFallback.textContent = initials;
-    }
-
-    const showInitialsBadge = () => {
-      this.$.profileIconGeneric?.classList.add("hidden");
-      this.$.profileAvatarImg?.classList.add("hidden");
-      if (this.$.profileAvatarFallback) {
-        this.$.profileAvatarFallback.classList.remove("hidden");
-      }
-      if (this.$.profileBtn) {
-        this.$.profileBtn.className = "w-8 h-8 sm:w-9 sm:h-9 rounded-full overflow-hidden flex items-center justify-center bg-gradient-to-tr from-teal-600 to-emerald-500 text-white font-bold text-xs ring-2 ring-primary/40 flex-shrink-0 cursor-pointer active:scale-95 transition-all shadow-xs";
-      }
-    };
-
-    if (photo && this.$.profileAvatarImg) {
-      this.$.profileAvatarImg.onload = () => {
-        this.$.profileIconGeneric?.classList.add("hidden");
-        this.$.profileAvatarFallback?.classList.add("hidden");
-        this.$.profileAvatarImg.classList.remove("hidden");
-        if (this.$.profileBtn) {
-          this.$.profileBtn.className = "w-8 h-8 sm:w-9 sm:h-9 rounded-full overflow-hidden flex items-center justify-center ring-2 ring-primary/40 flex-shrink-0 cursor-pointer active:scale-95 transition-all shadow-xs";
-        }
-      };
-      this.$.profileAvatarImg.onerror = () => {
-        showInitialsBadge();
-      };
-      this.$.profileAvatarImg.src = photo;
-    } else {
-      showInitialsBadge();
+      this.$.profileAvatarFallback.textContent = "";
+      this.$.profileAvatarFallback.classList.add("hidden");
     }
 
     if (this.$.accountLoggedOut)
@@ -8020,13 +8200,20 @@ class AurafiskyApp {
 
     if (this.$.accountAvatarImg) {
       if (photo) {
-        this.$.accountAvatarImg.onload = () => {
-          this.$.accountAvatarImg.classList.remove("hidden");
+        const modalPreloader = new Image();
+        modalPreloader.referrerPolicy = "no-referrer";
+        modalPreloader.onload = () => {
+          if (modalPreloader.naturalWidth > 0 && this.$.accountAvatarImg) {
+            this.$.accountAvatarImg.src = photo;
+            this.$.accountAvatarImg.classList.remove("hidden");
+          } else if (this.$.accountAvatarImg) {
+            this.$.accountAvatarImg.classList.add("hidden");
+          }
         };
-        this.$.accountAvatarImg.onerror = () => {
-          this.$.accountAvatarImg.classList.add("hidden");
+        modalPreloader.onerror = () => {
+          this.$.accountAvatarImg?.classList.add("hidden");
         };
-        this.$.accountAvatarImg.src = photo;
+        modalPreloader.src = photo;
       } else {
         this.$.accountAvatarImg.classList.add("hidden");
       }
@@ -8696,7 +8883,7 @@ class AurafiskyApp {
   }
 
   setMapStyle(style) {
-    const validStyles = ['street', 'satellite', 'terrain', 'dark'];
+    const validStyles = ['street', 'satellite', 'terrain', 'dark', 'hillshade', 'opentopo', 'ocean', 'natgeo'];
     if (!validStyles.includes(style)) style = 'street';
     this.mapStyle = style;
     try {
@@ -8718,6 +8905,10 @@ class AurafiskyApp {
       street: "Default (Street)",
       satellite: "Satellite (Aerial)",
       terrain: "Terrain (Topographic)",
+      hillshade: "Hillshade (Elevation)",
+      opentopo: "OpenTopoMap",
+      ocean: "Ocean (Bathymetry)",
+      natgeo: "National Geographic",
       dark: "Dark"
     };
     this.showToast(`Map mode: ${styleNames[style] || style}`, "info");
@@ -8729,10 +8920,14 @@ class AurafiskyApp {
       street: this.lightBasemap,
       dark: this.darkBasemap,
       satellite: this.satelliteBasemap,
-      terrain: this.terrainBasemap
+      terrain: this.terrainBasemap,
+      hillshade: this.hillshadeBasemap,
+      opentopo: this.openTopoBasemap,
+      ocean: this.oceanBasemap,
+      natgeo: this.natGeoBasemap
     };
     const targetGroup = styleGroups[this.mapStyle] || (this.isDark ? this.darkBasemap : this.lightBasemap);
-    const allGroups = [this.lightBasemap, this.darkBasemap, this.satelliteBasemap, this.terrainBasemap];
+    const allGroups = [this.lightBasemap, this.darkBasemap, this.satelliteBasemap, this.terrainBasemap, this.hillshadeBasemap, this.openTopoBasemap, this.oceanBasemap, this.natGeoBasemap];
     const layers = this.map.getLayers();
 
     allGroups.forEach((g) => {
@@ -8760,7 +8955,7 @@ class AurafiskyApp {
     }
 
     if (this.$.mapLayersBtn) {
-      const isCustom = this.mapStyle === "satellite" || this.mapStyle === "terrain";
+      const isCustom = this.mapStyle !== "street" && this.mapStyle !== "dark";
       this.$.mapLayersBtn.classList.toggle("layers-active", isCustom);
     }
   }
@@ -8815,6 +9010,44 @@ function bootAurafisky() {
     window.addEventListener("beforeunload", () => {
       if (window.app?.destroy) window.app.destroy();
     });
+
+    // ── Web Share Target ──────────────────────────────
+    // Handle "Share → Aurafisky" from Google Maps / other apps.
+    // The OS opens /share-target?text=...&url=... and we load that location.
+    const shareParams = new URLSearchParams(window.location.search);
+    const shareText = shareParams.get("text") || "";
+    const shareUrl = shareParams.get("url") || "";
+
+    if (shareText || shareUrl) {
+      const mapsMatch = shareUrl.match(/@(-?\d+\.\d+),(-?\d+\.\d+)/);
+      if (mapsMatch) {
+        // Google Maps URL with embedded coordinates — load directly
+        window.app.selectLocation(
+          parseFloat(mapsMatch[1]),
+          parseFloat(mapsMatch[2]),
+          shareText || "Shared location",
+        );
+      } else if (shareText) {
+        // Place name — geocode via Open-Meteo
+        const WS = typeof WeatherService !== "undefined" ? WeatherService : globalThis.WeatherService;
+        if (WS?.searchLocations) {
+          WS.searchLocations(shareText).then((results) => {
+            if (results.length > 0) {
+              const best = results[0];
+              window.app.selectLocation(
+                best.latitude,
+                best.longitude,
+                best.displayName || best.name,
+              );
+            } else {
+              window.app.showToast?.(`Couldn't find "${shareText}"`, "error");
+            }
+          });
+        }
+      }
+      // Clean the share-target params from the URL bar
+      window.history.replaceState({}, document.title, window.location.pathname);
+    }
   } catch (err) {
     console.error("Failed to boot Aurafisky:", err);
     const ov = document.getElementById("loadingOverlay");

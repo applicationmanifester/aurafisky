@@ -54,12 +54,8 @@ export default defineConfig(({ mode }) => {
             './features/navigation.js',
             './features/googleMapsMobile.js',
           ],
-          'features-heavy': [
-            './features/routes.js',
-            './features/timeMachine.js',
-            './features/compareCities.js',
-            './features/aura.js',
-          ],
+          // Heavy features (aura, routes, timeMachine, compareCities) are
+          // dynamically imported from registry.js — no eager chunk.
           'app-core': ['./app.js']
         },
         chunkFileNames: 'assets/js/[name]-[hash].js',
@@ -110,6 +106,9 @@ export default defineConfig(({ mode }) => {
         clientsClaim: true,
         skipWaiting: true,
         importScripts: ['sw-widgets.js'],
+        // Web Share Target: serve the app shell for /share-target so the page
+        // JS can read location.search and load the shared location.
+        navigateFallback: './index.html',
         globPatterns: ['**/*.{js,css,html,ico,png,svg,woff2,json}'],
         runtimeCaching: [
           {

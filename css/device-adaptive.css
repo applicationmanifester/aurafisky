@@ -195,6 +195,28 @@
   }
 }
 
+/* ── 8a. Dark-mode alerts card (alerts.js renders a hard-coded white
+   dialog — fix it here so the module stays theme-agnostic). ── */
+.dark .alerts-panel-card {
+  background: #1e293b !important;
+  color: #e2e8f0 !important;
+  border-color: #334155 !important;
+}
+.dark .alerts-panel-card input,
+.dark .alerts-panel-card select,
+.dark .alerts-panel-card textarea {
+  background: #0f172a !important;
+  color: #e2e8f0 !important;
+  border-color: #475569 !important;
+}
+.dark #alertsPanelCard input,
+.dark #alertsPanelCard select,
+.dark #alertsPanelCard textarea {
+  background: #0f172a;
+  color: #e2e8f0;
+  border-color: #475569;
+}
+
 /* ── 8. TV / 10-foot UI ────────────────────────────────────── */
 [data-device="tv"] {
   font-size: 18px;
@@ -263,6 +285,30 @@
 /* ── 12. CSP-safe replacements for previously inline styles ── */
 /* The CSP blocks style="" attributes, which silently disabled these
    safe-area paddings & legend gradients. Restored here as real CSS. */
+
+/* Brand wallpaper background. #wallpaperBrandBg previously relied on an
+   inline style="background-image:url('Aurafisky.png')" which the meta CSP
+   blocks, so the Aurafisky brand wallpaper never rendered at all. */
+#wallpaperBrandBg {
+  background-image: url("../Aurafisky.png");
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
+}
+
+/* The four non-semantic <div> affordances that used to be unreachable on
+   a keyboard or a TV remote. They are now real buttons, so they get the
+   standard focus ring and 44px target. */
+.aura-affordance {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 44px;
+  min-width: 44px;
+  cursor: pointer;
+  border: 0;
+  background: transparent;
+}
 .topbar-safe-top {
   padding-top: max(0.6rem, env(safe-area-inset-top, 0px));
 }

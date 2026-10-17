@@ -22,7 +22,7 @@ const WeatherService = (() => {
   // share a single network request.
   const _requestCache = new Map();
   const _geocodingCache = new Map();
-  const REQUEST_CACHE_TTL = 30000;
+  const REQUEST_CACHE_TTL = 300000;
   const MAX_CACHE_SIZE = 50;
 
   function _setCache(key, value) {
@@ -205,90 +205,108 @@ const WeatherService = (() => {
     const cacheKey = `${FORECAST_URL}?latitude=${round(lat)}&longitude=${round(lng)}&past_days=${PAST_DAYS}&forecast_days=${FORECAST_DAYS}&timezone=auto`;
     if (_requestCache.has(cacheKey)) {
       const entry = _requestCache.get(cacheKey);
-      if (Date.now() - entry.ts < REQUEST_CACHE_TTL) return entry.data;
+      if (Date.now() - entry.ts < REQUEST_CACHE_TTL) {
+        return entry.data instanceof Promise ? await entry.data : entry.data;
+      }
       _requestCache.delete(cacheKey);
     }
-    // Extended variable set: everything the device-adaptive weather card
-    // displays (sunshine duration, storm potential, freezing level, gust
-    // maxima, dominant wind, daylight). If the API ever rejects an unknown
-    // variable we transparently fall back to the legacy set below.
-    const buildParams = (extended) =>
-      new URLSearchParams({
-        latitude: round(lat),
-        longitude: round(lng),
-        hourly: [
-          "temperature_2m",
-          "relative_humidity_2m",
-          "apparent_temperature",
-          "precipitation_probability",
-          "precipitation",
-          "weather_code",
-          "cloud_cover",
-          "wind_speed_10m",
-          "wind_direction_10m",
-          "wind_gusts_10m",
-          "uv_index",
-          "pressure_msl",
-          "visibility",
-          "is_day",
-          ...(extended
-            ? ["sunshine_duration", "cape", "freezing_level_height"]
-            : []),
-        ].join(","),
-        daily: [
-          "weather_code",
-          "temperature_2m_max",
-          "temperature_2m_min",
-          "apparent_temperature_max",
-          "apparent_temperature_min",
-          "sunrise",
-          "sunset",
-          "uv_index_max",
-          "precipitation_sum",
-          "precipitation_probability_max",
-          "wind_speed_10m_max",
-          ...(extended
-            ? [
-                "wind_gusts_10m_max",
-                "wind_direction_10m_dominant",
-                "daylight_duration",
-              ]
-            : []),
-        ].join(","),
-        timezone: "auto",
-        past_days: PAST_DAYS,
-        forecast_days: FORECAST_DAYS,
-      });
 
-    let params = buildParams(true);
-    let useExtended = true;
+    const fetchPromise = (async () => {
+      // Extended variable set: everything the device-adaptive weather card
+      // displays (sunshine duration, storm potential, freezing level, gust
+      // maxima, dominant wind, daylight). If the API ever rejects an unknown
+      // variable we transparently fall back to the legacy set below.
+      const buildParams = (extended) =>
+        new URLSearchParams({
+          latitude: round(lat),
+          longitude: round(lng),
+          hourly: [
+            "temperature_2m",
+            "relative_humidity_2m",
+            "apparent_temperature",
+            "precipitation_probability",
+            "precipitation",
+            "weather_code",
+            "cloud_cover",
+            "wind_speed_10m",
+            "wind_direction_10m",
+            "wind_gusts_10m",
+            "uv_index",
+            "pressure_msl",
+            "visibility",
+            "is_day",
+            ...(extended
+              ? ["sunshine_duration", "cape", "freezing_level_height"]
+              : []),
+          ].join(","),
+          daily: [
+            "weather_code",
+            "temperature_2m_max",
+            "temperature_2m_min",
+            "apparent_temperature_max",
+            "apparent_temperature_min",
+            "sunrise",
+            "sunset",
+            "uv_index_max",
+            "precipitation_sum",
+            "precipitation_probability_max",
+            "wind_speed_10m_max",
+            ...(extended
+              ? [
+                  "wind_gusts_10m_max",
+                  "wind_direction_10m_dominant",
+                  "daylight_duration",
+                ]
+              : []),
+          ].join(","),
+          timezone: "auto",
+          past_days: PAST_DAYS,
+          forecast_days: FORECAST_DAYS,
+        });
 
-    for (let attempt = 0; attempt <= retries; attempt++) {
-      try {
-        const url = `${FORECAST_URL}?${params}`;
-        const response = await fetch(url, { signal });
-        if (!response.ok) {
-          // First rejection with the extended variable set: retry the same
-          // attempt with the legacy params (does not consume a backoff try).
-          if (useExtended) {
-            useExtended = false;
-            params = buildParams(false);
-            attempt--;
-            continue;
+      let params = buildParams(true);
+      let useExtended = true;
+
+      for (let attempt = 0; attempt <= retries; attempt++) {
+        try {
+          const url = `${FORECAST_URL}?${params}`;
+          const timeoutCtrl = new AbortController();
+          const timer = setTimeout(() => timeoutCtrl.abort(), 6000);
+          let response;
+          try {
+            response = await fetch(url, { signal: signal || timeoutCtrl.signal });
+          } finally {
+            clearTimeout(timer);
           }
-          throw new Error(`Weather API error: ${response.status}`);
+          if (!response.ok) {
+            // Only on 400 (Bad Request): fallback to legacy non-extended parameter set.
+            // On 503/502/429 (Server Overload), retrying the same payload with extended=false is wasteful.
+            if (useExtended && response.status === 400) {
+              useExtended = false;
+              params = buildParams(false);
+              attempt--;
+              continue;
+            }
+            throw new Error(`Weather API error: ${response.status}`);
+          }
+          const data = await response.json();
+          if (!data.hourly?.time || !data.daily)
+            throw new Error("Unexpected format");
+          _setCache(cacheKey, { data, ts: Date.now() });
+          return data;
+        } catch (err) {
+          if (attempt < retries)
+            await new Promise((r) => setTimeout(r, 300 * Math.pow(2, attempt)));
+          else {
+            _requestCache.delete(cacheKey);
+            throw err;
+          }
         }
-        const data = await response.json();
-        if (!data.hourly?.time || !data.daily)
-          throw new Error("Unexpected format");
-        _setCache(cacheKey, { data, ts: Date.now() });
-        return data;
-      } catch (err) {
-        if (attempt < retries)
-          await new Promise((r) => setTimeout(r, 1000 * Math.pow(2, attempt)));
-        else throw err;
       }
-    }
+    })();
+
+    _setCache(cacheKey, { data: fetchPromise, ts: Date.now() });
+    return await fetchPromise;
   }
 
   /**
@@ -999,42 +1017,58 @@ const WeatherService = (() => {
    * @param {number} lng - Longitude
    * @returns {Promise<Object>} Air Quality data
    */
-  async function fetchAirQuality(lat, lng, retries = 3, signal) {
+  async function fetchAirQuality(lat, lng, retries = 1, signal) {
     const round = (v) => v.toFixed(4);
     const cacheKey = `aq:${round(lat)},${round(lng)},d${PAST_DAYS},f${FORECAST_DAYS}`;
     if (_requestCache.has(cacheKey)) {
       const entry = _requestCache.get(cacheKey);
-      if (Date.now() - entry.ts < REQUEST_CACHE_TTL) return entry.data;
+      if (Date.now() - entry.ts < REQUEST_CACHE_TTL) {
+        return entry.data instanceof Promise ? await entry.data : entry.data;
+      }
       _requestCache.delete(cacheKey);
     }
-    const params = new URLSearchParams({
-      latitude: round(lat),
-      longitude: round(lng),
-      hourly:
-        "pm2_5,pm10,ozone,us_aqi,birch_pollen,grass_pollen,mugwort_pollen,alder_pollen",
-      timezone: "auto",
-      past_days: PAST_DAYS,
-      forecast_days: FORECAST_DAYS,
-    });
-    for (let attempt = 0; attempt <= retries; attempt++) {
-      try {
-        const response = await fetch(
-          `https://air-quality-api.open-meteo.com/v1/air-quality?${params}`,
-          { signal }
-        );
-        if (!response.ok) return null;
-        const data = await response.json();
-        _setCache(cacheKey, { data, ts: Date.now() });
-        return data;
-      } catch (err) {
-        if (attempt < retries) {
-          await new Promise((r) => setTimeout(r, 1000 * Math.pow(2, attempt)));
-        } else {
-          return null;
+
+    const fetchPromise = (async () => {
+      const params = new URLSearchParams({
+        latitude: round(lat),
+        longitude: round(lng),
+        hourly:
+          "pm2_5,pm10,ozone,us_aqi,birch_pollen,grass_pollen,mugwort_pollen,alder_pollen",
+        timezone: "auto",
+        past_days: PAST_DAYS,
+        forecast_days: FORECAST_DAYS,
+      });
+      for (let attempt = 0; attempt <= retries; attempt++) {
+        try {
+          const timeoutCtrl = new AbortController();
+          const timer = setTimeout(() => timeoutCtrl.abort(), 5000);
+          let response;
+          try {
+            response = await fetch(
+              `https://air-quality-api.open-meteo.com/v1/air-quality?${params}`,
+              { signal: signal || timeoutCtrl.signal }
+            );
+          } finally {
+            clearTimeout(timer);
+          }
+          if (!response.ok) return null;
+          const data = await response.json();
+          _setCache(cacheKey, { data, ts: Date.now() });
+          return data;
+        } catch (err) {
+          if (attempt < retries) {
+            await new Promise((r) => setTimeout(r, 400 * Math.pow(2, attempt)));
+          } else {
+            _requestCache.delete(cacheKey);
+            return null;
+          }
         }
       }
-    }
-    return null;
+      return null;
+    })();
+
+    _setCache(cacheKey, { data: fetchPromise, ts: Date.now() });
+    return await fetchPromise;
   }
 
   /**
@@ -2346,22 +2380,15 @@ const WeatherService = (() => {
   //  ================================================================
 
   function getSpatialGradient(lat, lng, windDir) {
-    if (lat == null || lng == null) return null;
-    const offset = 0.15; // ~15 km
-    const points = [
-      { label: "N", lat: lat + offset, lng },
-      { label: "S", lat: lat - offset, lng },
-      { label: "E", lat, lng: lng + offset },
-      { label: "W", lat, lng: lng - offset },
-    ];
-    // Approximate temp gradient from latitude alone (crude but functional)
-    const arr = points.map((p) => ({
-      ...p,
-      estTemp: Math.round(20 - Math.abs(p.lat) * 0.4),
-      dir: p.label,
-    }));
-    arr.points = arr;
-    return arr;
+    // Removed: this returned fabricated temperatures (`20 - |lat| * 0.4`)
+    // with no API call, so the label read as a measurement of something
+    // that was never measured. Returning null means callers skip rendering
+    // rather than display a guess.
+    //
+    // A real implementation would fetch the forecast at upwind/downwind
+    // sample points (getUpwindPoint already exists) and read their actual
+    // temperatures. The caller in app.js has been removed until then.
+    return null;
   }
 
   // ================================================================

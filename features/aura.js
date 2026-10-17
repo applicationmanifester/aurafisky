@@ -39,6 +39,7 @@ const INTENT_DEFS = [
   { id: 'alert', priority: 86, phrases: ['notify me', 'alert me', 'remind me', 'tell me when', 'set an alert', 'warn me', 'let me know when'] },
   { id: 'compare', priority: 70, phrases: ['compare', 'versus', ' vs ', 'difference between', 'other city', 'another city'] },
   { id: 'astronomy', priority: 68, phrases: ['sunset', 'sunrise', 'sun set', 'sun rise', 'golden hour', 'blue hour', 'stargazing', 'stars', 'star gazing', 'moon', 'moonlight', 'night sky', 'photography', 'photo', 'photo shoot', 'aurora', 'meteor shower', 'twilight'] },
+  { id: 'dailyBriefing', priority: 67, phrases: ['morning briefing', 'daily briefing', 'brief me', 'my briefing', "today's briefing", 'week ahead', 'day ahead'] },
   { id: 'thunderstorm', priority: 66, phrases: ['thunder', 'lightning', 'thunderstorm', 'squall', 'lightning storm'] },
   { id: 'solar', priority: 65, phrases: ['solar energy', 'solar panel', 'solar power', 'solar generation', 'photovoltaic', 'pv output', 'sun energy'] },
   { id: 'uv', priority: 64, phrases: ['uv', 'sunburn', 'burn risk', 'skin', 'sunscreen', 'wear sunscreen', 'spf', 'tan', 'shade', 'uv index'] },
@@ -57,7 +58,11 @@ const INTENT_DEFS = [
   { id: 'wind', priority: 44, phrases: ['wind', 'windy', 'breeze', 'breezy', 'gale', 'storm', 'gust', 'gusts', 'hawa', 'tez hawa'] },
   { id: 'humidity', priority: 42, phrases: ['humidity', 'humid', 'sticky', 'muggy', 'damp', 'moisture', 'dew point', 'dewpoint', 'chipchipa'] },
   { id: 'temperature', priority: 40, phrases: ['temperature', 'how hot', 'how cold', 'hot', 'cold', 'warm', 'chilly', 'degrees', 'freezing', 'freeze', 'heat', 'weather like', 'feels hotter', 'feels colder', 'thand', 'garmi', 'sardi', 'kitni thand', 'kitni garmi'] },
-  { id: 'overview', priority: 20, phrases: ['weather now', 'right now', 'current conditions', 'conditions', 'how is the weather', "what's the weather", 'summary', 'brief me', 'nice out', 'is it nice', 'worth going out'] },
+  { id: 'packing', priority: 59, phrases: ['pack', 'packing', 'suitcase', 'travel bag', 'vacation', 'holiday', 'trip', 'weekend getaway', 'what to pack', 'packing list', 'pack for'] },
+  { id: 'running', priority: 59, phrases: ['running', 'marathon', '5k', '10k', 'cardio run', 'jogging for exercise', 'running workout', 'long run', 'sprint training', 'tempo run', 'interval run', 'jog', 'jogging'] },
+  { id: 'cycling', priority: 59, phrases: ['cycling', 'bike', 'biking', 'bicycle', 'road bike', 'mountain bike', 'commute by bike', 'cycle to work', 'spin class', 'ride a bike', 'cycle'] },
+  { id: 'workfromhome', priority: 56, phrases: ['work from home', 'wfh', 'remote work', 'stay home from work', 'office closed', 'snow day', 'should i go to office', 'should i go into office', 'work remotely'] },
+  { id: 'overview', priority: 20, phrases: ['weather now', 'right now', 'current conditions', 'conditions', 'how is the weather', "what's the weather", 'summary', 'nice out', 'is it nice', 'worth going out'] },
   { id: 'greeting', priority: 18, phrases: ['hi', 'hello', 'hey', 'good morning', 'good afternoon', 'good evening', 'yo', 'sup', 'howdy'] },
 ];
 
@@ -198,10 +203,109 @@ export function precipTypeFor(code, tempC) {
   return 'none';
 }
 
-// ── Action registry ─────────────────────────────────────────────────
+// ── Two-city comparison ───────────────────────────────────────────
 //
-// Each entry is a real, already-implemented app capability. `silent` actions
-// skip the confirmation toast (used when the answer already says what happened).
+// "delhi vs mumbai", "compare delhi and mumbai", "difference between
+// delhi and mumbai". Returns the pair in the order asked; null when the
+// query doesn't name exactly two places.
+
+const VS_SPLIT = /\s+(?:vs\.?|versus)\s+/i;
+const COMPARE_PATTERNS = [
+  /\bcompare\s+([a-zA-Z][a-zA-Z\s.'-]{1,40}?)\s+(?:and|with|to|&)\s+([a-zA-Z][a-zA-Z\s.'-]{1,40})$/i,
+  /\b(?:difference|differences)\s+between\s+([a-zA-Z][a-zA-Z\s.'-]{1,40}?)\s+and\s+([a-zA-Z][a-zA-Z\s.'-]{1,40})$/i,
+];
+
+/**
+ * @returns {{a:string,b:string}|null} two place names, or null.
+ */
+export function extractTwoPlaces(query) {
+  const q = (query || '').trim().replace(/[?!.]+$/, '');
+  if (!q) return null;
+
+  // "X vs Y" — split on the first delimiter, keep it simple.
+  const vsParts = q.split(VS_SPLIT);
+  if (vsParts.length === 2) {
+    const a = vsParts[0].replace(/^(?:compare|weather(?:\s+(?:in|for|at))?)\s+/i, '').trim();
+    const b = vsParts[1].trim();
+    if (a && b) return { a, b };
+  }
+
+  for (const re of COMPARE_PATTERNS) {
+    const m = q.match(re);
+    if (m) {
+      const a = m[1].trim();
+      const b = m[2].trim();
+      if (a && b) return { a, b };
+    }
+  }
+  return null;
+}
+
+/**
+ * Builds the comparison bullets + verdict from two forecast snapshots.
+ * Pure: no network, no DOM. Each snapshot is what _citySnapshot() gathers.
+ *
+ * @param {object} A - {name, temperature, feelsLike, description, icon, humidity, windSpeed, windGusts, windDirection, prob6h, prob24h, todayMax, todayMin, todayDesc}
+ * @param {object} B - same shape
+ * @returns {{bullets:Array, verdict:string, tone:string}}
+ */
+export function buildCompareSummary(A, B) {
+  const dTemp = A.temperature - B.temperature;
+  const dRain = A.prob6h - B.prob6h;
+  const dWind = A.windSpeed - B.windSpeed;
+  const warmer = dTemp >= 0 ? A : B;
+  const cooler = dTemp >= 0 ? B : A;
+  const wetter = dRain >= 0 ? A : B;
+  const drier = dRain >= 0 ? B : A;
+  const windier = dWind >= 0 ? A : B;
+
+  const bullets = [
+    {
+      k: 'Now',
+      v: `${A.icon} ${Math.round(A.temperature)}° vs ${B.icon} ${Math.round(B.temperature)}° (feels ${Math.round(A.feelsLike)}° / ${Math.round(B.feelsLike)}°)`,
+    },
+    {
+      k: 'Conditions',
+      v: `${A.description} · ${B.description}`,
+    },
+    {
+      k: 'Rain risk (6h)',
+      v: `${A.prob6h}% vs ${B.prob6h}%`,
+      tone: Math.max(A.prob6h, B.prob6h) >= 50 ? 'warn' : 'good',
+    },
+    {
+      k: 'Next 24h',
+      v: `${A.prob24h}% vs ${B.prob24h}% rain · ${Math.round(A.todayMin)}–${Math.round(A.todayMax)}° vs ${Math.round(B.todayMin)}–${Math.round(B.todayMax)}°`,
+    },
+    {
+      k: 'Wind',
+      v: `${Math.round(A.windSpeed)} vs ${Math.round(B.windSpeed)} km/h`,
+      tone: Math.max(A.windSpeed, B.windSpeed) >= 35 ? 'warn' : undefined,
+    },
+  ];
+
+  const parts = [];
+  if (Math.abs(dTemp) >= 1) {
+    parts.push(`${warmer.name} is ${Math.abs(Math.round(dTemp))}° warmer`);
+  }
+  if (Math.abs(dRain) >= 10) {
+    parts.push(`${wetter.name} is ${Math.abs(Math.round(dRain))}% wetter over the next 6h`);
+  }
+  if (Math.abs(dWind) >= 10) {
+    parts.push(`${windier.name} is windier (${Math.abs(Math.round(dWind))} km/h more)`);
+  }
+
+  // Head-to-head recommendation: favour the drier, milder city.
+  const aScore = Math.abs(A.temperature - 22) + A.prob6h * 0.5 + A.windSpeed * 0.3;
+  const bScore = Math.abs(B.temperature - 22) + B.prob6h * 0.5 + B.windSpeed * 0.3;
+  const pick = aScore <= bScore ? A : B;
+  parts.push(`For being outside, ${pick.name} looks the better call right now`);
+
+  const verdict = parts.join('. ') + '.';
+  const tone = Math.max(A.prob6h, B.prob6h) >= 60 || Math.abs(dTemp) >= 12 ? 'warn' : 'info';
+
+  return { bullets, verdict, tone };
+}
 
 // Intents that a bare time follow-up ("and tomorrow?") may re-run.
 // Place/alert/help/greeting answers don't benefit from a time shift.
@@ -209,6 +313,11 @@ const RERUNNABLE = new Set([
   'rain', 'temperature', 'wind', 'outdoor', 'forecast', 'humidity',
   'uv', 'overview', 'commute', 'astronomy', 'thunderstorm',
 ]);
+
+// ── Action registry ─────────────────────────────────────────────────
+//
+// Each entry is a real, already-implemented app capability. `silent` actions
+// skip the confirmation toast (used when the answer already says what happened).
 export const ACTIONS = {
   radar: { label: 'Show rain radar', icon: '🌧️', run: (app) => app.toggleRadar?.() },
   isobars: { label: 'Pressure map', icon: '📈', run: (app) => app.toggleIsobars?.() },
@@ -236,8 +345,80 @@ export const ACTIONS = {
     icon: '⭐',
     run: (app, _p, self) => self?._saveCurrentPlace?.(),
   },
+  rainPush: {
+    label: 'Notify me before rain',
+    icon: '☔',
+    run: (app) => app?.enableRainPush?.(),
+  },
+  goPlace: {
+    label: 'Open place',
+    icon: '📍',
+    silent: true,
+    run: (app, p) => {
+      if (p?.lat != null && p?.lng != null) {
+        app.selectLocation?.(p.lat, p.lng, p.name || `${p.lat}, ${p.lng}`);
+      } else if (p?.q) {
+        app.performSearch?.(p.q);
+      }
+    },
+  },
   search: { label: 'Search the map', icon: '🔎', run: (app, p) => app.performSearch?.(p.q) },
   tab: { label: 'Open tab', icon: '📑', silent: true, run: (app, p, self) => { app.switchWeatherTab?.(p.tab); self?._wakeSheet?.(); } },
+  shareWeather: {
+    label: 'Share this weather',
+    icon: '📤',
+    silent: true,
+    run: (app) => {
+      const loc = app?.selectedName || 'this location';
+      const temp = app?.currentWeather?.temperature ?? 0;
+      const desc = app?.currentWeather?.description || '';
+      const text = `Weather in ${loc}: ${desc}, ${Math.round(temp)}°C via Aurafisky`;
+      if (typeof navigator?.share === 'function') {
+        navigator.share({ title: `Weather in ${loc}`, text, url: window.location.href }).catch(() => {});
+      } else {
+        app.showToast?.('Share not supported on this device.', 'info');
+      }
+    },
+  },
+  exportBriefing: {
+    label: 'Export briefing',
+    icon: '💾',
+    silent: true,
+    run: (app) => {
+      if (typeof URL?.createObjectURL !== 'function' || typeof document?.createElement !== 'function') {
+        app.showToast?.('Export not supported on this device.', 'info');
+        return;
+      }
+      const loc = app?.selectedName || 'this location';
+      const weather = app?.currentWeather;
+      const aqi = app?.currentAqi;
+      const briefing = [
+        `Aurafisky Weather Briefing — ${loc}`,
+        `Generated: ${new Date().toLocaleString()}`,
+        ``,
+        `Current: ${weather?.description ?? 'N/A'}, ${Math.round(weather?.temperature ?? 0)}°C (feels like ${Math.round(weather?.feelsLike ?? weather?.temperature ?? 0)}°C)`,
+        `Humidity: ${weather?.humidity ?? '--'}%`,
+        `Wind: ${app?.WeatherService?.formatWind?.(weather?.windSpeed ?? 0) ?? 'N/A'}`,
+        `Pressure: ${weather?.pressure ?? '--'} hPa`,
+        `UV Index: ${weather?.uvIndex ?? '--'}`,
+        `Air Quality: ${aqi != null ? `US AQI ${aqi}` : 'Not available'}`,
+        ``,
+        `Rain chance (6h): ${app?.currentWeather?.precipitation_probability ?? '--'}%`,
+        ``,
+        `Shared from Aurafisky — ${window.location.href}`,
+      ].join('\n');
+      const blob = new Blob([briefing], { type: 'text/plain' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `aurafisky-briefing-${loc.replace(/\s+/g, '_')}.txt`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      app.showToast?.('Briefing exported as text file.', 'success');
+    },
+  },
 };
 
 export class AuraAssistant {
@@ -296,7 +477,9 @@ export class AuraAssistant {
       if (e.key === 'Escape' && this.isOpen) {
         e.stopPropagation();
         this.close();
+        return;
       }
+      this._trapFocus(e);
     });
 
     // Preset chips are delegated: they are re-rendered as context changes.
@@ -319,7 +502,11 @@ export class AuraAssistant {
     this._els.chat?.setAttribute('aria-live', 'polite');
 
     this._watchLocation();
-    if (this._chatIsEmpty()) this._greeting();
+    // Restore the previous conversation for this location, if any. Falls
+    // back to a fresh greeting when there is no memory or it is stale.
+    if (!this._restoreMemory()) {
+      if (this._chatIsEmpty()) this._greeting();
+    }
     this._renderPresets();
   }
 
@@ -366,16 +553,58 @@ export class AuraAssistant {
       void panel.offsetWidth;
       panel.classList.add('animate-in');
     }
+    // Restore a saved conversation when the chat is empty — this is the
+    // path that runs on a fresh page load, after construction has already
+    // rendered the greeting (or nothing) and the user has actual memory.
+    if (this._chatIsEmpty()) {
+      if (!this._restoreMemory()) {
+        if (this._chatIsEmpty()) this._greeting();
+      }
+    }
     this._renderPresets();
-    // Don't steal focus on touch — it pops the keyboard over the answers.
+    // Focus trap: move focus into the modal and remember where it was so
+    // close() can restore it. This is the single most important a11y
+    // improvement for keyboard and TV-remote users.
+    this._previousFocus = document.activeElement;
     if (window.matchMedia?.('(pointer: fine)')?.matches) input?.focus();
+    else {
+      // On touch devices, focus the first focusable inside the modal so
+      // screen readers announce the dialog.
+      const first = modal.querySelector('button, input, [tabindex]:not([tabindex="-1"])');
+      first?.focus();
+    }
+  }
+
+  _trapFocus(e) {
+    const modal = this._els.modal;
+    if (!modal || !this.isOpen) return;
+    if (e.key !== 'Tab') return;
+    const focusable = modal.querySelectorAll(
+      'button:not([disabled]), input:not([disabled]), [tabindex]:not([tabindex="-1"])'
+    );
+    if (!focusable.length) return;
+    const first = focusable[0];
+    const last = focusable[focusable.length - 1];
+    if (e.shiftKey && document.activeElement === first) {
+      e.preventDefault();
+      last.focus();
+    } else if (!e.shiftKey && document.activeElement === last) {
+      e.preventDefault();
+      first.focus();
+    }
   }
 
   close() {
     if (!this._els.modal) return;
     this.isOpen = false;
     this._streamToken++; // cancel any in-flight answer
+    this._saveMemory();
     this._els.modal.classList.add('hidden');
+    // Restore focus to wherever the user was before opening.
+    if (this._previousFocus && typeof this._previousFocus.focus === 'function') {
+      try { this._previousFocus.focus(); } catch { /* ignore */ }
+    }
+    this._previousFocus = null;
   }
 
   reset() {
@@ -384,6 +613,11 @@ export class AuraAssistant {
     const { chat } = this._els;
     if (!chat) return;
     chat.innerHTML = '';
+    try {
+      localStorage.removeItem(this._memoryKey());
+    } catch {
+      /* ignore */
+    }
     this._greeting();
     this._renderPresets();
     this._haptic('medium');
@@ -501,6 +735,176 @@ export class AuraAssistant {
       </div>`;
     this._els.chat.appendChild(row);
     this._scrollToEnd();
+  }
+
+  // ── Conversation memory ─────────────────────────────────────────
+  //
+  // Aura remembers the conversation across page reloads, so a user who
+  // closes the tab and reopens it doesn't lose context. The memory is:
+  //   * stored in localStorage only — never synced, never sent anywhere
+  //   * keyed by the current location, so switching cities starts fresh
+  //   * capped at 40 messages so it can't grow unbounded
+  //   * cleared by the user via the reset button
+  //
+  // This is the "local-first, privacy-first" promise applied to the
+  // assistant: your conversation stays on your device.
+
+  _memoryKey() {
+    return "aurafisky_aura_memory";
+  }
+
+  _saveMemory() {
+    const { chat } = this._els;
+    if (!chat) return;
+    const messages = [];
+    for (const row of chat.querySelectorAll(".aura-msg")) {
+      const userBubble = row.querySelector(".aura-bubble-user");
+      if (userBubble) {
+        messages.push({ role: "user", text: userBubble.textContent || "" });
+        continue;
+      }
+      const title = row.querySelector(".aura-title")?.textContent;
+      const bullets = [...row.querySelectorAll(".aura-li")].map((li) => ({
+        k: li.querySelector(".aura-k")?.textContent || "",
+        v: li.querySelector(".aura-v")?.textContent || "",
+        tone: li.querySelector(".aura-v")?.className?.match(/aura-v-(good|warn)/)?.[1] || "",
+      }));
+      const note = row.querySelector(".aura-note")?.textContent;
+      const actions = [...row.querySelectorAll(".aura-action")].map((b) => ({
+        id: b.dataset.auraAction,
+        label: b.textContent?.trim() || "",
+      }));
+      const followups = [...row.querySelectorAll(".aura-followup")].map(
+        (b) => b.textContent?.trim() || "",
+      );
+      if (title || bullets.length || note) {
+        messages.push({ role: "assistant", title, bullets, note, actions, followups });
+      }
+    }
+    try {
+      localStorage.setItem(
+        this._memoryKey(),
+        JSON.stringify({
+          location: this._locName(),
+          ts: Date.now(),
+          messages: messages.slice(-40),
+        }),
+      );
+    } catch {
+      /* quota exceeded — memory is best-effort */
+    }
+  }
+
+  _restoreMemory() {
+    const { chat } = this._els;
+    if (!chat) return false;
+    let data;
+    try {
+      data = JSON.parse(localStorage.getItem(this._memoryKey()) || "null");
+    } catch {
+      return false;
+    }
+    if (!data || !Array.isArray(data.messages) || !data.messages.length) return false;
+    // Only restore if the user is still looking at the same place.
+    if (data.location && data.location !== this._locName()) return false;
+    // Discard stale memory (older than 24h).
+    if (data.ts && Date.now() - data.ts > 24 * 3600 * 1000) {
+      localStorage.removeItem(this._memoryKey());
+      return false;
+    }
+
+    chat.innerHTML = "";
+    for (const m of data.messages) {
+      if (m.role === "user") {
+        this._appendUser(m.text);
+      } else {
+        const reply = {
+          icon: "✨",
+          title: m.title,
+          bullets: m.bullets || [],
+          note: m.note,
+          actions: (m.actions || []).map((a) => ({
+            id: a.id,
+            label: a.label,
+            icon: "⚡",
+          })),
+          followups: m.followups || [],
+        };
+        // Render without the streaming animation — it's a restore, not a reveal.
+        this._renderReplyInstant(reply);
+      }
+    }
+    this._scrollToEnd();
+    return true;
+  }
+
+  /** Synchronous, non-animated render used by memory restore. */
+  _renderReplyInstant(reply) {
+    const { chat } = this._els;
+    if (!chat) return;
+    const row = document.createElement("div");
+    row.className = "aura-msg";
+    row.innerHTML = `
+      <div class="aura-avatar" aria-hidden="true">✨</div>
+      <div class="aura-col">
+        <div class="aura-bubble">
+          <div class="aura-head">
+            <span class="aura-emoji" aria-hidden="true">${esc(reply.icon || "✨")}</span>
+            <span class="aura-title aura-tone-${esc(reply.tone || "info")}">${esc(reply.title || "Aura")}</span>
+          </div>
+          <div class="aura-body"></div>
+        </div>
+      </div>`;
+    const body = row.querySelector(".aura-body");
+    const list = document.createElement("ul");
+    list.className = "aura-list";
+    for (const bullet of reply.bullets || []) {
+      const li = document.createElement("li");
+      li.className = "aura-li";
+      const k = document.createElement("span");
+      k.className = "aura-k";
+      k.textContent = bullet.k;
+      const v = document.createElement("span");
+      v.className = "aura-v";
+      if (bullet.tone) v.classList.add(`aura-v-${bullet.tone}`);
+      v.textContent = bullet.v;
+      li.append(k, v);
+      list.appendChild(li);
+    }
+    body.appendChild(list);
+    if (reply.note) {
+      const note = document.createElement("p");
+      note.className = "aura-note";
+      note.textContent = reply.note;
+      body.appendChild(note);
+    }
+    const bubble = row.querySelector(".aura-bubble");
+    if (reply.actions?.length) {
+      const bar = document.createElement("div");
+      bar.className = "aura-actions";
+      for (const action of reply.actions) {
+        const btn = document.createElement("button");
+        btn.type = "button";
+        btn.className = "aura-action";
+        btn.dataset.auraAction = action.id;
+        btn.innerHTML = `<span aria-hidden="true">${esc(action.icon || "⚡")}</span><span>${esc(action.label)}</span>`;
+        bar.appendChild(btn);
+      }
+      bubble.appendChild(bar);
+    }
+    if (reply.followups?.length) {
+      const chips = document.createElement("div");
+      chips.className = "aura-followups";
+      for (const text of reply.followups.slice(0, 3)) {
+        const btn = document.createElement("button");
+        btn.type = "button";
+        btn.className = "aura-followup";
+        btn.textContent = text;
+        chips.appendChild(btn);
+      }
+      row.querySelector(".aura-col").appendChild(chips);
+    }
+    chat.appendChild(row);
   }
 
   _systemNote(text) {
@@ -782,6 +1186,11 @@ export class AuraAssistant {
     if (ctx.aqi != null && ctx.aqi > 100) out.push('Is the air safe?');
     if (ctx.gusty) out.push('How strong are the wind gusts?');
 
+    // Severe weather suggestions
+    if (ctx.severe) out.push('Is severe weather expected?');
+    if (ctx.heatIndex >= 30) out.push('Is it too hot to be outside?');
+    if (ctx.freezingRisk) out.push('Is there a risk of ice?');
+
     // De-duplicate, keep order, cap at 4.
     return [...new Set(out)].slice(0, 4);
   }
@@ -864,6 +1273,10 @@ export class AuraAssistant {
     ctx.gusty = (curr.windGusts ?? 0) >= 40 || (curr.windSpeed ?? 0) >= 30;
     ctx.uvHigh = (curr.uvIndex ?? 0) >= 6;
     ctx.windBad = ctx.gusty;
+    ctx.severe = curr.weatherCode >= 95 || (curr.windGusts ?? 0) >= 65 || (curr.precipitation ?? 0) >= 10 || (curr.temperature ?? 20) <= -10 || (curr.temperature ?? 20) >= 40;
+    const heatIdx = (curr.temperature ?? 20) + 0.33 * ((curr.humidity ?? 50) - 50) - 0.7 * (curr.windSpeed ?? 0) - 4;
+    ctx.heatIndex = Math.round(heatIdx);
+    ctx.freezingRisk = (curr.temperature ?? 20) <= 2 && ((curr.precipitation ?? 0) > 0.05 || ctx.maxProb6h >= 40);
 
     // Analysis helpers — all optional, all sync.
     ctx.daily = S?.getDailyForecast ? S.getDailyForecast(wd) : [];
@@ -953,6 +1366,9 @@ export class AuraAssistant {
     // Re-read: a place lookup may have switched the map target mid-answer.
     this._activeCtx = this._context();
     this._renderPresets();
+
+    // Persist the conversation (memory is local-only, privacy-first).
+    this._saveMemory();
   }
 
   /**
@@ -972,6 +1388,11 @@ export class AuraAssistant {
   async _answer(query, ctx) {
     const q = query.toLowerCase();
     const { match, scope } = this._resolveIntent(q);
+
+    // Two-city comparison ("delhi vs mumbai") runs before anything else —
+    // it's fully self-contained and needs both cities resolved.
+    const twoPlaces = extractTwoPlaces(query);
+    if (twoPlaces) return this._answerComparePlaces(twoPlaces.a, twoPlaces.b, ctx);
 
     // Remember the thread for bare follow-ups ("and tomorrow?").
     if (match && RERUNNABLE.has(match.id)) this._lastIntent = match.id;
@@ -995,8 +1416,10 @@ export class AuraAssistant {
       };
     }
 
-    switch (match?.id) {      case 'help': return this._answerHelp(ctx);
+    switch (match?.id) {
+      case 'help': return this._answerHelp(ctx);
       case 'greeting': return this._answerGreeting(ctx);
+      case 'dailyBriefing': return this._answerDailyBriefing(ctx);
       case 'alert': return this._answerAlert(q, ctx);
       case 'place': return this._answerPlace(null, ctx);
       case 'compare': return this._answerCompare(ctx);
@@ -1018,6 +1441,10 @@ export class AuraAssistant {
       case 'rain': return this._answerRain(ctx, scope);
       case 'wind': return this._answerWind(ctx);
       case 'humidity': return this._answerHumidity(ctx);
+      case 'packing': return this._answerPacking(ctx);
+      case 'running': return this._answerRunning(ctx);
+      case 'cycling': return this._answerCycling(ctx);
+      case 'workfromhome': return this._answerWorkFromHome(ctx);
       case 'temperature': return this._answerTemperature(ctx);
       case 'overview': return this._answerOverview(ctx);
       default: return this._answerUnknown(query, ctx);
@@ -1107,6 +1534,11 @@ export class AuraAssistant {
         actions: [
           { id: 'radar', label: 'Live rain radar', icon: '🌧️' },
           { id: 'alert', label: 'Alert me above 60%', icon: '🔔', payload: { type: 'precipProb', condition: 'above', value: 60 } },
+          ...(typeof Notification !== 'undefined' &&
+            Notification.permission === 'granted' &&
+            this.app?.rainPushEnabled?.()
+            ? []
+            : [{ id: 'rainPush', label: 'Notify me before rain', icon: '☔' }]),
         ],
         followups: ['Driving conditions right now', 'Best outdoor window today?', 'Plan my day'],
       };
@@ -1162,16 +1594,24 @@ export class AuraAssistant {
         ? `Keep ${gear} handy; ${ctx.maxProb6h}% is the peak risk in the next 6 hours.`
         : `You can probably leave the umbrella — peak risk is only ${ctx.maxProb6h}% over the next 6 hours.${scopeNote}`;
 
+    // Offer the proactive rain heads-up until it's enabled + permitted.
+    const pushLive =
+      typeof Notification !== 'undefined' &&
+      Notification.permission === 'granted' &&
+      this.app?.rainPushEnabled?.();
+    const actions = [
+      { id: 'radar', label: 'Live rain radar', icon: '🌧️' },
+      { id: 'alert', label: 'Alert me above 60%', icon: '🔔', payload: { type: 'precipProb', condition: 'above', value: 60 } },
+    ];
+    if (!pushLive) actions.push({ id: 'rainPush', label: 'Notify me before rain', icon: '☔' });
+
     return {
       icon: type === 'snow' ? '❄️' : '🌧️',
       tone: soon ? 'warn' : 'good',
       title: `${type === 'snow' ? 'Snow' : type === 'mix' ? 'Wintry mix' : 'Rain'} outlook · ${ctx.loc}`,
       bullets,
       note: verdict,
-      actions: [
-        { id: 'radar', label: 'Live rain radar', icon: '🌧️' },
-        { id: 'alert', label: 'Alert me above 60%', icon: '🔔', payload: { type: 'precipProb', condition: 'above', value: 60 } },
-      ],
+      actions,
       followups: ['Driving conditions right now', 'Best outdoor window today?', 'Plan my day'],
     };
   }
@@ -1732,6 +2172,180 @@ export class AuraAssistant {
     };
   }
 
+  /** ── Packing advice ──────────────────────────────────────────── */
+  _answerPacking(ctx) {
+    const f = this._fmt();
+    const { curr, today } = ctx;
+    const t = curr.feelsLike ?? curr.temperature ?? 20;
+    const rain = ctx.maxProb6h >= 40 || ctx.precip24h > 5;
+    const uv = (curr.uvIndex ?? 0) >= 5;
+    const windy = (curr.windGusts ?? 0) >= 30;
+    const cold = t <= 10;
+    const hot = t >= 28;
+
+    const items = [];
+    if (cold) items.push('warm coat or jacket', 'sweater or fleece', 'long pants');
+    else if (hot) items.push('light breathable clothing', 'shorts or skirt', 't-shirt or tank top');
+    else items.push('light jacket or cardigan', 'long-sleeve shirts', 'jeans or trousers');
+
+    if (rain) items.push('umbrella or rain shell', 'waterproof shoes');
+    if (uv) items.push('sunglasses', 'sun hat or cap');
+    if (windy) items.push('windbreaker', 'hat with chin strap');
+    if (today && today.minTemp != null && today.minTemp < t - 8) items.push('extra layer for evening');
+
+    return {
+      icon: '🧳',
+      tone: 'info',
+      title: `Packing List · ${ctx.loc}`,
+      bullets: [
+        { k: 'Conditions', v: `${f.temp(curr.temperature)} · ${curr.description} · ${Math.round(curr.humidity ?? 0)}% humidity` },
+        { k: 'Pack', v: items.length ? items.join(', ') : 'Light clothes and basics' },
+      ],
+      note: items.length
+        ? `Pack for ${Math.round(t)}°C with ${rain ? 'rain' : 'no significant rain'} expected. Layer up if temperatures drop overnight.`
+        : 'Pack light — comfortable conditions.',
+      actions: [{ id: 'tab', label: 'Daily forecast', icon: '📑', payload: { tab: 'daily' } }],
+      followups: ['Will it rain?', 'What should I wear?', 'Plan my day'],
+    };
+  }
+
+  /** ── Running advice ──────────────────────────────────────────── */
+  _answerRunning(ctx) {
+    const f = this._fmt();
+    const { curr } = ctx;
+    const t = curr.temperature ?? 20;
+    const h = curr.humidity ?? 50;
+    const heatIndex = t + 0.33 * (h - 50) - 0.7 * (curr.windSpeed ?? 0) - 4;
+    const rain = ctx.maxProb6h >= 40;
+    const aqi = ctx.aqi ?? 50;
+
+    let advice = 'Great running weather.';
+    let tone = 'good';
+    if (heatIndex >= 30) {
+      advice = 'Heat risk — run early or evening, hydrate well, shorten your run.';
+      tone = 'warn';
+    } else if (heatIndex >= 25) {
+      advice = 'Warm — hydrate, wear light clothing, consider a shorter route.';
+      tone = 'warn';
+    } else if (t <= 5) {
+      advice = 'Cold — warm up thoroughly, cover extremities, watch for ice.';
+      tone = 'warn';
+    } else if (rain) {
+      advice = 'Wet — wear a rain shell, watch for slippery surfaces.';
+      tone = 'warn';
+    }
+    if (aqi > 100) {
+      advice = 'Poor air quality — consider indoor training instead.';
+      tone = 'warn';
+    }
+
+    return {
+      icon: '🏃',
+      tone,
+      title: `Running Conditions · ${ctx.loc}`,
+      bullets: [
+        { k: 'Feels like', v: `${f.temp(curr.feelsLike ?? t)} · heat index ≈ ${Math.round(heatIndex)}°C` },
+        { k: 'Air quality', v: ctx.aqi != null ? `US AQI ${ctx.aqi} (${f.aqi(ctx.aqi)})` : 'Not available', tone: ctx.aqi > 100 ? 'warn' : 'good' },
+        { k: 'Wind', v: `${f.wind(curr.windSpeed)} ${f.dir(curr.windDirection)}`, tone: (curr.windGusts ?? 0) > 30 ? 'warn' : undefined },
+        { k: 'Rain (6h)', v: `${ctx.maxProb6h}%`, tone: ctx.maxProb6h >= 50 ? 'warn' : 'good' },
+      ],
+      note: advice,
+      actions: [{ id: 'tab', label: 'Hourly detail', icon: '📑', payload: { tab: 'hourly' } }],
+      followups: ['Is the air safe?', 'Will it rain?', 'Best outdoor window today?'],
+    };
+  }
+
+  /** ── Cycling advice ──────────────────────────────────────────── */
+  _answerCycling(ctx) {
+    const f = this._fmt();
+    const { curr } = ctx;
+    const t = curr.temperature ?? 20;
+    const wind = curr.windSpeed ?? 0;
+    const gusts = curr.windGusts ?? 0;
+    const vis = curr.visibility ?? 10000;
+    const rain = ctx.maxProb6h >= 40;
+
+    let advice = 'Great cycling weather.';
+    let tone = 'good';
+    if (gusts >= 35) {
+      advice = 'Strong winds — expect headwinds on exposed roads, take extra care.';
+      tone = 'warn';
+    } else if (wind >= 20) {
+      advice = 'Breezy — plan for headwinds on exposed sections.';
+      tone = 'warn';
+    } else if (rain) {
+      advice = 'Wet roads — reduce speed, increase braking distance.';
+      tone = 'warn';
+    } else if (t <= 2) {
+      advice = 'Freezing — watch for ice, especially on bridges and shaded roads.';
+      tone = 'warn';
+    } else if (t >= 30) {
+      advice = 'Hot — carry water, ride early or evening.';
+      tone = 'warn';
+    }
+    if (vis < 3000) {
+      advice = 'Low visibility — use lights, wear high-visibility clothing.';
+      tone = 'warn';
+    }
+
+    return {
+      icon: '🚴',
+      tone,
+      title: `Cycling Conditions · ${ctx.loc}`,
+      bullets: [
+        { k: 'Wind', v: `${f.wind(wind)} ${f.dir(curr.windDirection)}${gusts > wind ? ` · gusting ${f.wind(gusts)}` : ''}`, tone: gusts >= 30 ? 'warn' : undefined },
+        { k: 'Temperature', v: `${f.temp(t)} · feels like ${f.temp(curr.feelsLike ?? t)}` },
+        { k: 'Visibility', v: `${Math.round(vis / 1000)} km`, tone: vis < 3000 ? 'warn' : 'good' },
+        { k: 'Rain (6h)', v: `${ctx.maxProb6h}%`, tone: ctx.maxProb6h >= 50 ? 'warn' : 'good' },
+      ],
+      note: advice,
+      actions: [{ id: 'tab', label: 'Hourly detail', icon: '📑', payload: { tab: 'hourly' } }],
+      followups: ['How windy is it?', 'Will it rain?', 'Best outdoor window today?'],
+    };
+  }
+
+  /** ── Work from home advice ───────────────────────────────────── */
+  _answerWorkFromHome(ctx) {
+    const f = this._fmt();
+    const { curr } = ctx;
+    const t = curr.temperature ?? 20;
+    const gusts = curr.windGusts ?? 0;
+    const rain = ctx.maxProb6h >= 50 || ctx.precip24h > 10;
+    const severe = curr.weatherCode >= 95 || gusts >= 65 || t <= -10 || t >= 40;
+    const flood = ctx.precip24h >= 40;
+
+    let advice = 'Good day to go into the office — conditions are fine.';
+    let tone = 'good';
+    if (severe) {
+      advice = 'Severe weather — work from home if possible. Stay safe.';
+      tone = 'warn';
+    } else if (flood) {
+      advice = 'Heavy rain — flooding possible, consider working from home.';
+      tone = 'warn';
+    } else if (gusts >= 50 || (t <= -5 && curr.precipitation > 0)) {
+      advice = 'Very windy or freezing with precipitation — WFH recommended.';
+      tone = 'warn';
+    } else if (rain) {
+      advice = 'Rainy — commute will be slower, WFH is a comfortable option.';
+      tone = 'info';
+    }
+
+    return {
+      icon: '💻',
+      tone,
+      title: `Work From Home · ${ctx.loc}`,
+      bullets: [
+        { k: 'Conditions', v: `${curr.icon} ${curr.description} · ${f.temp(curr.temperature)}` },
+        { k: 'Wind', v: `${f.wind(curr.windSpeed)} ${f.dir(curr.windDirection)}${curr.windGusts > curr.windSpeed ? ` · gusting ${f.wind(curr.windGusts)}` : ''}` },
+        { k: 'Rain (6h)', v: `${ctx.maxProb6h}%`, tone: ctx.maxProb6h >= 50 ? 'warn' : 'good' },
+        { k: 'Precipitation (24h)', v: f.precip(ctx.precip24h), tone: ctx.precip24h > 10 ? 'warn' : undefined },
+      ],
+      note: advice,
+      actions: [{ id: 'tab', label: 'Hourly detail', icon: '📑', payload: { tab: 'hourly' } }],
+      followups: ['Will it rain?', 'How strong are the wind gusts?', 'Commute conditions'],
+    };
+  }
+
   _answerPollen(ctx) {
     const f = this._fmt();
     const { curr } = ctx;
@@ -1878,6 +2492,76 @@ export class AuraAssistant {
     };
   }
 
+  /** "Morning briefing" — day-ahead summary; also pins the Overview card. */
+  _answerDailyBriefing(ctx) {
+    const f = this._fmt();
+    const { curr, today } = ctx;
+    const w = ctx.bestWindow;
+    const bullets = [];
+
+    bullets.push({
+      k: 'Now',
+      v: `${curr.icon} ${f.temp(curr.temperature)} · ${curr.description} (feels ${f.temp(curr.feelsLike)})`,
+    });
+    if (today) {
+      bullets.push({ k: 'Day range', v: `${f.temp(today.minTemp)} – ${f.temp(today.maxTemp)}` });
+    }
+    if (ctx.nextRainIdx != null) {
+      const away = Math.max(0, ctx.nextRainIdx - ctx.idx);
+      bullets.push({
+        k: 'Rain arrives',
+        v: `${this._fmtHour(ctx.nextRainTime)}${away > 0 ? ` (in ${away}h)` : ''}`,
+        tone: away <= 3 ? 'warn' : undefined,
+      });
+    } else {
+      bullets.push({ k: 'Rain', v: `Low — ${ctx.maxProb24h}% peak over 24h`, tone: 'good' });
+    }
+    if (w) {
+      let sh = NaN;
+      let eh = NaN;
+      try {
+        sh = new Date(w.startTime).getHours();
+        eh = new Date(w.endTime).getHours();
+      } catch { /* keep NaN → not overnight */ }
+      const overnight = Number.isFinite(sh) && Number.isFinite(eh) && sh > eh;
+      bullets.push({
+        k: 'Best outdoor window',
+        v: `${this._fmtHour(w.startTime)} – ${this._fmtHour(w.endTime)}${overnight ? ' (overnight)' : ''} (${w.hours}h)`,
+        tone: 'good',
+      });
+    }
+    if (ctx.advisories.length) {
+      bullets.push({ k: 'Watch out', v: ctx.advisories[0].title, tone: 'warn' });
+    }
+    if (ctx.comfort != null) {
+      bullets.push({
+        k: 'Comfort',
+        v: `${ctx.comfort}/100${ctx.comfortLabel ? ` · ${ctx.comfortLabel.label}` : ''}`,
+        tone: ctx.comfort >= 70 ? 'good' : 'warn',
+      });
+    }
+
+    // Make sure the pinned card exists too.
+    try {
+      this.app?.renderDailyBriefing?.(true);
+    } catch {
+      /* card is best-effort */
+    }
+
+    return {
+      icon: '🌤️',
+      tone: 'info',
+      title: `Day ahead · ${ctx.loc}`,
+      bullets,
+      note: 'The full briefing card is pinned at the top of the Overview tab.',
+      actions: [
+        { id: 'briefing', label: 'Full briefing', icon: '📝' },
+        { id: 'tab', label: 'Overview tab', icon: '📑', payload: { tab: 'overview' } },
+      ],
+      followups: ['Plan my day', 'Best outdoor window today?', 'Notify me before rain'],
+    };
+  }
+
   _answerCompare(ctx) {
     const home = this.app?.defaultLocation;
     if (!home) {
@@ -1886,7 +2570,7 @@ export class AuraAssistant {
         tone: 'warn',
         title: 'No home location set',
         bullets: [{ k: 'Status', v: 'Aura has nothing to compare against yet' }],
-        note: 'Set a home location in Aurafisky settings, then ask me to compare again.',
+        note: 'Set a home location in Aurafisky settings — or name both cities, like "Delhi vs Mumbai" — then ask again.',
         actions: [{ id: 'compareHome', label: 'Try anyway', icon: '🏠' }],
         followups: ['What is the weather like here?', 'Plan my day'],
       };
@@ -1902,6 +2586,130 @@ export class AuraAssistant {
       note: `Opening a side-by-side comparison of ${ctx.loc} and ${home.name}.`,
       actions: [{ id: 'compareHome', label: `Compare with ${home.name}`, icon: '⚖️' }],
       followups: ['What is the weather like here?', 'Plan my day'],
+    };
+  }
+
+  /** Condense a fetched forecast + resolved place into compare-fodder. */
+  _citySnapshot(name, data) {
+    if (!data?.hourly?.time?.length) return null;
+    const S = ws();
+    const idx = S?.getCurrentHourIndex
+      ? S.getCurrentHourIndex(data, data.utc_offset_seconds || 0)
+      : 0;
+    const curr = S?.getHourlyAtIndex ? S.getHourlyAtIndex(data, idx) : null;
+    if (!curr) return null;
+
+    const prob = data.hourly.precipitation_probability || [];
+    const slice = (arr, start, len) =>
+      arr.slice(start, start + len).filter((n) => typeof n === 'number');
+    const prob6 = slice(prob, idx, 6);
+    const prob24 = slice(prob, idx, 24);
+
+    // Today's range: the first daily row matching the current hour's date.
+    const dateKey = (data.hourly.time[idx] || '').slice(0, 10);
+    const dIdx = data.daily?.time ? data.daily.time.indexOf(dateKey) : -1;
+    const todayMax = dIdx >= 0 ? data.daily.temperature_2m_max?.[dIdx] : null;
+    const todayMin = dIdx >= 0 ? data.daily.temperature_2m_min?.[dIdx] : null;
+
+    return {
+      name: shortPlaceName(name),
+      temperature: curr.temperature ?? 0,
+      feelsLike: curr.feelsLike ?? curr.temperature ?? 0,
+      description: curr.description || '',
+      icon: curr.icon || '🌤️',
+      humidity: curr.humidity,
+      windSpeed: curr.windSpeed ?? 0,
+      windGusts: curr.windGusts ?? 0,
+      windDirection: curr.windDirection,
+      prob6h: prob6.length ? Math.max(...prob6) : 0,
+      prob24h: prob24.length ? Math.max(...prob24) : 0,
+      todayMax: todayMax ?? curr.temperature ?? 0,
+      todayMin: todayMin ?? curr.temperature ?? 0,
+    };
+  }
+
+  /** Resolve one place name → geocoded + fetched snapshot, tolerantly. */
+  async _resolveCity(place) {
+    const S = ws();
+    if (!S?.searchLocations || !S?.fetchForecast) return { ok: false, place };
+    let results = [];
+    try {
+      results = await S.searchLocations(place);
+    } catch {
+      results = [];
+    }
+    if (!results.length) return { ok: false, place };
+    const best = results[0];
+    let data = null;
+    try {
+      data = await S.fetchForecast(best.latitude, best.longitude);
+    } catch {
+      data = null;
+    }
+    const snap = data ? this._citySnapshot(best.displayName || best.name, data) : null;
+    return snap ? { ok: true, place: best, snap } : { ok: false, place };
+  }
+
+  async _answerComparePlaces(aName, bName, ctx) {
+    const S = ws();
+    if (!S?.searchLocations) {
+      return {
+        icon: '⚠️',
+        tone: 'warn',
+        title: 'Comparison unavailable',
+        bullets: [{ k: 'Reason', v: 'The geocoding service is not loaded' }],
+      };
+    }
+
+    const norm = (s) => s.trim().toLowerCase();
+    if (norm(aName) === norm(bName)) {
+      return {
+        icon: '🤔',
+        tone: 'info',
+        title: 'Same place twice',
+        bullets: [{ k: 'Tip', v: 'Name two different cities, like "Delhi vs Mumbai"' }],
+      };
+    }
+
+    const [A, B] = await Promise.all([this._resolveCity(aName), this._resolveCity(bName)]);
+
+    if (!A.ok && !B.ok) {
+      return {
+        icon: '🔍',
+        tone: 'warn',
+        title: `Couldn't find "${aName}" or "${bName}"`,
+        bullets: [{ k: 'Tried', v: 'Open-Meteo geocoding for both' }],
+        note: 'Aurafisky geocodes towns and cities — try larger nearby names.',
+      };
+    }
+    if (!A.ok || !B.ok) {
+      const found = A.ok ? A : B;
+      const missing = A.ok ? bName : aName;
+      const f = found.snap;
+      return {
+        icon: '⚠️',
+        tone: 'warn',
+        title: `Found ${f.name}, but not "${missing}"`,
+        bullets: [
+          { k: f.name, v: `${f.icon} ${Math.round(f.temperature)}° · ${f.description}` },
+          { k: 'Rain (6h)', v: `${f.prob6h}%` },
+        ],
+        note: 'I can only compare when both places resolve. Try a larger city near it.',
+      };
+    }
+
+    const { bullets, verdict, tone } = buildCompareSummary(A.snap, B.snap);
+    return {
+      icon: '⚖️',
+      tone,
+      title: `${A.snap.name} vs ${B.snap.name}`,
+      bullets,
+      note: verdict,
+      actions: [
+        { id: 'goPlace', label: `Open ${A.snap.name}`, icon: '📍', payload: { lat: A.place.latitude, lng: A.place.longitude, name: A.place.displayName || A.place.name } },
+        { id: 'goPlace', label: `Open ${B.snap.name}`, icon: '📍', payload: { lat: B.place.latitude, lng: B.place.longitude, name: B.place.displayName || B.place.name } },
+      ],
+      followups: ['Plan my day', 'When does the rain start?', 'Best outdoor window today?'],
     };
   }
 
@@ -2051,8 +2859,15 @@ export class AuraAssistant {
   _answerUnknown(query, ctx) {
     const f = this._fmt();
     const { curr } = ctx;
-    // No intent matched — give the conditions plus a nudge toward what Aura
-    // actually understands, rather than a dead-end "I can't help".
+    const ql = query.toLowerCase();
+    // No intent matched — give the conditions plus smart nudges toward what
+    // Aura actually understands, based on current conditions.
+    const followups = ['What can you do?', 'Plan my day', 'When does the rain start?'];
+    if (ctx.maxProb6h >= 50) followups.splice(1, 0, 'When will the rain stop?');
+    if ((curr.uvIndex ?? 0) >= 6) followups.splice(1, 0, 'What is the UV index?');
+    if (ctx.aqi != null && ctx.aqi > 100) followups.splice(1, 0, 'Is the air safe?');
+    if (curr.windGusts >= 40) followups.splice(1, 0, 'How strong are the wind gusts?');
+
     return {
       icon: '🤔',
       tone: 'info',
@@ -2063,9 +2878,13 @@ export class AuraAssistant {
         { k: 'Wind', v: `${f.wind(curr.windSpeed)} ${f.dir(curr.windDirection)}` },
         { k: 'Air', v: ctx.aqi != null ? `US AQI ${ctx.aqi}` : 'Not available' },
       ],
-      note: 'I match on keywords, so try asking about rain, your commute, a workout, air quality, UV, sunset, stargazing — with "tonight" or "tomorrow" to scope it — or say "notify me when…".',
-      actions: [{ id: 'briefing', label: 'Give me a briefing', icon: '📝' }],
-      followups: ['What can you do?', 'Plan my day', 'When does the rain start?'],
+      note: 'I match on keywords, so try asking about rain, your commute, a workout, air quality, UV, sunset, stargazing — with "tonight" or "tomorrow" to scope it — or say "notify me when…". You can also ask about packing, running, cycling, or whether to work from home.',
+      actions: [
+        { id: 'briefing', label: 'Give me a briefing', icon: '📝' },
+        { id: 'shareWeather', label: 'Share this weather', icon: '📤' },
+        { id: 'exportBriefing', label: 'Export briefing', icon: '💾' },
+      ],
+      followups: followups.slice(0, 4),
     };
   }
 

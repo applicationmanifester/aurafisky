@@ -7,6 +7,8 @@ import { test, expect, describe } from "vitest";
 import {
   classify,
   extractPlace,
+  extractTwoPlaces,
+  buildCompareSummary,
   detectTimeScope,
   isBareTimeQuery,
   precipTypeFor,
@@ -26,7 +28,7 @@ describe("classify", () => {
     ["road grip on the highway", "commute"],
     ["can I go for a run", "outdoor"],
     ["best time for a workout today", "outdoor"],
-    ["is it good for cycling", "outdoor"],
+    ["is it good for cycling", "cycling"],
     ["restaurant recommendations nearby", "dining"],
     ["where should I have dinner", "dining"],
     ["good coffee place", "dining"],
@@ -64,7 +66,7 @@ describe("classify", () => {
     ["is there flood risk", "hazard"],
     ["is it nice out", "overview"],
     ["is it going to pour", "rain"],
-    ["should I bike instead", "outdoor"],
+    ["should I bike instead", "cycling"],
     ["is it good for photos", "astronomy"],
     ["any good cafes nearby", "dining"],
     ["will it freeze", "temperature"],
@@ -288,5 +290,81 @@ describe("_resolveIntent", () => {
     const r = assistant(null)._resolveIntent("will it rain tonight");
     expect(r.match.id).toBe("rain");
     expect(r.scope?.kind).toBe("tonight");
+  });
+});
+
+// ── Two-city comparison ───────────────────────────────────────────
+
+describe("extractTwoPlaces", () => {
+  test("handles the common phrasings", () => {
+    expect(extractTwoPlaces("delhi vs mumbai")).toEqual({ a: "delhi", b: "mumbai" });
+    expect(extractTwoPlaces("Delhi versus Mumbai")).toEqual({ a: "Delhi", b: "Mumbai" });
+    expect(extractTwoPlaces("compare Delhi and Mumbai")).toEqual({ a: "Delhi", b: "Mumbai" });
+    expect(extractTwoPlaces("difference between Tokyo and Osaka")).toEqual({
+      a: "Tokyo",
+      b: "Osaka",
+    });
+    expect(extractTwoPlaces("weather in Paris vs London?")).toEqual({ a: "Paris", b: "London" });
+  });
+
+  test("returns null for non-comparison queries", () => {
+    expect(extractTwoPlaces("will it rain")).toBeNull();
+    expect(extractTwoPlaces("weather in Tokyo")).toBeNull();
+    expect(extractTwoPlaces("")).toBeNull();
+    expect(extractTwoPlaces("compare")).toBeNull();
+  });
+});
+
+describe("buildCompareSummary", () => {
+  const snap = (over) => ({
+    name: "A",
+    temperature: 20,
+    feelsLike: 19,
+    description: "Clear sky",
+    icon: "☀️",
+    humidity: 50,
+    windSpeed: 10,
+    windGusts: 15,
+    windDirection: 180,
+    prob6h: 10,
+    prob24h: 20,
+    todayMax: 24,
+    todayMin: 14,
+    ...over,
+  });
+
+  test("calls out the warmer city", () => {
+    const { verdict } = buildCompareSummary(
+      snap({ name: "Delhi", temperature: 34, feelsLike: 36 }),
+      snap({ name: "Mumbai", temperature: 28, feelsLike: 31 }),
+    );
+    expect(verdict).toContain("Delhi is 6° warmer");
+  });
+
+  test("calls out the wetter city when the gap is meaningful", () => {
+    const { verdict, bullets } = buildCompareSummary(
+      snap({ name: "Mumbai", prob6h: 80, prob24h: 90 }),
+      snap({ name: "Delhi", prob6h: 10, prob24h: 15 }),
+    );
+    expect(verdict).toContain("Mumbai is 70% wetter");
+    expect(bullets.some((b) => b.tone === "warn")).toBe(true);
+  });
+
+  test("recommends the drier, milder city for outdoor plans", () => {
+    const { verdict } = buildCompareSummary(
+      snap({ name: "A", temperature: 22, prob6h: 5, windSpeed: 5 }),
+      snap({ name: "B", temperature: 22, prob6h: 70, windSpeed: 40 }),
+    );
+    expect(verdict).toContain("A looks the better call");
+  });
+
+  test("both bullets name both cities' values", () => {
+    const { bullets } = buildCompareSummary(
+      snap({ name: "X", temperature: 30 }),
+      snap({ name: "Y", temperature: 10 }),
+    );
+    const now = bullets.find((b) => b.k === "Now");
+    expect(now.v).toContain("30°");
+    expect(now.v).toContain("10°");
   });
 });

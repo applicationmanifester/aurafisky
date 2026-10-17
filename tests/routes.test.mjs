@@ -280,3 +280,32 @@ test("generateAuraCopilotBriefing produces coherent travel and aerodynamic advic
   assert.ok(dangerBriefing.narrative.includes("Severe weather hazards"));
 });
 
+test("removeStop and clearRoute do not close Route Weather Studio", async () => {
+  const fs = await import("fs");
+  const routesCode = fs.readFileSync("features/routes.js", "utf-8");
+
+  // In removeStop(index), when pts.length < 2, it must NOT call hidePanel()
+  const removeStopFunc = routesCode.slice(
+    routesCode.indexOf("export function removeStop("),
+    routesCode.indexOf("export function reverseRoute()")
+  );
+  expect(removeStopFunc).not.toContain("hidePanel()");
+  expect(removeStopFunc).toContain("renderEmptyRoutePanel()");
+
+  // In removeLastStop(), when pts.length < 2, it must NOT call hidePanel()
+  const removeLastStopFunc = routesCode.slice(
+    routesCode.indexOf("export function undoLastStop()"),
+    routesCode.indexOf("export function removeStop(")
+  );
+  expect(removeLastStopFunc).not.toContain("hidePanel()");
+  expect(removeLastStopFunc).toContain("renderEmptyRoutePanel()");
+
+  // In clearRoute(), it must NOT call hidePanel()
+  const clearRouteFunc = routesCode.slice(
+    routesCode.indexOf("export function clearRoute()"),
+    routesCode.indexOf("function buildHUD()")
+  );
+  expect(clearRouteFunc).not.toContain("hidePanel()");
+});
+
+

@@ -45,6 +45,8 @@ let hudEl = null;
 let panelEl = null;
 let activeRouteData = null; // cached analysis data
 let isPanelOpen = false;
+let activeRouteTab = "stops"; // 'stops' | 'weather' | 'analytics'
+let lastLoadedStops = [];
 
 // ============================================================================
 //  MATH & MULTIMODAL ROUTE HELPERS (Exported for Unit Testing)
@@ -625,13 +627,36 @@ function getActiveUnits() {
 //  INITIALIZATION & CORE LIFECYCLE
 // ============================================================================
 
+function syncRouteChipState(isActive) {
+  const routeChip = document.querySelector('.mobile-quick-chip[data-category="route-weather"]');
+  const allChips = document.querySelectorAll('.mobile-quick-chip');
+  if (isActive) {
+    allChips.forEach((c) => c.classList.remove("active"));
+    if (routeChip) routeChip.classList.add("active");
+  } else {
+    if (routeChip) routeChip.classList.remove("active");
+  }
+
+  const routeMobile = appRef?.googleMapsMobile || (typeof window !== "undefined" ? window.googleMapsMobile : null);
+  if (routeMobile) {
+    routeMobile.activeCategory = isActive ? "route-weather" : null;
+  }
+}
+
 export function init(app) {
   appRef = app;
   app.toggleRoute = toggleRoute;
+  app.openRouteStudio = openRouteStudio;
+  app.closeRouteStudio = closeRouteStudio;
+  if (typeof window !== "undefined") {
+    window.openRouteStudio = openRouteStudio;
+    window.closeRouteStudio = closeRouteStudio;
+    window.toggleRoute = toggleRoute;
+  }
   btn = document.getElementById("routeBtn");
   if (btn) {
-    btn.title = "Route Studio (Trip Weather Planner)";
-    btn.setAttribute("aria-label", "Route Studio (Trip Weather Planner)");
+    btn.title = "Route Weather & Planner";
+    btn.setAttribute("aria-label", "Route Weather & Planner");
     btn.addEventListener("click", toggleRoute);
   }
   buildHUD();
@@ -639,60 +664,82 @@ export function init(app) {
 }
 
 /**
+ * Fully exit and close Route Studio: hides HUD, panel, removes map listeners & keydown.
+ */
+export function closeRouteStudio() {
+  closeWaypointPopover();
+  routeMode = false;
+  isPanelOpen = false;
+
+  if (appRef) {
+    appRef._routeModeActive = false;
+    if (appRef.map) {
+      appRef.map.un("click", onMapClick);
+      const targetEl = appRef.map.getTargetElement();
+      if (targetEl) targetEl.style.cursor = "";
+    }
+  }
+  window.removeEventListener("keydown", onKeyDown);
+
+  if (btn) {
+    btn.classList.remove("bg-indigo-600", "text-white", "ring-2", "ring-indigo-400/50");
+    btn.title = "Route Weather & Planner";
+  }
+
+  hideHUD();
+  hidePanel();
+  syncRouteChipState(false);
+}
+
+/**
+ * Open Route Studio mode.
+ */
+export function openRouteStudio() {
+  if (!appRef || !appRef.map) return;
+  routeMode = true;
+  appRef._routeModeActive = true;
+
+  const targetEl = appRef.map.getTargetElement();
+  ensureRouteLayers();
+  if (btn) {
+    btn.classList.add("bg-indigo-600", "text-white", "ring-2", "ring-indigo-400/50");
+    btn.title = "Exit Route Weather";
+  }
+
+  if (targetEl) targetEl.style.cursor = "crosshair";
+
+  // Synchronize with mobile quick chips and Google Maps Mobile controller
+  syncRouteChipState(true);
+
+  // Open the merged Route Studio panel directly (hide the duplicate floating HUD)
+  hideHUD();
+  showPanel();
+  updateHUD();
+
+  if (pts.length >= 2) {
+    fetchAndRenderRoutePlan();
+  } else {
+    renderEmptyRoutePanel();
+  }
+
+  appRef.map.on("click", onMapClick);
+  window.addEventListener("keydown", onKeyDown);
+
+  if (pts.length === 0) {
+    appRef.showToast?.("🚗 Route Weather: Click map or search to place Departure point", "info");
+  } else {
+    appRef.showToast?.(`🚗 Route Weather: ${pts.length} stops ready.`, "info");
+  }
+}
+
+/**
  * Toggle drawing mode on/off
  */
 export function toggleRoute() {
-  if (!appRef || !appRef.map) return;
-  routeMode = !routeMode;
-  appRef._routeModeActive = routeMode;
-
-  const targetEl = appRef.map.getTargetElement();
-
-  if (routeMode) {
-    // ---- Enter Route Studio Mode ----
-    ensureRouteLayers();
-    if (btn) {
-      btn.classList.add("bg-indigo-600", "text-white", "ring-2", "ring-indigo-400/50");
-      btn.title = "Exit Route Studio";
-    }
-
-    if (targetEl) targetEl.style.cursor = "crosshair";
-
-    if (pts.length >= 2) {
-      showPanel();
-      fetchAndRenderRoutePlan();
-    } else {
-      hidePanel();
-    }
-    showHUD();
-    updateHUD();
-
-    appRef.map.on("click", onMapClick);
-    window.addEventListener("keydown", onKeyDown);
-
-    if (pts.length === 0) {
-      appRef.showToast("Route Studio: Click map to place Departure point", "info");
-    } else {
-      appRef.showToast(`Route Studio: ${pts.length} stops loaded. Click map to add more.`, "info");
-    }
+  if (routeMode || isPanelOpen) {
+    closeRouteStudio();
   } else {
-    // ---- Exit Route Studio Mode ----
-    appRef.map.un("click", onMapClick);
-    window.removeEventListener("keydown", onKeyDown);
-
-    if (targetEl) targetEl.style.cursor = "";
-
-    if (btn) {
-      btn.classList.remove("bg-indigo-600", "text-white", "ring-2", "ring-indigo-400/50");
-      btn.title = "Route Studio (Trip Weather Planner)";
-    }
-
-    hideHUD();
-
-    if (pts.length < 2) {
-      clearRoute();
-      hidePanel();
-    }
+    openRouteStudio();
   }
 }
 
@@ -706,14 +753,13 @@ function onKeyDown(e) {
     return;
   }
 
-  // Escape: Exit mode or close popover/panel
+  // Escape: Close popover or exit Route Studio completely
   if (e.key === "Escape") {
     e.preventDefault();
-    closeWaypointPopover();
-    if (isPanelOpen) {
-      hidePanel();
-    } else if (routeMode) {
-      toggleRoute();
+    if (activePopoverOverlay) {
+      closeWaypointPopover();
+    } else {
+      closeRouteStudio();
     }
     return;
   }
@@ -860,7 +906,145 @@ function renderWaypointMarkers() {
 }
 
 /**
- * Interactive on-map Waypoint Popover with 1-click Delete button
+ * Asynchronously resolve real settlement / city name for a stop via reverse geocoding
+ */
+async function resolvePointName(pt) {
+  try {
+    const url = `https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${pt.lat}&lon=${pt.lng}&zoom=14`;
+    const res = await fetch(url, { headers: { "User-Agent": "Aurafisky/14.0.0", Accept: "application/json" } });
+    if (!res.ok) return;
+    const data = await res.json();
+    const city =
+      data.address?.city ||
+      data.address?.town ||
+      data.address?.village ||
+      data.address?.hamlet ||
+      data.address?.suburb ||
+      data.address?.county;
+    const state = data.address?.state;
+    if (city) {
+      pt.name = state ? `${city}, ${state}` : city;
+      pt.shortName = city;
+    } else if (data.name) {
+      pt.name = data.name;
+      pt.shortName = data.name;
+    }
+
+    // Refresh titles in DOM if open
+    if (isPanelOpen) {
+      const bodyEl = panelEl ? panelEl.querySelector("#routePanelBody") : document.getElementById("routePanelBody");
+      bodyEl?.querySelectorAll(`[data-stop-title-idx]`).forEach((el) => {
+        const idx = parseInt(el.dataset.stopTitleIdx, 10);
+        if (pts[idx] === pt) el.textContent = pt.name;
+      });
+    }
+  } catch (err) {
+    // silent fallback
+  }
+}
+
+/**
+ * Fast place search for adding waypoints via autocomplete (Open-Meteo with Nominatim fallback)
+ */
+async function searchPlacesForRoute(query) {
+  if (!query || query.trim().length < 2) return [];
+  const q = query.trim();
+
+  try {
+    const url = `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(q)}&count=5&language=en&format=json`;
+    const res = await fetch(url);
+    if (res.ok) {
+      const data = await res.json();
+      if (data.results && data.results.length) {
+        return data.results.map((r) => ({
+          name: r.name,
+          details: [r.admin1, r.country].filter(Boolean).join(", "),
+          lat: r.latitude,
+          lng: r.longitude,
+        }));
+      }
+    }
+  } catch (e) {}
+
+  try {
+    const url = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(q)}&format=json&limit=5&addressdetails=1`;
+    const res = await fetch(url, { headers: { "User-Agent": "Aurafisky/14.0.0", Accept: "application/json" } });
+    if (res.ok) {
+      const list = await res.json();
+      return list.map((item) => ({
+        name: item.name || item.display_name.split(",")[0],
+        details: item.display_name,
+        lat: parseFloat(item.lat),
+        lng: parseFloat(item.lon),
+      }));
+    }
+  } catch (e) {}
+
+  return [];
+}
+
+/**
+ * Add a stop programmatically by coordinates & optional name
+ */
+export async function addStop(lat, lng, name = null) {
+  closeWaypointPopover();
+  const pt = {
+    lat,
+    lng,
+    name: name || `Stop ${pts.length + 1}`,
+    marker: null,
+  };
+  pts.push(pt);
+  renderWaypointMarkers();
+  updateHUD();
+
+  if (!name) {
+    resolvePointName(pt);
+  }
+
+  await updateRouteGeometry();
+
+  if (appRef?.map) {
+    appRef.map.getView().animate({
+      center: fromLonLat([lng, lat]),
+      zoom: Math.max(appRef.map.getView().getZoom(), 8),
+      duration: 600,
+    });
+  }
+
+  if (isPanelOpen) {
+    await fetchAndRenderRoutePlan();
+  }
+}
+
+/**
+ * Move stop from one position to another (custom reordering)
+ */
+export function moveStop(fromIndex, toIndex) {
+  closeWaypointPopover();
+  if (
+    fromIndex < 0 ||
+    fromIndex >= pts.length ||
+    toIndex < 0 ||
+    toIndex >= pts.length ||
+    fromIndex === toIndex
+  ) {
+    return;
+  }
+  const [item] = pts.splice(fromIndex, 1);
+  pts.splice(toIndex, 0, item);
+  renderWaypointMarkers();
+  updateRouteGeometry();
+  updateHUD();
+  appRef.showToast(`Moved stop to position ${toIndex + 1}`, "info");
+
+  if (isPanelOpen) {
+    fetchAndRenderRoutePlan();
+  }
+}
+
+/**
+ * Interactive on-map Waypoint Popover with reorder and delete controls
  */
 function showWaypointPopover(index) {
   closeWaypointPopover();
@@ -869,24 +1053,53 @@ function showWaypointPopover(index) {
 
   const isStart = index === 0;
   const isEnd = index === pts.length - 1 && pts.length > 1;
-  const roleLabel = isStart ? "Start (Departure)" : isEnd ? "Destination" : `Stop ${index + 1}`;
+  const roleLabel = isStart ? "Start (Departure)" : isEnd ? "Destination (Arrival)" : `Stop ${index + 1}`;
   const badgeColor = isStart ? "text-emerald-600 dark:text-emerald-400" : isEnd ? "text-rose-600 dark:text-rose-400" : "text-indigo-600 dark:text-indigo-400";
+  const badgeBg = isStart ? "bg-emerald-500/10 border-emerald-500/30" : isEnd ? "bg-rose-500/10 border-rose-500/30" : "bg-indigo-500/10 border-indigo-500/30";
 
   const popoverEl = document.createElement("div");
   popoverEl.className =
-    "route-studio-popover glass p-2.5 rounded-2xl shadow-2xl border border-slate-200/80 dark:border-slate-700/80 " +
-    "text-xs min-w-[160px] text-center space-y-2 pointer-events-auto backdrop-blur-xl animate-fade-in";
+    "route-studio-popover glass p-3 rounded-2xl shadow-2xl border border-slate-200/80 dark:border-slate-700/80 " +
+    "text-xs min-w-[210px] space-y-2 pointer-events-auto backdrop-blur-2xl animate-fade-in";
   popoverEl.style.zIndex = "2500";
 
   popoverEl.innerHTML = `
-    <div class="flex items-center justify-between gap-2 border-b border-slate-200/50 dark:border-slate-700/50 pb-1.5">
-      <span class="font-extrabold ${badgeColor} text-[11px]">${roleLabel}</span>
-      <button type="button" class="route-popover-close text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 p-0.5" aria-label="Close">✕</button>
+    <div class="flex items-center justify-between gap-2 border-b border-slate-200/50 dark:border-slate-700/50 pb-2">
+      <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg border text-[10px] font-bold ${badgeBg} ${badgeColor}">
+        ${roleLabel}
+      </span>
+      <button type="button" class="route-popover-close text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 p-1 rounded-lg" aria-label="Close">✕</button>
     </div>
-    <div class="text-[10px] text-slate-500 dark:text-slate-400 font-mono">${pt.lat.toFixed(4)}, ${pt.lng.toFixed(4)}</div>
-    <button type="button" class="route-popover-delete w-full py-1.5 px-2.5 rounded-xl bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs shadow-md shadow-rose-500/20 flex items-center justify-center gap-1.5 transition-all">
+
+    <div>
+      <div class="font-extrabold text-sm text-slate-900 dark:text-white truncate">${escapeXml(pt.name || `Stop ${index + 1}`)}</div>
+      <div class="text-[10px] text-slate-500 dark:text-slate-400 font-mono mt-0.5">${pt.lat.toFixed(4)}, ${pt.lng.toFixed(4)}</div>
+    </div>
+
+    <div class="flex items-center gap-1.5 pt-1">
+      ${
+        index > 0
+          ? `
+        <button type="button" class="route-popover-up flex-1 py-1.5 px-2 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-700/70 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 font-semibold text-[11px] transition-all flex items-center justify-center gap-1">
+          <span>↑</span><span>Earlier</span>
+        </button>
+      `
+          : ""
+      }
+      ${
+        index < pts.length - 1
+          ? `
+        <button type="button" class="route-popover-down flex-1 py-1.5 px-2 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-700/70 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 font-semibold text-[11px] transition-all flex items-center justify-center gap-1">
+          <span>↓</span><span>Later</span>
+        </button>
+      `
+          : ""
+      }
+    </div>
+
+    <button type="button" class="route-popover-delete w-full py-1.5 px-2.5 rounded-xl bg-rose-500/10 hover:bg-rose-500 text-rose-600 hover:text-white border border-rose-500/20 font-bold text-xs flex items-center justify-center gap-1.5 transition-all">
       <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
-      <span>Delete Stop</span>
+      <span>Remove Stop</span>
     </button>
   `;
 
@@ -899,6 +1112,18 @@ function showWaypointPopover(index) {
     e.stopPropagation();
     closeWaypointPopover();
     removeStop(index);
+  });
+
+  popoverEl.querySelector(".route-popover-up")?.addEventListener("click", (e) => {
+    e.stopPropagation();
+    closeWaypointPopover();
+    moveStop(index, index - 1);
+  });
+
+  popoverEl.querySelector(".route-popover-down")?.addEventListener("click", (e) => {
+    e.stopPropagation();
+    closeWaypointPopover();
+    moveStop(index, index + 1);
   });
 
   activePopoverOverlay = new Overlay({
@@ -921,15 +1146,18 @@ async function onMapClick(e) {
   closeWaypointPopover();
   const [lng, lat] = toLonLat(e.coordinate);
 
-  pts.push({
+  const pt = {
     lat,
     lng,
     name: `Stop ${pts.length + 1}`,
     marker: null,
-  });
+  };
+  pts.push(pt);
 
   renderWaypointMarkers();
   updateHUD();
+
+  resolvePointName(pt);
 
   await updateRouteGeometry();
 
@@ -1052,8 +1280,7 @@ export function undoLastStop() {
     if (pts.length >= 2) {
       fetchAndRenderRoutePlan();
     } else {
-      hidePanel();
-      if (!routeMode) toggleRoute();
+      renderEmptyRoutePanel();
     }
   }
 }
@@ -1077,8 +1304,7 @@ export function removeStop(index) {
     if (pts.length >= 2) {
       fetchAndRenderRoutePlan();
     } else {
-      hidePanel();
-      if (!routeMode) toggleRoute();
+      renderEmptyRoutePanel();
     }
   }
 }
@@ -1088,7 +1314,9 @@ export function reverseRoute() {
   if (pts.length < 2) return;
   pts.reverse();
   pts.forEach((p, idx) => {
-    p.name = `Stop ${idx + 1}`;
+    if (!p.name || /^Stop \d+$/.test(p.name)) {
+      p.name = `Stop ${idx + 1}`;
+    }
   });
   renderWaypointMarkers();
   updateRouteGeometry();
@@ -1126,7 +1354,9 @@ export async function optimizeWaypointOrder() {
 
   pts = optimized;
   pts.forEach((p, idx) => {
-    p.name = `Stop ${idx + 1}`;
+    if (!p.name || /^Stop \d+$/.test(p.name)) {
+      p.name = `Stop ${idx + 1}`;
+    }
   });
 
   renderWaypointMarkers();
@@ -1154,8 +1384,11 @@ export function clearRoute() {
   if (routeSource) routeSource.clear();
   clearWaypointMarkers();
   updateHUD();
-  hidePanel();
-  appRef.showToast("Route cleared", "info");
+  const bodyEl = panelEl ? panelEl.querySelector("#routePanelBody") : document.getElementById("routePanelBody");
+  if (bodyEl) renderEmptyRoutePanel();
+  const panelStopsCountEl = document.getElementById("routePanelStopsCount") || panelEl?.querySelector("#routePanelStopsCount");
+  if (panelStopsCountEl) panelStopsCountEl.textContent = "0";
+  if (appRef) appRef.showToast("Route cleared", "info");
 }
 
 // ============================================================================
@@ -1169,20 +1402,24 @@ function buildHUD() {
   hudEl = document.createElement("div");
   hudEl.id = "routeStudioHud";
   hudEl.className =
-    "hidden fixed top-16 sm:top-20 left-1/2 -translate-x-1/2 " +
+    "hidden fixed top-24 sm:top-28 left-1/2 -translate-x-1/2 " +
     "glass rounded-2xl shadow-2xl border border-slate-200/80 dark:border-slate-700/80 " +
-    "px-3.5 py-2 sm:px-4 sm:py-2.5 flex items-center gap-2 sm:gap-3 backdrop-blur-xl animate-fade-in max-w-[95vw] overflow-x-auto hide-scrollbar pointer-events-auto";
-  hudEl.style.zIndex = "2000";
+    "px-2.5 py-1.5 sm:px-3.5 sm:py-2 flex items-center gap-1.5 sm:gap-2.5 backdrop-blur-2xl animate-fade-in max-w-[96vw] overflow-x-auto hide-scrollbar pointer-events-auto";
+  hudEl.style.zIndex = "1040";
 
   hudEl.innerHTML = `
-    <!-- Status & Stop Counter -->
-    <div class="flex items-center gap-2 flex-shrink-0">
-      <div class="relative flex h-3 w-3">
-        <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-indigo-400 opacity-75"></span>
-        <span class="relative inline-flex rounded-full h-3 w-3 bg-indigo-600"></span>
+    <!-- Route Weather Branding & Status -->
+    <div class="flex items-center gap-1.5 flex-shrink-0 cursor-pointer min-w-0" id="routeHudSummaryPill" title="View stops & trip itinerary">
+      <div class="flex items-center gap-1 px-2 py-0.5 rounded-lg bg-indigo-500/15 border border-indigo-500/30 text-indigo-600 dark:text-indigo-400 font-extrabold text-[11px] select-none flex-shrink-0">
+        <span>🚗</span>
+        <span class="tracking-tight hidden xs:inline font-bold">Route Weather</span>
       </div>
-      <div id="routeHudStatus" class="text-xs font-semibold text-slate-800 dark:text-slate-100 whitespace-nowrap">
-        Click map to place Departure
+      <div class="relative flex h-2 w-2 flex-shrink-0">
+        <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-indigo-400 opacity-75"></span>
+        <span class="relative inline-flex rounded-full h-2 w-2 bg-indigo-600"></span>
+      </div>
+      <div id="routeHudStatus" class="text-xs font-semibold text-slate-800 dark:text-slate-100 truncate max-w-[110px] sm:max-w-[200px]">
+        Tap map to add start
       </div>
     </div>
 
@@ -1190,40 +1427,51 @@ function buildHUD() {
     <div class="h-4 w-px bg-slate-300 dark:bg-slate-700 flex-shrink-0"></div>
 
     <!-- Mode Selector -->
-    <div class="flex items-center gap-1 bg-slate-200/60 dark:bg-slate-800/60 p-0.5 rounded-xl flex-shrink-0">
-      <button type="button" data-mode="driving" class="route-mode-btn px-2 py-1 rounded-lg text-xs font-medium transition-all bg-white dark:bg-slate-700 shadow-sm text-indigo-600 dark:text-indigo-400 font-bold" title="Drive (Car speed & road network)">🚗</button>
-      <button type="button" data-mode="cycling" class="route-mode-btn px-2 py-1 rounded-lg text-xs font-medium transition-all text-slate-600 dark:text-slate-300 hover:text-slate-900" title="Bike (Cycling pace ~18 km/h)">🚲</button>
-      <button type="button" data-mode="walking" class="route-mode-btn px-2 py-1 rounded-lg text-xs font-medium transition-all text-slate-600 dark:text-slate-300 hover:text-slate-900" title="Walk (Hiking pace ~4.8 km/h)">🚶</button>
-      <button type="button" data-mode="direct" class="route-mode-btn px-2 py-1 rounded-lg text-xs font-medium transition-all text-slate-600 dark:text-slate-300 hover:text-slate-900" title="Flight (Curved great-circle arc ~800 km/h)">✈️</button>
+    <div class="flex items-center gap-0.5 bg-slate-100/90 dark:bg-slate-800/90 p-0.5 rounded-xl flex-shrink-0" id="routeHudModeGroup">
+      <button type="button" data-mode="driving" class="route-mode-btn px-2 py-1 rounded-lg text-xs font-semibold transition-all bg-white dark:bg-indigo-600 shadow-xs text-indigo-600 dark:text-white flex items-center gap-1 cursor-pointer" title="Drive (Roads)">
+        <span>🚗</span><span class="hidden md:inline text-[11px]">Drive</span>
+      </button>
+      <button type="button" data-mode="cycling" class="route-mode-btn px-2 py-1 rounded-lg text-xs font-medium transition-all text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white flex items-center gap-1 cursor-pointer" title="Bike (Cycling)">
+        <span>🚲</span><span class="hidden md:inline text-[11px]">Bike</span>
+      </button>
+      <button type="button" data-mode="walking" class="route-mode-btn px-2 py-1 rounded-lg text-xs font-medium transition-all text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white flex items-center gap-1 cursor-pointer" title="Walk">
+        <span>🚶</span><span class="hidden md:inline text-[11px]">Walk</span>
+      </button>
+      <button type="button" data-mode="direct" class="route-mode-btn px-2 py-1 rounded-lg text-xs font-medium transition-all text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white flex items-center gap-1 cursor-pointer" title="Flight">
+        <span>✈️</span><span class="hidden md:inline text-[11px]">Flight</span>
+      </button>
     </div>
 
     <!-- Divider -->
     <div class="h-4 w-px bg-slate-300 dark:bg-slate-700 flex-shrink-0"></div>
 
     <!-- Action Buttons -->
-    <div class="flex items-center gap-1.5 flex-shrink-0">
+    <div class="flex items-center gap-0.5 sm:gap-1 flex-shrink-0">
+      <button type="button" id="routeHudAddSearch" class="p-1.5 rounded-xl hover:bg-indigo-50 dark:hover:bg-slate-700/60 text-indigo-600 dark:text-indigo-400 transition-colors" title="Search place to add stop" aria-label="Add stop by search">
+        <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4"/></svg>
+      </button>
+
       <button type="button" id="routeHudUndo" class="p-1.5 rounded-xl hover:bg-slate-200/60 dark:hover:bg-slate-700/60 text-slate-600 dark:text-slate-300 transition-colors" title="Undo last stop (Ctrl+Z)" aria-label="Undo">
-        <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M3 10h10a5 5 0 015 5v2m-15-7l4-4m-4 4l4 4"/></svg>
+        <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M3 10h10a5 5 0 015 5v2m-15-7l4-4m-4 4l4 4"/></svg>
       </button>
 
       <button type="button" id="routeHudOptimize" class="p-1.5 rounded-xl hover:bg-amber-100 dark:hover:bg-amber-900/30 text-amber-600 dark:text-amber-400 transition-colors hidden" title="⚡ Optimize stop sequence (2-Opt TSP for 4+ stops)" aria-label="Optimize stops">
-        <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>
+        <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>
       </button>
 
       <button type="button" id="routeHudReverse" class="p-1.5 rounded-xl hover:bg-slate-200/60 dark:hover:bg-slate-700/60 text-slate-600 dark:text-slate-300 transition-colors" title="Reverse route direction" aria-label="Reverse">
-        <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M7 16V4m0 0L3 8m4-4l4 4m6 0v12m0 0l4-4m-4 4l-4-4"/></svg>
+        <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M7 16V4m0 0L3 8m4-4l4 4m6 0v12m0 0l4-4m-4 4l-4-4"/></svg>
       </button>
 
-      <button type="button" id="routeHudClear" class="p-1.5 rounded-xl hover:bg-slate-200/60 dark:hover:bg-slate-700/60 text-rose-500 transition-colors" title="Clear all stops" aria-label="Clear">
-        <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
+      <button type="button" id="routeHudClear" class="p-1.5 rounded-xl hover:bg-rose-100 dark:hover:bg-rose-900/30 text-rose-500 transition-colors" title="Clear all stops" aria-label="Clear">
+        <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
       </button>
 
-      <button type="button" id="routeHudFinish" class="px-3 py-1.5 rounded-xl bg-gradient-to-r from-indigo-600 to-indigo-700 hover:from-indigo-500 hover:to-indigo-600 text-white text-xs font-bold shadow-md shadow-indigo-500/20 transition-all flex items-center gap-1.5 disabled:opacity-50 disabled:pointer-events-none whitespace-nowrap">
-        <span>Analyze Route</span>
-        <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M13 7l5 5m0 0l-5 5m5-5H6"/></svg>
+      <button type="button" id="routeHudFinish" class="px-2.5 py-1.5 rounded-xl bg-gradient-to-r from-indigo-600 via-indigo-500 to-purple-600 hover:brightness-110 active:scale-95 text-white text-xs font-bold shadow-sm shadow-indigo-500/25 transition-all flex items-center gap-1 disabled:opacity-40 disabled:pointer-events-none whitespace-nowrap cursor-pointer flex-shrink-0" title="Analyze route weather">
+        <span>🌤️ Analyze</span>
       </button>
 
-      <button type="button" id="routeHudExit" class="p-1.5 rounded-xl hover:bg-slate-200/60 dark:hover:bg-slate-700/60 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition-colors ml-1" title="Exit (Esc)" aria-label="Close">✕</button>
+      <button type="button" id="routeHudExit" class="w-7 h-7 rounded-xl hover:bg-rose-50 dark:hover:bg-rose-950/40 text-slate-400 hover:text-rose-600 dark:hover:text-rose-400 transition-colors flex items-center justify-center font-bold text-sm cursor-pointer flex-shrink-0 border border-transparent hover:border-rose-200 dark:hover:border-rose-900/40" title="Close Route Weather (Esc)" aria-label="Close Route Weather">✕</button>
     </div>
   `;
 
@@ -1235,75 +1483,132 @@ function buildHUD() {
     });
   });
 
+  hudEl.querySelector("#routeHudAddSearch")?.addEventListener("click", () => {
+    showPanel();
+    activeRouteTab = "stops";
+    if (pts.length >= 2) {
+      fetchAndRenderRoutePlan();
+    } else {
+      renderEmptyRoutePanel();
+    }
+    setTimeout(() => {
+      document.getElementById("routeSearchAddInput")?.focus();
+    }, 100);
+  });
+
+  hudEl.querySelector("#routeHudSummaryPill")?.addEventListener("click", () => {
+    if (pts.length >= 2) {
+      finishRoute();
+    } else {
+      showPanel();
+      renderEmptyRoutePanel();
+    }
+  });
+
   hudEl.querySelector("#routeHudUndo")?.addEventListener("click", undoLastStop);
   hudEl.querySelector("#routeHudOptimize")?.addEventListener("click", optimizeWaypointOrder);
   hudEl.querySelector("#routeHudReverse")?.addEventListener("click", reverseRoute);
   hudEl.querySelector("#routeHudClear")?.addEventListener("click", clearRoute);
   hudEl.querySelector("#routeHudFinish")?.addEventListener("click", finishRoute);
-  hudEl.querySelector("#routeHudExit")?.addEventListener("click", toggleRoute);
+  hudEl.querySelector("#routeHudExit")?.addEventListener("click", closeRouteStudio);
 }
 
 function showHUD() {
-  if (hudEl) hudEl.classList.remove("hidden");
+  if (hudEl) {
+    hudEl.classList.remove("hidden");
+    hudEl.style.display = "flex";
+  }
 }
 
 function hideHUD() {
-  if (hudEl) hudEl.classList.add("hidden");
+  if (hudEl) {
+    hudEl.classList.add("hidden");
+    hudEl.style.display = "none";
+  }
 }
 
 function setTransportMode(mode) {
   transportMode = mode;
-  if (hudEl) {
-    hudEl.querySelectorAll(".route-mode-btn").forEach((b) => {
-      if (b.dataset.mode === mode) {
-        b.className =
-          "route-mode-btn px-2 py-1 rounded-lg text-xs font-medium transition-all bg-white dark:bg-slate-700 shadow-sm text-indigo-600 dark:text-indigo-400 font-bold";
-      } else {
-        b.className =
-          "route-mode-btn px-2 py-1 rounded-lg text-xs font-medium transition-all text-slate-600 dark:text-slate-300 hover:text-slate-900";
-      }
-    });
+  document.querySelectorAll(".route-mode-btn").forEach((b) => {
+    if (b.dataset.mode === mode) {
+      b.className =
+        "route-mode-btn px-2 sm:px-2.5 py-1 rounded-lg text-xs font-semibold transition-all bg-white dark:bg-indigo-600 shadow-xs text-indigo-600 dark:text-white flex items-center gap-1 cursor-pointer";
+    } else {
+      b.className =
+        "route-mode-btn px-2 sm:px-2.5 py-1 rounded-lg text-xs font-medium transition-all text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white flex items-center gap-1 cursor-pointer";
+    }
+  });
+
+  const modeIconEl = document.getElementById("routePanelModeIcon");
+  if (modeIconEl) {
+    let icon = "🚗";
+    if (mode === "cycling") icon = "🚲";
+    else if (mode === "walking") icon = "🚶";
+    else if (mode === "direct") icon = "✈️";
+    modeIconEl.textContent = icon;
   }
+
   updateRouteGeometry();
-  if (isPanelOpen) fetchAndRenderRoutePlan();
+  if (isPanelOpen && pts.length >= 2) fetchAndRenderRoutePlan();
 }
 
 function updateHUD() {
-  if (!hudEl) return;
-
-  const statusEl = hudEl.querySelector("#routeHudStatus");
-  const finishBtn = hudEl.querySelector("#routeHudFinish");
-  const optBtn = hudEl.querySelector("#routeHudOptimize");
   const units = getActiveUnits();
+  const panelStopsCountEl = document.getElementById("routePanelStopsCount");
+  if (panelStopsCountEl) panelStopsCountEl.textContent = String(pts.length);
 
-  // Show ⚡ Optimize button whenever user has placed 4 or more stops (can reorder intermediates)
-  if (optBtn) {
+  const panelOptimizeBtn = document.getElementById("routePanelOptimizeBtn");
+  if (panelOptimizeBtn) {
     if (pts.length >= 4) {
-      optBtn.classList.remove("hidden");
+      panelOptimizeBtn.classList.remove("hidden");
     } else {
-      optBtn.classList.add("hidden");
+      panelOptimizeBtn.classList.add("hidden");
     }
   }
 
-  if (pts.length === 0) {
-    if (statusEl) statusEl.textContent = "📍 Click map to place Departure point";
-    if (finishBtn) finishBtn.disabled = true;
-  } else if (pts.length === 1) {
-    if (statusEl) statusEl.textContent = "📍 Click map to set Destination or stop";
-    if (finishBtn) finishBtn.disabled = true;
-  } else {
-    const distStr = activeRouteData ? formatRouteDistance(activeRouteData.distanceM, units) : "--";
-    const durStr = activeRouteData ? formatRouteDuration(activeRouteData.durationS) : "--";
-
-    let modeIcon = "🚗";
-    if (transportMode === "cycling") modeIcon = "🚲";
-    else if (transportMode === "walking") modeIcon = "🚶";
-    else if (transportMode === "direct") modeIcon = "✈️";
-
-    if (statusEl) {
-      statusEl.innerHTML = `<span class="font-bold text-indigo-600 dark:text-indigo-400">${pts.length} stops</span> · ${modeIcon} ${durStr} · ${distStr}`;
+  const liveStatsEl = document.getElementById("routePanelLiveStats");
+  if (liveStatsEl) {
+    if (pts.length >= 2) {
+      const distStr = activeRouteData ? formatRouteDistance(activeRouteData.distanceM, units) : "--";
+      const durStr = activeRouteData ? formatRouteDuration(activeRouteData.durationS) : "--";
+      let modeIcon = "🚗";
+      if (transportMode === "cycling") modeIcon = "🚲";
+      else if (transportMode === "walking") modeIcon = "🚶";
+      else if (transportMode === "direct") modeIcon = "✈️";
+      liveStatsEl.innerHTML = `<span class="text-slate-500 dark:text-slate-400 font-medium">${pts.length} stops ·</span> ${modeIcon} ${durStr} · ${distStr}`;
+    } else if (pts.length === 1) {
+      liveStatsEl.textContent = "1 stop placed";
+    } else {
+      liveStatsEl.textContent = "Click map to start";
     }
-    if (finishBtn) finishBtn.disabled = false;
+  }
+
+  if (hudEl) {
+    const statusEl = hudEl.querySelector("#routeHudStatus");
+    const finishBtn = hudEl.querySelector("#routeHudFinish");
+    const optBtn = hudEl.querySelector("#routeHudOptimize");
+    if (optBtn) {
+      if (pts.length >= 4) optBtn.classList.remove("hidden");
+      else optBtn.classList.add("hidden");
+    }
+    if (pts.length === 0) {
+      if (statusEl) statusEl.textContent = "Tap map to add start";
+      if (finishBtn) finishBtn.disabled = true;
+    } else if (pts.length === 1) {
+      if (statusEl) statusEl.textContent = "Tap map for destination";
+      if (finishBtn) finishBtn.disabled = true;
+    } else {
+      const distStr = activeRouteData ? formatRouteDistance(activeRouteData.distanceM, units) : "--";
+      const durStr = activeRouteData ? formatRouteDuration(activeRouteData.durationS) : "--";
+      let modeIcon = "🚗";
+      if (transportMode === "cycling") modeIcon = "🚲";
+      else if (transportMode === "walking") modeIcon = "🚶";
+      else if (transportMode === "direct") modeIcon = "✈️";
+      if (statusEl) {
+        statusEl.innerHTML = `<span class="font-extrabold text-indigo-600 dark:text-indigo-400">${pts.length} stops</span> · ${modeIcon} ${durStr} · ${distStr}`;
+      }
+      if (finishBtn) finishBtn.disabled = false;
+    }
   }
 }
 
@@ -1319,47 +1624,94 @@ function buildPanel() {
   panelEl.id = "routePanel";
   panelEl.className =
     "hidden glass rounded-3xl shadow-2xl overflow-hidden fixed top-16 sm:top-20 right-3 sm:right-6 " +
-    "w-[94vw] sm:w-96 max-h-[calc(100vh-100px)] flex flex-col " +
+    "w-[94vw] sm:w-[440px] max-h-[calc(100vh-100px)] flex flex-col " +
     "border border-slate-200/80 dark:border-slate-700/70 backdrop-blur-2xl animate-fade-in pointer-events-auto";
   panelEl.style.zIndex = "2000";
 
   panelEl.innerHTML = `
+    <!-- Drag handle for mobile -->
+    <div class="sm:hidden w-10 h-1.5 rounded-full bg-slate-300 dark:bg-slate-600 mx-auto mt-2 mb-1 cursor-grab"></div>
+
     <!-- Header -->
-    <div class="flex items-center justify-between px-4 py-3 border-b border-slate-200/60 dark:border-slate-700/60 bg-white/40 dark:bg-slate-800/40 flex-shrink-0">
-      <div class="flex items-center gap-2">
-        <span class="text-base" id="routePanelModeIcon">🧭</span>
-        <div>
-          <h3 class="text-xs font-bold uppercase tracking-wider text-slate-800 dark:text-slate-100" id="routePanelTitle">Route Studio</h3>
-          <div id="routePanelSubtitle" class="text-[10px] text-slate-500 dark:text-slate-400 font-medium">Trip Weather & Safety Intelligence</div>
+    <div class="flex items-center justify-between px-4 py-3 border-b border-slate-200/60 dark:border-slate-700/60 bg-white/50 dark:bg-slate-800/50 flex-shrink-0">
+      <div class="flex items-center gap-2.5 min-w-0">
+        <div class="w-8 h-8 rounded-xl bg-gradient-to-tr from-indigo-600 to-violet-600 text-white flex items-center justify-center font-bold text-sm shadow-md shadow-indigo-500/20 flex-shrink-0" id="routePanelModeIcon">🚗</div>
+        <div class="min-w-0">
+          <h3 class="text-xs font-black uppercase tracking-wider text-slate-900 dark:text-slate-100 truncate" id="routePanelTitle">Route Weather Studio</h3>
+          <div id="routePanelSubtitle" class="text-[10px] text-slate-500 dark:text-slate-400 font-medium truncate">Trip Weather & Safety Intelligence</div>
         </div>
       </div>
-      <div class="flex items-center gap-1">
-        <button type="button" id="routePanelOptimizeBtn" class="px-2 py-1 rounded-lg text-xs font-semibold text-amber-600 dark:text-amber-400 hover:bg-amber-50 dark:hover:bg-slate-700/50 transition-colors hidden" title="⚡ Optimize intermediate stops to minimize distance">⚡ Optimize</button>
-        <button type="button" id="routePanelEditBtn" class="px-2 py-1 rounded-lg text-xs font-medium text-indigo-600 dark:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-slate-700/50 transition-colors" title="Edit stops on map">✏️ Edit</button>
-        <button type="button" id="routePanelClearBtn" class="px-2 py-1 rounded-lg text-xs font-medium text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-900/30 transition-colors" title="Clear entire route">🗑️ Clear</button>
-        <button type="button" id="routePanelCloseBtn" class="p-1 rounded-lg hover:bg-slate-200/60 dark:hover:bg-slate-700/50 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition-colors ml-1" aria-label="Close route panel">✕</button>
+      <div class="flex items-center gap-1 flex-shrink-0">
+        <button type="button" id="routePanelUndoBtn" class="p-1.5 rounded-lg hover:bg-slate-200/60 dark:hover:bg-slate-700/50 text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-100 transition-colors" title="Undo last stop (Ctrl+Z)" aria-label="Undo">
+          <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M3 10h10a5 5 0 015 5v2m-15-7l4-4m-4 4l4 4"/></svg>
+        </button>
+        <button type="button" id="routePanelReverseBtn" class="p-1.5 rounded-lg hover:bg-slate-200/60 dark:hover:bg-slate-700/50 text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-100 transition-colors" title="Reverse route direction" aria-label="Reverse">
+          <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M7 16V4m0 0L3 8m4-4l4 4m6 0v12m0 0l4-4m-4 4l-4-4"/></svg>
+        </button>
+        <button type="button" id="routePanelOptimizeBtn" class="px-2 py-1 rounded-lg text-xs font-bold text-amber-600 dark:text-amber-400 hover:bg-amber-50 dark:hover:bg-slate-700/50 transition-colors hidden" title="⚡ Optimize intermediate stops (2-Opt TSP)">⚡ Optimize</button>
+        <button type="button" id="routePanelClearBtn" class="p-1.5 rounded-lg hover:bg-rose-50 dark:hover:bg-rose-900/30 text-rose-500 transition-colors" title="Clear entire route" aria-label="Clear">
+          <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
+        </button>
+        <button type="button" id="routePanelCloseBtn" class="p-1.5 rounded-lg hover:bg-slate-200/60 dark:hover:bg-slate-700/50 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition-colors ml-1 font-bold text-sm" aria-label="Close route panel">✕</button>
       </div>
+    </div>
+
+    <!-- Integrated Transport Modes & Live Trip Status Strip -->
+    <div class="px-3.5 py-2 border-b border-slate-200/60 dark:border-slate-700/60 bg-slate-50/70 dark:bg-slate-900/50 flex items-center justify-between gap-2 flex-shrink-0">
+      <!-- Mode buttons -->
+      <div class="flex items-center gap-1 bg-slate-200/70 dark:bg-slate-800/80 p-0.5 rounded-xl flex-shrink-0" id="routePanelModeGroup">
+        <button type="button" data-mode="driving" class="route-mode-btn px-2 sm:px-2.5 py-1 rounded-lg text-xs font-semibold transition-all bg-white dark:bg-indigo-600 shadow-xs text-indigo-600 dark:text-white flex items-center gap-1 cursor-pointer" title="Drive (Road network)">
+          <span>🚗</span><span class="text-[11px]">Drive</span>
+        </button>
+        <button type="button" data-mode="cycling" class="route-mode-btn px-2 sm:px-2.5 py-1 rounded-lg text-xs font-medium transition-all text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white flex items-center gap-1 cursor-pointer" title="Bike (Cycling pace ~18 km/h)">
+          <span>🚲</span><span class="text-[11px]">Bike</span>
+        </button>
+        <button type="button" data-mode="walking" class="route-mode-btn px-2 sm:px-2.5 py-1 rounded-lg text-xs font-medium transition-all text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white flex items-center gap-1 cursor-pointer" title="Walk (Hiking pace ~4.8 km/h)">
+          <span>🚶</span><span class="text-[11px]">Walk</span>
+        </button>
+        <button type="button" data-mode="direct" class="route-mode-btn px-2 sm:px-2.5 py-1 rounded-lg text-xs font-medium transition-all text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white flex items-center gap-1 cursor-pointer" title="Flight (Great circle arc)">
+          <span>✈️</span><span class="text-[11px]">Flight</span>
+        </button>
+      </div>
+
+      <!-- Live Trip Stats (Duration & Distance) -->
+      <div id="routePanelLiveStats" class="text-right text-xs font-black text-indigo-600 dark:text-indigo-400 truncate min-w-0">
+        --
+      </div>
+    </div>
+
+    <!-- Tab Strip -->
+    <div class="flex items-center border-b border-slate-200/60 dark:border-slate-700/60 bg-slate-50/70 dark:bg-slate-900/60 px-3 py-1.5 gap-1.5 flex-shrink-0" id="routePanelTabStrip">
+      <button type="button" data-route-tab="stops" class="route-tab-pill flex-1 py-1.5 px-2 rounded-xl text-xs font-bold transition-all bg-white dark:bg-slate-800 text-indigo-600 dark:text-indigo-400 shadow-xs border border-slate-200/60 dark:border-slate-700/60 cursor-pointer">
+        🗺️ Stops (<span id="routePanelStopsCount">0</span>)
+      </button>
+      <button type="button" data-route-tab="weather" class="route-tab-pill flex-1 py-1.5 px-2 rounded-xl text-xs font-medium transition-all text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white cursor-pointer">
+        🌤️ Weather
+      </button>
+      <button type="button" data-route-tab="analytics" class="route-tab-pill flex-1 py-1.5 px-2 rounded-xl text-xs font-medium transition-all text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white cursor-pointer">
+        📊 Analytics
+      </button>
     </div>
 
     <!-- Scrollable Content -->
-    <div id="routePanelBody" class="overflow-y-auto custom-scrollbar p-3.5 space-y-3.5 text-slate-700 dark:text-slate-200 text-xs">
-      <!-- Injected dynamically in finishRoute() -->
+    <div id="routePanelBody" class="overflow-y-auto custom-scrollbar p-3.5 space-y-3.5 text-slate-700 dark:text-slate-200 text-xs flex-1">
+      <!-- Injected dynamically in finishRoute() or renderEmptyRoutePanel() -->
     </div>
 
     <!-- Pro Actions Footer -->
-    <div class="px-3.5 py-3 border-t border-slate-200/60 dark:border-slate-700/60 bg-white/40 dark:bg-slate-800/40 flex flex-wrap gap-2 flex-shrink-0 justify-between">
-      <button type="button" id="routeNavBtn" class="flex-1 min-w-[130px] py-2 px-3 rounded-xl bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-500 hover:to-violet-500 text-white font-bold text-xs shadow-md shadow-indigo-500/20 flex items-center justify-center gap-1.5 transition-all">
+    <div class="px-3.5 py-3 border-t border-slate-200/60 dark:border-slate-700/60 bg-white/60 dark:bg-slate-800/60 flex flex-wrap gap-2 flex-shrink-0 justify-between">
+      <button type="button" id="routeNavBtn" class="flex-1 min-w-[130px] py-2 px-3 rounded-xl bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-500 hover:to-violet-500 text-white font-bold text-xs shadow-md shadow-indigo-500/20 flex items-center justify-center gap-1.5 transition-all cursor-pointer">
         <span>🚗 Start Navigation</span>
       </button>
 
       <div class="flex items-center gap-1.5">
-        <button type="button" id="routeExportGpxBtn" class="p-2 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-700/60 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 font-semibold text-xs transition-colors" title="Export GPX file for Garmin/Strava/GPS">
+        <button type="button" id="routeExportGpxBtn" class="p-2 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-700/60 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 font-semibold text-xs transition-colors cursor-pointer" title="Export GPX file for Garmin/Strava/GPS">
           📥 GPX
         </button>
-        <button type="button" id="routeShareBtn" class="p-2 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-700/60 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 font-semibold text-xs transition-colors" title="Copy route itinerary & GeoJSON">
+        <button type="button" id="routeShareBtn" class="p-2 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-700/60 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 font-semibold text-xs transition-colors cursor-pointer" title="Copy route itinerary & GeoJSON">
           📋 Share
         </button>
-        <button type="button" id="routeSaveBtn" class="p-2 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-700/60 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 font-semibold text-xs transition-colors" title="Save trip to favorite routes">
+        <button type="button" id="routeSaveBtn" class="p-2 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-700/60 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 font-semibold text-xs transition-colors cursor-pointer" title="Save trip to favorite routes">
           💾 Save
         </button>
       </div>
@@ -1368,13 +1720,40 @@ function buildPanel() {
 
   document.body.appendChild(panelEl);
 
-  panelEl.querySelector("#routePanelCloseBtn")?.addEventListener("click", hidePanel);
+  // Bind transport modes inside the merged panel
+  panelEl.querySelectorAll(".route-mode-btn").forEach((b) => {
+    b.addEventListener("click", () => {
+      setTransportMode(b.dataset.mode);
+    });
+  });
+
+  // Bind tab switching
+  panelEl.querySelectorAll(".route-tab-pill").forEach((tabBtn) => {
+    tabBtn.addEventListener("click", () => {
+      activeRouteTab = tabBtn.dataset.routeTab;
+      panelEl.querySelectorAll(".route-tab-pill").forEach((b) => {
+        if (b.dataset.routeTab === activeRouteTab) {
+          b.className =
+            "route-tab-pill flex-1 py-1.5 px-2 rounded-xl text-xs font-bold transition-all bg-white dark:bg-slate-800 text-indigo-600 dark:text-indigo-400 shadow-xs border border-slate-200/60 dark:border-slate-700/60 cursor-pointer";
+        } else {
+          b.className =
+            "route-tab-pill flex-1 py-1.5 px-2 rounded-xl text-xs font-medium transition-all text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white cursor-pointer";
+        }
+      });
+      const stopsView = panelEl.querySelector("#routeTabStopsContent");
+      const weatherView = panelEl.querySelector("#routeTabWeatherContent");
+      const analyticsView = panelEl.querySelector("#routeTabAnalyticsContent");
+      if (stopsView) stopsView.classList.toggle("hidden", activeRouteTab !== "stops");
+      if (weatherView) weatherView.classList.toggle("hidden", activeRouteTab !== "weather");
+      if (analyticsView) analyticsView.classList.toggle("hidden", activeRouteTab !== "analytics");
+    });
+  });
+
+  panelEl.querySelector("#routePanelUndoBtn")?.addEventListener("click", undoLastStop);
+  panelEl.querySelector("#routePanelReverseBtn")?.addEventListener("click", reverseRoute);
+  panelEl.querySelector("#routePanelCloseBtn")?.addEventListener("click", closeRouteStudio);
   panelEl.querySelector("#routePanelClearBtn")?.addEventListener("click", clearRoute);
   panelEl.querySelector("#routePanelOptimizeBtn")?.addEventListener("click", optimizeWaypointOrder);
-  panelEl.querySelector("#routePanelEditBtn")?.addEventListener("click", () => {
-    hidePanel();
-    if (!routeMode) toggleRoute();
-  });
 
   panelEl.querySelector("#routeNavBtn")?.addEventListener("click", handoverToNavigation);
   panelEl.querySelector("#routeExportGpxBtn")?.addEventListener("click", exportGPXFile);
@@ -1385,6 +1764,7 @@ function buildPanel() {
 function showPanel() {
   if (panelEl) {
     panelEl.classList.remove("hidden");
+    panelEl.style.display = "flex";
     isPanelOpen = true;
   }
 }
@@ -1392,8 +1772,179 @@ function showPanel() {
 function hidePanel() {
   if (panelEl) {
     panelEl.classList.add("hidden");
+    panelEl.style.display = "none";
     isPanelOpen = false;
   }
+}
+
+export function isRoutePanelOpen() {
+  return isPanelOpen;
+}
+
+function renderEmptyRoutePanel() {
+  const bodyEl = panelEl ? panelEl.querySelector("#routePanelBody") : document.getElementById("routePanelBody");
+  if (!bodyEl) return;
+
+  const panelStopsCountEl = document.getElementById("routePanelStopsCount") || panelEl?.querySelector("#routePanelStopsCount");
+  if (panelStopsCountEl) panelStopsCountEl.textContent = String(pts.length);
+
+  const liveStatsEl = document.getElementById("routePanelLiveStats") || panelEl?.querySelector("#routePanelLiveStats");
+  if (liveStatsEl) {
+    liveStatsEl.textContent = pts.length === 1 ? "1 Stop (Need 2+)" : "--";
+  }
+
+  const singleStopCardHtml =
+    pts.length === 1
+      ? `
+      <div class="rounded-2xl bg-white/70 dark:bg-slate-800/70 border border-slate-200/80 dark:border-slate-700/80 p-3 space-y-2 hover:border-indigo-400/50 transition-all shadow-xs">
+        <div class="flex items-center justify-between gap-2">
+          <div class="flex items-center gap-2 min-w-0">
+            <span class="px-2 py-0.5 rounded-lg border text-[10px] font-black uppercase tracking-wider flex-shrink-0 bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border-emerald-500/30">Start (A)</span>
+            <div class="min-w-0">
+              <div class="font-extrabold text-xs text-slate-900 dark:text-slate-100 truncate">${escapeXml(pts[0].name || "Departure Point")}</div>
+              <div class="text-[10px] text-slate-400 font-mono">${pts[0].lat.toFixed(4)}, ${pts[0].lng.toFixed(4)}</div>
+            </div>
+          </div>
+
+          <button type="button" class="route-delete-stop-btn p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-900/30 transition-colors cursor-pointer" data-delete-idx="0" title="Remove this stop" aria-label="Delete stop">
+            <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
+          </button>
+        </div>
+      </div>
+    `
+      : "";
+
+  bodyEl.innerHTML = `
+    <div class="space-y-3">
+      <!-- Search Place to Add Stop -->
+      <div class="relative">
+        <div class="flex items-center gap-2 px-3 py-2 rounded-2xl bg-white/70 dark:bg-slate-800/70 border border-slate-200/80 dark:border-slate-700/80 focus-within:ring-2 focus-within:ring-indigo-500/50 transition-all shadow-xs">
+          <span class="text-slate-400 text-xs">🔍</span>
+          <input type="text" id="routeSearchAddInput" placeholder="Add stop by city, address or landmark..." class="w-full bg-transparent text-xs text-slate-800 dark:text-slate-100 placeholder-slate-400 outline-none" autocomplete="off" />
+          <div id="routeSearchAddSpinner" class="hidden w-3.5 h-3.5 border-2 border-indigo-500/30 border-t-indigo-500 rounded-full animate-spin flex-shrink-0"></div>
+        </div>
+        <div id="routeSearchAddDropdown" class="hidden absolute top-full left-0 right-0 mt-1 bg-white dark:bg-slate-800 rounded-2xl shadow-2xl border border-slate-200/80 dark:border-slate-700/80 p-1.5 z-50 max-h-52 overflow-y-auto custom-scrollbar"></div>
+      </div>
+
+      ${singleStopCardHtml}
+
+      <div class="py-10 text-center space-y-3">
+        <div class="text-4xl">🗺️</div>
+        <div class="font-extrabold text-sm text-slate-800 dark:text-slate-100">
+          ${pts.length === 0 ? "Place Departure Point" : "Add Destination Stop"}
+        </div>
+        <div class="text-xs text-slate-500 dark:text-slate-400 leading-relaxed max-w-[280px] mx-auto">
+          ${
+            pts.length === 0
+              ? "Click anywhere on the map or type a city in the search bar above to set your departure point (A)."
+              : "Click the map or search above to set your destination point (B) or intermediate waypoints."
+          }
+        </div>
+      </div>
+    </div>
+  `;
+
+  bodyEl.querySelectorAll(".route-delete-stop-btn").forEach((delBtn) => {
+    delBtn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      const idx = parseInt(delBtn.dataset.deleteIdx, 10);
+      removeStop(idx);
+    });
+  });
+
+  bindRouteSearchAddEvents(bodyEl);
+}
+
+/**
+ * Binds autocomplete search input for quickly adding stops by place name
+ */
+function bindRouteSearchAddEvents(containerEl) {
+  if (!containerEl) return;
+  const inputEl = containerEl.querySelector("#routeSearchAddInput");
+  const dropdownEl = containerEl.querySelector("#routeSearchAddDropdown");
+  const spinnerEl = containerEl.querySelector("#routeSearchAddSpinner");
+  if (!inputEl || !dropdownEl) return;
+
+  let debounceTimer = null;
+
+  inputEl.addEventListener("input", (e) => {
+    const val = e.target.value.trim();
+    if (debounceTimer) clearTimeout(debounceTimer);
+
+    if (val.length < 2) {
+      dropdownEl.classList.add("hidden");
+      dropdownEl.innerHTML = "";
+      if (spinnerEl) spinnerEl.classList.add("hidden");
+      return;
+    }
+
+    if (spinnerEl) spinnerEl.classList.remove("hidden");
+
+    debounceTimer = setTimeout(async () => {
+      try {
+        const results = await searchPlacesForRoute(val);
+        if (spinnerEl) spinnerEl.classList.add("hidden");
+
+        if (!results || results.length === 0) {
+          dropdownEl.innerHTML = `
+            <div class="p-2.5 text-center text-xs text-slate-400">
+              No matching places found
+            </div>
+          `;
+          dropdownEl.classList.remove("hidden");
+          return;
+        }
+
+        dropdownEl.innerHTML = results
+          .map(
+            (r, i) => `
+          <button type="button" class="route-search-result-item w-full text-left p-2 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-700/60 transition-colors flex items-center justify-between gap-2 cursor-pointer group" data-idx="${i}">
+            <div class="min-w-0">
+              <div class="text-xs font-bold text-slate-800 dark:text-slate-100 group-hover:text-indigo-600 dark:group-hover:text-indigo-400 truncate">${escapeXml(r.name)}</div>
+              ${r.details ? `<div class="text-[10px] text-slate-400 truncate">${escapeXml(r.details)}</div>` : ""}
+            </div>
+            <span class="text-xs text-indigo-500 opacity-0 group-hover:opacity-100 transition-opacity font-bold">+ Add</span>
+          </button>
+        `,
+          )
+          .join("");
+
+        dropdownEl.classList.remove("hidden");
+
+        dropdownEl.querySelectorAll(".route-search-result-item").forEach((btn) => {
+          btn.addEventListener("click", () => {
+            const idx = parseInt(btn.dataset.idx, 10);
+            const item = results[idx];
+            if (item) {
+              dropdownEl.classList.add("hidden");
+              inputEl.value = "";
+              addStop(item.lat, item.lng, item.name);
+            }
+          });
+        });
+      } catch (err) {
+        if (spinnerEl) spinnerEl.classList.add("hidden");
+        dropdownEl.classList.add("hidden");
+      }
+    }, 280);
+  });
+
+  inputEl.addEventListener("keydown", (e) => {
+    if (e.key === "Escape") {
+      dropdownEl.classList.add("hidden");
+    }
+  });
+
+  // Hide dropdown on click outside
+  document.addEventListener(
+    "click",
+    (e) => {
+      if (!containerEl.contains(e.target)) {
+        dropdownEl.classList.add("hidden");
+      }
+    },
+    { capture: true },
+  );
 }
 
 // ============================================================================
@@ -1403,11 +1954,15 @@ function hidePanel() {
 export async function finishRoute() {
   closeWaypointPopover();
   if (pts.length < 2) {
+    showPanel();
+    renderEmptyRoutePanel();
     appRef.showToast("Add at least 2 stops to analyze your trip", "info");
     return;
   }
 
   showPanel();
+  hideHUD();
+  updateHUD();
   const bodyEl = panelEl ? panelEl.querySelector("#routePanelBody") : document.getElementById("routePanelBody");
   if (bodyEl) {
     bodyEl.innerHTML = `
@@ -1431,7 +1986,7 @@ export async function finishRoute() {
           <div class="text-xl">⚠️</div>
           <div class="font-bold">Weather Analysis Failed</div>
           <div class="text-xs text-slate-400">Unable to reach weather services. Check network connection and retry.</div>
-          <button type="button" id="routeRetryBtn" class="mt-2 px-3 py-1.5 rounded-xl bg-slate-200 dark:bg-slate-700 text-slate-800 dark:text-slate-200 font-bold text-xs">Retry</button>
+          <button type="button" id="routeRetryBtn" class="mt-2 px-3 py-1.5 rounded-xl bg-slate-200 dark:bg-slate-700 text-slate-800 dark:text-slate-200 font-bold text-xs cursor-pointer">Retry</button>
         </div>
       `;
       panelEl.querySelector("#routeRetryBtn")?.addEventListener("click", finishRoute);
@@ -1519,6 +2074,8 @@ function renderRoutePanelContent(stops, units) {
   const bodyEl = panelEl ? panelEl.querySelector("#routePanelBody") : document.getElementById("routePanelBody");
   if (!bodyEl) return;
 
+  lastLoadedStops = stops;
+
   const totalDistanceM = activeRouteData?.distanceM || 0;
   const totalDurationS = activeRouteData?.durationS || 0;
   const allHazards = stops.flatMap((s) => s.hazards);
@@ -1547,7 +2104,11 @@ function renderRoutePanelContent(stops, units) {
   if (modeIconEl) modeIconEl.textContent = modeEmoji;
 
   const subtitleEl = panelEl?.querySelector("#routePanelSubtitle");
-  if (subtitleEl) subtitleEl.textContent = `${modeName} Trip Weather & Arrival Timeline`;
+  if (subtitleEl) subtitleEl.textContent = `${modeName} Trip Weather & Safety Intelligence`;
+
+  // Update stop count in panel tab strip
+  const panelStopsCountEl = document.getElementById("routePanelStopsCount");
+  if (panelStopsCountEl) panelStopsCountEl.textContent = String(stops.length);
 
   // Toggle Header Optimize Button if 4+ stops exist
   const panelOptBtn = panelEl ? panelEl.querySelector("#routePanelOptimizeBtn") : document.getElementById("routePanelOptimizeBtn");
@@ -1622,7 +2183,7 @@ function renderRoutePanelContent(stops, units) {
   ]
     .map(
       (c) => `
-      <button type="button" data-offset="${c.offset}" class="route-departure-chip px-2.5 py-1 rounded-xl text-[11px] font-semibold transition-all ${
+      <button type="button" data-offset="${c.offset}" class="route-departure-chip px-2.5 py-1 rounded-xl text-[11px] font-semibold transition-all cursor-pointer ${
         departureOffsetHours === c.offset
           ? "bg-indigo-600 text-white shadow-sm"
           : "bg-slate-200/60 dark:bg-slate-700/60 text-slate-700 dark:text-slate-300 hover:bg-slate-200"
@@ -1633,8 +2194,95 @@ function renderRoutePanelContent(stops, units) {
     )
     .join("");
 
-  // Stop-by-Stop Itinerary Cards with Aerodynamic Relative Wind Legs
-  const itineraryHtml = stops
+  // =========================================================================
+  // TAB 1: STOPS & LEGS ITINERARY
+  // =========================================================================
+  const stopsCardsHtml = stops
+    .map((stop, i) => {
+      const isStart = i === 0;
+      const isEnd = i === stops.length - 1;
+      const roleLabel = isStart ? "Start (A)" : isEnd ? "Destination (B)" : `Stop ${i + 1}`;
+      const roleBadgeBg = isStart
+        ? "bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border-emerald-500/30"
+        : isEnd
+        ? "bg-rose-500/15 text-rose-700 dark:text-rose-300 border-rose-500/30"
+        : "bg-indigo-500/15 text-indigo-700 dark:text-indigo-300 border-indigo-500/30";
+
+      const info = weatherInfo(stop.weather.weatherCode);
+      const etaStr = stop.eta.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+
+      // Aerodynamic leg connector between consecutive stops
+      let legConnectorHtml = "";
+      if (i < stops.length - 1) {
+        const nextStop = stops[i + 1];
+        const bearing = calculateBearing(stop.lat, stop.lng, nextStop.lat, nextStop.lng);
+        const compass = bearingToCompass(bearing);
+        const relWind = calculateRelativeWind(bearing, stop.weather.windSpeed, stop.weather.windDirection);
+        const legDist = haversineDistanceMeters(stop.lat, stop.lng, nextStop.lat, nextStop.lng);
+        const legDistStr = formatRouteDistance(legDist, units);
+
+        legConnectorHtml = `
+          <div class="flex items-center gap-2 py-1 px-2.5 text-[10px] text-slate-500 dark:text-slate-400">
+            <div class="flex flex-col items-center">
+              <div class="w-0.5 h-2.5 bg-slate-300 dark:bg-slate-700"></div>
+              <div class="w-1.5 h-1.5 rounded-full bg-slate-400 dark:bg-slate-600"></div>
+              <div class="w-0.5 h-2.5 bg-slate-300 dark:bg-slate-700"></div>
+            </div>
+            <div class="flex-1 flex items-center justify-between gap-1 flex-wrap">
+              <span class="font-medium font-mono text-[10px] text-slate-600 dark:text-slate-400">Leg ${i + 1}: ${legDistStr} · ${compass} (${Math.round(bearing)}°)</span>
+              <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full font-bold border text-[10px] ${relWind.bg} ${relWind.color}">
+                <span>${relWind.icon}</span>
+                <span>${relWind.label}</span>
+              </span>
+            </div>
+          </div>
+        `;
+      }
+
+      return `
+        <div class="rounded-2xl bg-white/70 dark:bg-slate-800/70 border border-slate-200/80 dark:border-slate-700/80 p-3 space-y-2 hover:border-indigo-400/50 transition-all shadow-xs" data-stop-card="${i}">
+          <div class="flex items-center justify-between gap-2">
+            <div class="flex items-center gap-2 min-w-0">
+              <span class="px-2 py-0.5 rounded-lg border text-[10px] font-black uppercase tracking-wider flex-shrink-0 ${roleBadgeBg}">${roleLabel}</span>
+              <div class="min-w-0">
+                <div class="font-extrabold text-xs text-slate-900 dark:text-slate-100 truncate" data-stop-title-idx="${i}">
+                  ${escapeXml(stop.name || roleLabel)}
+                </div>
+                <div class="text-[10px] text-slate-400 font-mono">${stop.lat.toFixed(4)}, ${stop.lng.toFixed(4)}</div>
+              </div>
+            </div>
+
+            <div class="flex items-center gap-1 flex-shrink-0">
+              <button type="button" class="route-move-up-btn p-1.5 rounded-lg text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700/60 transition-colors cursor-pointer ${i === 0 ? "invisible pointer-events-none" : ""}" data-move-up="${i}" title="Move earlier in trip" aria-label="Move stop up">
+                ↑
+              </button>
+              <button type="button" class="route-move-down-btn p-1.5 rounded-lg text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700/60 transition-colors cursor-pointer ${i === stops.length - 1 ? "invisible pointer-events-none" : ""}" data-move-down="${i}" title="Move later in trip" aria-label="Move stop down">
+                ↓
+              </button>
+              <button type="button" class="route-delete-stop-btn p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-900/30 transition-colors cursor-pointer" data-delete-idx="${i}" title="Remove this stop" aria-label="Delete stop">
+                <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
+              </button>
+            </div>
+          </div>
+
+          <div class="flex items-center justify-between pt-1 border-t border-slate-200/50 dark:border-slate-700/50 text-[11px] cursor-pointer" data-zoom-stop="${i}">
+            <span class="font-bold text-indigo-600 dark:text-indigo-400">ETA ${etaStr}</span>
+            <span class="inline-flex items-center gap-1 text-slate-600 dark:text-slate-300 font-medium">
+              <span>${info.icon}</span>
+              <span>${formatTemp(stop.weather.temperature, units)}</span>
+              <span class="opacity-75">· ${info.description}</span>
+            </span>
+          </div>
+        </div>
+        ${legConnectorHtml}
+      `;
+    })
+    .join("");
+
+  // =========================================================================
+  // TAB 2: DETAILED WEATHER & ARRIVAL TIMELINE
+  // =========================================================================
+  const weatherTimelineHtml = stops
     .map((stop, i) => {
       const isStart = i === 0;
       const isEnd = i === stops.length - 1;
@@ -1658,121 +2306,192 @@ function renderRoutePanelContent(stops, units) {
         )
         .join("");
 
-      // Aerodynamic leg connector between consecutive stops
-      let legConnectorHtml = "";
-      if (i < stops.length - 1) {
-        const nextStop = stops[i + 1];
-        const bearing = calculateBearing(stop.lat, stop.lng, nextStop.lat, nextStop.lng);
-        const compass = bearingToCompass(bearing);
-        const relWind = calculateRelativeWind(bearing, stop.weather.windSpeed, stop.weather.windDirection);
-        const legDist = haversineDistanceMeters(stop.lat, stop.lng, nextStop.lat, nextStop.lng);
-        const legDistStr = formatRouteDistance(legDist, units);
-
-        legConnectorHtml = `
-          <div class="flex items-center gap-2 py-1 px-2.5 text-[10px] text-slate-500 dark:text-slate-400">
-            <div class="flex flex-col items-center">
-              <div class="w-0.5 h-2.5 bg-slate-300 dark:bg-slate-700"></div>
-              <div class="w-1.5 h-1.5 rounded-full bg-slate-400 dark:bg-slate-600"></div>
-              <div class="w-0.5 h-2.5 bg-slate-300 dark:bg-slate-700"></div>
-            </div>
-            <div class="flex-1 flex items-center justify-between gap-1 flex-wrap">
-              <span class="font-medium font-mono text-[10px] text-slate-600 dark:text-slate-400">Leg ${i + 1}: ${legDistStr} · Heading ${compass} (${Math.round(bearing)}°)</span>
-              <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full font-bold border text-[10px] ${relWind.bg} ${relWind.color}">
-                <span>${relWind.icon}</span>
-                <span>${relWind.label}</span>
-              </span>
-            </div>
-          </div>
-        `;
-      }
-
       return `
-        <div class="rounded-2xl bg-white/60 dark:bg-slate-800/60 border border-slate-200/60 dark:border-slate-700/60 p-3 space-y-2 hover:border-indigo-400/50 transition-all group" data-stop-card="${i}">
+        <div class="rounded-2xl bg-white/70 dark:bg-slate-800/70 border border-slate-200/80 dark:border-slate-700/80 p-3 space-y-2 hover:border-indigo-400/50 transition-all cursor-pointer shadow-xs" data-zoom-stop="${i}">
           <div class="flex items-center justify-between">
             <div class="flex items-center gap-2">
               <span class="px-2 py-0.5 rounded-lg border text-[10px] font-black uppercase tracking-wider ${roleBadgeBg}">${roleLabel}</span>
               <span class="font-extrabold text-slate-900 dark:text-slate-100 text-xs">${etaStr}</span>
             </div>
-            <div class="flex items-center gap-2">
-              <div class="text-base leading-none" title="${info.description}">${info.icon}</div>
-              <button type="button" class="route-delete-stop-btn p-1.5 rounded-xl text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-900/30 transition-all" data-delete-idx="${i}" title="Remove this stop (${roleLabel})" aria-label="Delete stop">
-                <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
-              </button>
+            <div class="flex items-center gap-1 text-base leading-none" title="${info.description}">
+              ${info.icon}
             </div>
           </div>
 
-          <div class="flex items-center justify-between text-xs cursor-pointer" data-zoom-stop="${i}">
-            <div class="text-slate-500 dark:text-slate-400 text-[11px] truncate max-w-[180px]">
-              ${info.description}
+          <div class="flex items-center justify-between text-xs">
+            <div class="text-slate-600 dark:text-slate-300 text-[11px] font-medium truncate max-w-[190px]">
+              ${escapeXml(stop.name || info.description)}
             </div>
             <div class="font-black text-sm text-slate-900 dark:text-white">
               ${formatTemp(stop.weather.temperature, units)}
             </div>
           </div>
 
-          <div class="flex items-center justify-between pt-1 border-t border-slate-200/40 dark:border-slate-700/40 text-[10px] text-slate-500 dark:text-slate-400 cursor-pointer" data-zoom-stop="${i}">
+          <div class="flex items-center justify-between pt-1 border-t border-slate-200/50 dark:border-slate-700/50 text-[10px] text-slate-500 dark:text-slate-400">
             <span class="flex items-center gap-1">💨 ${formatSpeed(stop.weather.windSpeed, units)}</span>
             <span class="flex items-center gap-1">🌧️ ${stop.weather.precipitationProb}% (${formatPrecip(stop.weather.precipitation, units)})</span>
           </div>
 
-          ${hazardTags ? `<div class="flex flex-wrap gap-1 pt-1">${hazardTags}</div>` : ""}
+          ${hazardTags ? `<div class="flex flex-wrap gap-1 pt-0.5">${hazardTags}</div>` : ""}
         </div>
-        ${legConnectorHtml}
       `;
     })
     .join("");
 
+  // =========================================================================
+  // TAB 3: TRIP ANALYTICS & MULTIMODAL COMPARISON
+  // =========================================================================
+  const driveSec = calculateModeDuration(totalDistanceM, "driving", totalDurationS);
+  const bikeSec = calculateModeDuration(totalDistanceM, "cycling");
+  const walkSec = calculateModeDuration(totalDistanceM, "walking");
+  const flightSec = calculateModeDuration(totalDistanceM, "direct");
+
+  // Relative Wind Tally
+  let tailwindLegs = 0;
+  let headwindLegs = 0;
+  let crosswindLegs = 0;
+  for (let i = 0; i < stops.length - 1; i++) {
+    const p1 = stops[i];
+    const p2 = stops[i + 1];
+    const bearing = calculateBearing(p1.lat, p1.lng, p2.lat, p2.lng);
+    const relWind = calculateRelativeWind(bearing, p1.weather?.windSpeed, p1.weather?.windDirection);
+    if (relWind.classification === "tailwind") tailwindLegs++;
+    else if (relWind.classification === "headwind") headwindLegs++;
+    else if (relWind.classification === "crosswind") crosswindLegs++;
+  }
+
+  let aeroVerdict = "Neutral Aerodynamic Resistance";
+  let aeroColor = "text-slate-600 dark:text-slate-300";
+  if (tailwindLegs > headwindLegs) {
+    aeroVerdict = "🟢 Net Tailwind Boost (+3-5% efficiency)";
+    aeroColor = "text-emerald-600 dark:text-emerald-400";
+  } else if (headwindLegs > tailwindLegs) {
+    aeroVerdict = "🔴 Net Headwind Drag (-4-8% range impact)";
+    aeroColor = "text-rose-600 dark:text-rose-400";
+  }
+
+  // Inject full 3-tab layout into body
   bodyEl.innerHTML = `
-    <!-- AuraCopilot AI Briefing -->
-    ${copilotHtml}
+    <!-- TAB 1: STOPS & LEGS -->
+    <div id="routeTabStopsContent" class="${activeRouteTab === "stops" ? "" : "hidden"} space-y-3">
+      <!-- Search Place to Add Stop -->
+      <div class="relative">
+        <div class="flex items-center gap-2 px-3 py-2 rounded-2xl bg-white/70 dark:bg-slate-800/70 border border-slate-200/80 dark:border-slate-700/80 focus-within:ring-2 focus-within:ring-indigo-500/50 transition-all shadow-xs">
+          <span class="text-slate-400 text-xs">🔍</span>
+          <input type="text" id="routeSearchAddInput" placeholder="Add stop by city, address or landmark..." class="w-full bg-transparent text-xs text-slate-800 dark:text-slate-100 placeholder-slate-400 outline-none" autocomplete="off" />
+          <div id="routeSearchAddSpinner" class="hidden w-3.5 h-3.5 border-2 border-indigo-500/30 border-t-indigo-500 rounded-full animate-spin flex-shrink-0"></div>
+        </div>
+        <div id="routeSearchAddDropdown" class="hidden absolute top-full left-0 right-0 mt-1 bg-white dark:bg-slate-800 rounded-2xl shadow-2xl border border-slate-200/80 dark:border-slate-700/80 p-1.5 z-50 max-h-52 overflow-y-auto custom-scrollbar"></div>
+      </div>
 
-    <!-- Top Hazards Banner -->
-    ${hazardHtml}
-
-    <!-- Key Trip KPIs -->
-    <div class="grid grid-cols-2 gap-2">
-      <div class="bg-slate-100/70 dark:bg-slate-800/70 p-2.5 rounded-2xl border border-slate-200/40 dark:border-slate-700/40">
-        <div class="text-[10px] text-slate-400 uppercase font-bold tracking-wider">Total Distance</div>
-        <div class="text-sm font-black text-slate-900 dark:text-white mt-0.5">${formatRouteDistance(totalDistanceM, units)}</div>
-      </div>
-      <div class="bg-slate-100/70 dark:bg-slate-800/70 p-2.5 rounded-2xl border border-slate-200/40 dark:border-slate-700/40">
-        <div class="text-[10px] text-slate-400 uppercase font-bold tracking-wider">${modeEmoji} ${modeName} Time</div>
-        <div class="text-sm font-black text-slate-900 dark:text-white mt-0.5">${formatRouteDuration(totalDurationS)}</div>
-      </div>
-      <div class="bg-slate-100/70 dark:bg-slate-800/70 p-2.5 rounded-2xl border border-slate-200/40 dark:border-slate-700/40">
-        <div class="text-[10px] text-slate-400 uppercase font-bold tracking-wider">Temp Range</div>
-        <div class="text-xs font-bold text-slate-800 dark:text-slate-100 mt-0.5">${formatTemp(minTemp, units)} – ${formatTemp(maxTemp, units)}</div>
-      </div>
-      <div class="bg-slate-100/70 dark:bg-slate-800/70 p-2.5 rounded-2xl border border-slate-200/40 dark:border-slate-700/40">
-        <div class="text-[10px] text-slate-400 uppercase font-bold tracking-wider">Max Wind / Rain</div>
-        <div class="text-xs font-bold text-slate-800 dark:text-slate-100 mt-0.5">${formatSpeed(maxWind, units)} · ${rainyStopsCount} rainy</div>
-      </div>
-    </div>
-
-    <!-- Departure Time Selector -->
-    <div class="space-y-1.5">
-      <div class="flex items-center justify-between">
-        <span class="text-[11px] font-bold text-slate-700 dark:text-slate-300">Departure Time</span>
-        <span class="text-[10px] text-indigo-600 dark:text-indigo-400 font-semibold">Updates arrival weather</span>
-      </div>
-      <div class="flex items-center gap-1.5 overflow-x-auto pb-0.5 hide-scrollbar">
-        ${departureChips}
-      </div>
-    </div>
-
-    <!-- Itinerary Timeline -->
-    <div class="space-y-2 pt-1">
-      <div class="flex items-center justify-between">
-        <span class="text-[11px] font-bold text-slate-700 dark:text-slate-300">Stop-by-Stop Weather Timeline</span>
-        <button type="button" id="routePanelAddStopBtn" class="text-[10px] font-bold text-indigo-600 dark:text-indigo-400 hover:underline">+ Add Stop</button>
-      </div>
+      <!-- Stop Cards List -->
       <div class="space-y-2">
-        ${itineraryHtml}
+        ${stopsCardsHtml}
+      </div>
+
+      <!-- Quick Actions at bottom of Stops Tab -->
+      <div class="pt-2 flex items-center gap-2 flex-wrap">
+        <button type="button" id="routePanelTabAddMapBtn" class="flex-1 py-1.5 px-2.5 rounded-xl bg-indigo-50 dark:bg-indigo-900/30 hover:bg-indigo-100 text-indigo-600 dark:text-indigo-400 font-bold text-xs transition-colors flex items-center justify-center gap-1 cursor-pointer">
+          <span>+ Add from Map</span>
+        </button>
+        <button type="button" id="routePanelTabReverseBtn" class="py-1.5 px-2.5 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 text-slate-700 dark:text-slate-200 font-bold text-xs transition-colors flex items-center justify-center gap-1 cursor-pointer" title="Reverse trip direction">
+          <span>🔄 Reverse</span>
+        </button>
+      </div>
+    </div>
+
+    <!-- TAB 2: DETAILED WEATHER & ARRIVAL TIMELINE -->
+    <div id="routeTabWeatherContent" class="${activeRouteTab === "weather" ? "" : "hidden"} space-y-3">
+      <!-- AuraCopilot Briefing -->
+      ${copilotHtml}
+
+      <!-- Hazard Banner -->
+      ${hazardHtml}
+
+      <!-- Departure Time Selector -->
+      <div class="space-y-1.5">
+        <div class="flex items-center justify-between">
+          <span class="text-[11px] font-bold text-slate-700 dark:text-slate-300">Departure Time</span>
+          <span class="text-[10px] text-indigo-600 dark:text-indigo-400 font-semibold">Updates arrival weather</span>
+        </div>
+        <div class="flex items-center gap-1.5 overflow-x-auto pb-0.5 hide-scrollbar">
+          ${departureChips}
+        </div>
+      </div>
+
+      <!-- Weather Cards Timeline -->
+      <div class="space-y-2 pt-1">
+        <div class="text-[11px] font-bold text-slate-700 dark:text-slate-300">Stop Arrival Forecasts</div>
+        <div class="space-y-2">
+          ${weatherTimelineHtml}
+        </div>
+      </div>
+    </div>
+
+    <!-- TAB 3: TRIP ANALYTICS -->
+    <div id="routeTabAnalyticsContent" class="${activeRouteTab === "analytics" ? "" : "hidden"} space-y-3">
+      <!-- Key Trip KPIs -->
+      <div class="grid grid-cols-2 gap-2">
+        <div class="bg-slate-100/70 dark:bg-slate-800/70 p-2.5 rounded-2xl border border-slate-200/50 dark:border-slate-700/50">
+          <div class="text-[10px] text-slate-400 uppercase font-bold tracking-wider">Total Distance</div>
+          <div class="text-sm font-black text-slate-900 dark:text-white mt-0.5">${formatRouteDistance(totalDistanceM, units)}</div>
+        </div>
+        <div class="bg-slate-100/70 dark:bg-slate-800/70 p-2.5 rounded-2xl border border-slate-200/50 dark:border-slate-700/50">
+          <div class="text-[10px] text-slate-400 uppercase font-bold tracking-wider">${modeEmoji} ${modeName} Time</div>
+          <div class="text-sm font-black text-slate-900 dark:text-white mt-0.5">${formatRouteDuration(totalDurationS)}</div>
+        </div>
+        <div class="bg-slate-100/70 dark:bg-slate-800/70 p-2.5 rounded-2xl border border-slate-200/50 dark:border-slate-700/50">
+          <div class="text-[10px] text-slate-400 uppercase font-bold tracking-wider">Temp Range</div>
+          <div class="text-xs font-bold text-slate-800 dark:text-slate-100 mt-0.5">${formatTemp(minTemp, units)} – ${formatTemp(maxTemp, units)}</div>
+        </div>
+        <div class="bg-slate-100/70 dark:bg-slate-800/70 p-2.5 rounded-2xl border border-slate-200/50 dark:border-slate-700/50">
+          <div class="text-[10px] text-slate-400 uppercase font-bold tracking-wider">Max Wind / Rain</div>
+          <div class="text-xs font-bold text-slate-800 dark:text-slate-100 mt-0.5">${formatSpeed(maxWind, units)} · ${rainyStopsCount} rainy</div>
+        </div>
+      </div>
+
+      <!-- Multimodal Travel Comparisons -->
+      <div class="rounded-2xl border border-slate-200/60 dark:border-slate-700/60 bg-white/40 dark:bg-slate-800/40 p-3 space-y-2">
+        <div class="text-[11px] font-bold text-slate-800 dark:text-slate-200">Multimodal Pacing & Energy</div>
+        <div class="space-y-1.5 text-xs">
+          <div class="flex items-center justify-between p-1.5 rounded-xl bg-slate-100/80 dark:bg-slate-700/40">
+            <span class="flex items-center gap-1.5 font-medium"><span>🚗</span><span>Driving</span></span>
+            <span class="font-bold">${formatRouteDuration(driveSec)}</span>
+          </div>
+          <div class="flex items-center justify-between p-1.5 rounded-xl bg-slate-100/80 dark:bg-slate-700/40">
+            <span class="flex items-center gap-1.5 font-medium"><span>🚲</span><span>Cycling (~18 km/h)</span></span>
+            <span class="font-bold">${formatRouteDuration(bikeSec)} <span class="text-[10px] text-slate-400 font-normal">(~${Math.round((totalDistanceM / 1000) * 28)} kcal)</span></span>
+          </div>
+          <div class="flex items-center justify-between p-1.5 rounded-xl bg-slate-100/80 dark:bg-slate-700/40">
+            <span class="flex items-center gap-1.5 font-medium"><span>🚶</span><span>Walking (~4.8 km/h)</span></span>
+            <span class="font-bold">${formatRouteDuration(walkSec)} <span class="text-[10px] text-slate-400 font-normal">(~${Math.round((totalDistanceM / 1000) * 1300).toLocaleString()} steps)</span></span>
+          </div>
+          <div class="flex items-center justify-between p-1.5 rounded-xl bg-slate-100/80 dark:bg-slate-700/40">
+            <span class="flex items-center gap-1.5 font-medium"><span>✈️</span><span>Direct Geodesic</span></span>
+            <span class="font-bold">${formatRouteDuration(flightSec)}</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Aerodynamic Wind & Efficiency -->
+      <div class="rounded-2xl border border-slate-200/60 dark:border-slate-700/60 bg-white/40 dark:bg-slate-800/40 p-3 space-y-2">
+        <div class="text-[11px] font-bold text-slate-800 dark:text-slate-200">Aerodynamics & Wind Resistance</div>
+        <div class="text-xs font-semibold ${aeroColor}">
+          ${aeroVerdict}
+        </div>
+        <div class="flex items-center justify-between text-[11px] text-slate-500 dark:text-slate-400 pt-1 border-t border-slate-200/40 dark:border-slate-700/40">
+          <span>Tailwind: ${tailwindLegs} legs</span>
+          <span>Headwind: ${headwindLegs} legs</span>
+          <span>Crosswind: ${crosswindLegs} legs</span>
+        </div>
       </div>
     </div>
   `;
 
-  // Bind departure time chips
+  // Bind Autocomplete search in Stops tab
+  bindRouteSearchAddEvents(bodyEl);
+
+  // Bind Departure time chips
   bodyEl.querySelectorAll(".route-departure-chip").forEach((chip) => {
     chip.addEventListener("click", () => {
       departureOffsetHours = parseInt(chip.dataset.offset, 10) || 0;
@@ -1780,13 +2499,24 @@ function renderRoutePanelContent(stops, units) {
     });
   });
 
-  // Bind "+ Add Stop" button
-  bodyEl.querySelector("#routePanelAddStopBtn")?.addEventListener("click", () => {
-    hidePanel();
-    if (!routeMode) toggleRoute();
+  // Bind Move Up and Move Down buttons
+  bodyEl.querySelectorAll(".route-move-up-btn").forEach((btn) => {
+    btn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      const idx = parseInt(btn.dataset.moveUp, 10);
+      if (idx > 0) moveStop(idx, idx - 1);
+    });
   });
 
-  // Bind individual delete stop buttons on each card!
+  bodyEl.querySelectorAll(".route-move-down-btn").forEach((btn) => {
+    btn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      const idx = parseInt(btn.dataset.moveDown, 10);
+      if (idx < stops.length - 1) moveStop(idx, idx + 1);
+    });
+  });
+
+  // Bind individual delete stop buttons
   bodyEl.querySelectorAll(".route-delete-stop-btn").forEach((delBtn) => {
     delBtn.addEventListener("click", (e) => {
       e.stopPropagation();
@@ -1809,6 +2539,28 @@ function renderRoutePanelContent(stops, units) {
       }
     });
   });
+
+  // Bind quick buttons at bottom of stops tab
+  bodyEl.querySelector("#routePanelTabAddMapBtn")?.addEventListener("click", () => {
+    hidePanel();
+    showHUD();
+    routeMode = true;
+    if (appRef) {
+      appRef._routeModeActive = true;
+      if (appRef.map) {
+        appRef.map.on("click", onMapClick);
+        const targetEl = appRef.map.getTargetElement();
+        if (targetEl) targetEl.style.cursor = "crosshair";
+      }
+    }
+    updateHUD();
+    if (appRef) appRef.showToast("Click map to add stop. Click 'Analyze Route' when done.", "info");
+  });
+
+  bodyEl.querySelector("#routePanelTabReverseBtn")?.addEventListener("click", reverseRoute);
+
+  // Bind autocomplete search input inside the Stops tab
+  bindRouteSearchAddEvents(bodyEl);
 }
 
 // ============================================================================

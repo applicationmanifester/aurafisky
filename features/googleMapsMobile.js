@@ -134,14 +134,24 @@ export class AuraMobileController {
 
   handleChipClick(category, chipEl) {
     const allChips = document.querySelectorAll('.mobile-quick-chip');
-    allChips.forEach(c => c.classList.remove('active'));
 
     if (this.activeCategory === category && category !== 'aura') {
       this.activeCategory = null;
+      allChips.forEach(c => c.classList.remove('active'));
+      if (category === 'route-weather') {
+        if (typeof this.app.closeRouteStudio === 'function') {
+          this.app.closeRouteStudio();
+        } else if (typeof this.app.toggleRoute === 'function') {
+          this.app.toggleRoute();
+        }
+      } else if (category === 'radar') {
+        this.toggleRadarOverlay();
+      }
       return;
     }
 
     this.activeCategory = category;
+    allChips.forEach(c => c.classList.remove('active'));
     chipEl.classList.add('active');
 
     if (category === 'aura') {
@@ -193,8 +203,10 @@ export class AuraMobileController {
   }
 
   openRouteWeather() {
-    this.app.showToast?.('🚗 Route Weather: Driving hazards & road grip alerts loaded', 'info');
-    if (typeof this.app.toggleRoute === 'function') {
+    this.app.showToast?.('🚗 Route Weather: Driving hazards & road weather intelligence loaded', 'info');
+    if (typeof this.app.openRouteStudio === 'function') {
+      this.app.openRouteStudio();
+    } else if (typeof this.app.toggleRoute === 'function') {
       this.app.toggleRoute();
     } else {
       const routeBtn = document.getElementById('routeBtn');

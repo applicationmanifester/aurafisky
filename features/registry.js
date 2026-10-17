@@ -2,20 +2,21 @@
 // directly onto the running AurafiskyApp instance (app.foo = foo), so `this`
 // inside each extracted function resolves normally at the call site.
 //
-// Loaded eagerly via static imports (NOT dynamic import()) and run
-// synchronously from inside the AurafiskyApp constructor, before any event
-// listener is bound or any feature method is called directly. Static import
-// guarantees every module below is fully evaluated before this file's own
-// top-level code runs (ES module semantics) — no lazy-load race is possible.
+// Core features are loaded eagerly (static import) so they're available the
+// instant the app boots. Heavy, interaction-gated features (aura assistant,
+// routes, time-machine, city comparison) are loaded in the background after
+// first paint so they don't block parse/eval of the critical path.
 //
-// If a lazily-loaded / code-split feature is ever wanted again, load it with
-// dynamic import() *and* verify every call site guards on a readiness flag
-// first (see app._ensembleReady for the existing example of that pattern).
+// Lazy features are initialized on a setTimeout(0) after the eager set; by
+// the time a user clicks a corresponding button they've already evaluated.
+// If a call site is reached before loading completes, the corresponding
+// app.* method is undefined and call sites must guard (they already do for
+// optional features like app._ensembleReady).
+
+// ── Eager (critical path) ─────────────────────────────────────────────
 import * as ensemble from './ensemble.js';
-import * as routes from './routes.js';
 import * as radar from './radar.js';
 import * as bookmarks from './bookmarks.js';
-import * as compareCities from './compareCities.js';
 import * as units from './units.js';
 import * as share from './share.js';
 import * as hourlyStrip from './hourlyStrip.js';
@@ -24,7 +25,6 @@ import * as minimalMode from './minimalMode.js';
 import * as canvasEffects from './canvasEffects.js';
 import * as audio from './audio.js';
 import * as myLocation from './myLocation.js';
-import * as timeMachine from './timeMachine.js';
 import * as astronomy from './astronomy.js';
 import * as advisories from './advisories.js';
 import * as appToggles from './appToggles.js';
@@ -36,23 +36,29 @@ import * as stargazing from './stargazing.js';
 import * as extremes from './extremes.js';
 import * as navigation from './navigation.js';
 import * as alerts from './alerts.js';
+import * as rainPush from './rainPush.js';
+import * as dailyBriefing from './dailyBriefing.js';
+import * as smartTodos from './smartTodos.js';
+import * as myPlaces from './myPlaces.js';
 import * as shareCard from './shareCard.js';
-import * as aura from './aura.js';
 import * as wallpaper from './wallpaper.js';
+import * as analytics from './analytics.js';
+import * as nativeBridge from './nativeBridge.js';
+import * as animatedShare from './animatedShare.js';
 import * as googleMapsMobile from './googleMapsMobile.js';
 import * as deviceProfile from './deviceProfile.js';
 import * as tvNavigation from './tvNavigation.js';
+import * as sync from './sync.js';
 
 const featureModules = {
   // Device profile runs first so data-device attributes exist on <html>
   // before any other feature (and before first panel paint) reads them.
   deviceProfile,
   tvNavigation,
+  sync,
   ensemble,
-  routes,
   radar,
   bookmarks,
-  compareCities,
   units,
   share,
   hourlyStrip,
@@ -61,7 +67,6 @@ const featureModules = {
   canvasEffects,
   audio,
   myLocation,
-  timeMachine,
   astronomy,
   advisories,
   appToggles,
@@ -73,11 +78,40 @@ const featureModules = {
   extremes,
   navigation,
   alerts,
+  rainPush,
+  dailyBriefing,
+  smartTodos,
+  myPlaces,
   shareCard,
-  aura,
   wallpaper,
   googleMapsMobile,
+  analytics,
+  nativeBridge,
+  animatedShare,
 };
+
+// ── Heavy / interaction-gated (background-loaded) ─────────────────────
+const heavyFeatureImports = {
+  aura: () => import('./aura.js'),
+  routes: () => import('./routes.js'),
+  timeMachine: () => import('./timeMachine.js'),
+  compareCities: () => import('./compareCities.js'),
+};
+
+let heavyLoaded = false;
+
+export async function initHeavyFeatures(app) {
+  if (heavyLoaded) return;
+  heavyLoaded = true;
+  for (const [name, importFn] of Object.entries(heavyFeatureImports)) {
+    try {
+      const mod = await importFn();
+      if (typeof mod.init === 'function') mod.init(app);
+    } catch (e) {
+      console.warn(`Heavy feature "${name}" failed to initialize:`, e);
+    }
+  }
+}
 
 export function initFeatures(app) {
   for (const [name, mod] of Object.entries(featureModules)) {
@@ -87,4 +121,8 @@ export function initFeatures(app) {
       console.warn(`Feature "${name}" failed to initialize:`, e);
     }
   }
+
+  // Kick off heavy-feature loading on the next tick so the critical path
+  // (map + weather + panel) isn't blocked by their parse/eval cost.
+  setTimeout(() => initHeavyFeatures(app), 0);
 }

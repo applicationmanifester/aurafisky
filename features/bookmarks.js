@@ -25,6 +25,7 @@ function saveBookmarks() {
     this.updateStarUI();
     this.refreshBookmarkPins();
     this.saveUserDataToCloud();
+    this.syncBus?.syncBookmarks(this.bookmarks);
   }
 
 function toggleFavoriteCurrentLocation() {
@@ -209,7 +210,7 @@ function renderBookmarksList() {
       compareBtn.addEventListener("click", (e) => {
         e.stopPropagation();
         this.$.bookmarksDropdown.classList.add("hidden");
-        this.compareWeatherWithActive(this.bookmarks[idx]);
+        this.compareWeatherWithActive?.(this.bookmarks[idx]);
       });
       actions.appendChild(compareBtn);
 

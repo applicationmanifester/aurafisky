@@ -21,6 +21,9 @@
 importScripts(
   "https://cdn.jsdelivr.net/npm/localforage@1.10.0/dist/localforage.min.js",
 );
+// Load WeatherService so the SW can evaluate alert rules against the forecast
+// without depending on the page being open.
+importScripts("./weather.js");
 // Bump this on every deploy. The activate handler wipes any aurafisky-v*
 // cache whose version differs, so browsers can never keep serving a stale
 // older build of the app shell.
@@ -203,6 +206,19 @@ self.addEventListener("fetch", (e) => {
     return;
   }
 
+  // Web Share Target — serve the app shell so the page JS can read
+  // location.search for the shared text/url and load that location.
+  if (url.includes("/share-target")) {
+    e.respondWith(
+      (async () => {
+        const shell = await caches.match("./index.html");
+        if (shell) return shell;
+        return fetch(e.request);
+      })()
+    );
+    return;
+  }
+
   // Detect navigation requests (the app shell) robustly, including cases where the browser
   // might not set request mode to "navigate" (e.g., inside iframe, redirects, or older engines).
   const isNav = e.request.mode === "navigate" ||
@@ -377,7 +393,12 @@ async function checkAndSendBackgroundWeatherNotification() {
 
 self.addEventListener("periodicsync", (event) => {
   if (event.tag === "hourly-weather-update") {
-    event.waitUntil(checkAndSendBackgroundWeatherNotification());
+    event.waitUntil(
+      Promise.all([
+        checkAndSendBackgroundWeatherNotification(),
+        checkRainAlerts(),
+      ])
+    );
   }
 });
 
@@ -411,3 +432,122 @@ self.addEventListener("unhandledrejection", (event) => {
   console.error("SW unhandled rejection:", event.reason);
   event.preventDefault();
 });
+
+// ── Proactive Rain Alerts via PeriodicSync ──────────────────────────────
+//
+// Checks saved alert rules (precipProb thresholds) against the forecast for
+// the user's default location and fires a notification when rain is expected
+// within the next 6 hours. Runs on the same periodicsync tick as the hourly
+// weather update, so no extra network wake-ups.
+//
+// Cooldown is tracked per rule in localforage (aurafisky_rain_alert_<id>)
+// at a 2-hour minimum, independent of the hourly-weather notification cooldown.
+
+const RAIN_ALERT_LOOKAHEAD_H = 6;
+const RAIN_ALERT_COOLDOWN_MS = 2 * 60 * 60 * 1000;
+
+function ruleKey(ruleId) {
+  return `aurafisky_rain_alert_${ruleId}`;
+}
+
+async function checkRainAlerts() {
+  try {
+    // ── 1. Load alert rules and filter for enabled precipProb rules ─────
+    const rawRules = await localforage.getItem("aurafisky_alert_rules");
+    if (!rawRules || !Array.isArray(rawRules)) return;
+
+    const rainRules = rawRules.filter(
+      (r) => r && r.enabled && r.type === "precipProb",
+    );
+    if (rainRules.length === 0) return;
+
+    // ── 2. Get default location ─────────────────────────────────────────
+    const defaultLocation = await localforage.getItem("defaultLocation");
+    if (!defaultLocation || defaultLocation.lat == null) return;
+
+    // ── 3. Apply units ──────────────────────────────────────────────────
+    const units = await localforage.getItem("units");
+    if (units) {
+      try {
+        WeatherService.setUnits(units);
+      } catch (_) {
+        /* ignore unit errors */
+      }
+    }
+
+    // ── 4. Fetch forecast ───────────────────────────────────────────────
+    const forecast = await WeatherService.fetchForecast(
+      defaultLocation.lat,
+      defaultLocation.lng,
+    );
+    if (!forecast || !forecast.hourly) return;
+
+    const { hourly } = forecast;
+    const probs = hourly.precipitation_probability || [];
+    const times = hourly.time || [];
+    const currentIdx = WeatherService.getCurrentHourIndex(
+      forecast,
+      forecast.utc_offset_seconds || 0,
+    );
+    if (currentIdx < 0 || currentIdx >= probs.length) return;
+
+    // ── 5. Check each rule against the forecast ─────────────────────────
+    const now = Date.now();
+    let fired = 0;
+
+    for (const rule of rainRules) {
+      // Per-rule cooldown check
+      const lastFired = await localforage.getItem(ruleKey(rule.id));
+      if (
+        typeof lastFired === "number" &&
+        now - lastFired < RAIN_ALERT_COOLDOWN_MS
+      ) {
+        continue;
+      }
+
+      // Scan lookahead window for precipProb >= threshold
+      let rainIdx = -1;
+      for (
+        let i = currentIdx;
+        i < Math.min(currentIdx + RAIN_ALERT_LOOKAHEAD_H, probs.length);
+        i++
+      ) {
+        if ((probs[i] ?? 0) >= rule.value) {
+          rainIdx = i;
+          break;
+        }
+      }
+
+      if (rainIdx < 0) continue;
+
+      const hoursAway = Math.max(0, rainIdx - currentIdx);
+      const timeLabel =
+        hoursAway <= 0
+          ? "now"
+          : hoursAway === 1
+            ? "in 1 hour"
+            : `in ${hoursAway} hours`;
+      const prob = Math.round(probs[rainIdx] ?? 0);
+
+      await self.registration.showNotification(
+        `🌧️ Rain Alert: ${defaultLocation.name}`,
+        {
+          body: `Rain chance ≥ ${rule.value}% ${timeLabel} (${prob}%)`,
+          icon: "/icon-192.png",
+          badge: "/icon-192.png",
+          tag: `aurafisky-rain-${rule.id}`,
+          renotify: true,
+        },
+      );
+
+      await localforage.setItem(ruleKey(rule.id), now);
+      fired++;
+    }
+
+    if (fired > 0) {
+      console.log(`Rain alerts fired: ${fired}`);
+    }
+  } catch (err) {
+    console.error("Rain alert check failed:", err);
+  }
+}

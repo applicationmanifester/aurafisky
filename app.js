@@ -7896,9 +7896,17 @@ class AurafiskyApp {
 
     routeBtn?.addEventListener("click", () => {
       setActiveBtn(routeBtn);
+      this.hideWeatherPanel();
+      if (this.googleMapsMobile) {
+        this.googleMapsMobile.sheetState = "dismissed";
+        const pill = document.getElementById("restoreSheetPill");
+        if (pill) pill.classList.add("hidden");
+      }
       this.$.bookmarksDropdown?.classList.add("hidden");
       this.toggleMapLayersFlyout(false);
-      if (typeof this.toggleRoute === "function") {
+      if (typeof this.openRouteStudio === "function") {
+        this.openRouteStudio();
+      } else if (typeof this.toggleRoute === "function") {
         this.toggleRoute();
       } else {
         this.$.routeBtn?.click();

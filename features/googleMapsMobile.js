@@ -203,6 +203,10 @@ export class AuraMobileController {
   }
 
   openRouteWeather() {
+    this.sheetState = 'dismissed';
+    this.app?.hideWeatherPanel?.();
+    const pill = document.getElementById('restoreSheetPill');
+    if (pill) pill.classList.add('hidden');
     this.app.showToast?.('🚗 Route Weather: Driving hazards & road weather intelligence loaded', 'info');
     if (typeof this.app.openRouteStudio === 'function') {
       this.app.openRouteStudio();
@@ -266,7 +270,7 @@ export class AuraMobileController {
   // ── Right Side Floating Controls ─────────────────────────────────
   initFloatingActions() {
     const shareBtn = document.getElementById('mobileFloatingShareBtn');
-    const compassBtn = document.getElementById('mobileFloatingCompassBtn');
+    const compassBtn = document.getElementById('mobileLocationFab') || document.getElementById('mobileFloatingCompassBtn');
     const directionsFab = document.getElementById('mobileDirectionsFab');
 
     shareBtn?.addEventListener('click', (e) => {
@@ -294,7 +298,13 @@ export class AuraMobileController {
     directionsFab?.addEventListener('click', (e) => {
       e.stopPropagation();
       this._haptic('medium');
-      if (typeof this.app.toggleRoute === 'function') {
+      this.sheetState = 'dismissed';
+      this.app?.hideWeatherPanel?.();
+      const pill = document.getElementById('restoreSheetPill');
+      if (pill) pill.classList.add('hidden');
+      if (typeof this.app.openRouteStudio === 'function') {
+        this.app.openRouteStudio();
+      } else if (typeof this.app.toggleRoute === 'function') {
         this.app.toggleRoute();
       } else {
         const routeBtn = document.getElementById('routeBtn');

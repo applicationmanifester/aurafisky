@@ -712,9 +712,29 @@ export function openRouteStudio() {
   // Synchronize with mobile quick chips and Google Maps Mobile controller
   syncRouteChipState(true);
 
+  // Crucially dismiss any active location weather panel on mobile/desktop
+  if (appRef) {
+    appRef.hideWeatherPanel?.();
+    if (appRef.googleMapsMobile) {
+      appRef.googleMapsMobile.sheetState = "dismissed";
+    }
+  }
+
   // Hide mobile restoreSheetPill while route studio is open
   const restorePill = document.getElementById("restoreSheetPill");
   if (restorePill) restorePill.classList.add("hidden");
+
+  // If user already had a selected location and no stops exist yet, set it as Origin (A)
+  if (pts.length === 0 && appRef.selectedLat != null && appRef.selectedLng != null) {
+    const ptA = {
+      lat: appRef.selectedLat,
+      lng: appRef.selectedLng,
+      name: (appRef.selectedName || "Departure Point").split(",")[0].trim(),
+      marker: null,
+    };
+    pts.push(ptA);
+    renderWaypointMarkers();
+  }
 
   // On mobile: if user doesn't have 2+ stops yet, keep the map clear so they can tap Origin & Destination!
   if (isMobileLayout() && pts.length < 2) {
@@ -738,7 +758,7 @@ export function openRouteStudio() {
   if (pts.length === 0) {
     appRef.showToast?.("🚗 Route Weather: Tap map to place Departure point (A)", "info");
   } else if (pts.length === 1) {
-    appRef.showToast?.("🚗 Route Weather: Tap map to place Destination point (B)", "info");
+    appRef.showToast?.(`📍 Departure set: ${pts[0].name}. Tap map for Destination (B)`, "info");
   } else {
     appRef.showToast?.(`🚗 Route Weather: ${pts.length} stops ready.`, "info");
   }

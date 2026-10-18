@@ -2098,7 +2098,7 @@ button, a, input, select, textarea, [role="button"] {
   #zoomControls {
     right: 0.5rem !important;
     gap: 0.25rem !important;
-    top: 50% !important;
+    top: 42% !important;
     bottom: auto !important;
     transform: translateY(-50%) !important;
   }
@@ -2265,12 +2265,18 @@ button, a, input, select, textarea, [role="button"] {
   #comparePanel.open ~ #zoomControls,
   body:has(.weather-panel.open:not(.minimized)) #zoomControls,
   body:has(#comparePanel.open) #zoomControls,
-  body:has(#routePanel:not(.hidden)) #zoomControls {
+  body:has(#routePanel:not(.hidden)) #zoomControls,
+  .weather-panel.open:not(.minimized) ~ #mobileMapControls,
+  #comparePanel.open ~ #mobileMapControls,
+  body:has(.weather-panel.open:not(.minimized)) #mobileMapControls,
+  body:has(#comparePanel.open) #mobileMapControls,
+  body:has(#routePanel:not(.hidden)) #mobileMapControls {
     opacity: 0 !important;
     pointer-events: none !important;
-    transform: translateY(-50%) translateX(36px) scale(0.9) !important;
+    transform: translateX(36px) scale(0.9) !important;
   }
-  #zoomControls {
+  #zoomControls,
+  #mobileMapControls {
     transition: opacity 0.22s cubic-bezier(0.16, 1, 0.3, 1), transform 0.22s cubic-bezier(0.16, 1, 0.3, 1);
   }
 

@@ -16,7 +16,13 @@ function getMyLocation() {
     if (this._lastKnownGpsCoords) {
       const { latitude, longitude } = this._lastKnownGpsCoords;
       optimisticCoords = { latitude, longitude };
-      this._debouncedHandleMapClick(latitude, longitude);
+      if (typeof this.handleMapClick === "function") {
+        this.handleMapClick(latitude, longitude);
+      } else if (typeof this.selectLocation === "function") {
+        this.selectLocation(latitude, longitude);
+      } else if (typeof this._debouncedHandleMapClick === "function") {
+        this._debouncedHandleMapClick(latitude, longitude);
+      }
     } else {
       this.showToast("Finding your location...", "info");
     }
@@ -33,7 +39,13 @@ function getMyLocation() {
       ) {
         return;
       }
-      this._debouncedHandleMapClick(latitude, longitude);
+      if (typeof this.handleMapClick === "function") {
+        this.handleMapClick(latitude, longitude);
+      } else if (typeof this.selectLocation === "function") {
+        this.selectLocation(latitude, longitude);
+      } else if (typeof this._debouncedHandleMapClick === "function") {
+        this._debouncedHandleMapClick(latitude, longitude);
+      }
     };
 
     const onLocationError = (err) => {

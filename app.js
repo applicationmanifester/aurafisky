@@ -7530,15 +7530,27 @@ class AurafiskyApp {
   }
 
   hideWeatherPanel() {
-    this.$.weatherPanel.classList.remove("open", "minimized");
+    this.$.weatherPanel.classList.remove("open", "minimized", "sheet-peek", "sheet-half", "sheet-full");
     this.$.weatherPanel.setAttribute("inert", "");
-    this.$.weatherPanel.style.opacity = "";
-    this.$.weatherPanel.style.pointerEvents = "";
-    this.$.weatherPanel.style.transform = "";
+    this.$.weatherPanel.style.opacity = "0";
+    this.$.weatherPanel.style.pointerEvents = "none";
+    this.$.weatherPanel.style.transform = "translateY(110%)";
     this.$.weatherPanel.style.transition = "";
+    if (this.googleMapsMobile) {
+      this.googleMapsMobile.sheetState = 'dismissed';
+      const pill = document.getElementById('restoreSheetPill');
+      if (pill) pill.classList.add('hidden');
+    }
     if (!isMobileLayout()) {
       this.$.weatherPanel.style.height = "";
       this.$.weatherPanel.style.maxHeight = "";
+    } else {
+      this.$.weatherPanel.style.height = "";
+      this.$.weatherPanel.style.maxHeight = "";
+      this.$.weatherPanel.style.top = "";
+      this.$.weatherPanel.style.bottom = "";
+      this.$.weatherPanel.style.left = "";
+      this.$.weatherPanel.style.right = "";
     }
     document.body.classList.remove("weather-panel-expanded");
     if (this.$.mobileNavMapBtn) {

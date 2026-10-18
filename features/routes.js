@@ -716,22 +716,29 @@ export function openRouteStudio() {
   const restorePill = document.getElementById("restoreSheetPill");
   if (restorePill) restorePill.classList.add("hidden");
 
-  // Open the merged Route Studio panel directly (hide the duplicate floating HUD)
-  hideHUD();
-  showPanel();
-  updateHUD();
-
-  if (pts.length >= 2) {
-    fetchAndRenderRoutePlan();
+  // On mobile: if user doesn't have 2+ stops yet, keep the map clear so they can tap Origin & Destination!
+  if (isMobileLayout() && pts.length < 2) {
+    showHUD();
+    hidePanel();
+    updateHUD();
   } else {
-    renderEmptyRoutePanel();
+    hideHUD();
+    showPanel();
+    updateHUD();
+    if (pts.length >= 2) {
+      fetchAndRenderRoutePlan();
+    } else {
+      renderEmptyRoutePanel();
+    }
   }
 
   appRef.map.on("click", onMapClick);
   window.addEventListener("keydown", onKeyDown);
 
   if (pts.length === 0) {
-    appRef.showToast?.("🚗 Route Weather: Click map or search to place Departure point", "info");
+    appRef.showToast?.("🚗 Route Weather: Tap map to place Departure point (A)", "info");
+  } else if (pts.length === 1) {
+    appRef.showToast?.("🚗 Route Weather: Tap map to place Destination point (B)", "info");
   } else {
     appRef.showToast?.(`🚗 Route Weather: ${pts.length} stops ready.`, "info");
   }
@@ -1168,6 +1175,12 @@ async function onMapClick(e) {
 
   if (isPanelOpen) {
     await fetchAndRenderRoutePlan();
+  } else if (isMobileLayout()) {
+    if (pts.length === 1) {
+      appRef?.showToast?.("📍 Start point set! Now tap map for Destination (B)", "info");
+    } else if (pts.length === 2) {
+      appRef?.showToast?.("🏁 Route ready! Tap 'Analyze' on the top HUD to view full route weather.", "success");
+    }
   }
 }
 
@@ -1649,6 +1662,9 @@ function buildPanel() {
         </div>
       </div>
       <div class="flex items-center gap-1 flex-shrink-0">
+        <button type="button" id="routePanelViewMapBtn" class="px-2.5 py-1 rounded-xl text-xs font-bold text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-950/40 hover:bg-indigo-100 dark:hover:bg-indigo-900/50 border border-indigo-200/50 dark:border-indigo-800/40 transition-colors sm:hidden flex items-center gap-1 cursor-pointer" title="View route on map">
+          <span>🗺️</span><span>Map</span>
+        </button>
         <button type="button" id="routePanelUndoBtn" class="p-1.5 rounded-lg hover:bg-slate-200/60 dark:hover:bg-slate-700/50 text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-100 transition-colors" title="Undo last stop (Ctrl+Z)" aria-label="Undo">
           <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M3 10h10a5 5 0 015 5v2m-15-7l4-4m-4 4l4 4"/></svg>
         </button>
@@ -1761,6 +1777,14 @@ function buildPanel() {
 
   panelEl.querySelector("#routePanelUndoBtn")?.addEventListener("click", undoLastStop);
   panelEl.querySelector("#routePanelReverseBtn")?.addEventListener("click", reverseRoute);
+  panelEl.querySelector("#routePanelViewMapBtn")?.addEventListener("click", () => {
+    if (isMobileLayout()) {
+      hidePanel();
+      showHUD();
+      updateHUD();
+      appRef?.showToast?.("🗺️ Showing route on map. Tap 'Analyze' to return to full-screen view.", "info");
+    }
+  });
   panelEl.querySelector("#routePanelCloseBtn")?.addEventListener("click", closeRouteStudio);
   panelEl.querySelector("#routePanelClearBtn")?.addEventListener("click", clearRoute);
   panelEl.querySelector("#routePanelOptimizeBtn")?.addEventListener("click", optimizeWaypointOrder);
@@ -1791,16 +1815,33 @@ export function snapRouteSheet(state = "half") {
 
   if (state === "peek") {
     const targetHeight = 150;
+    panelEl.style.setProperty("top", "auto", "important");
+    panelEl.style.setProperty("bottom", "calc(3.5rem + env(safe-area-inset-bottom, 0px) + 0.5rem)", "important");
+    panelEl.style.setProperty("left", "0.75rem", "important");
+    panelEl.style.setProperty("right", "0.75rem", "important");
+    panelEl.style.setProperty("width", "auto", "important");
     panelEl.style.setProperty("height", `${targetHeight}px`, "important");
     panelEl.style.setProperty("max-height", `${targetHeight}px`, "important");
+    panelEl.style.setProperty("border-radius", "1.5rem", "important");
   } else if (state === "half") {
     const targetHeight = Math.round(vh * 0.52);
+    panelEl.style.setProperty("top", "auto", "important");
+    panelEl.style.setProperty("bottom", "calc(3.5rem + env(safe-area-inset-bottom, 0px) + 0.5rem)", "important");
+    panelEl.style.setProperty("left", "0.75rem", "important");
+    panelEl.style.setProperty("right", "0.75rem", "important");
+    panelEl.style.setProperty("width", "auto", "important");
     panelEl.style.setProperty("height", `${targetHeight}px`, "important");
     panelEl.style.setProperty("max-height", `${targetHeight}px`, "important");
+    panelEl.style.setProperty("border-radius", "1.5rem", "important");
   } else if (state === "full") {
-    const targetHeight = Math.round(vh * 0.86);
-    panelEl.style.setProperty("height", `${targetHeight}px`, "important");
-    panelEl.style.setProperty("max-height", `${targetHeight}px`, "important");
+    panelEl.style.setProperty("top", "0px", "important");
+    panelEl.style.setProperty("bottom", "0px", "important");
+    panelEl.style.setProperty("left", "0px", "important");
+    panelEl.style.setProperty("right", "0px", "important");
+    panelEl.style.setProperty("width", "100%", "important");
+    panelEl.style.setProperty("height", "100dvh", "important");
+    panelEl.style.setProperty("max-height", "100dvh", "important");
+    panelEl.style.setProperty("border-radius", "0px", "important");
   }
 }
 
@@ -1956,7 +1997,7 @@ function initRoutePanelInteractions() {
       panelEl.style.top = "";
       panelEl.style.right = "";
       panelEl.style.bottom = "";
-      snapRouteSheet(routeSheetState || "half");
+      snapRouteSheet(routeSheetState || "full");
     }
   });
 }
@@ -1967,7 +2008,7 @@ function showPanel() {
     panelEl.style.display = "flex";
     isPanelOpen = true;
     if (isMobileLayout()) {
-      snapRouteSheet(routeSheetState || "half");
+      snapRouteSheet("full");
     }
   }
 }

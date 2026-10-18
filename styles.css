@@ -1616,6 +1616,24 @@ input[type='range'].timeline-slider::-moz-range-thumb {
   transition: max-width 0.25s cubic-bezier(0.16, 1, 0.3, 1), max-height 0.25s ease;
 }
 
+@media (max-width: 639px) {
+  #auraModal {
+    padding: 0 !important;
+    align-items: stretch !important;
+  }
+  #auraModal .aura-panel {
+    width: 100% !important;
+    max-width: 100% !important;
+    height: 100% !important;
+    height: 100dvh !important;
+    max-height: 100dvh !important;
+    border-radius: 0 !important;
+    border: none !important;
+    padding-top: env(safe-area-inset-top, 0px);
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+  }
+}
+
 @media (min-width: 640px) {
   .aura-panel {
     width: 92vw;
@@ -2046,8 +2064,8 @@ button, a, input, select, textarea, [role="button"] {
     border-radius: 1.1rem;
   }
 
-  /* Ensure full-height panels don't overflow behind nav */
-  #weatherPanel,
+  /* Ensure partial-height panels don't overflow behind nav */
+  #weatherPanel:not(.sheet-full),
   #comparePanel {
     max-height: min(68vh, calc(var(--app-height, 100vh) - 124px - env(safe-area-inset-bottom, 0px)));
   }
@@ -2187,9 +2205,22 @@ button, a, input, select, textarea, [role="button"] {
     max-height: 52vh !important;
   }
 
+  /* Full screen mobile overlap for Route Weather Studio */
   #routePanel.sheet-full {
-    height: min(86vh, calc(var(--app-height, 100vh) - 4.5rem - env(safe-area-inset-bottom, 0px))) !important;
-    max-height: min(86vh, calc(var(--app-height, 100vh) - 4.5rem - env(safe-area-inset-bottom, 0px))) !important;
+    top: 0 !important;
+    bottom: 0 !important;
+    left: 0 !important;
+    right: 0 !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    height: 100% !important;
+    height: 100dvh !important;
+    max-height: 100dvh !important;
+    border-radius: 0 !important;
+    z-index: 1250 !important;
+    padding-top: env(safe-area-inset-top, 0px);
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+    transform: translateY(0) !important;
   }
 
   /* Favorites / Bookmarks dropdown on mobile: anchor above bottom nav */
@@ -2682,10 +2713,23 @@ button, a, input, select, textarea, [role="button"] {
     max-height: 52vh !important;
   }
 
+  /* Full screen mobile overlap for Weather Card */
   .weather-panel.aura-sheet.sheet-full,
   .weather-panel.google-maps-sheet.sheet-full {
-    height: calc(88vh - env(safe-area-inset-bottom, 0px)) !important;
-    max-height: calc(88vh - env(safe-area-inset-bottom, 0px)) !important;
+    top: 0 !important;
+    bottom: 0 !important;
+    left: 0 !important;
+    right: 0 !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    height: 100% !important;
+    height: 100dvh !important;
+    max-height: 100dvh !important;
+    border-radius: 0 !important;
+    z-index: 1200 !important;
+    padding-top: env(safe-area-inset-top, 0px);
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+    transform: translateY(0) !important;
   }
 
   /* Safe Area handling for iPhone & Android */

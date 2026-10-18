@@ -7495,8 +7495,8 @@ class AurafiskyApp {
       this.$.weatherPanel.style.pointerEvents = '';
       this.$.weatherPanel.classList.remove("sheet-peek", "sheet-half", "sheet-full", "google-maps-sheet");
     } else if (this.googleMapsMobile) {
-      this.googleMapsMobile.sheetState = 'half';
-      this.googleMapsMobile.snapSheet('half');
+      this.googleMapsMobile.sheetState = 'full';
+      this.googleMapsMobile.snapSheet('full');
     }
     document.body.classList.add("weather-panel-expanded");
     if (this.$.panelMinimizeBtn) {

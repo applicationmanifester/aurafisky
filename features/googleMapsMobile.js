@@ -543,9 +543,8 @@ export class AuraMobileController {
       panel.style.transform = 'translateY(0)';
       panel.classList.remove('minimized');
     } else if (state === 'full') {
-      const targetHeight = Math.round(vh * 0.88);
-      panel.style.height = `${targetHeight}px`;
-      panel.style.maxHeight = `${targetHeight}px`;
+      panel.style.height = '100dvh';
+      panel.style.maxHeight = '100dvh';
       panel.style.transform = 'translateY(0)';
       panel.classList.remove('minimized');
     }
@@ -587,7 +586,7 @@ export class AuraMobileController {
       pill.className = 'fixed bottom-18 left-1/2 -translate-x-1/2 z-[1020] bg-white dark:bg-[#202124] text-slate-800 dark:text-slate-100 px-4 py-2 rounded-full shadow-2xl border border-slate-200/80 dark:border-slate-700/80 text-xs font-semibold flex items-center gap-2 active:scale-95 transition-all cursor-pointer animate-in fade-in duration-200';
       pill.innerHTML = `<span>📍</span><span>${locName} Weather</span><span class="text-teal-500 font-bold">▲ Show</span>`;
       pill.addEventListener('click', () => {
-        this.restoreSheet('half');
+        this.restoreSheet('full');
       });
       document.body.appendChild(pill);
     } else {
@@ -597,7 +596,7 @@ export class AuraMobileController {
     this.app?.hideWeatherPanel?.();
   }
 
-  restoreSheet(state = 'half') {
+  restoreSheet(state = 'full') {
     const panel = document.getElementById('weatherPanel');
     if (!panel) return;
     panel.removeAttribute('inert');

@@ -7494,9 +7494,20 @@ class AurafiskyApp {
       this.$.weatherPanel.style.opacity = '';
       this.$.weatherPanel.style.pointerEvents = '';
       this.$.weatherPanel.classList.remove("sheet-peek", "sheet-half", "sheet-full", "google-maps-sheet");
-    } else if (this.googleMapsMobile) {
-      this.googleMapsMobile.sheetState = 'full';
-      this.googleMapsMobile.snapSheet('full');
+    } else {
+      this.$.weatherPanel.classList.add("open", "sheet-full", "aura-sheet", "google-maps-sheet");
+      this.$.weatherPanel.classList.remove("sheet-peek", "sheet-half", "minimized");
+      this.$.weatherPanel.style.height = '100dvh';
+      this.$.weatherPanel.style.maxHeight = '100dvh';
+      this.$.weatherPanel.style.top = '0px';
+      this.$.weatherPanel.style.bottom = '0px';
+      this.$.weatherPanel.style.left = '0px';
+      this.$.weatherPanel.style.right = '0px';
+      this.$.weatherPanel.style.transform = 'translateY(0)';
+      if (this.googleMapsMobile) {
+        this.googleMapsMobile.sheetState = 'full';
+        this.googleMapsMobile.snapSheet('full');
+      }
     }
     document.body.classList.add("weather-panel-expanded");
     if (this.$.panelMinimizeBtn) {

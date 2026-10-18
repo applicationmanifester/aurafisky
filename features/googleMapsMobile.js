@@ -172,7 +172,7 @@ export class AuraMobileController {
       this.navigateToHomeCommute();
     } else if (category === 'restaurants') {
       this.filterPlaces('dining');
-      this.snapSheet('half');
+      this.snapSheet('full');
     }
   }
 
@@ -232,19 +232,19 @@ export class AuraMobileController {
   }
 
   openOutdoorDecision() {
-    this.restoreSheet('half');
+    this.restoreSheet('full');
     this.filterPlaces('outdoor');
     this.app.showToast?.('🏃 Fitness & Outdoor: Real-time workout comfort ratings', 'info');
   }
 
   openUvAqiIntelligence() {
-    this.restoreSheet('half');
+    this.restoreSheet('full');
     this.filterPlaces('health');
     this.app.showToast?.('☀️ Air Quality & UV Protection Intelligence', 'info');
   }
 
   openRoadHazards() {
-    this.restoreSheet('half');
+    this.restoreSheet('full');
     this.filterPlaces('hazard');
     this.app.showToast?.('⚠️ Road Hazard Watch: Active surface & visibility cautions', 'warning');
   }
@@ -345,7 +345,7 @@ export class AuraMobileController {
       if (this.sheetState === 'full' || this.sheetState === 'half') {
         this.snapSheet('peek');
       } else {
-        this.snapSheet('half');
+        this.snapSheet('full');
       }
     });
 
@@ -363,7 +363,7 @@ export class AuraMobileController {
           if (e.target.closest('#panelCloseBtn, #panelMinimizeBtn')) return;
           e.stopPropagation();
           this._haptic('selection');
-          this.snapSheet('half');
+          this.snapSheet('full');
         }
       });
     });
@@ -421,21 +421,16 @@ export class AuraMobileController {
       const velocity = deltaY / (duration || 1); // px per ms
 
       if (velocity > 0.4) {
-        if (this.sheetState === 'peek') this.snapSheet('half');
-        else this.snapSheet('full');
+        this.snapSheet('full');
       } else if (velocity < -0.4) {
-        if (this.sheetState === 'full') this.snapSheet('half');
-        else if (this.sheetState === 'half') this.snapSheet('peek');
-        else this.dismissSheet();
+        this.snapSheet('peek');
       } else {
         const currentHeight = panel.getBoundingClientRect().height;
         const vh = window.innerHeight;
         if (currentHeight < 130) {
           this.dismissSheet();
-        } else if (currentHeight < vh * 0.32) {
+        } else if (currentHeight < vh * 0.45) {
           this.snapSheet('peek');
-        } else if (currentHeight < vh * 0.70) {
-          this.snapSheet('half');
         } else {
           this.snapSheet('full');
         }
@@ -449,17 +444,16 @@ export class AuraMobileController {
     dragHandle.addEventListener('click', () => {
       if (!isMobileLayout()) return;
       this._haptic('selection');
-      if (this.sheetState === 'peek') this.snapSheet('half');
-      else if (this.sheetState === 'half') this.snapSheet('full');
+      if (this.sheetState === 'peek') this.snapSheet('full');
       else this.snapSheet('peek');
     });
 
     if (isMobileLayout()) {
       panel.classList.add('aura-sheet', 'google-maps-sheet');
       panel.classList.add('open');
-      // If a location is currently selected, snap to 'half' so user immediately sees weather details!
+      // If a location is currently selected, snap to 'full' so weather card completely overlaps mobile screen!
       if (this.app?.selectedLat != null || this.app?.selectedName || this.currentLocationName) {
-        this.snapSheet('half');
+        this.snapSheet('full');
       } else {
         this.snapSheet('peek');
       }
@@ -489,18 +483,14 @@ export class AuraMobileController {
       } else {
         panel.classList.add('google-maps-sheet');
         if (!panel.classList.contains('sheet-peek') && !panel.classList.contains('sheet-half') && !panel.classList.contains('sheet-full')) {
-          this.snapSheet('half');
+          this.snapSheet('full');
         }
       }
     });
 
     const mapEl = document.getElementById('map');
     mapEl?.addEventListener('click', (e) => {
-      if (isMobileLayout() && this.sheetState !== 'peek' && this.sheetState !== 'dismissed') {
-        if (!e.target.closest('#weatherPanel, #mobileBottomNav, #mobileQuickChips, .mobile-floating-control')) {
-          this.snapSheet('peek');
-        }
-      }
+      // Map click fires app.js handleMapClick which selects a location and snaps sheet to 'full'.
     });
   }
 
@@ -544,19 +534,24 @@ export class AuraMobileController {
       const targetHeight = 175;
       panel.style.height = `${targetHeight}px`;
       panel.style.maxHeight = `${targetHeight}px`;
+      panel.style.top = '';
+      panel.style.bottom = '';
+      panel.style.left = '';
+      panel.style.right = '';
       panel.style.transform = 'translateY(0)';
       panel.classList.add('minimized');
-    } else if (state === 'half') {
-      const targetHeight = Math.round(vh * 0.52);
-      panel.style.height = `${targetHeight}px`;
-      panel.style.maxHeight = `${targetHeight}px`;
-      panel.style.transform = 'translateY(0)';
-      panel.classList.remove('minimized');
-    } else if (state === 'full') {
+      this.app?.$.panelMinimizeBtn?.classList.add('chevron-flipped');
+    } else {
+      // 'full' or any expanded state: completely overlap screen on mobile
       panel.style.height = '100dvh';
       panel.style.maxHeight = '100dvh';
+      panel.style.top = '0px';
+      panel.style.bottom = '0px';
+      panel.style.left = '0px';
+      panel.style.right = '0px';
       panel.style.transform = 'translateY(0)';
       panel.classList.remove('minimized');
+      this.app?.$.panelMinimizeBtn?.classList.remove('chevron-flipped');
     }
 
     this._haptic('selection');

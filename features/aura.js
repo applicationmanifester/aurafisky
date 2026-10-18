@@ -636,7 +636,7 @@ export class AuraAssistant {
   }
 
   _wakeSheet() {
-    this.app?.auraMobile?.restoreSheet?.('half');
+    this.app?.auraMobile?.restoreSheet?.('full');
   }
 
   _submit() {

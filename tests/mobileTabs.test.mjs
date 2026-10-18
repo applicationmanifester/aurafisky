@@ -265,6 +265,21 @@ describe('Mobile Tabs & Navigation Layout', () => {
     expect(css).toContain('#mobileQuickChips {');
     expect(css).toContain('white-space: nowrap !important;');
   });
+
+  it('completely overlaps mobile screen when location is selected and weather card is open', () => {
+    const css = fs.readFileSync('styles.css', 'utf-8');
+    expect(css).toContain('.weather-panel.open:not(.minimized):not(.sheet-peek)');
+    expect(css).toContain('height: 100dvh !important;');
+    expect(css).toContain('z-index: 1200 !important;');
+    expect(css).toContain('border-radius: 0 !important;');
+
+    const mobileJs = fs.readFileSync('features/googleMapsMobile.js', 'utf-8');
+    expect(mobileJs).toContain("this.snapSheet('full');");
+
+    const appJs = fs.readFileSync('app.js', 'utf-8');
+    expect(appJs).toContain("this.$.weatherPanel.classList.add(\"open\", \"sheet-full\"");
+    expect(appJs).toContain("this.$.weatherPanel.style.height = '100dvh'");
+  });
 });
 
 

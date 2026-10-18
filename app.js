@@ -52,8 +52,8 @@ import {
 } from "./modules/geo.js";
 import { reverseUrls, labelFromReverse } from "./modules/reverseGeocode.js";
 import { applyViewportHeight, watchViewport } from "./modules/viewport.js";
+import { t, detectLocale, setLocale, supportedLocales } from "./modules/i18n.js";
 import { isMobileLayout } from "./features/breakpoints.js";
-import { t, setLocale, detectLocale, supportedLocales } from "./modules/i18n.js";
 import localforage from "localforage";
 import DOMPurify from "dompurify";
 
@@ -374,6 +374,11 @@ class AurafiskyApp {
       mobileNavRouteBtn: document.getElementById("mobileNavRouteBtn"),
       mobileNavSavedBtn: document.getElementById("mobileNavSavedBtn"),
       mobileNavLayersBtn: document.getElementById("mobileNavLayersBtn"),
+      errorBanner: document.getElementById("errorBanner"),
+      errorMessage: document.getElementById("errorMessage"),
+      errorRetryBtn: document.getElementById("errorRetryBtn"),
+      errorDismissBtn: document.getElementById("errorDismissBtn"),
+      a11yLiveRegion: document.getElementById("a11y-live-region"),
 
       // Turn-by-turn navigation
       navigateHereBtn: document.getElementById("navigateHereBtn"),
@@ -847,7 +852,17 @@ class AurafiskyApp {
 
     // Web Vitals tracking (LCP, FID/INP, CLS) — privacy-first, no network
     // unless the user opts in to analytics sharing.
-    initWebVitals(this);
+    if (this.analytics) {
+      initWebVitals(this.analytics);
+    }
+
+    // Apply device language
+    this.setLanguage(this.currentLanguage);
+
+    // Sync device profile across tabs
+    if (this.deviceProfile && this.syncBus?.syncDeviceProfile) {
+      this.syncBus.syncDeviceProfile(this.deviceProfile);
+    }
 
     // Global error boundary — catch unhandled errors and show a friendly banner
     // instead of a blank white screen.
@@ -867,8 +882,6 @@ class AurafiskyApp {
     });
 
     // Load bookmarks (in-memory until cloud sync)
-    this.loadBookmarks();
-    this.startBookmarkAlertPolling();
 
     // Setup OpenLayers map viewport
     this.initMap();
@@ -912,17 +925,6 @@ class AurafiskyApp {
         this.updateWallpaperButtonUI();
       }, 2000);
     }
-
-    // ── Error banner wiring ────────────────────────────────────────────
-    this.$.errorRetryBtn?.addEventListener("click", () => {
-      this.hideError();
-      if (this.selectedLat != null && this.selectedLng != null) {
-        this.selectLocation(this.selectedLat, this.selectedLng, this.selectedName);
-      } else {
-        window.location.reload();
-      }
-    });
-    this.$.errorDismissBtn?.addEventListener("click", () => this.hideError());
   }
 
   /**
@@ -1147,6 +1149,9 @@ class AurafiskyApp {
 
       // Language preference: 'en' for English, 'native' for each place's local name
       this.mapLanguage = this.getSavedMapLanguage() || 'en';
+    // i18n: detect and apply the user's preferred language.
+    this.language = detectLocale();
+    this.applyLanguage(this.language);
 
       // Map style preference: 'street' | 'satellite' | 'terrain' | 'dark'
       const savedMapStyle = localStorage.getItem("aurafisky_map_style");
@@ -2871,13 +2876,10 @@ class AurafiskyApp {
   updateOnlineStatus(isOnline) {
     this.isOffline = !isOnline;
     const banner = this.$.offlineBanner;
-    const offlinePanel = this.$.panelOfflineStatus;
-    const offlineText = this.$.panelOfflineText;
     if (banner) {
       if (isOnline) {
         banner.classList.add("hidden");
         banner.className = "hidden fixed top-20 left-0 right-0 z-[1004] bg-amber-600 text-white text-center py-2 px-4 text-sm font-medium shadow-lg";
-        if (offlinePanel) offlinePanel.classList.add("hidden");
         if (this.selectedLat != null && !this._isFetching) {
           this.showToast("⚡ Network reconnected — refreshing weather...", "info");
           this.selectLocation(this.selectedLat, this.selectedLng, this.selectedName);
@@ -2892,11 +2894,6 @@ class AurafiskyApp {
           banner.className = "fixed top-20 left-0 right-0 z-[1004] bg-amber-600 text-white text-center py-2 px-4 text-sm font-medium shadow-lg";
         }
         banner.classList.remove("hidden");
-        if (offlinePanel && offlineText) {
-          offlinePanel.classList.remove("hidden");
-          offlineText.textContent = "Offline";
-          offlinePanel.className = "flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-rose-500/10 text-rose-600 dark:bg-rose-500/20 dark:text-rose-400 border border-rose-500/20 dark:border-rose-500/30";
-        }
       }
     }
   }
@@ -2922,7 +2919,6 @@ class AurafiskyApp {
 
   // ================================================================
   //  GEOLOCATION & REVERSE SEARCH (Nominatim)
-  // ================================================================
 
   _persistSession(lat, lng, name) {
     localforage.setItem("_lastSession", { lat, lng, name }).catch(() => {});
@@ -3685,20 +3681,6 @@ class AurafiskyApp {
       }
       this.$.offlineTimeMachineBadge.classList.add("hidden");
     }
-    // Update offline indicator panel
-    const offlinePanel = this.$.panelOfflineStatus;
-    const offlineText = this.$.panelOfflineText;
-    if (offlinePanel && offlineText) {
-      if (isCachedDisplay || this.isOffline) {
-        offlinePanel.classList.remove("hidden");
-        offlineText.textContent = this.isOffline ? "Offline" : "Cached";
-        offlinePanel.className = this.isOffline
-          ? "flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-rose-500/10 text-rose-600 dark:bg-rose-500/20 dark:text-rose-400 border border-rose-500/20 dark:border-rose-500/30"
-          : "flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-amber-500/10 text-amber-600 dark:bg-amber-500/20 dark:text-amber-400 border border-amber-500/20 dark:border-amber-500/30";
-      } else {
-        offlinePanel.classList.add("hidden");
-      }
-    }
   }
 
   /**
@@ -3971,21 +3953,11 @@ class AurafiskyApp {
     const importance = WeatherService.getParameterImportance(weather, aqiVal);
     this.updateParamImportance(importance);
 
-    // 9. Freshness + sync time
-    if (this.freshnessTimestamp) {
+    // 9. Freshness
+    if (this.freshnessTimestamp && this.$.freshnessLabel) {
       const fresh = WeatherService.getFreshnessLabel(this.freshnessTimestamp);
-      if (this.$.freshnessLabel) {
-        this.$.freshnessLabel.textContent = `📡 ${fresh.label}`;
-        this.$.freshnessLabel.style.opacity = fresh.opacity;
-      }
-      if (this.$.panelSyncText) {
-        const d = new Date(this.freshnessTimestamp);
-        this.$.panelSyncText.textContent = d.toLocaleTimeString([], {
-          hour: "2-digit",
-          minute: "2-digit",
-        });
-        this.$.panelSyncText.className = `text-[10px] font-medium text-slate-600 dark:text-slate-300`;
-      }
+      this.$.freshnessLabel.textContent = `📡 ${fresh.label}`;
+      this.$.freshnessLabel.style.opacity = fresh.opacity;
     }
 
     // 15. Phase-space regime classifier
@@ -7510,9 +7482,17 @@ class AurafiskyApp {
       restorePill.classList.add("hidden");
     }
 
+    const timeline = document.getElementById("timelineBar");
+    if (timeline && isMobileLayout()) {
+      timeline.classList.add("hidden-by-sheet");
+    }
+
     if (!isMobileLayout()) {
       this.$.weatherPanel.style.height = '';
       this.$.weatherPanel.style.maxHeight = '';
+      this.$.weatherPanel.style.transform = '';
+      this.$.weatherPanel.style.opacity = '';
+      this.$.weatherPanel.style.pointerEvents = '';
       this.$.weatherPanel.classList.remove("sheet-peek", "sheet-half", "sheet-full", "google-maps-sheet");
     } else if (this.googleMapsMobile) {
       this.googleMapsMobile.sheetState = 'half';
@@ -7883,26 +7863,12 @@ class AurafiskyApp {
 
     mapBtn?.addEventListener("click", () => {
       setActiveBtn(mapBtn);
-      // Close Route Studio if open to return to Explore map view
-      if (this._routeModeActive || (typeof isRoutePanelOpen === "function" && isRoutePanelOpen())) {
-        if (typeof this.closeRouteStudio === "function") {
-          this.closeRouteStudio();
-        } else if (typeof window.closeRouteStudio === "function") {
-          window.closeRouteStudio();
-        }
+      if (this.$.weatherPanel?.classList.contains("open") && !this.$.weatherPanel?.classList.contains("minimized")) {
+        this.toggleMinimizeWeatherPanel();
       }
       this.$.bookmarksDropdown?.classList.add("hidden");
       this.toggleMapLayersFlyout(false);
       this.hideComparePanel();
-
-      // On mobile, if weather panel was dismissed or closed, restore it
-      if (isMobileLayout() && this.googleMapsMobile) {
-        if (!this.$.weatherPanel?.classList.contains("open") || this.googleMapsMobile.sheetState === 'dismissed') {
-          if (this.selectedLat != null || this.defaultLocation?.lat != null) {
-            this.showWeatherPanel();
-          }
-        }
-      }
       this._haptic("light");
     });
 
@@ -7932,9 +7898,6 @@ class AurafiskyApp {
       setActiveBtn(routeBtn);
       this.$.bookmarksDropdown?.classList.add("hidden");
       this.toggleMapLayersFlyout(false);
-      // Hide restore sheet pill while route studio is active so they don't collide
-      const pill = document.getElementById("restoreSheetPill");
-      if (pill) pill.classList.add("hidden");
       if (typeof this.toggleRoute === "function") {
         this.toggleRoute();
       } else {
@@ -8306,6 +8269,11 @@ class AurafiskyApp {
         this.$.profileBtn.className = "w-8 h-8 sm:w-9 sm:h-9 rounded-full overflow-hidden flex items-center justify-center bg-slate-100/90 hover:bg-slate-200/80 dark:bg-slate-800/80 dark:hover:bg-slate-700/80 text-slate-600 dark:text-slate-300 border border-slate-200/80 dark:border-slate-700/80 flex-shrink-0 cursor-pointer active:scale-95 transition-all shadow-xs ring-1 ring-slate-900/5 dark:ring-white/10";
       }
     };
+
+    if (this.$.profileAvatarImg && !this._profileAvatarErrorBound) {
+      this._profileAvatarErrorBound = true;
+      this.$.profileAvatarImg.addEventListener("error", showPersonIcon);
+    }
 
     if (photo && this.$.profileAvatarImg) {
       // Preload user's Gmail profile picture
@@ -9014,6 +8982,33 @@ class AurafiskyApp {
     }
   }
 
+  applyLanguage(lang) {
+    if (!lang) return;
+    try {
+      localStorage.setItem("aurafisky_lang", lang);
+    } catch (_) { /* ignore */ }
+    document.documentElement.lang = lang;
+    const title = document.querySelector("title");
+    if (title) title.textContent = `${t("app_name")} — ${t("app_tagline")}`;
+    if (this.$.searchInput) {
+      this.$.searchInput.placeholder = t("search_placeholder");
+    }
+    if (this.aura && this.aura.isOpen) {
+      this.aura.reset();
+    }
+  }
+
+  setLanguage(lang) {
+    if (!setLocale(lang)) return false;
+    this.language = lang;
+    this.applyLanguage(lang);
+    if (typeof this.saveUserDataToCloud === "function") {
+      this.saveUserDataToCloud();
+    }
+    this.showToast?.(`Language: ${lang.toUpperCase()}`, "info");
+    return true;
+  }
+
   /**
    * Swap the active vector basemap layer group when light/dark theme
    * changes. Both groups were already styled (with the current language) in
@@ -9200,7 +9195,8 @@ function bootAurafisky() {
     console.error("Failed to boot Aurafisky:", err);
     const ov = document.getElementById("loadingOverlay");
     if (ov) {
-      ov.innerHTML = `<div class="text-center p-6 bg-white dark:bg-slate-900 rounded-2xl shadow-xl max-w-sm mx-4"><p class="text-rose-500 font-semibold mb-2">Startup Error</p><p class="text-sm text-slate-600 dark:text-slate-400 mb-4">${err.message || 'An error occurred during startup.'}</p><button onclick="location.reload()" class="px-4 py-2 bg-primary text-white rounded-lg text-sm font-medium hover:opacity-90">Retry</button></div>`;
+      ov.innerHTML = `<div class="text-center p-6 bg-white dark:bg-slate-900 rounded-2xl shadow-xl max-w-sm mx-4"><p class="text-rose-500 font-semibold mb-2">Startup Error</p><p class="text-sm text-slate-600 dark:text-slate-400 mb-4">${err.message || 'An error occurred during startup.'}</p><button id="bootRetryBtn" class="px-4 py-2 bg-primary text-white rounded-lg text-sm font-medium hover:opacity-90">Retry</button></div>`;
+      ov.querySelector("#bootRetryBtn")?.addEventListener("click", () => location.reload());
     }
   }
 }

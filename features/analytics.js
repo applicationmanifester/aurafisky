@@ -32,6 +32,7 @@ const MAX_COUNTERS = 500;
 // coordinate.
 const ALLOWED_EVENTS = new Set([
   "app_loaded",
+  "web_vital",
   "location_selected",
   "search_performed",
   "aura_question",
@@ -57,6 +58,8 @@ const ALLOWED_PROPS = new Set([
   "feature",
   "device",
   "source",
+  "name",
+  "value",
 ]);
 
 export function init(app) {
@@ -64,6 +67,7 @@ export function init(app) {
   app.analytics = analytics;
   window.AuraAnalytics = analytics;
   analytics.track("app_loaded", { device: app.deviceProfile?.device || "unknown" });
+  initWebVitals(analytics);
   return analytics;
 }
 

@@ -2,23 +2,16 @@
  * ============================================================
  * Device-Adaptive Layer — css/device-adaptive.css
  * ============================================================
- * Loads AFTER styles.css and adapts the whole app to every class
- * of screen it can run on:
+ * Adaptive styles for all device classes:
+ *   • Phones (Android, iOS) — portrait/landscape, safe areas, touch targets
+ *   • Tablets (iPad, Android tablets) — split view, landscape
+ *   • Laptops/Desktops — hover states, keyboard navigation
+ *   • TVs / 10-foot UI — large targets, D-pad navigation, no hover
+ *   • Foldables / Dual-screen — viewport segments
  *
- *   • phones (incl. small ≤359px devices & landscape phones)
- *   • tablets (portrait + landscape, incl. iPad Pro)
- *   • foldables (dual-viewport-segment devices)
- *   • laptops / desktops (incl. short-height windows)
- *   • large displays & TVs (10-foot UI, D-pad focus rings)
- *
- * Hooks: data-device / data-input / data-orientation / data-short
- * / data-foldable attributes set on <html> by
- * features/deviceProfile.js.
- *
- * Everything here is additive — it only overrides layout +
- * ergonomics, never app logic or existing class behavior.
- * ============================================================
- */
+ * Hooks: data-device, data-input, data-orientation attributes on <html>
+ * set by features/deviceProfile.js.
+ * ============================================================ */
 
 /* ── 0. Universal focus visibility (keyboard, D-pad, switch) ── */
 :focus-visible {
@@ -27,21 +20,24 @@
   border-radius: 6px;
 }
 
-/* ── 1. Touch-first ergonomics (phones & tablets) ──────────── */
+/* ── 1. Touch-first ergonomics (phones & tablets) ── */
 @media (hover: none) and (pointer: coarse) {
   * {
     -webkit-tap-highlight-color: transparent;
+    -webkit-touch-callout: none;
   }
   button,
   a,
   [role="button"],
   [role="tab"],
-  .weather-tab-btn,
-  .metric-card,
-  .quick-chip-btn {
+  input,
+  select,
+  textarea {
     touch-action: manipulation;
+    min-height: 44px;
+    min-width: 44px;
   }
-  /* Contain scrolling inside the card so scrubs never chain to the map */
+  /* Contain scrolling inside panels so scrubs don't chain to map */
   #weatherPanelContent,
   #hourlyTabContent,
   #dailyForecast,
@@ -52,69 +48,118 @@
   }
 }
 
-/* ── 2. Weather card width tiers (phone → desktop → TV) ────── */
-/* styles.css baseline is 340px (<768px) / 380px (≥768px). */
-@media (min-width: 640px) and (max-width: 767px) {
+/* ── 2. Phone portrait — full-width bottom sheet panel ── */
+@media (max-width: 639px) and (orientation: portrait) {
   #weatherPanel {
-    width: 360px;
+    position: fixed !important;
+    top: auto !important;
+    bottom: calc(3.5rem + env(safe-area-inset-bottom, 0px)) !important;
+    left: 0 !important;
+    right: 0 !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    max-height: calc(75vh - 3.5rem - env(safe-area-inset-bottom, 0px)) !important;
+    border-radius: 1.25rem 1.25rem 0 0 !important;
+    z-index: 1050 !important;
   }
-}
-@media (min-width: 768px) {
-  #weatherPanel {
-    width: 400px;
+  .weather-panel {
+    transform: translateY(110%);
+    transition: transform 0.3s cubic-bezier(0.22, 1, 0.36, 1);
   }
-}
-@media (min-width: 1280px) {
-  #weatherPanel {
-    width: 420px;
+  .weather-panel.open {
+    transform: translateY(0);
   }
-}
-@media (min-width: 1536px) {
-  #weatherPanel {
-    width: 440px;
+  .weather-panel.minimized {
+    max-height: none !important;
+    height: auto !important;
+    bottom: calc(3.5rem + env(safe-area-inset-bottom, 0px)) !important;
+    top: auto !important;
+    transform: translateY(0) !important;
+    max-height: none !important;
   }
-}
-
-/* ── 3. Small phones (≤359px): compact density, keep all info ─ */
-@media (max-width: 359px) {
-  #panelIcon {
-    font-size: 2.5rem !important;
-  }
-  #panelTemp {
-    font-size: 2rem !important;
-  }
-  #panelLocationName {
-    font-size: 1.05rem !important;
-  }
-  #weatherPanelContent {
-    padding-left: 0.75rem;
-    padding-right: 0.75rem;
-  }
-  #weatherPanelTabs {
-    padding-left: 0.5rem;
-    padding-right: 0.5rem;
-  }
-  #weatherPanelTabs .weather-tab-btn {
-    padding-left: 0.625rem;
-    padding-right: 0.625rem;
-    font-size: 0.68rem;
-  }
-  #askMapsBannerCard {
+  .weather-panel.minimized #weatherPanelContent,
+  .weather-panel.minimized #weatherPanelSkeleton,
+  .weather-panel.minimized #weatherPanelTabs {
     display: none !important;
   }
-  /* Summary grid: 2 columns read better below 360px */
-  #todaySummaryGrid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+  .weather-panel.minimized .flex-shrink-0 {
+    border-bottom: none;
   }
-  .metric-card {
-    padding-top: 0.6rem;
-    padding-bottom: 0.6rem;
+
+  /* Mobile bottom navigation */
+  #mobileBottomNav {
+    display: flex !important;
+    padding-bottom: calc(0.5rem + env(safe-area-inset-bottom, 0px)) !important;
+    height: calc(3.5rem + env(safe-area-inset-bottom, 0px)) !important;
+  }
+  .mobile-nav-btn {
+    min-height: 44px;
+    min-width: 44px;
+    border-radius: 0.75rem;
+    padding: 0.5rem;
+  }
+
+  /* Top bar safe area */
+  .topbar-safe-top {
+    padding-top: max(0.6rem, env(safe-area-inset-top, 0px)) !important;
+    padding-left: max(0.625rem, env(safe-area-inset-left, 0px)) !important;
+    padding-right: max(0.625rem, env(safe-area-inset-right, 0px)) !important;
+  }
+
+  /* Map has bottom padding for nav */
+  #map {
+    padding-bottom: calc(3.5rem + env(safe-area-inset-bottom, 0px)) !important;
+  }
+
+  /* Toast above bottom nav */
+  #toastContainer {
+    bottom: calc(3.5rem + env(safe-area-inset-bottom, 0px) + 1rem) !important;
+  }
+
+  /* Timeline above bottom nav */
+  #timelineBar {
+    bottom: calc(3.5rem + env(safe-area-inset-bottom, 0px)) !important;
+    padding: 0.5rem 0.75rem !important;
+  }
+  #timelineBar > div {
+    padding: 0.75rem 1rem !important;
+    border-radius: 1.1rem !important;
+  }
+
+  /* Weather panel tabs mobile */
+  .weather-tab-btn {
+    padding: 0.35rem 0.65rem !important;
+    font-size: 0.72rem !important;
+    letter-spacing: -0.01em !important;
+  }
+  #weatherPanelTabs {
+    -webkit-overflow-scrolling: touch !important;
+    scroll-behavior: smooth !important;
+    overscroll-behavior-x: contain !important;
+  }
+
+  /* Search dropdown full width */
+  .search-dropdown {
+    position: fixed !important;
+    left: 0.75rem !important;
+    right: 0.75rem !important;
+    top: 3.5rem !important;
+    max-height: 50vh !important;
+  }
+  .search-dropdown.open {
+    max-height: calc(50vh - env(safe-area-inset-top, 0px)) !important;
+  }
+
+  /* Quick chips */
+  .mobile-quick-chip {
+    min-height: 44px;
+    min-width: 44px;
+    border-radius: 9999px;
+    box-shadow: var(--aura-shadow-1);
   }
 }
 
-/* ── 4. Landscape phones: panel becomes a right-side sheet ─── */
-/* (orientation + short height = phone rotated; the left floating
-   card would bury the map, so dock it to the right edge.) */
+/* ── 3. Landscape phones — compact header, right-side sheet ─── */
 @media (orientation: landscape) and (max-height: 500px) {
   #weatherPanel {
     top: 0.5rem !important;
@@ -132,137 +177,160 @@
   .weather-panel.open {
     transform: translateX(0);
   }
-  /* Minimized panel: anchor to the top edge only (avoid stretching) */
-  #weatherPanel.minimized {
-    top: 0.5rem !important;
-    bottom: auto !important;
-    max-height: none !important;
-    height: auto !important;
-  }
   #askMapsBannerCard {
     display: none !important;
   }
   #weatherPanelTabs {
-    padding-top: 0.25rem;
-    padding-bottom: 0.25rem;
+    padding-top: 0.25rem !important;
+    padding-bottom: 0.25rem !important;
   }
-  /* Keep the top bar strip slim in landscape */
-  #weatherPanel .flex-shrink-0 .hidden.sm\:flex {
+  /* Top bar slim in landscape */
+  #weatherPanel .flex-shrink-0 .hidden.sm\\:flex {
     display: none !important;
   }
-}
-
-/* ── 5. Short desktop windows: reclaim vertical room ───────── */
-@media (min-width: 640px) and (max-height: 520px) {
-  #weatherPanel {
-    top: 0.5rem !important;
-    max-height: calc(var(--app-height, 100vh) - 3.5rem) !important;
-  }
-  #askMapsBannerCard {
-    display: none !important;
+  /* Top bar slim */
+  .topbar-safe-top {
+    padding-top: max(0.5rem, env(safe-area-inset-top, 0px)) !important;
   }
 }
 
-/* ── 6. Foldables: honor the hinge via viewport segments ───── */
-@media (horizontal-viewport-segments: 2) {
+/* ── 4. Tablets — portrait & landscape ── */
+@media (min-width: 640px) and (max-width: 1023px) {
   #weatherPanel {
-    left: calc(env(viewport-segment-left 1 0, 50vw) + 12px) !important;
-    right: 12px !important;
-    width: auto !important;
-    max-width: none !important;
+    width: min(400px, 46vw);
+    top: 5.25rem;
   }
-}
-@media (vertical-viewport-segments: 2) {
-  #weatherPanel {
-    top: calc(env(viewport-segment-top 0 1, 50vh) + 12px) !important;
-    bottom: 12px !important;
-    left: 12px !important;
-    right: 12px !important;
-    width: auto !important;
-    max-width: none !important;
+  #timelineFullContent {
+    max-width: min(720px, 92vw);
+  }
+  #metricsGrid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+  /* Tablet landscape — right-side sheet */
+  @media (orientation: landscape) {
+    #weatherPanel {
+      position: fixed;
+      top: 0.5rem;
+      bottom: calc(4.25rem + env(safe-area-inset-bottom, 0px));
+      left: auto;
+      right: 0.5rem;
+      width: min(400px, 55vw);
+      max-height: none;
+      border-radius: 1.25rem 0.375rem 0.375rem 1.25rem;
+    }
+    #askMapsBannerCard {
+      display: none !important;
+    }
+    .topbar-safe-top {
+      padding-top: max(0.5rem, env(safe-area-inset-top, 0px)) !important;
+    }
   }
 }
 
-/* ── 7. Large displays (QHD+): gentle scale-up ─────────────── */
+/* ── 5. Laptops / Desktops (fine pointer) ── */
+@media (min-width: 1024px) {
+  #weatherPanel {
+    width: 400px;
+    top: 5.25rem;
+  }
+  #timelineFullContent {
+    max-width: min(760px, 92vw);
+  }
+  /* Hover effects for fine pointer */
+  .metric-card,
+  .hourly-pill,
+  .daily-item,
+  .map-style-card,
+  #timelineMinimizedTrigger {
+    transition: transform 0.18s ease, box-shadow 0.18s ease, background-color 0.18s ease, border-color 0.18s ease;
+  }
+  #zoomControls > button:hover,
+  #radarControls > button:hover {
+    transform: translateY(-1px);
+  }
+}
+
+/* ── 6. Large displays / Ultrawide ── */
 @media (min-width: 1920px) {
   html {
-    font-size: 17px;
+    font-size: 17.5px;
+  }
+  #weatherPanel {
+    width: 440px;
+  }
+  #timelineFullContent {
+    max-width: min(820px, 92vw);
   }
 }
 @media (min-width: 2560px) {
   html {
     font-size: 19px;
   }
+  #weatherPanel {
+    width: 480px;
+  }
 }
 
-/* ── 8a. Dark-mode alerts card (alerts.js renders a hard-coded white
-   dialog — fix it here so the module stays theme-agnostic). ── */
-.dark .alerts-panel-card {
-  background: #1e293b !important;
-  color: #e2e8f0 !important;
-  border-color: #334155 !important;
-}
-.dark .alerts-panel-card input,
-.dark .alerts-panel-card select,
-.dark .alerts-panel-card textarea {
-  background: #0f172a !important;
-  color: #e2e8f0 !important;
-  border-color: #475569 !important;
-}
-.dark #alertsPanelCard input,
-.dark #alertsPanelCard select,
-.dark #alertsPanelCard textarea {
-  background: #0f172a;
-  color: #e2e8f0;
-  border-color: #475569;
-}
-
-/* ── 8. TV / 10-foot UI ────────────────────────────────────── */
+/* ── 7. TV / 10-foot UI ── */
 [data-device="tv"] {
-  font-size: 18px;
+  font-size: 112.5%;
 }
-[data-device="tv"] .weather-panel {
-  /* Backdrop blur is expensive & weak on TV GPUs — solid glass instead */
-  backdrop-filter: none;
+[data-device="tv"] #weatherPanel {
+  width: min(600px, 36vw);
+  border-radius: 26px;
+}
+[data-device="tv"] .glass,
+[data-device="tv"] .glass-no-border,
+[data-device="tv"] #weatherPanel,
+[data-device="tv"] #googleMapsSearchPill {
   -webkit-backdrop-filter: none;
-  transition: transform 0.15s ease;
+  backdrop-filter: none;
 }
-[data-device="tv"] .weather-panel.open {
-  transform: translateX(0);
+[data-device="tv"] #panelTemp {
+  font-size: 3.4rem;
+}
+[data-device="tv"] #panelLocationName {
+  font-size: 1.5rem;
 }
 [data-device="tv"] button,
 [data-device="tv"] [role="button"],
 [data-device="tv"] [role="tab"],
-[data-device="tv"] a {
-  min-height: 44px;
+[data-device="tv"] input {
+  min-height: 56px;
 }
 [data-device="tv"] .weather-tab-btn {
-  padding: 0.5rem 1rem;
-  font-size: 0.85rem;
+  padding: 0.65rem 1.15rem;
+  font-size: 0.95rem;
 }
-[data-device="tv"] .metric-card,
-[data-device="tv"] .quick-chip-btn {
-  padding: 0.875rem;
+[data-device="tv"] .metric-card {
+  padding: 1rem 1.1rem;
 }
 [data-device="tv"] :focus-visible,
 [data-device="tv"] :focus {
-  outline: 4px solid #2dd4bf !important;
+  outline: 3px solid #2dd4bf;
   outline-offset: 3px;
-  border-radius: 8px;
-  box-shadow: 0 0 0 8px rgba(20, 184, 166, 0.25);
+  border-radius: 10px;
+  box-shadow: 0 0 0 6px rgba(45, 212, 191, 0.3);
 }
-[data-device="tv"] #weatherPanel {
-  width: min(560px, 34vw);
+[data-device="tv"] #timelineBar,
+[data-device="tv"] #zoomControls {
+  transform: scale(1.08);
+  transform-origin: bottom right;
 }
 
-/* ── 9. Touch-classified devices: kill sticky hover artifacts ─ */
-@media (hover: none) {
-  .quick-chip-btn:active {
-    transform: scale(0.97);
+/* ── 8. Foldables ── */
+@media (horizontal-viewport-segments: 2) {
+  #timelineFullContent {
+    max-width: calc(env(viewport-segment-width 0 0, 50vw) - 2rem);
+  }
+}
+@media (vertical-viewport-segments: 2) {
+  #weatherPanel {
+    max-height: calc(env(viewport-segment-height 0 0, 50vh) - 6rem);
   }
 }
 
-/* ── 10. Rain-chance strip (12h probability bars) ──────────── */
+/* ── 9. Rain-chance strip ── */
 #rainChanceStrip {
   align-items: flex-end;
 }
@@ -272,7 +340,7 @@
   transition: height 0.3s ease;
 }
 
-/* ── 11. Today-at-a-glance chips: keep values readable ─────── */
+/* ── 10. Today-at-a-glance chips ── */
 #todaySummaryGrid > div {
   min-width: 0;
 }
@@ -282,33 +350,7 @@
   text-overflow: ellipsis;
 }
 
-/* ── 12. CSP-safe replacements for previously inline styles ── */
-/* The CSP blocks style="" attributes, which silently disabled these
-   safe-area paddings & legend gradients. Restored here as real CSS. */
-
-/* Brand wallpaper background. #wallpaperBrandBg previously relied on an
-   inline style="background-image:url('Aurafisky.png')" which the meta CSP
-   blocks, so the Aurafisky brand wallpaper never rendered at all. */
-#wallpaperBrandBg {
-  background-image: url("../Aurafisky.png");
-  background-size: cover;
-  background-position: center;
-  background-repeat: no-repeat;
-}
-
-/* The four non-semantic <div> affordances that used to be unreachable on
-   a keyboard or a TV remote. They are now real buttons, so they get the
-   standard focus ring and 44px target. */
-.aura-affordance {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-height: 44px;
-  min-width: 44px;
-  cursor: pointer;
-  border: 0;
-  background: transparent;
-}
+/* ── 11. CSP-safe replacements ── */
 .topbar-safe-top {
   padding-top: max(0.6rem, env(safe-area-inset-top, 0px));
 }
@@ -327,3 +369,225 @@
   -webkit-overflow-scrolling: touch;
 }
 
+/* ── 11b. CSP-safe replacements ── */
+.topbar-safe-top {
+  padding-top: max(0.6rem, env(safe-area-inset-top, 0px));
+}
+#mobileMapControls.mobile-controls-safe-bottom,
+.mobile-controls-safe-bottom {
+  bottom: calc(5rem + env(safe-area-inset-bottom, 0px));
+}
+.legend-gradient-precip {
+  background: linear-gradient(90deg, #00ff80, #00e5ff, #ffcc00, #ff6600, #ff0000, #cc00ff);
+}
+.legend-gradient-temp {
+  background: linear-gradient(90deg, #0000ff, #00bfff, #00ff00, #ffff00, #ff8800, #ff0000);
+}
+#mobileQuickChips,
+#discoveriesCarousel {
+  -webkit-overflow-scrolling: touch;
+}
+
+/* ── 12. Rain-chance strip ── */
+#rainChanceStrip {
+  align-items: flex-end;
+}
+#rainChanceStrip > div {
+  min-width: 4px;
+  border-radius: 3px 3px 0 0;
+  transition: height 0.3s ease;
+}
+
+/* ── 13. Today-at-a-glance chips ── */
+#todaySummaryGrid > div {
+  min-width: 0;
+}
+#todaySummaryGrid > div > div:last-child {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* ── 14. High Contrast Mode ── */
+@media (prefers-contrast: high) {
+  :root {
+    --glass-border: rgba(0, 0, 0, 0.8);
+    --glass-bg: rgba(255, 255, 255, 0.98);
+  }
+  .dark {
+    --glass-border: rgba(255, 255, 255, 0.8);
+    --glass-bg: rgba(15, 23, 42, 0.98);
+  }
+  .glass {
+    border-width: 2px;
+  }
+  #panelLocationName,
+  #panelTemp,
+  .metric-card > div:last-child {
+    letter-spacing: 0;
+  }
+}
+
+/* ── 15. Forced-colors (Windows High Contrast) ── */
+@media (forced-colors: active) {
+  .glass,
+  .glass-no-border,
+  #googleMapsSearchPill,
+  #weatherPanel,
+  #mobileBottomNav {
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+    background: Canvas;
+    border: 1px solid CanvasText;
+  }
+  :focus-visible {
+    outline: 3px solid Highlight;
+  }
+}
+
+/* ── 16. Micro-precision details ── */
+.micro-label {
+  font-size: 11px;
+  font-weight: 650;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+#panelTimeLabel:empty,
+#trustScore:empty,
+#freshnessLabel:empty {
+  display: none;
+}
+#sheetWeatherAqiBadge {
+  letter-spacing: -0.01em;
+  font-variant-numeric: tabular-nums;
+}
+#rainChanceStrip > div {
+  min-width: 5px;
+  border-radius: 4px 4px 2px 2px;
+}
+.temp-range-bar {
+  height: 5px;
+}
+.timeline-day-labels {
+  letter-spacing: 0.02em;
+}
+.ol-tooltip {
+  border-radius: 10px;
+  letter-spacing: -0.01em;
+}
+/* Hairline dividers — 1px on DPR 1, 0.5px on DPR 2+ */
+#weatherPanel .flex-shrink-0,
+#timelineFullContent > div:first-child,
+.aura-panel > div {
+  border-width: 0 0 1px 0;
+}
+@supports (border-width: 0.5px) {
+  @media (-webkit-min-device-pixel-ratio: 2), (min-resolution: 2dppx) {
+    #weatherPanel .flex-shrink-0,
+    #timelineFullContent > div:first-child {
+      border-bottom-width: 0.5px;
+    }
+  }
+}
+
+/* ── 13. Rain-chance strip ── */
+#rainChanceStrip {
+  align-items: flex-end;
+}
+#rainChanceStrip > div {
+  min-width: 4px;
+  border-radius: 3px 3px 0 0;
+  transition: height 0.3s ease;
+}
+
+/* ── 14. Today-at-a-glance chips ── */
+#todaySummaryGrid > div {
+  min-width: 0;
+}
+#todaySummaryGrid > div > div:last-child {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* ── 15. High Contrast Mode ── */
+@media (prefers-contrast: high) {
+  :root {
+    --glass-border: rgba(0, 0, 0, 0.8);
+    --glass-bg: rgba(255, 255, 255, 0.98);
+  }
+  .dark {
+    --glass-border: rgba(255, 255, 255, 0.8);
+    --glass-bg: rgba(15, 23, 42, 0.98);
+  }
+  .glass {
+    border-width: 2px;
+  }
+  #panelLocationName,
+  #panelTemp,
+  .metric-card > div:last-child {
+    letter-spacing: 0;
+  }
+}
+
+/* ── 16. Forced-colors (Windows High Contrast) ── */
+@media (forced-colors: active) {
+  .glass,
+  .glass-no-border,
+  #googleMapsSearchPill,
+  #weatherPanel,
+  #mobileBottomNav {
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+    background: Canvas;
+    border: 1px solid CanvasText;
+  }
+  :focus-visible {
+    outline: 3px solid Highlight;
+  }
+}
+
+/* ── 17. Micro-precision details ── */
+.micro-label {
+  font-size: 11px;
+  font-weight: 650;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+#panelTimeLabel:empty,
+#trustScore:empty,
+#freshnessLabel:empty {
+  display: none;
+}
+#sheetWeatherAqiBadge {
+  letter-spacing: -0.01em;
+  font-variant-numeric: tabular-nums;
+}
+#rainChanceStrip > div {
+  min-width: 5px;
+  border-radius: 4px 4px 2px 2px;
+}
+.temp-range-bar {
+  height: 5px;
+}
+.timeline-day-labels {
+  letter-spacing: 0.02em;
+}
+.ol-tooltip {
+  border-radius: 10px;
+  letter-spacing: -0.01em;
+}
+/* Hairline dividers — 1px on DPR 1, 0.5px on DPR 2+ */
+#weatherPanel .flex-shrink-0,
+#timelineFullContent > div:first-child,
+.aura-panel > div {
+  border-width: 0 0 1px 0;
+}
+@supports (border-width: 0.5px) {
+  @media (-webkit-min-device-pixel-ratio: 2), (min-resolution: 2dppx) {
+    #weatherPanel .flex-shrink-0,
+    #timelineFullContent > div:first-child {
+      border-bottom-width: 0.5px;
+    }
+  }
+}

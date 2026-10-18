@@ -916,7 +916,7 @@ function renderWaypointMarkers() {
 async function resolvePointName(pt) {
   try {
     const url = `https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${pt.lat}&lon=${pt.lng}&zoom=14`;
-    const res = await fetch(url, { headers: { "User-Agent": "Aurafisky/14.0.0", Accept: "application/json" } });
+    const res = await fetch(url, { headers: { "User-Agent": "Aurafisky/15.0.0", Accept: "application/json" } });
     if (!res.ok) return;
     const data = await res.json();
     const city =
@@ -973,7 +973,7 @@ async function searchPlacesForRoute(query) {
 
   try {
     const url = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(q)}&format=json&limit=5&addressdetails=1`;
-    const res = await fetch(url, { headers: { "User-Agent": "Aurafisky/14.0.0", Accept: "application/json" } });
+    const res = await fetch(url, { headers: { "User-Agent": "Aurafisky/15.0.0", Accept: "application/json" } });
     if (res.ok) {
       const list = await res.json();
       return list.map((item) => ({
@@ -1635,10 +1635,12 @@ function buildPanel() {
 
   panelEl.innerHTML = `
     <!-- Drag handle for mobile -->
-    <div class="sm:hidden w-10 h-1.5 rounded-full bg-slate-300 dark:bg-slate-600 mx-auto mt-2 mb-1 cursor-grab"></div>
+    <div id="routePanelDragHandle" class="sm:hidden w-16 h-5 mx-auto mt-1 mb-0.5 flex items-center justify-center cursor-grab active:cursor-grabbing touch-none select-none" title="Drag to resize · Tap to toggle">
+      <div class="w-10 h-1.5 rounded-full bg-slate-300 dark:bg-slate-600"></div>
+    </div>
 
     <!-- Header -->
-    <div class="flex items-center justify-between px-4 py-3 border-b border-slate-200/60 dark:border-slate-700/60 bg-white/50 dark:bg-slate-800/50 flex-shrink-0">
+    <div id="routePanelHeader" class="flex items-center justify-between px-4 py-2.5 sm:py-3 border-b border-slate-200/60 dark:border-slate-700/60 bg-white/50 dark:bg-slate-800/50 flex-shrink-0 sm:cursor-grab active:sm:cursor-grabbing select-none">
       <div class="flex items-center gap-2.5 min-w-0">
         <div class="w-8 h-8 rounded-xl bg-gradient-to-tr from-indigo-600 to-violet-600 text-white flex items-center justify-center font-bold text-sm shadow-md shadow-indigo-500/20 flex-shrink-0" id="routePanelModeIcon">🚗</div>
         <div class="min-w-0">
@@ -1736,6 +1738,9 @@ function buildPanel() {
   panelEl.querySelectorAll(".route-tab-pill").forEach((tabBtn) => {
     tabBtn.addEventListener("click", () => {
       activeRouteTab = tabBtn.dataset.routeTab;
+      if (isMobileLayout() && routeSheetState === "peek") {
+        snapRouteSheet("half");
+      }
       panelEl.querySelectorAll(".route-tab-pill").forEach((b) => {
         if (b.dataset.routeTab === activeRouteTab) {
           b.className =
@@ -1764,6 +1769,196 @@ function buildPanel() {
   panelEl.querySelector("#routeExportGpxBtn")?.addEventListener("click", exportGPXFile);
   panelEl.querySelector("#routeShareBtn")?.addEventListener("click", shareRouteItinerary);
   panelEl.querySelector("#routeSaveBtn")?.addEventListener("click", saveRouteToFavorites);
+
+  initRoutePanelInteractions();
+}
+
+let routeSheetState = "half"; // 'peek' | 'half' | 'full'
+
+export function isMobileLayout() {
+  return typeof window !== "undefined" && window.innerWidth < 640;
+}
+
+export function snapRouteSheet(state = "half") {
+  if (!panelEl) return;
+  routeSheetState = state;
+  const vh = window.innerHeight;
+  panelEl.classList.remove("sheet-peek", "sheet-half", "sheet-full");
+  panelEl.classList.add(`sheet-${state}`);
+  panelEl.style.transition =
+    "height 0.35s cubic-bezier(0.2, 0.9, 0.3, 1), max-height 0.35s cubic-bezier(0.2, 0.9, 0.3, 1), transform 0.35s cubic-bezier(0.2, 0.9, 0.3, 1)";
+  panelEl.style.transform = "translateY(0)";
+
+  if (state === "peek") {
+    const targetHeight = 150;
+    panelEl.style.setProperty("height", `${targetHeight}px`, "important");
+    panelEl.style.setProperty("max-height", `${targetHeight}px`, "important");
+  } else if (state === "half") {
+    const targetHeight = Math.round(vh * 0.52);
+    panelEl.style.setProperty("height", `${targetHeight}px`, "important");
+    panelEl.style.setProperty("max-height", `${targetHeight}px`, "important");
+  } else if (state === "full") {
+    const targetHeight = Math.round(vh * 0.86);
+    panelEl.style.setProperty("height", `${targetHeight}px`, "important");
+    panelEl.style.setProperty("max-height", `${targetHeight}px`, "important");
+  }
+}
+
+function initRoutePanelInteractions() {
+  const dragHandle = panelEl.querySelector("#routePanelDragHandle");
+  const header = panelEl.querySelector("#routePanelHeader");
+  if (!dragHandle || !header) return;
+
+  // ── 1. Mobile Sheet Gesture & Touch Dragging ────────────────────────
+  let isDraggingMobile = false;
+  let startY = 0;
+  let initialHeight = 0;
+  let startTime = 0;
+
+  const onTouchStart = (e) => {
+    if (!isMobileLayout()) return;
+    isDraggingMobile = true;
+    startY = e.touches ? e.touches[0].clientY : e.clientY;
+    initialHeight = panelEl.getBoundingClientRect().height;
+    startTime = Date.now();
+    panelEl.style.transition = "none";
+  };
+
+  const onTouchMove = (e) => {
+    if (!isDraggingMobile) return;
+    const currentY = e.touches ? e.touches[0].clientY : e.clientY;
+    const deltaY = startY - currentY; // Up is positive (expand)
+    const newHeight = initialHeight + deltaY;
+    const vh = window.innerHeight;
+
+    if (newHeight >= 140 && newHeight <= vh * 0.90) {
+      panelEl.style.setProperty("height", `${newHeight}px`, "important");
+      panelEl.style.setProperty("max-height", `${newHeight}px`, "important");
+      panelEl.style.transform = "translateY(0)";
+    } else if (newHeight < 140) {
+      const overdrag = 140 - newHeight;
+      panelEl.style.transform = `translateY(${overdrag * 0.5}px)`;
+    }
+  };
+
+  const onTouchEnd = (e) => {
+    if (!isDraggingMobile) return;
+    isDraggingMobile = false;
+    const endY =
+      e.changedTouches && e.changedTouches[0]
+        ? e.changedTouches[0].clientY
+        : e.clientY;
+    const deltaY = startY - endY;
+    const duration = Date.now() - startTime;
+    const velocity = deltaY / (duration || 1);
+
+    if (velocity > 0.4) {
+      if (routeSheetState === "peek") snapRouteSheet("half");
+      else snapRouteSheet("full");
+    } else if (velocity < -0.4) {
+      if (routeSheetState === "full") snapRouteSheet("half");
+      else snapRouteSheet("peek");
+    } else {
+      const currentHeight = panelEl.getBoundingClientRect().height;
+      const vh = window.innerHeight;
+      if (currentHeight < vh * 0.32) {
+        snapRouteSheet("peek");
+      } else if (currentHeight < vh * 0.70) {
+        snapRouteSheet("half");
+      } else {
+        snapRouteSheet("full");
+      }
+    }
+    appRef?._haptic?.("light");
+  };
+
+  // Drag handle events (touch & click toggle)
+  dragHandle.addEventListener("touchstart", onTouchStart, { passive: true });
+  dragHandle.addEventListener("click", (e) => {
+    e.stopPropagation();
+    if (!isMobileLayout()) return;
+    appRef?._haptic?.("selection");
+    if (routeSheetState === "peek") snapRouteSheet("half");
+    else if (routeSheetState === "half") snapRouteSheet("full");
+    else snapRouteSheet("peek");
+  });
+
+  // Header drag on mobile (ignores clicks on buttons)
+  header.addEventListener(
+    "touchstart",
+    (e) => {
+      if (e.target.closest("button") || e.target.closest("input")) return;
+      onTouchStart(e);
+    },
+    { passive: true },
+  );
+
+  window.addEventListener("touchmove", onTouchMove, { passive: true });
+  window.addEventListener("touchend", onTouchEnd, { passive: true });
+
+  // ── 2. Desktop Floating Window Dragging (Move anywhere) ───────────
+  let isDraggingDesktop = false;
+  let dragOffset = { x: 0, y: 0 };
+
+  header.addEventListener("pointerdown", (e) => {
+    if (isMobileLayout()) return;
+    if (e.target.closest("button") || e.target.closest("input")) return;
+    isDraggingDesktop = true;
+    header.classList.add("cursor-grabbing");
+    header.classList.remove("cursor-grab");
+
+    const rect = panelEl.getBoundingClientRect();
+    dragOffset.x = e.clientX - rect.left;
+    dragOffset.y = e.clientY - rect.top;
+
+    panelEl.style.left = `${rect.left}px`;
+    panelEl.style.top = `${rect.top}px`;
+    panelEl.style.right = "auto";
+    panelEl.style.bottom = "auto";
+    panelEl.style.margin = "0";
+    panelEl.style.transition = "none";
+
+    header.setPointerCapture?.(e.pointerId);
+    e.preventDefault();
+  });
+
+  window.addEventListener("pointermove", (e) => {
+    if (!isDraggingDesktop) return;
+    const maxX = window.innerWidth - panelEl.offsetWidth;
+    const maxY = window.innerHeight - 80;
+    const nextLeft = Math.max(8, Math.min(maxX - 8, e.clientX - dragOffset.x));
+    const nextTop = Math.max(60, Math.min(maxY, e.clientY - dragOffset.y));
+
+    panelEl.style.left = `${nextLeft}px`;
+    panelEl.style.top = `${nextTop}px`;
+  });
+
+  const stopDesktopDrag = () => {
+    if (!isDraggingDesktop) return;
+    isDraggingDesktop = false;
+    header.classList.remove("cursor-grabbing");
+    header.classList.add("cursor-grab");
+    panelEl.style.transition = "";
+  };
+
+  window.addEventListener("pointerup", stopDesktopDrag);
+  window.addEventListener("pointercancel", stopDesktopDrag);
+
+  // Resize listener to switch cleanly between mobile sheet and desktop card
+  window.addEventListener("resize", () => {
+    if (!isMobileLayout()) {
+      panelEl.classList.remove("sheet-peek", "sheet-half", "sheet-full");
+      panelEl.style.height = "";
+      panelEl.style.maxHeight = "";
+      panelEl.style.transform = "";
+    } else {
+      panelEl.style.left = "";
+      panelEl.style.top = "";
+      panelEl.style.right = "";
+      panelEl.style.bottom = "";
+      snapRouteSheet(routeSheetState || "half");
+    }
+  });
 }
 
 function showPanel() {
@@ -1771,6 +1966,9 @@ function showPanel() {
     panelEl.classList.remove("hidden");
     panelEl.style.display = "flex";
     isPanelOpen = true;
+    if (isMobileLayout()) {
+      snapRouteSheet(routeSheetState || "half");
+    }
   }
 }
 

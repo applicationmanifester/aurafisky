@@ -501,7 +501,9 @@ export class AuraMobileController {
     const restorePill = document.getElementById('restoreSheetPill');
     if (restorePill) restorePill.classList.add('hidden');
 
+    const timeline = document.getElementById('timelineBar');
     if (!isMobileLayout()) {
+      if (timeline) timeline.classList.remove('hidden-by-sheet');
       // On desktop, keep normal floating card with full content visible
       panel.style.height = '';
       panel.style.maxHeight = '';
@@ -514,6 +516,8 @@ export class AuraMobileController {
       panel.removeAttribute('inert');
       return;
     }
+
+    if (timeline) timeline.classList.add('hidden-by-sheet');
 
     this.sheetState = state;
     panel.removeAttribute('inert');
@@ -557,6 +561,8 @@ export class AuraMobileController {
       this.sheetState = 'dismissed';
       const pill = document.getElementById('restoreSheetPill');
       if (pill) pill.classList.add('hidden');
+      const timeline = document.getElementById('timelineBar');
+      if (timeline) timeline.classList.remove('hidden-by-sheet');
       this.app?.hideWeatherPanel?.();
       return;
     }
@@ -568,6 +574,10 @@ export class AuraMobileController {
     panel.style.transform = 'translateY(calc(100% + 120px))';
     panel.style.opacity = '0';
     panel.style.pointerEvents = 'none';
+
+    // Hide timeline bar on mobile so it doesn't overlap with restoreSheetPill
+    const timeline = document.getElementById('timelineBar');
+    if (timeline) timeline.classList.add('hidden-by-sheet');
 
     let pill = document.getElementById('restoreSheetPill');
     const locName = (this.currentLocationName || this.app?.selectedName || 'Current Location').split(',')[0].trim();
@@ -594,6 +604,8 @@ export class AuraMobileController {
     panel.classList.add('open');
     const pill = document.getElementById('restoreSheetPill');
     if (pill) pill.classList.add('hidden');
+    const timeline = document.getElementById('timelineBar');
+    if (timeline && isMobileLayout()) timeline.classList.add('hidden-by-sheet');
     this.snapSheet(state);
   }
 

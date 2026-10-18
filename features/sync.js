@@ -86,6 +86,11 @@ export function syncDefaultLocation(defaultLocation, defaultLocationNotify, noti
   post("defaultLocation:changed", { defaultLocation, defaultLocationNotify, notifyIntervalMin });
 }
 
+/** Call after the device profile changes (language, input type, etc.). */
+export function syncDeviceProfile(profile) {
+  post("deviceProfile:changed", profile);
+}
+
 // ── Incoming: apply changes from other tabs ──────────────────────────
 
 function handleMessage(event) {

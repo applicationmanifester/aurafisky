@@ -308,4 +308,24 @@ test("removeStop and clearRoute do not close Route Weather Studio", async () => 
   expect(clearRouteFunc).not.toContain("hidePanel()");
 });
 
+test("Route Weather Studio provides movable bottom sheet states and drag handles", () => {
+  const fs = require("fs");
+  const routesCode = fs.readFileSync("features/routes.js", "utf-8");
+  const css = fs.readFileSync("styles.css", "utf-8");
+
+  // Drag handle and header exists
+  expect(routesCode).toContain('id="routePanelDragHandle"');
+  expect(routesCode).toContain('id="routePanelHeader"');
+
+  // Sheet states
+  expect(routesCode).toContain('export function snapRouteSheet(');
+  expect(routesCode).toContain('initRoutePanelInteractions();');
+
+  // CSS sheet states for route panel
+  expect(css).toContain("#routePanel.sheet-peek");
+  expect(css).toContain("#routePanel.sheet-half");
+  expect(css).toContain("#routePanel.sheet-full");
+});
+
+
 

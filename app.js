@@ -7863,12 +7863,18 @@ class AurafiskyApp {
 
     mapBtn?.addEventListener("click", () => {
       setActiveBtn(mapBtn);
-      if (this.$.weatherPanel?.classList.contains("open") && !this.$.weatherPanel?.classList.contains("minimized")) {
-        this.toggleMinimizeWeatherPanel();
-      }
       this.$.bookmarksDropdown?.classList.add("hidden");
       this.toggleMapLayersFlyout(false);
       this.hideComparePanel();
+
+      if (this.selectedLat != null && this.selectedLng != null) {
+        this.toggleHomeLocation();
+      } else if (this.defaultLocation && this.defaultLocation.lat != null) {
+        this.selectLocation(this.defaultLocation.lat, this.defaultLocation.lng, this.defaultLocation.name);
+        this.showToast(`📍 Opening Home: ${(this.defaultLocation.name || 'Home').split(',')[0]}`, 'info');
+      } else {
+        this.showToast("📍 Tap any place on map or search a city, then tap 'Set Home' to save your home.", "info");
+      }
       this._haptic("light");
     });
 

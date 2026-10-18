@@ -69,6 +69,10 @@ function updateStarUI() {
     const isFav = this.isCurrentLocationFavorited();
     this.$.starOutlineIcon.classList.toggle("hidden", isFav);
     this.$.starFilledIcon.classList.toggle("hidden", !isFav);
+    const mobileStarIcon = document.getElementById("mobileNavStarIcon");
+    if (mobileStarIcon) {
+      mobileStarIcon.setAttribute("fill", isFav ? "currentColor" : "none");
+    }
   }
 
 function toggleHomeLocation() {
@@ -109,6 +113,11 @@ function updateHomeButton() {
     if (this.$.homeOutlineIcon) {
       this.$.homeOutlineIcon.classList.toggle("text-amber-500", isHome);
       this.$.homeOutlineIcon.classList.toggle("text-slate-400", !isHome);
+    }
+    const mobileHomeIcon = document.getElementById("mobileNavHomeIcon");
+    if (mobileHomeIcon) {
+      mobileHomeIcon.classList.toggle("text-teal-600", isHome);
+      mobileHomeIcon.classList.toggle("dark:text-teal-400", isHome);
     }
     if (this.$.homeToggleBtn) {
       this.$.homeToggleBtn.title = isHome

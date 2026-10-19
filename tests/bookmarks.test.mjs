@@ -57,4 +57,19 @@ describe('Bookmarks UI and Delete Icon', () => {
     expect(css).toContain('.bookmark-remove-btn svg {');
     expect(css).toContain('stroke: currentColor !important;');
   });
+
+  it('contains exactly one star icon in favoriteToggleBtn without any secondary ghost star', () => {
+    const html = fs.readFileSync('index.html', 'utf-8');
+    const dom = new JSDOM(html);
+    const favBtn = dom.window.document.getElementById('favoriteToggleBtn');
+    expect(favBtn).not.toBeNull();
+
+    // Must only have 1 SVG child — no dual stars side-by-side
+    const svgs = favBtn.querySelectorAll('svg');
+    expect(svgs.length).toBe(1);
+
+    const starIcon = favBtn.querySelector('#favoriteStarIcon');
+    expect(starIcon).not.toBeNull();
+    expect(starIcon.querySelector('polygon')).not.toBeNull();
+  });
 });

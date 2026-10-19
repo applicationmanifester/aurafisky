@@ -83,8 +83,31 @@ function isCurrentLocationFavorited() {
 
 function updateStarUI() {
     const isFav = this.isCurrentLocationFavorited();
-    this.$.starOutlineIcon?.classList.toggle("hidden", isFav);
-    this.$.starFilledIcon?.classList.toggle("hidden", !isFav);
+    const btn = this.$.favoriteToggleBtn || document.getElementById("favoriteToggleBtn");
+    const star = document.getElementById("favoriteStarIcon") || this.$.favoriteStarIcon;
+
+    if (btn) {
+      btn.setAttribute("aria-pressed", isFav ? "true" : "false");
+      btn.title = isFav ? "Remove bookmark" : "Bookmark location";
+      btn.classList.toggle("is-bookmarked", isFav);
+    }
+
+    if (star) {
+      star.setAttribute("fill", isFav ? "#f59e0b" : "none");
+      star.setAttribute("stroke", isFav ? "#f59e0b" : "currentColor");
+      star.classList.toggle("text-amber-500", isFav);
+      star.classList.toggle("text-slate-400", !isFav);
+    }
+
+    if (this.$.starOutlineIcon && this.$.starOutlineIcon !== star) {
+      this.$.starOutlineIcon.classList.toggle("hidden", isFav);
+      this.$.starOutlineIcon.style.display = isFav ? "none" : "";
+    }
+    if (this.$.starFilledIcon && this.$.starFilledIcon !== star) {
+      this.$.starFilledIcon.classList.toggle("hidden", !isFav);
+      this.$.starFilledIcon.style.display = isFav ? "" : "none";
+    }
+
     const mobileStarIcon = document.getElementById("mobileNavStarIcon");
     if (mobileStarIcon) {
       mobileStarIcon.setAttribute("fill", isFav ? "currentColor" : "none");

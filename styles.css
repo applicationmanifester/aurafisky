@@ -2176,6 +2176,20 @@ button, a, input, select, textarea, [role="button"] {
     padding: 0.55rem;
   }
 
+  /* Bookmark location button bookmarked state */
+  #favoriteToggleBtn.is-bookmarked {
+    background-color: rgba(245, 158, 11, 0.15) !important;
+    color: #f59e0b !important;
+    border-color: rgba(245, 158, 11, 0.35) !important;
+    box-shadow: 0 0 10px rgba(245, 158, 11, 0.25) !important;
+  }
+  #favoriteToggleBtn.is-bookmarked svg {
+    fill: #f59e0b !important;
+    stroke: #f59e0b !important;
+    filter: drop-shadow(0 0 6px rgba(245, 158, 11, 0.5));
+    transform: scale(1.1);
+  }
+
   /* Zoom controls: compact, sleek buttons centered on the left edge on mobile map view */
   #zoomControls {
     left: 0.65rem !important;

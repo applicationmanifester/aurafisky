@@ -125,4 +125,9 @@ test("navigateHereBtn and mobileDirectionsFab share identical icon, stroke, and 
   const navStroke = navigateBtn.querySelector("svg")?.getAttribute("stroke-width");
   const fabStroke = fabBtn.querySelector("svg")?.getAttribute("stroke-width");
   assert.equal(navStroke, fabStroke, "both buttons must use consistent stroke-width");
+
+  // Both share matching teal symbol colors and mobileDirectionsFab has white background
+  assert.ok(navigateBtn.querySelector("svg").getAttribute("class").includes("text-teal-600"));
+  assert.ok(fabBtn.querySelector("svg").getAttribute("class").includes("text-teal-600"));
+  assert.ok(fabBtn.className.includes("bg-white/85"), "mobileDirectionsFab must have white background");
 });

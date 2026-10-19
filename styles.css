@@ -2815,11 +2815,7 @@ button, a, input, select, textarea, [role="button"] {
 
 /* Directions FAB Button */
 #mobileDirectionsFab {
-  background-color: #00897b;
-  box-shadow: 0 4px 14px rgba(0, 137, 123, 0.4);
-}
-#mobileDirectionsFab:hover {
-  background-color: #00796b;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.12);
 }
 
 /* Draggable Bottom Sheet Styling on Mobile */

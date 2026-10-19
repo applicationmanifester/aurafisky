@@ -2200,29 +2200,51 @@ button, a, input, select, textarea, [role="button"] {
     transform: translateY(-50%) !important;
   }
 
-  /* Right-side action controls: uniform vertical column centered on right edge */
+  /* Right-side action controls: responsive, adaptive vertical column centered on right edge */
   #mobileMapControls {
-    right: 0.65rem !important;
+    right: 0.5rem !important;
     left: auto !important;
-    gap: 0.35rem !important;
+    gap: 0.25rem !important;
     top: 50% !important;
     bottom: auto !important;
     transform: translateY(-50%) !important;
     display: flex !important;
     flex-direction: column !important;
     align-items: center !important;
+    z-index: 1001 !important;
+    max-height: calc(100dvh - 180px - env(safe-area-inset-bottom, 0px)) !important;
+    overflow-y: auto !important;
+    overflow-x: hidden !important;
+    overscroll-behavior: contain !important;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none !important;
+    -ms-overflow-style: none !important;
+    padding: 2px !important;
+  }
+  #mobileMapControls::-webkit-scrollbar {
+    display: none !important;
   }
 
-  #zoomControls > button,
-  #mobileMapControls button,
-  #mobileMapControls .mobile-floating-control,
-  #radarControls > button,
-  #mapLayersBtn,
-  #terminatorToggleBtn,
-  #extremesBtn,
-  #mobileFloatingShareBtn,
-  #mobileLocationFab,
-  #mobileDirectionsFab {
+  /* When bottom sheet / weather panel is peeked or minimized on mobile, adaptively position controls in visible map area */
+  body:has(#weatherPanel.open.minimized) #mobileMapControls,
+  body:has(#weatherPanel.open.sheet-peek) #mobileMapControls,
+  body:has(#weatherPanel.sheet-peek) #mobileMapControls,
+  body:has(#weatherPanel.minimized) #mobileMapControls {
+    top: calc(106px + env(safe-area-inset-top, 0px)) !important;
+    bottom: auto !important;
+    transform: none !important;
+    max-height: calc(100dvh - 350px - env(safe-area-inset-bottom, 0px)) !important;
+  }
+
+  /* Ensure hidden buttons inside toolbars stay completely hidden */
+  #mobileMapControls .hidden,
+  #mobileMapControls button.hidden,
+  #zoomControls .hidden,
+  #zoomControls button.hidden {
+    display: none !important;
+  }
+
+  #zoomControls > button {
     width: 2.25rem !important;
     height: 2.25rem !important;
     min-width: 2.25rem !important;
@@ -2234,7 +2256,34 @@ button, a, input, select, textarea, [role="button"] {
     justify-content: center !important;
   }
 
-  #zoomControls svg,
+  #mobileMapControls button,
+  #mobileMapControls .mobile-floating-control,
+  #radarControls > button,
+  #mapLayersBtn,
+  #terminatorToggleBtn,
+  #extremesBtn,
+  #mobileFloatingShareBtn,
+  #mobileLocationFab,
+  #mobileDirectionsFab {
+    width: 2rem !important;
+    height: 2rem !important;
+    min-width: 2rem !important;
+    min-height: 2rem !important;
+    border-radius: 0.65rem !important;
+    padding: 0 !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    flex-shrink: 0 !important;
+  }
+
+  #zoomControls svg {
+    width: 1.2rem !important;
+    height: 1.2rem !important;
+    max-width: 1.2rem !important;
+    max-height: 1.2rem !important;
+  }
+
   #mobileMapControls svg,
   #mapLayersBtn svg,
   #terminatorToggleBtn svg,
@@ -2242,10 +2291,51 @@ button, a, input, select, textarea, [role="button"] {
   #mobileFloatingShareBtn svg,
   #mobileLocationFab svg,
   #mobileDirectionsFab svg {
-    width: 1.2rem !important;
-    height: 1.2rem !important;
-    max-width: 1.2rem !important;
-    max-height: 1.2rem !important;
+    width: 1.05rem !important;
+    height: 1.05rem !important;
+    max-width: 1.05rem !important;
+    max-height: 1.05rem !important;
+  }
+
+  @media (max-width: 639px) and (max-height: 720px), (max-height: 520px) {
+    #mobileMapControls {
+      gap: 0.2rem !important;
+      max-height: calc(100dvh - 160px) !important;
+    }
+    body:has(#weatherPanel.open.minimized) #mobileMapControls,
+    body:has(#weatherPanel.open.sheet-peek) #mobileMapControls,
+    body:has(#weatherPanel.sheet-peek) #mobileMapControls,
+    body:has(#weatherPanel.minimized) #mobileMapControls {
+      top: calc(96px + env(safe-area-inset-top, 0px)) !important;
+      max-height: calc(100dvh - 310px) !important;
+    }
+    #mobileMapControls button,
+    #mobileMapControls .mobile-floating-control,
+    #radarControls > button,
+    #mapLayersBtn,
+    #terminatorToggleBtn,
+    #extremesBtn,
+    #mobileFloatingShareBtn,
+    #mobileLocationFab,
+    #mobileDirectionsFab {
+      width: 1.85rem !important;
+      height: 1.85rem !important;
+      min-width: 1.85rem !important;
+      min-height: 1.85rem !important;
+      border-radius: 0.55rem !important;
+    }
+    #mobileMapControls svg,
+    #mapLayersBtn svg,
+    #terminatorToggleBtn svg,
+    #extremesBtn svg,
+    #mobileFloatingShareBtn svg,
+    #mobileLocationFab svg,
+    #mobileDirectionsFab svg {
+      width: 0.95rem !important;
+      height: 0.95rem !important;
+      max-width: 0.95rem !important;
+      max-height: 0.95rem !important;
+    }
   }
 
   /* Horizontal quick action chips on mobile */

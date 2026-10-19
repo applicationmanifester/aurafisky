@@ -1328,15 +1328,13 @@
   <!-- ============================================================ -->
   <div id="mobileMapControls" class="map-controls-right fixed top-1/2 -translate-y-1/2 right-3 sm:right-4 z-[1001] pointer-events-auto flex flex-col gap-1.5 items-center">
     <!-- 1. Map Modes & Terrain Switcher (Street, Satellite, Terrain, Dark) -->
-    <div class="relative pointer-events-auto">
-      <button id="mapLayersBtn" class="w-10 h-10 sm:w-11 sm:h-11 flex items-center justify-center rounded-xl glass bg-white/85 dark:bg-slate-800/85 hover:bg-white dark:hover:bg-slate-700 transition-all border border-slate-200/70 dark:border-slate-700/60 shadow-lg active:scale-95 group cursor-pointer" title="Map terrain & styles (L)" aria-label="Map terrain and styles" aria-expanded="false">
-        <svg class="w-5 h-5 text-slate-700 dark:text-slate-200 transition-transform group-hover:scale-110 duration-200" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
-          <polygon points="12 2 2 7 12 12 22 7 12 2"></polygon>
-          <polyline points="2 17 12 22 22 17"></polyline>
-          <polyline points="2 12 12 17 22 12"></polyline>
-        </svg>
-      </button>
-    </div>
+    <button id="mapLayersBtn" class="w-10 h-10 sm:w-11 sm:h-11 flex items-center justify-center rounded-xl glass bg-white/85 dark:bg-slate-800/85 hover:bg-white dark:hover:bg-slate-700 transition-all border border-slate-200/70 dark:border-slate-700/60 shadow-lg active:scale-95 group cursor-pointer" title="Map terrain & styles (L)" aria-label="Map terrain and styles" aria-expanded="false">
+      <svg class="w-5 h-5 text-slate-700 dark:text-slate-200 transition-transform group-hover:scale-110 duration-200" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+        <polygon points="12 2 2 7 12 12 22 7 12 2"></polygon>
+        <polyline points="2 17 12 22 22 17"></polyline>
+        <polyline points="2 12 12 17 22 12"></polyline>
+      </svg>
+    </button>
 
     <!-- 2. Day/Night Terminator Toggle (Sun / Moon Dual Hemisphere) -->
     <button id="terminatorToggleBtn" class="w-10 h-10 sm:w-11 sm:h-11 flex items-center justify-center rounded-xl glass bg-white/85 dark:bg-slate-800/85 hover:bg-white dark:hover:bg-slate-700 transition-all border border-slate-200/70 dark:border-slate-700/60 shadow-lg active:scale-95 group cursor-pointer" title="Toggle day/night terminator" aria-label="Toggle day/night terminator" aria-pressed="false">

@@ -509,7 +509,17 @@ input[type='range'].timeline-slider:focus-visible {
     left: auto !important;
     gap: 0.25rem !important;
   }
-  #zoomControls > button,
+  #mobileMapControls .hidden,
+  #mobileMapControls button.hidden {
+    display: none !important;
+  }
+  #zoomControls > button {
+    min-width: 36px !important;
+    min-height: 36px !important;
+    width: 36px !important;
+    height: 36px !important;
+    border-radius: 10px !important;
+  }
   #mobileMapControls button,
   #mobileMapControls .mobile-floating-control,
   #radarControls > button,
@@ -519,10 +529,10 @@ input[type='range'].timeline-slider:focus-visible {
   #mobileFloatingShareBtn,
   #mobileLocationFab,
   #mobileDirectionsFab {
-    min-width: 36px !important;
-    min-height: 36px !important;
-    width: 36px !important;
-    height: 36px !important;
+    min-width: 32px !important;
+    min-height: 32px !important;
+    width: 32px !important;
+    height: 32px !important;
     border-radius: 10px !important;
   }
   #timelineBar.hidden-by-sheet,

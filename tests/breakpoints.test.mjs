@@ -106,3 +106,15 @@ describe("isLandscapePhone", () => {
     expect(isLandscapePhone(makeWin({ width: 1920, height: 400, coarse: false, fine: true }))).toBe(false);
   });
 });
+
+describe("mobileMapControls responsive & adaptive toolbar", () => {
+  test("styles.css ensures right toolbar is responsive, adaptive and preserves hidden buttons", async () => {
+    const fs = await import("fs");
+    const css = fs.readFileSync("styles.css", "utf-8");
+    expect(css).toContain("#mobileMapControls");
+    expect(css).toContain("#mobileMapControls button.hidden");
+    expect(css).toContain("max-height: calc(100dvh - 180px");
+    expect(css).toContain("overflow-y: auto !important;");
+  });
+});
+

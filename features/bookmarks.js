@@ -1,8 +1,25 @@
 // -- SAVED LOCATIONS / BOOKMARKS FAVORITES --
 import { HtmlMarker } from "../modules/ol-marker.js";
+import { fromLonLat } from "ol/proj.js";
 
 async function loadBookmarks() {
-    this.bookmarks = (await this._loadBookmarksFromStorage()) || [];
+    let cloudBookmarks = [];
+    if (this._fb?.firestore && this.user?.uid) {
+      cloudBookmarks = (await this._loadBookmarksFromStorage()) || [];
+    }
+    let localBookmarks = [];
+    try {
+      localBookmarks = JSON.parse(localStorage.getItem("aurafisky_local_bookmarks") || "[]");
+    } catch (_) {}
+
+    const merged = [...cloudBookmarks];
+    localBookmarks.forEach((loc) => {
+      if (!merged.some((b) => Math.abs(b.lat - loc.lat) < 0.0001 && Math.abs(b.lng - loc.lng) < 0.0001)) {
+        merged.push(loc);
+      }
+    });
+
+    this.bookmarks = merged;
     this.renderBookmarksList();
     this.refreshBookmarkPins();
   }
@@ -21,21 +38,20 @@ async function _loadBookmarksFromStorage() {
   }
 
 function saveBookmarks() {
+    try {
+      localStorage.setItem("aurafisky_local_bookmarks", JSON.stringify(this.bookmarks));
+    } catch (_) {}
     this.renderBookmarksList();
     this.updateStarUI();
     this.refreshBookmarkPins();
-    this.saveUserDataToCloud();
+    if (this.user) {
+      this.saveUserDataToCloud();
+    }
     this.syncBus?.syncBookmarks(this.bookmarks);
   }
 
 function toggleFavoriteCurrentLocation() {
     if (this.selectedLat == null || this.selectedLng == null) return;
-
-    if (!this.user) {
-      this.toggleAccountDialog(true);
-      this.showToast("Sign in with Google to save bookmarks", "info");
-      return;
-    }
 
     const isFav = this.isCurrentLocationFavorited();
     if (isFav) {
@@ -47,7 +63,7 @@ function toggleFavoriteCurrentLocation() {
       this.showToast("Removed location from bookmarks.", "success");
     } else {
       this.bookmarks.push({
-        name: this.selectedName,
+        name: this.selectedName || `${this.selectedLat.toFixed(2)}, ${this.selectedLng.toFixed(2)}`,
         lat: this.selectedLat,
         lng: this.selectedLng,
       });
@@ -67,12 +83,62 @@ function isCurrentLocationFavorited() {
 
 function updateStarUI() {
     const isFav = this.isCurrentLocationFavorited();
-    this.$.starOutlineIcon.classList.toggle("hidden", isFav);
-    this.$.starFilledIcon.classList.toggle("hidden", !isFav);
+    this.$.starOutlineIcon?.classList.toggle("hidden", isFav);
+    this.$.starFilledIcon?.classList.toggle("hidden", !isFav);
     const mobileStarIcon = document.getElementById("mobileNavStarIcon");
     if (mobileStarIcon) {
       mobileStarIcon.setAttribute("fill", isFav ? "currentColor" : "none");
     }
+  }
+
+function setHomeLocation(lat, lng, name) {
+    this.defaultLocation = {
+      lat,
+      lng,
+      name: name || `${lat.toFixed(4)}, ${lng.toFixed(4)}`,
+    };
+    try {
+      localStorage.setItem("defaultLocation", JSON.stringify(this.defaultLocation));
+    } catch (_) {}
+    if (typeof localforage !== "undefined") {
+      localforage.setItem("defaultLocation", this.defaultLocation);
+    }
+    this.updateHomeButton();
+    this.updateHomeMarker();
+    this.updateSettingsUIFromLocal?.();
+    this.saveUserDataToCloud?.();
+    this.showToast(`🏠 Home set to ${this.defaultLocation.name}`, "success");
+  }
+
+function removeHomeLocation() {
+    this.defaultLocation = null;
+    this.defaultLocationNotify = false;
+    try {
+      localStorage.removeItem("defaultLocation");
+    } catch (_) {}
+    if (typeof localforage !== "undefined") {
+      localforage.setItem("defaultLocation", null);
+      localforage.setItem("defaultLocationNotify", false);
+    }
+    this.setupHourlyNotifications?.();
+    this.updateHomeButton();
+    this.updateHomeMarker();
+    this.updateSettingsUIFromLocal?.();
+    this.saveUserDataToCloud?.();
+    this.showToast("Home location removed.", "success");
+  }
+
+function goToHomeLocation() {
+    if (!this.defaultLocation || this.defaultLocation.lat == null) {
+      this.showToast("No home location set.", "info");
+      return;
+    }
+    const { lat, lng, name } = this.defaultLocation;
+    if (this.map) {
+      this.map.getView().animate({ center: fromLonLat([lng, lat]), zoom: 11, duration: 600 });
+    }
+    this.selectLocation(lat, lng, name);
+    this.showToast(`📍 Opening Home: ${(name || 'Home').split(',')[0]}`, "info");
   }
 
 function toggleHomeLocation() {
@@ -83,45 +149,43 @@ function toggleHomeLocation() {
       Math.abs(this.defaultLocation.lat - this.selectedLat) < 0.0001 &&
       Math.abs(this.defaultLocation.lng - this.selectedLng) < 0.0001
     ) {
-      this.defaultLocation = null;
-      this.defaultLocationNotify = false;
-      this.setupHourlyNotifications();
-      this.showToast("Home location removed.", "success");
+      this.removeHomeLocation();
     } else {
-      this.defaultLocation = {
-        lat: this.selectedLat,
-        lng: this.selectedLng,
-        name:
-          this.selectedName ||
-          `${this.selectedLat.toFixed(4)}, ${this.selectedLng.toFixed(4)}`,
-      };
-      this.showToast(`Home set to ${this.defaultLocation.name}`, "success");
+      this.setHomeLocation(this.selectedLat, this.selectedLng, this.selectedName);
     }
-
-    this.updateHomeButton();
-    this.updateHomeMarker();
-    this.updateSettingsUIFromLocal();
-    this.saveUserDataToCloud();
   }
 
 function updateHomeButton() {
+    const hasHome = !!(this.defaultLocation && this.defaultLocation.lat != null);
     const isHome =
-      this.defaultLocation &&
-      this.selectedLat &&
+      hasHome &&
+      this.selectedLat != null &&
       Math.abs(this.defaultLocation.lat - this.selectedLat) < 0.0001 &&
       Math.abs(this.defaultLocation.lng - this.selectedLng) < 0.0001;
-    if (this.$.homeOutlineIcon) {
-      this.$.homeOutlineIcon.classList.toggle("text-amber-500", isHome);
-      this.$.homeOutlineIcon.classList.toggle("text-slate-400", !isHome);
+
+    const homeLabel = document.getElementById("mobileNavHomeLabel");
+    if (homeLabel) {
+      homeLabel.textContent = hasHome ? "Go to Home" : "Set Home";
     }
     const mobileHomeIcon = document.getElementById("mobileNavHomeIcon");
     if (mobileHomeIcon) {
-      mobileHomeIcon.classList.toggle("text-teal-600", isHome);
-      mobileHomeIcon.classList.toggle("dark:text-teal-400", isHome);
+      mobileHomeIcon.classList.toggle("text-teal-600", hasHome);
+      mobileHomeIcon.classList.toggle("dark:text-teal-400", hasHome);
+      mobileHomeIcon.classList.toggle("text-amber-500", isHome);
+    }
+    const mobileMapBtn = document.getElementById("mobileNavMapBtn");
+    if (mobileMapBtn) {
+      mobileMapBtn.title = hasHome ? `Go to Home (${this.defaultLocation.name || 'Home'})` : "Set home location";
+      mobileMapBtn.setAttribute("aria-label", hasHome ? "Go to Home" : "Set home location");
+    }
+
+    if (this.$.homeOutlineIcon) {
+      this.$.homeOutlineIcon.classList.toggle("text-amber-500", hasHome);
+      this.$.homeOutlineIcon.classList.toggle("text-slate-400", !hasHome);
     }
     if (this.$.homeToggleBtn) {
-      this.$.homeToggleBtn.title = isHome
-        ? "Remove home location"
+      this.$.homeToggleBtn.title = hasHome
+        ? `Home: ${this.defaultLocation.name} (Click for options)`
         : "Set as home location";
     }
     if (this.$.panelLocationName) {
@@ -131,6 +195,16 @@ function updateHomeButton() {
     const badge = document.getElementById("panelHomeBadge");
     if (badge) {
       badge.classList.toggle("hidden", !isHome);
+    }
+
+    // Update Home Dropdown elements
+    const homeLocText = document.getElementById("homeDropdownLocationText");
+    if (homeLocText) {
+      homeLocText.textContent = hasHome ? this.defaultLocation.name : "Not set";
+    }
+    const homeCurrentText = document.getElementById("homeDropdownCurrentText");
+    if (homeCurrentText) {
+      homeCurrentText.textContent = this.selectedName || (this.selectedLat != null ? `${this.selectedLat.toFixed(2)}, ${this.selectedLng.toFixed(2)}` : "Select a place first");
     }
   }
 
@@ -191,14 +265,15 @@ function renderBookmarksList() {
     this.bookmarks.forEach((b, idx) => {
       const container = document.createElement("div");
       container.className =
-        "flex items-center justify-between px-3 py-1.5 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg group";
+        "flex items-center justify-between px-3 py-1.5 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg group gap-2";
 
       // Item button
       const btn = document.createElement("button");
       btn.className =
-        "bookmark-item-btn text-left truncate flex-1 font-semibold text-slate-700 dark:text-slate-200";
+        "bookmark-item-btn text-left truncate flex-1 min-w-0 font-semibold text-slate-700 dark:text-slate-200 hover:text-primary transition-colors cursor-pointer";
       btn.dataset.index = idx;
       btn.textContent = b.name;
+      btn.title = b.name;
       btn.addEventListener("click", () => {
         this.$.bookmarksDropdown.classList.add("hidden");
         this.selectLocation(b.lat, b.lng, b.name);
@@ -207,12 +282,12 @@ function renderBookmarksList() {
 
       // Action buttons container
       const actions = document.createElement("div");
-      actions.className = "flex items-center gap-1.5";
+      actions.className = "flex items-center gap-1.5 shrink-0 flex-shrink-0";
 
       // Compare button
       const compareBtn = document.createElement("button");
       compareBtn.className =
-        "bookmark-compare-btn px-1.5 py-0.5 rounded text-[10px] font-bold text-primary dark:text-primary-light hover:bg-primary/10 transition-colors";
+        "bookmark-compare-btn px-2 py-0.5 rounded text-[10px] font-bold text-teal-600 dark:text-teal-400 bg-teal-50 dark:bg-teal-950/40 hover:bg-teal-100 dark:hover:bg-teal-900/50 transition-colors shrink-0 cursor-pointer";
       compareBtn.dataset.index = idx;
       compareBtn.title = "Compare weather with active location";
       compareBtn.textContent = "Compare";
@@ -223,23 +298,17 @@ function renderBookmarksList() {
       });
       actions.appendChild(compareBtn);
 
-      // Remove button
+      // Remove button - always visible with clear trash can icon
       const removeBtn = document.createElement("button");
       removeBtn.className =
-        "bookmark-remove-btn p-1 text-slate-400 hover:text-red-500 opacity-0 group-hover:opacity-100 focus:opacity-100 transition-opacity";
+        "bookmark-remove-btn w-7 h-7 rounded-lg flex items-center justify-center text-slate-500 dark:text-slate-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-950/40 transition-colors shrink-0 flex-shrink-0 cursor-pointer";
       removeBtn.dataset.index = idx;
       removeBtn.title = "Delete bookmark";
-
-      const icon = document.createElement("svg");
-      icon.className = "w-4 h-4";
-      icon.setAttribute("fill", "none");
-      icon.setAttribute("viewBox", "0 0 24 24");
-      icon.setAttribute("stroke", "currentColor");
-      icon.setAttribute("stroke-width", "2");
-      icon.innerHTML =
-        '<path stroke-linecap="round" stroke-linejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />';
-
-      removeBtn.appendChild(icon);
+      removeBtn.setAttribute("aria-label", "Delete bookmark");
+      removeBtn.innerHTML =
+        '<svg class="w-4 h-4 shrink-0 pointer-events-none" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" aria-hidden="true">' +
+        '<path stroke-linecap="round" stroke-linejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />' +
+        "</svg>";
       removeBtn.addEventListener("click", (e) => {
         e.stopPropagation();
         this.bookmarks.splice(idx, 1);
@@ -266,7 +335,7 @@ function updateBookmarksMapToggleUI() {
 
 async function refreshBookmarkPins() {
     // Clear existing bookmark markers
-    this.bookmarkMarkers.forEach((m) => m.remove());
+    (this.bookmarkMarkers || []).forEach((m) => m?.remove?.());
     this.bookmarkMarkers = [];
 
     if (!this.map || this.bookmarks.length === 0) return;
@@ -279,6 +348,51 @@ async function refreshBookmarkPins() {
       const cached = pinCache[b.lat + "_" + b.lng];
       return !cached || now - cached.ts > 300000;
     });
+
+    // Helper to render pins from pinCache or fallbacks
+    const renderPins = () => {
+      this.bookmarkMarkers.forEach((m) => m.remove());
+      this.bookmarkMarkers = [];
+      this.bookmarks.forEach((b) => {
+        // Don't render a duplicate bookmark pin on top of the active selected location marker card
+        if (this.selectedLat != null && this.selectedLng != null) {
+          const isSelected =
+            Math.abs(b.lat - this.selectedLat) < 0.0001 &&
+            Math.abs(b.lng - this.selectedLng) < 0.0001;
+          if (isSelected) return;
+        }
+
+        const cached = pinCache[b.lat + "_" + b.lng];
+        const icon = cached?.weather ? cached.weather.icon : "⭐";
+        const tempText = cached?.weather ? WeatherService.formatTemp(cached.weather.temperature) : (b.name ? b.name.split(',')[0] : "Saved");
+
+        const html = `
+            <div class="flex items-center gap-1.5 bg-white/95 dark:bg-slate-800/95 rounded-full px-2.5 py-1 shadow-md border-2 border-amber-500 cursor-pointer transition-transform hover:scale-105" style="white-space:nowrap;">
+              <span class="text-xs text-amber-500 font-bold">${icon}</span>
+              <span class="text-[11px] font-bold text-slate-800 dark:text-white">${tempText}</span>
+            </div>
+          `;
+
+        const marker = new HtmlMarker(this.map, {
+          lat: b.lat,
+          lng: b.lng,
+          html,
+          className: "bookmark-pin-icon",
+          size: [80, 30],
+          anchor: [40, 15],
+          tooltip: b.name,
+          tooltipClassName: "location-tooltip",
+          onClick: (domEvent) => {
+            if (this._isDragGesture({ originalEvent: domEvent })) return;
+            this.selectLocation(b.lat, b.lng, b.name);
+          },
+        });
+        this.bookmarkMarkers.push(marker);
+      });
+    };
+
+    // Render pins immediately so user sees them on the map without waiting
+    renderPins();
 
     if (needsFetch.length > 0) {
       await Promise.all(
@@ -298,44 +412,9 @@ async function refreshBookmarkPins() {
         })
       );
       this._saveBookmarkPinCache(pinCache);
+      // Re-render pins with loaded weather data
+      renderPins();
     }
-
-    // Render all bookmarks (mix of fresh + cached)
-    this.bookmarks.forEach((b) => {
-      // Don't render a duplicate bookmark pin on top of the active selected location marker card
-      if (this.selectedLat != null && this.selectedLng != null) {
-        const isSelected =
-          Math.abs(b.lat - this.selectedLat) < 0.0001 &&
-          Math.abs(b.lng - this.selectedLng) < 0.0001;
-        if (isSelected) return;
-      }
-
-      const cached = pinCache[b.lat + "_" + b.lng];
-      if (!cached || !cached.weather) return;
-
-      const html = `
-          <div class="flex items-center gap-1 bg-white/90 dark:bg-slate-800/90 rounded-lg px-2 py-1 shadow-md border border-slate-200/40 dark:border-slate-600/30 cursor-pointer" style="white-space:nowrap;">
-            <span class="text-sm">${cached.weather.icon}</span>
-            <span class="text-[10px] font-bold text-slate-800 dark:text-white">${WeatherService.formatTemp(cached.weather.temperature)}</span>
-          </div>
-        `;
-
-      const marker = new HtmlMarker(this.map, {
-        lat: b.lat,
-        lng: b.lng,
-        html,
-        className: "bookmark-pin-icon",
-        size: [70, 28],
-        anchor: [35, 14],
-        tooltip: b.name,
-        tooltipClassName: "location-tooltip",
-        onClick: (domEvent) => {
-          if (this._isDragGesture({ originalEvent: domEvent })) return;
-          this.selectLocation(b.lat, b.lng, b.name);
-        },
-      });
-      this.bookmarkMarkers.push(marker);
-    });
   }
 
 function _getBookmarkPinCache() {
@@ -390,6 +469,9 @@ export function init(app) {
   app.toggleFavoriteCurrentLocation = toggleFavoriteCurrentLocation;
   app.isCurrentLocationFavorited = isCurrentLocationFavorited;
   app.updateStarUI = updateStarUI;
+  app.setHomeLocation = setHomeLocation;
+  app.removeHomeLocation = removeHomeLocation;
+  app.goToHomeLocation = goToHomeLocation;
   app.toggleHomeLocation = toggleHomeLocation;
   app.updateHomeButton = updateHomeButton;
   app.updateHomeMarker = updateHomeMarker;

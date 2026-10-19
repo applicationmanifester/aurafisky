@@ -21,9 +21,12 @@ export function init(app) {
       impact(style = 'medium') {
         if (isNative) {
           try { window.Capacitor.Plugins.Haptics?.impact({ style }); } catch {}
-        } else if (navigator.vibrate) {
-          const ms = style === 'heavy' ? 30 : style === 'light' ? 8 : 15;
-          navigator.vibrate(ms);
+        } else if (typeof navigator !== 'undefined' && navigator.vibrate) {
+          if (navigator.userActivation && !navigator.userActivation.hasBeenActive) return;
+          try {
+            const ms = style === 'heavy' ? 30 : style === 'light' ? 8 : 15;
+            navigator.vibrate(ms);
+          } catch (_) {}
         }
       },
       notification(type = 'success') {
@@ -34,8 +37,11 @@ export function init(app) {
       selection() {
         if (isNative) {
           try { window.Capacitor.Plugins.Haptics?.selectionStart?.(); } catch {}
-        } else if (navigator.vibrate) {
-          navigator.vibrate(8);
+        } else if (typeof navigator !== 'undefined' && navigator.vibrate) {
+          if (navigator.userActivation && !navigator.userActivation.hasBeenActive) return;
+          try {
+            navigator.vibrate(8);
+          } catch (_) {}
         }
       }
     },

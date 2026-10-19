@@ -643,22 +643,295 @@ function syncRouteChipState(isActive) {
   }
 }
 
+let pendingPickRole = null; // null | "origin" | "destination" | "stop"
+
+export function toggleRouteDropdown(forceState) {
+  const dropdown = document.getElementById("routeDropdown");
+  if (!dropdown) return;
+  const isHidden = dropdown.classList.contains("hidden");
+  const open = typeof forceState === "boolean" ? forceState : isHidden;
+  if (open) {
+    if (appRef) {
+      appRef.toggleHomeDropdown?.(false);
+      if (appRef.$.bookmarksDropdown) appRef.$.bookmarksDropdown.classList.add("hidden");
+      appRef.toggleMapLayersFlyout?.(false);
+    }
+    updateRouteDropdownUI();
+    dropdown.classList.remove("hidden");
+  } else {
+    dropdown.classList.add("hidden");
+  }
+}
+
+export function updateRouteDropdownUI() {
+  const dropdown = document.getElementById("routeDropdown");
+  if (!dropdown) return;
+
+  const originText = document.getElementById("routeDropdownOriginText");
+  const destText = document.getElementById("routeDropdownDestText");
+  const stopsCountText = document.getElementById("routeDropdownStopsCountText");
+  const statusBadge = document.getElementById("routeDropdownStatusBadge");
+  const useCurrentBtn = document.getElementById("routeDropdownUseCurrentBtn");
+  const currentTitle = document.getElementById("routeDropdownCurrentPlaceTitle");
+  const currentText = document.getElementById("routeDropdownCurrentPlaceText");
+  const closeStudioBtn = document.getElementById("routeDropdownCloseStudioBtn");
+  const deleteBtn = document.getElementById("routeDropdownDeleteLocationsBtn");
+  const deleteSubtext = document.getElementById("routeDropdownDeleteSubtext");
+  const locationsContainer = document.getElementById("routeDropdownLocationsContainer");
+  const locationsList = document.getElementById("routeDropdownLocationsList");
+  const stopsBadge = document.getElementById("routeDropdownStopsBadge");
+
+  const hasStops = pts.length > 0;
+  const studioActive = routeMode || isPanelOpen;
+
+  // Status Badge
+  if (statusBadge) {
+    if (studioActive) {
+      statusBadge.textContent = "Studio Active";
+      statusBadge.className = "text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 shrink-0";
+    } else if (hasStops) {
+      statusBadge.textContent = `${pts.length} stop${pts.length > 1 ? "s" : ""}`;
+      statusBadge.className = "text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border border-indigo-500/20 shrink-0";
+    } else {
+      statusBadge.textContent = "Ready";
+      statusBadge.className = "text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-slate-500/10 text-slate-600 dark:text-slate-400 border border-slate-500/20 shrink-0";
+    }
+  }
+
+  // Origin (A) text
+  if (originText) {
+    if (pts.length > 0) {
+      originText.textContent = pts[0].name || `Lat: ${pts[0].lat.toFixed(3)}, Lng: ${pts[0].lng.toFixed(3)}`;
+      originText.className = "text-[10px] font-semibold text-emerald-600 dark:text-emerald-400 truncate";
+    } else {
+      originText.textContent = "Tap map to set origin";
+      originText.className = "text-[10px] text-slate-500 dark:text-slate-400 truncate";
+    }
+  }
+
+  // Destination (B) text
+  if (destText) {
+    if (pts.length >= 2) {
+      const dest = pts[pts.length - 1];
+      destText.textContent = dest.name || `Lat: ${dest.lat.toFixed(3)}, Lng: ${dest.lng.toFixed(3)}`;
+      destText.className = "text-[10px] font-semibold text-rose-600 dark:text-rose-400 truncate";
+    } else {
+      destText.textContent = pts.length === 1 ? "Next: Tap map to set destination" : "Tap map to set destination";
+      destText.className = "text-[10px] text-slate-500 dark:text-slate-400 truncate";
+    }
+  }
+
+  // Intermediate stops text
+  if (stopsCountText) {
+    if (pts.length > 2) {
+      stopsCountText.textContent = `${pts.length - 2} intermediate stop${pts.length - 2 > 1 ? "s" : ""} added`;
+    } else {
+      stopsCountText.textContent = "Tap map to insert waypoint";
+    }
+  }
+
+  // Use currently selected place on map
+  if (useCurrentBtn && appRef) {
+    if (appRef.selectedLat != null && appRef.selectedLng != null) {
+      useCurrentBtn.classList.remove("hidden");
+      const placeName = (appRef.selectedName || "Selected location").split(",")[0].trim();
+      if (currentTitle) {
+        currentTitle.textContent = `Add "${placeName}"`;
+      }
+      if (currentText) {
+        const targetRole = pts.length === 0 ? "as Origin (A)" : pts.length === 1 ? "as Destination (B)" : "as Next Stop";
+        currentText.textContent = `Set ${targetRole}`;
+      }
+    } else {
+      useCurrentBtn.classList.add("hidden");
+    }
+  }
+
+  // Close Studio button (visible if studio opened)
+  if (closeStudioBtn) {
+    if (studioActive) {
+      closeStudioBtn.classList.remove("hidden");
+    } else {
+      closeStudioBtn.classList.add("hidden");
+    }
+  }
+
+  // Delete Locations button (visible if user selected locations)
+  if (deleteBtn) {
+    if (hasStops) {
+      deleteBtn.classList.remove("hidden");
+      if (deleteSubtext) {
+        deleteSubtext.textContent = `Clear all ${pts.length} selected location${pts.length > 1 ? "s" : ""}`;
+      }
+    } else {
+      deleteBtn.classList.add("hidden");
+    }
+  }
+
+  // Selected Locations list
+  if (locationsContainer && locationsList) {
+    if (hasStops) {
+      locationsContainer.classList.remove("hidden");
+      if (stopsBadge) {
+        stopsBadge.textContent = `${pts.length} stop${pts.length > 1 ? "s" : ""}`;
+      }
+      locationsList.innerHTML = "";
+      pts.forEach((p, idx) => {
+        const isStart = idx === 0;
+        const isEnd = idx === pts.length - 1 && pts.length > 1;
+        const badge = isStart ? "A" : isEnd ? "B" : `${idx + 1}`;
+        const badgeColor = isStart
+          ? "bg-emerald-500/20 text-emerald-600 dark:text-emerald-400"
+          : isEnd
+          ? "bg-rose-500/20 text-rose-600 dark:text-rose-400"
+          : "bg-indigo-500/20 text-indigo-600 dark:text-indigo-400";
+
+        const item = document.createElement("div");
+        item.className = "flex items-center justify-between gap-1.5 px-2 py-1 rounded-lg bg-slate-50 dark:bg-slate-800/60 border border-slate-100 dark:border-slate-800 text-xs";
+        item.innerHTML = `
+          <div class="flex items-center gap-1.5 min-w-0 flex-1">
+            <span class="w-4 h-4 rounded-full ${badgeColor} text-[9px] font-black flex items-center justify-center shrink-0">${badge}</span>
+            <span class="truncate font-medium text-slate-700 dark:text-slate-200">${escapeXml(p.name || `Stop ${idx + 1}`)}</span>
+          </div>
+          <button type="button" class="route-del-single-btn p-1 text-slate-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-950/40 rounded transition-colors shrink-0 cursor-pointer" data-index="${idx}" title="Remove this stop" aria-label="Remove stop ${idx + 1}">
+            <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
+          </button>
+        `;
+        item.querySelector(".route-del-single-btn").addEventListener("click", (e) => {
+          e.stopPropagation();
+          removeStop(idx);
+          updateRouteDropdownUI();
+        });
+        locationsList.appendChild(item);
+      });
+    } else {
+      locationsContainer.classList.add("hidden");
+      locationsList.innerHTML = "";
+    }
+  }
+}
+
+export function activateMapPickMode(role = "stop") {
+  if (!appRef || !appRef.map) return;
+  pendingPickRole = role;
+  routeMode = true;
+  appRef._routeModeActive = true;
+  ensureRouteLayers();
+  const targetEl = appRef.map.getTargetElement();
+  if (targetEl) targetEl.style.cursor = "crosshair";
+  appRef.map.un("click", onMapClick);
+  appRef.map.on("click", onMapClick);
+  window.removeEventListener("keydown", onKeyDown);
+  window.addEventListener("keydown", onKeyDown);
+  if (btn) {
+    btn.classList.add("bg-indigo-600", "text-white", "ring-2", "ring-indigo-400/50");
+  }
+}
+
+function initRouteDropdownListeners() {
+  const closeBtn = document.getElementById("closeRouteDropdownBtn");
+  closeBtn?.addEventListener("click", (e) => {
+    e.stopPropagation();
+    toggleRouteDropdown(false);
+  });
+
+  const selectOriginBtn = document.getElementById("routeDropdownSelectOriginBtn");
+  selectOriginBtn?.addEventListener("click", (e) => {
+    e.stopPropagation();
+    toggleRouteDropdown(false);
+    activateMapPickMode("origin");
+    appRef?.showToast?.("📍 Tap map to set Departure / Origin (A)", "info");
+  });
+
+  const selectDestBtn = document.getElementById("routeDropdownSelectDestBtn");
+  selectDestBtn?.addEventListener("click", (e) => {
+    e.stopPropagation();
+    toggleRouteDropdown(false);
+    activateMapPickMode("destination");
+    if (pts.length === 0) {
+      appRef?.showToast?.("📍 Tap map to set Departure (A) first, then Destination (B)", "info");
+    } else {
+      appRef?.showToast?.("🏁 Tap map to set Destination (B)", "info");
+    }
+  });
+
+  const addStopBtn = document.getElementById("routeDropdownAddStopBtn");
+  addStopBtn?.addEventListener("click", (e) => {
+    e.stopPropagation();
+    toggleRouteDropdown(false);
+    activateMapPickMode("stop");
+    appRef?.showToast?.("➕ Tap map to add intermediate stop", "info");
+  });
+
+  const useCurrentBtn = document.getElementById("routeDropdownUseCurrentBtn");
+  useCurrentBtn?.addEventListener("click", (e) => {
+    e.stopPropagation();
+    if (appRef && appRef.selectedLat != null && appRef.selectedLng != null) {
+      const pt = {
+        lat: appRef.selectedLat,
+        lng: appRef.selectedLng,
+        name: (appRef.selectedName || `Stop ${pts.length + 1}`).split(",")[0].trim(),
+        marker: null,
+      };
+      pts.push(pt);
+      renderWaypointMarkers();
+      updateRouteGeometry();
+      updateHUD();
+      updateRouteDropdownUI();
+      appRef.showToast?.(`Added "${pt.name}" to route`, "success");
+      if (isPanelOpen && pts.length >= 2) {
+        fetchAndRenderRoutePlan();
+      }
+    }
+  });
+
+  const openStudioBtn = document.getElementById("routeDropdownOpenStudioBtn");
+  openStudioBtn?.addEventListener("click", (e) => {
+    e.stopPropagation();
+    toggleRouteDropdown(false);
+    openRouteStudio();
+  });
+
+  const closeStudioBtn = document.getElementById("routeDropdownCloseStudioBtn");
+  closeStudioBtn?.addEventListener("click", (e) => {
+    e.stopPropagation();
+    toggleRouteDropdown(false);
+    closeRouteStudio();
+    appRef?.showToast?.("Route Weather Studio closed", "info");
+  });
+
+  const deleteBtn = document.getElementById("routeDropdownDeleteLocationsBtn");
+  deleteBtn?.addEventListener("click", (e) => {
+    e.stopPropagation();
+    clearRoute();
+    updateRouteDropdownUI();
+  });
+}
+
 export function init(app) {
   appRef = app;
   app.toggleRoute = toggleRoute;
   app.openRouteStudio = openRouteStudio;
   app.closeRouteStudio = closeRouteStudio;
+  app.toggleRouteDropdown = toggleRouteDropdown;
+  app.updateRouteDropdownUI = updateRouteDropdownUI;
   if (typeof window !== "undefined") {
     window.openRouteStudio = openRouteStudio;
     window.closeRouteStudio = closeRouteStudio;
     window.toggleRoute = toggleRoute;
+    window.toggleRouteDropdown = toggleRouteDropdown;
+    window.updateRouteDropdownUI = updateRouteDropdownUI;
   }
   btn = document.getElementById("routeBtn");
   if (btn) {
     btn.title = "Route Weather & Planner";
     btn.setAttribute("aria-label", "Route Weather & Planner");
-    btn.addEventListener("click", toggleRoute);
+    btn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      toggleRouteDropdown();
+    });
   }
+  initRouteDropdownListeners();
   buildHUD();
   buildPanel();
 }
@@ -943,7 +1216,7 @@ function renderWaypointMarkers() {
 async function resolvePointName(pt) {
   try {
     const url = `https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${pt.lat}&lon=${pt.lng}&zoom=14`;
-    const res = await fetch(url, { headers: { "User-Agent": "Aurafisky/15.0.0", Accept: "application/json" } });
+    const res = await fetch(url, { headers: { "User-Agent": "Aurafisky/16.0.0", Accept: "application/json" } });
     if (!res.ok) return;
     const data = await res.json();
     const city =
@@ -1000,7 +1273,7 @@ async function searchPlacesForRoute(query) {
 
   try {
     const url = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(q)}&format=json&limit=5&addressdetails=1`;
-    const res = await fetch(url, { headers: { "User-Agent": "Aurafisky/15.0.0", Accept: "application/json" } });
+    const res = await fetch(url, { headers: { "User-Agent": "Aurafisky/16.0.0", Accept: "application/json" } });
     if (res.ok) {
       const list = await res.json();
       return list.map((item) => ({
@@ -1032,6 +1305,10 @@ export async function addStop(lat, lng, name = null) {
 
   if (!name) {
     resolvePointName(pt);
+  }
+
+  if (isPanelOpen && pts.length >= 2) {
+    showRoutePanelLoading();
   }
 
   await updateRouteGeometry();
@@ -1178,18 +1455,58 @@ async function onMapClick(e) {
   closeWaypointPopover();
   const [lng, lat] = toLonLat(e.coordinate);
 
+  const role = pendingPickRole;
+  pendingPickRole = null;
+
+  const defaultName =
+    role === "origin"
+      ? "Departure Point"
+      : role === "destination"
+      ? "Destination Point"
+      : `Stop ${pts.length + 1}`;
+
   const pt = {
     lat,
     lng,
-    name: `Stop ${pts.length + 1}`,
+    name: defaultName,
     marker: null,
   };
-  pts.push(pt);
+
+  if (role === "origin") {
+    if (pts.length === 0) {
+      pts.push(pt);
+      appRef?.showToast?.("📍 Departure (A) set! Tap map for Destination (B)", "info");
+    } else {
+      if (pts[0].marker) {
+        try { pts[0].marker.remove(); } catch (_) {}
+      }
+      pts[0] = pt;
+      appRef?.showToast?.("📍 Departure (A) updated", "info");
+    }
+  } else if (role === "destination") {
+    if (pts.length < 2) {
+      pts.push(pt);
+      appRef?.showToast?.(pts.length === 1 ? "📍 Departure set! Tap map for Destination (B)" : "🏁 Destination (B) set", "info");
+    } else {
+      if (pts[pts.length - 1].marker) {
+        try { pts[pts.length - 1].marker.remove(); } catch (_) {}
+      }
+      pts[pts.length - 1] = pt;
+      appRef?.showToast?.("🏁 Destination (B) updated", "info");
+    }
+  } else {
+    pts.push(pt);
+  }
 
   renderWaypointMarkers();
   updateHUD();
+  updateRouteDropdownUI();
 
   resolvePointName(pt);
+
+  if (isPanelOpen && pts.length >= 2) {
+    showRoutePanelLoading();
+  }
 
   await updateRouteGeometry();
 
@@ -1312,6 +1629,7 @@ export function undoLastStop() {
   renderWaypointMarkers();
   updateRouteGeometry();
   updateHUD();
+  updateRouteDropdownUI();
   appRef.showToast("Removed last stop", "info");
 
   if (isPanelOpen) {
@@ -1336,6 +1654,7 @@ export function removeStop(index) {
   renderWaypointMarkers();
   updateRouteGeometry();
   updateHUD();
+  updateRouteDropdownUI();
   appRef.showToast(`Removed stop ${index + 1}`, "info");
 
   if (isPanelOpen) {
@@ -1359,6 +1678,7 @@ export function reverseRoute() {
   renderWaypointMarkers();
   updateRouteGeometry();
   updateHUD();
+  updateRouteDropdownUI();
   appRef.showToast("Route reversed (swapped start & destination)", "info");
 
   if (isPanelOpen) {
@@ -1400,6 +1720,7 @@ export async function optimizeWaypointOrder() {
   renderWaypointMarkers();
   await updateRouteGeometry();
   updateHUD();
+  updateRouteDropdownUI();
 
   const savedM = origDist - newDist;
   const units = getActiveUnits();
@@ -1422,6 +1743,7 @@ export function clearRoute() {
   if (routeSource) routeSource.clear();
   clearWaypointMarkers();
   updateHUD();
+  updateRouteDropdownUI();
   const bodyEl = panelEl ? panelEl.querySelector("#routePanelBody") : document.getElementById("routePanelBody");
   if (bodyEl) renderEmptyRoutePanel();
   const panelStopsCountEl = document.getElementById("routePanelStopsCount") || panelEl?.querySelector("#routePanelStopsCount");
@@ -2227,16 +2549,7 @@ export async function finishRoute() {
   showPanel();
   hideHUD();
   updateHUD();
-  const bodyEl = panelEl ? panelEl.querySelector("#routePanelBody") : document.getElementById("routePanelBody");
-  if (bodyEl) {
-    bodyEl.innerHTML = `
-      <div class="py-12 text-center space-y-3">
-        <div class="inline-block animate-spin text-2xl">🧭</div>
-        <div class="font-bold text-slate-800 dark:text-slate-100">Analyzing Route & Weather…</div>
-        <div class="text-xs text-slate-500 dark:text-slate-400">Computing real arrival ETAs and hazard conditions along ${pts.length} stops…</div>
-      </div>
-    `;
-  }
+  showRoutePanelLoading();
 
   appRef.showToast("Fetching time-aware weather along route…", "info");
 
@@ -2258,7 +2571,65 @@ export async function finishRoute() {
   }
 }
 
+function showRoutePanelLoading() {
+  const bodyEl = panelEl ? panelEl.querySelector("#routePanelBody") : document.getElementById("routePanelBody");
+  if (!bodyEl) return;
+
+  const panelStopsCountEl = document.getElementById("routePanelStopsCount") || panelEl?.querySelector("#routePanelStopsCount");
+  if (panelStopsCountEl) panelStopsCountEl.textContent = String(pts.length);
+
+  const liveStatsEl = document.getElementById("routePanelLiveStats") || panelEl?.querySelector("#routePanelLiveStats");
+  if (liveStatsEl) liveStatsEl.textContent = "Loading data…";
+
+  bodyEl.innerHTML = `
+    <div class="py-10 px-4 text-center space-y-4">
+      <div class="inline-flex items-center justify-center w-12 h-12 rounded-2xl bg-indigo-50 dark:bg-indigo-950/60 border border-indigo-200/50 dark:border-indigo-800/40 text-2xl shadow-sm mx-auto">
+        <span class="animate-spin inline-block">🧭</span>
+      </div>
+      <div class="space-y-1">
+        <div class="font-extrabold text-sm text-slate-900 dark:text-slate-100">Loading Route & Weather Data…</div>
+        <div class="text-xs text-slate-500 dark:text-slate-400">Computing road navigation & live weather along ${pts.length} stops…</div>
+      </div>
+      <div class="space-y-2.5 pt-2 max-w-[340px] mx-auto">
+        <div class="p-3 rounded-2xl bg-slate-100/70 dark:bg-slate-800/60 border border-slate-200/60 dark:border-slate-700/60 flex items-center justify-between gap-3 animate-pulse">
+          <div class="flex items-center gap-2.5 min-w-0">
+            <div class="w-7 h-7 rounded-lg bg-indigo-500/20"></div>
+            <div class="space-y-1.5 text-left">
+              <div class="h-3 w-28 bg-slate-200 dark:bg-slate-700 rounded-md"></div>
+              <div class="h-2 w-16 bg-slate-200/60 dark:bg-slate-700/40 rounded-md"></div>
+            </div>
+          </div>
+          <div class="h-6 w-14 bg-slate-200 dark:bg-slate-700 rounded-lg"></div>
+        </div>
+        <div class="p-3 rounded-2xl bg-slate-100/70 dark:bg-slate-800/60 border border-slate-200/60 dark:border-slate-700/60 flex items-center justify-between gap-3 animate-pulse">
+          <div class="flex items-center gap-2.5 min-w-0">
+            <div class="w-7 h-7 rounded-lg bg-indigo-500/20"></div>
+            <div class="space-y-1.5 text-left">
+              <div class="h-3 w-32 bg-slate-200 dark:bg-slate-700 rounded-md"></div>
+              <div class="h-2 w-20 bg-slate-200/60 dark:bg-slate-700/40 rounded-md"></div>
+            </div>
+          </div>
+          <div class="h-6 w-14 bg-slate-200 dark:bg-slate-700 rounded-lg"></div>
+        </div>
+        <div class="p-3 rounded-2xl bg-slate-100/70 dark:bg-slate-800/60 border border-slate-200/60 dark:border-slate-700/60 flex items-center justify-between gap-3 animate-pulse">
+          <div class="flex items-center gap-2.5 min-w-0">
+            <div class="w-7 h-7 rounded-lg bg-indigo-500/20"></div>
+            <div class="space-y-1.5 text-left">
+              <div class="h-3 w-24 bg-slate-200 dark:bg-slate-700 rounded-md"></div>
+              <div class="h-2 w-14 bg-slate-200/60 dark:bg-slate-700/40 rounded-md"></div>
+            </div>
+          </div>
+          <div class="h-6 w-14 bg-slate-200 dark:bg-slate-700 rounded-lg"></div>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
 async function fetchAndRenderRoutePlan() {
+  if (isPanelOpen) {
+    showRoutePanelLoading();
+  }
   const units = getActiveUnits();
   const totalDurationS = activeRouteData?.durationS || 3600;
   const departureDate = new Date(Date.now() + departureOffsetHours * 3600 * 1000);
@@ -2602,10 +2973,11 @@ function renderRoutePanelContent(stops, units) {
     })
     .join("");
 
-  // =========================================================================
-  // TAB 3: TRIP ANALYTICS & MULTIMODAL COMPARISON
-  // =========================================================================
-  const driveSec = calculateModeDuration(totalDistanceM, "driving", totalDurationS);
+  const driveSec = calculateModeDuration(
+    totalDistanceM,
+    "driving",
+    transportMode === "driving" ? totalDurationS : null
+  );
   const bikeSec = calculateModeDuration(totalDistanceM, "cycling");
   const walkSec = calculateModeDuration(totalDistanceM, "walking");
   const flightSec = calculateModeDuration(totalDistanceM, "direct");

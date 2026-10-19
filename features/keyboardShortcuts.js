@@ -2,8 +2,8 @@
 
 function initKeyboardShortcuts() {
     document.addEventListener("keydown", (e) => {
-      // Don't trigger if typing in an input
-      if (e.target.tagName === "INPUT" || e.target.tagName === "TEXTAREA") {
+      // Don't trigger if typing in an input, textarea or select dropdown
+      if (e.target.tagName === "INPUT" || e.target.tagName === "TEXTAREA" || e.target.tagName === "SELECT") {
         if (e.key === "Escape") {
           e.target.blur();
           this.$.searchDropdown.classList.remove("open");
@@ -55,6 +55,18 @@ function initKeyboardShortcuts() {
         case "l":
           e.preventDefault();
           this.toggleMapLayersFlyout?.();
+          break;
+        case "s":
+          e.preventDefault();
+          this.cycleMapStyle?.(e.shiftKey ? -1 : 1);
+          break;
+        case "[":
+          e.preventDefault();
+          this.cycleMapStyle?.(-1);
+          break;
+        case "]":
+          e.preventDefault();
+          this.cycleMapStyle?.(1);
           break;
         case "w":
           e.preventDefault();

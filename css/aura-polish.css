@@ -500,14 +500,25 @@ input[type='range'].timeline-slider:focus-visible {
 /* Mobile phones: sleek, compact map tool buttons */
 @media (max-width: 639px), (max-height: 500px) and (pointer: coarse) {
   #zoomControls {
+    left: 0.5rem !important;
+    right: auto !important;
+    gap: 0.25rem !important;
+  }
+  #mobileMapControls {
     right: 0.5rem !important;
+    left: auto !important;
     gap: 0.25rem !important;
   }
   #zoomControls > button,
+  #mobileMapControls button,
+  #mobileMapControls .mobile-floating-control,
   #radarControls > button,
   #mapLayersBtn,
   #terminatorToggleBtn,
-  #extremesBtn {
+  #extremesBtn,
+  #mobileFloatingShareBtn,
+  #mobileLocationFab,
+  #mobileDirectionsFab {
     min-width: 36px !important;
     min-height: 36px !important;
     width: 36px !important;
@@ -688,6 +699,10 @@ input[type='range'].timeline-slider:focus-visible {
 /* #zoomControls is also translated by the -translate-y-1/2 utility in
    index.html, so the scale must compose with it rather than replace it. */
 [data-device='tv'] #zoomControls {
+  transform: translateY(-50%) scale(1.08);
+  transform-origin: center left;
+}
+[data-device='tv'] #mobileMapControls {
   transform: translateY(-50%) scale(1.08);
   transform-origin: center right;
 }

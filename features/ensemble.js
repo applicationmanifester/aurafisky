@@ -52,10 +52,13 @@ async function fetchModelSnapshot(lat, lng, modelId, signal) {
   const cacheKey = `${round(lat)},${round(lng)},${modelId || "auto"}`;
   if (_ensembleCache.has(cacheKey)) {
     const entry = _ensembleCache.get(cacheKey);
-    if (Date.now() - entry.ts < ENSEMBLE_CACHE_TTL) {
-      return entry.data;
+    if (entry) {
+      if (entry.promise) return await entry.promise;
+      if (Date.now() - entry.ts < ENSEMBLE_CACHE_TTL) {
+        return entry.data;
+      }
+      _ensembleCache.delete(cacheKey);
     }
-    _ensembleCache.delete(cacheKey);
   }
 
   const base = "https://api.open-meteo.com/v1/forecast";
@@ -69,31 +72,38 @@ async function fetchModelSnapshot(lat, lng, modelId, signal) {
   });
   if (modelId) params.set("models", modelId);
   const url = base + "?" + params.toString();
-  try {
-    const res = await fetch(url, { signal });
-    if (!res.ok) {
-      // If a 4xx with a specific model, retry without model selection
-      if (modelId && res.status >= 400 && res.status < 500) {
-        return fetchModelSnapshot(lat, lng, null, signal);
+
+  const fetchPromise = (async () => {
+    try {
+      const res = await fetch(url, { signal });
+      if (!res.ok) {
+        // If a 4xx with a specific model (except 429), retry without model selection
+        if (modelId && res.status >= 400 && res.status < 500 && res.status !== 429) {
+          return fetchModelSnapshot(lat, lng, null, signal);
+        }
+        return null; // 429/503/offline
       }
-      return null; // 429/503/offline
+      const j = await res.json();
+      const result = {
+        model: modelId || "auto",
+        temp: j.current && j.current.temperature_2m,
+        precip: j.current && j.current.precipitation,
+        code: j.current && j.current.weather_code,
+        precipProb:
+          j.hourly && j.hourly.precipitation_probability
+            ? j.hourly.precipitation_probability.slice(0, 6)
+            : [],
+      };
+      _ensembleCache.set(cacheKey, { data: result, ts: Date.now() });
+      return result;
+    } catch {
+      _ensembleCache.delete(cacheKey);
+      return null; // network error / offline / aborted
     }
-    const j = await res.json();
-    const result = {
-      model: modelId || "auto",
-      temp: j.current && j.current.temperature_2m,
-      precip: j.current && j.current.precipitation,
-      code: j.current && j.current.weather_code,
-      precipProb:
-        j.hourly && j.hourly.precipitation_probability
-          ? j.hourly.precipitation_probability.slice(0, 6)
-          : [],
-    };
-    _ensembleCache.set(cacheKey, { data: result, ts: Date.now() });
-    return result;
-  } catch {
-    return null; // network error / offline / aborted
-  }
+  })();
+
+  _ensembleCache.set(cacheKey, { promise: fetchPromise, ts: Date.now() });
+  return await fetchPromise;
 }
 
 let ensembleAbortCtrl = null;

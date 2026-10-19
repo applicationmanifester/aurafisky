@@ -202,14 +202,16 @@ html, body {
   /* ── Mobile Bottom Sheets & Floating FABs ─────────────────── */
   /* Floating GPS Locate Me Button */
   #mobileLocationFab {
-    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.18), 0 0 0 1px rgba(20, 184, 166, 0.2);
+    box-shadow: 0 4px 14px rgba(0, 0, 0, 0.15);
   }
   #mobileLocationFab:active {
     transform: scale(0.92);
   }
 
-  /* Saved Places Bottom Sheet */
-  #bookmarksDropdown {
+  /* Saved Places Bottom Sheet & Home / Route Planner Dropdowns */
+  #bookmarksDropdown,
+  #homeDropdown,
+  #routeDropdown {
     position: fixed !important;
     left: 0 !important;
     right: 0 !important;
@@ -221,7 +223,7 @@ html, body {
     border-radius: 1.5rem 1.5rem 0 0 !important;
     margin: 0 !important;
     padding: 1rem 1.25rem !important;
-    z-index: 1040 !important;
+    z-index: 1055 !important;
     box-shadow: 0 -10px 40px rgba(0, 0, 0, 0.25) !important;
     border-bottom: none !important;
     background: var(--glass-bg);
@@ -393,9 +395,12 @@ html, body {
   transition: transform 0.4s cubic-bezier(0.22, 1, 0.36, 1);
   contain: paint;
   will-change: transform;
+  border: 2px solid #f97316 !important;
+  box-shadow: 0 0 0 1px rgba(249, 115, 22, 0.35), 0 20px 45px -10px rgba(249, 115, 22, 0.25) !important;
 }
 .weather-panel.open {
   transform: translateX(0);
+  border: 2px solid #f97316 !important;
 }
 
 /* Mobile: slide up from bottom above mobile bottom navigation */
@@ -411,11 +416,15 @@ html, body {
     max-width: 100% !important;
     max-height: calc(78vh - 3.5rem - env(safe-area-inset-bottom, 0px));
     border-radius: 1.25rem 1.25rem 0 0 !important;
+    border: 2px solid #f97316 !important;
+    border-bottom: none !important;
     /* Momentum scrolling for iOS */
     -webkit-overflow-scrolling: touch;
   }
   .weather-panel.open {
     transform: translateY(0);
+    border: 2px solid #f97316 !important;
+    border-bottom: none !important;
   }
   .weather-panel:not(.open),
   #weatherPanel:not(.open) {
@@ -439,6 +448,7 @@ html, body {
     height: 100dvh !important;
     max-height: 100dvh !important;
     border-radius: 0 !important;
+    border: 2px solid #f97316 !important;
     z-index: 1200 !important;
     background-color: #ffffff !important;
     padding-top: env(safe-area-inset-top, 0px);
@@ -450,6 +460,7 @@ html, body {
   :is(.dark, [data-theme="dark"]) .weather-panel.open.aura-sheet.sheet-full,
   :is(.dark, [data-theme="dark"]) .weather-panel.open.google-maps-sheet.sheet-full {
     background-color: #202124 !important;
+    border: 2px solid #f97316 !important;
   }
 }
 
@@ -2129,31 +2140,62 @@ button, a, input, select, textarea, [role="button"] {
     padding: 0.55rem;
   }
 
-  /* Zoom controls: compact, sleek buttons centered on the right edge on mobile map view */
+  /* Zoom controls: compact, sleek buttons centered on the left edge on mobile map view */
   #zoomControls {
-    right: 0.5rem !important;
-    gap: 0.25rem !important;
-    top: 42% !important;
+    left: 0.65rem !important;
+    right: auto !important;
+    gap: 0.35rem !important;
+    top: 50% !important;
     bottom: auto !important;
     transform: translateY(-50%) !important;
   }
 
+  /* Right-side action controls: uniform vertical column centered on right edge */
+  #mobileMapControls {
+    right: 0.65rem !important;
+    left: auto !important;
+    gap: 0.35rem !important;
+    top: 50% !important;
+    bottom: auto !important;
+    transform: translateY(-50%) !important;
+    display: flex !important;
+    flex-direction: column !important;
+    align-items: center !important;
+  }
+
   #zoomControls > button,
+  #mobileMapControls button,
+  #mobileMapControls .mobile-floating-control,
   #radarControls > button,
   #mapLayersBtn,
   #terminatorToggleBtn,
-  #extremesBtn {
+  #extremesBtn,
+  #mobileFloatingShareBtn,
+  #mobileLocationFab,
+  #mobileDirectionsFab {
     width: 2.25rem !important;
     height: 2.25rem !important;
     min-width: 2.25rem !important;
     min-height: 2.25rem !important;
     border-radius: 0.75rem !important;
     padding: 0 !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
   }
 
-  #zoomControls svg {
-    width: 1.15rem !important;
-    height: 1.15rem !important;
+  #zoomControls svg,
+  #mobileMapControls svg,
+  #mapLayersBtn svg,
+  #terminatorToggleBtn svg,
+  #extremesBtn svg,
+  #mobileFloatingShareBtn svg,
+  #mobileLocationFab svg,
+  #mobileDirectionsFab svg {
+    width: 1.2rem !important;
+    height: 1.2rem !important;
+    max-width: 1.2rem !important;
+    max-height: 1.2rem !important;
   }
 
   /* Horizontal quick action chips on mobile */
@@ -2179,28 +2221,58 @@ button, a, input, select, textarea, [role="button"] {
     display: none !important;
   }
 
-  /* Radar expanded panel sits above mobile bottom nav */
+  /* Radar expanded panel sits to the left of the radar button */
   #radarExpandedPanel {
-    right: 3.4rem;
-    bottom: calc(3.5rem + env(safe-area-inset-bottom, 0px) + 0.25rem);
+    right: 3.25rem !important;
+    top: 50% !important;
+    bottom: auto !important;
+    transform: translateY(-50%) !important;
   }
 
-  /* Map layers flyout: on mobile, anchor cleanly above all panels with z-index 1200 */
+  /* Map layers flyout: on mobile, anchor to bottom above nav bar with z-index 1250 */
   #mapLayersFlyout {
     position: fixed !important;
-    right: 1rem !important;
-    left: 1rem !important;
+    left: 50% !important;
+    right: auto !important;
     top: auto !important;
-    bottom: calc(4.5rem + env(safe-area-inset-bottom, 0px)) !important;
-    transform: none !important;
-    width: auto !important;
-    max-width: 320px !important;
-    margin: 0 auto !important;
-    z-index: 1200 !important;
-    max-height: 70vh;
-    overflow-y: auto;
+    bottom: calc(4.2rem + env(safe-area-inset-bottom, 0px)) !important;
+    transform: translateX(-50%) !important;
+    width: min(290px, calc(100vw - 2rem)) !important;
+    max-width: 290px !important;
+    max-height: calc(72vh - env(safe-area-inset-bottom, 0px)) !important;
+    margin: 0 !important;
+    z-index: 1250 !important;
+    overflow-y: auto !important;
     -webkit-overflow-scrolling: touch;
-    box-shadow: 0 16px 48px rgba(0, 0, 0, 0.45) !important;
+    box-shadow: 0 20px 50px rgba(0, 0, 0, 0.5) !important;
+    border-radius: 1.25rem !important;
+  }
+
+  #mapLayersFlyout.minimized {
+    top: auto !important;
+    bottom: calc(4.2rem + env(safe-area-inset-bottom, 0px)) !important;
+    left: 50% !important;
+    transform: translateX(-50%) !important;
+    width: auto !important;
+    min-width: 220px !important;
+    max-width: calc(100vw - 2rem) !important;
+    max-height: none !important;
+    overflow: visible !important;
+  }
+
+  #mapModeSelectDropdown {
+    background-image: none;
+    font-family: inherit;
+  }
+
+  #mapModeSelectDropdown option {
+    background-color: #ffffff;
+    color: #1e293b;
+  }
+
+  .dark #mapModeSelectDropdown option {
+    background-color: #0f172a;
+    color: #f8fafc;
   }
 
   /* Weather panel scrollable content: momentum scroll on iOS and paint/layout isolation */
@@ -2300,7 +2372,12 @@ button, a, input, select, textarea, [role="button"] {
   #comparePanel.open ~ #zoomControls,
   body:has(.weather-panel.open:not(.minimized)) #zoomControls,
   body:has(#comparePanel.open) #zoomControls,
-  body:has(#routePanel:not(.hidden)) #zoomControls,
+  body:has(#routePanel:not(.hidden)) #zoomControls {
+    opacity: 0 !important;
+    pointer-events: none !important;
+    transform: translateY(-50%) translateX(-36px) scale(0.9) !important;
+  }
+
   .weather-panel.open:not(.minimized) ~ #mobileMapControls,
   #comparePanel.open ~ #mobileMapControls,
   body:has(.weather-panel.open:not(.minimized)) #mobileMapControls,
@@ -2308,7 +2385,7 @@ button, a, input, select, textarea, [role="button"] {
   body:has(#routePanel:not(.hidden)) #mobileMapControls {
     opacity: 0 !important;
     pointer-events: none !important;
-    transform: translateX(36px) scale(0.9) !important;
+    transform: translateY(-50%) translateX(36px) scale(0.9) !important;
   }
   #zoomControls,
   #mobileMapControls {
@@ -2470,6 +2547,38 @@ button, a, input, select, textarea, [role="button"] {
 }
 
 /* ── Map Mode & Terrain Switcher Cards ────────────────────────── */
+#mapLayersFlyout {
+  transition: width 0.2s cubic-bezier(0.16, 1, 0.3, 1),
+              padding 0.2s cubic-bezier(0.16, 1, 0.3, 1),
+              box-shadow 0.2s ease,
+              transform 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+#mapLayersFlyout.minimized {
+  width: auto !important;
+  min-width: 210px !important;
+  max-width: 260px !important;
+  padding: 0.5rem 0.75rem !important;
+  box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.2), 0 8px 10px -6px rgba(0, 0, 0, 0.1) !important;
+}
+#mapLayersFlyout.minimized #mapLayersHeader {
+  margin-bottom: 0 !important;
+  padding-bottom: 0 !important;
+  border-bottom: none !important;
+}
+#mapLayersFlyout.minimized #mapLayersBody,
+#mapLayersFlyout.minimized #mapLayersShortcutHint {
+  display: none !important;
+}
+#mapLayersFlyout.minimized #mapLayersActiveBadge {
+  display: inline-flex !important;
+}
+#mapLayersFlyout.minimized #minimizeMapLayersIcon {
+  display: none !important;
+}
+#mapLayersFlyout.minimized #expandMapLayersIcon {
+  display: block !important;
+}
+
 .map-style-card {
   transition: all 0.15s cubic-bezier(0.4, 0, 0.2, 1);
 }
@@ -2749,10 +2858,10 @@ button, a, input, select, textarea, [role="button"] {
   }
 
   /* Only when explicitly minimized or in peek mode, collapse to bottom peek bar */
-  .weather-panel.open.aura-sheet.sheet-peek,
-  .weather-panel.open.google-maps-sheet.sheet-peek,
-  .weather-panel.open.aura-sheet.minimized,
-  .weather-panel.open.google-maps-sheet.minimized {
+  .weather-panel.open.aura-sheet.sheet-peek:not(.sheet-full),
+  .weather-panel.open.google-maps-sheet.sheet-peek:not(.sheet-full),
+  .weather-panel.open.aura-sheet.minimized:not(.sheet-full),
+  .weather-panel.open.google-maps-sheet.minimized:not(.sheet-full) {
     top: auto !important;
     bottom: calc(3.5rem + env(safe-area-inset-bottom, 0px)) !important;
     height: 175px !important;
@@ -2761,6 +2870,9 @@ button, a, input, select, textarea, [role="button"] {
     z-index: 1040 !important;
     padding-top: 0 !important;
     padding-bottom: 0 !important;
+    border: 2px solid #f97316 !important;
+    border-bottom: none !important;
+    box-shadow: 0 -6px 28px rgba(249, 115, 22, 0.35) !important;
   }
 
   /* Full screen mobile overlap for Weather Card */
@@ -2825,4 +2937,27 @@ button, a, input, select, textarea, [role="button"] {
   #restoreSheetPill {
     display: none !important;
   }
+}
+
+/* Bookmark item delete trash icon */
+.bookmark-remove-btn {
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  width: 28px !important;
+  height: 28px !important;
+  min-width: 28px !important;
+  min-height: 28px !important;
+  opacity: 1 !important;
+  visibility: visible !important;
+  cursor: pointer !important;
+}
+.bookmark-remove-btn svg {
+  display: block !important;
+  width: 16px !important;
+  height: 16px !important;
+  min-width: 16px !important;
+  min-height: 16px !important;
+  stroke: currentColor !important;
+  fill: none !important;
 }

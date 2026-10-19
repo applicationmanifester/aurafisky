@@ -327,5 +327,41 @@ test("Route Weather Studio provides movable bottom sheet states and drag handles
   expect(css).toContain("#routePanel.sheet-full");
 });
 
+test("Route Weather & Planner Dropdown exists with all required options", () => {
+  const fs = require("fs");
+  const html = fs.readFileSync("index.html", "utf-8");
+  const routesCode = fs.readFileSync("features/routes.js", "utf-8");
+  const css = fs.readFileSync("styles.css", "utf-8");
+
+  // Dropdown markup in index.html
+  expect(html).toContain('id="routeDropdown"');
+  expect(html).toContain('id="routeDropdownSelectOriginBtn"');
+  expect(html).toContain('id="routeDropdownSelectDestBtn"');
+  expect(html).toContain('id="routeDropdownAddStopBtn"');
+  expect(html).toContain('id="routeDropdownOpenStudioBtn"');
+  expect(html).toContain('id="routeDropdownCloseStudioBtn"');
+  expect(html).toContain('id="routeDropdownDeleteLocationsBtn"');
+
+  // Logic in routes.js
+  expect(routesCode).toContain("export function toggleRouteDropdown(");
+  expect(routesCode).toContain("export function updateRouteDropdownUI()");
+
+  // CSS in styles.css
+  expect(css).toContain("#routeDropdown");
+});
+
+test("Driving and flight durations in analytics are calculated separately", () => {
+  const dist56km = 56000;
+  const flightSec = calculateModeDuration(dist56km, "direct");
+  // For driving, when not in driving mode, it calculates road driving time independently rather than copying flight time
+  const driveSec = calculateModeDuration(dist56km, "driving", null);
+  expect(driveSec).toBeGreaterThan(0);
+  expect(flightSec).toBeGreaterThan(0);
+  // Flight includes 30 min takeoff/climb + 800km/h cruise; drive is 80 km/h
+  // Ensure they are not arbitrarily forced equal
+  expect(driveSec).not.toEqual(flightSec);
+});
+
+
 
 

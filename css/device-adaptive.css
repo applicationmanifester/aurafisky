@@ -339,10 +339,17 @@
   border-radius: 10px;
   box-shadow: 0 0 0 6px rgba(45, 212, 191, 0.3);
 }
-[data-device="tv"] #timelineBar,
-[data-device="tv"] #zoomControls {
+[data-device="tv"] #timelineBar {
   transform: scale(1.08);
   transform-origin: bottom right;
+}
+[data-device="tv"] #zoomControls {
+  transform: scale(1.08);
+  transform-origin: center left;
+}
+[data-device="tv"] #mobileMapControls {
+  transform: scale(1.08);
+  transform-origin: center right;
 }
 
 /* ── 8. Foldables ── */

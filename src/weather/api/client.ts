@@ -44,11 +44,21 @@ async function fetchWithTimeout(
   const { timeout = DEFAULT_TIMEOUT, signal, ...fetchOptions } = options;
 
   const controller = new AbortController();
-  const abortSignals: AbortSignal[] = [controller.signal];
-  if (signal) abortSignals.push(signal);
-
-  // Combine signals
-  const combinedSignal = AbortSignal.any(abortSignals);
+  let combinedSignal: AbortSignal;
+  if (typeof AbortSignal !== 'undefined' && typeof (AbortSignal as any).any === 'function') {
+    const abortSignals: AbortSignal[] = [controller.signal];
+    if (signal) abortSignals.push(signal);
+    combinedSignal = (AbortSignal as any).any(abortSignals);
+  } else if (signal) {
+    if (signal.aborted) {
+      controller.abort();
+    } else {
+      signal.addEventListener('abort', () => controller.abort(), { once: true });
+    }
+    combinedSignal = controller.signal;
+  } else {
+    combinedSignal = controller.signal;
+  }
 
   const timeoutId = setTimeout(() => controller.abort(), timeout);
 
@@ -84,17 +94,17 @@ export async function fetchWithRetry<T>(
       const response = await fetchWithTimeout(url, { signal, timeout });
 
       if (!response.ok) {
-        // Don't retry 4xx errors (client errors)
-        if (response.status >= 400 && response.status < 500) {
+        // Don't retry 4xx errors (client errors), EXCEPT 429 (Too Many Requests / rate limit)
+        if (response.status >= 400 && response.status < 500 && response.status !== 429) {
           throw new WeatherApiError(
             `API error: ${response.status}`,
             response.status,
             url
           );
         }
-        // Retry 5xx errors
+        // Retry 5xx errors and 429 rate limit
         throw new WeatherApiError(
-          `Server error: ${response.status}`,
+          response.status === 429 ? `Rate limited: 429` : `Server error: ${response.status}`,
           response.status,
           url
         );
@@ -104,12 +114,15 @@ export async function fetchWithRetry<T>(
     } catch (err) {
       lastError = err instanceof Error ? err : new Error(String(err));
 
-      // Don't retry on client errors or abort
-      if (err instanceof WeatherApiError && err.status < 500) throw err;
+      // Don't retry on client errors (except 429) or abort
+      if (err instanceof WeatherApiError && err.status < 500 && err.status !== 429) throw err;
       if (err instanceof DOMException && err.name === 'AbortError') throw err;
 
       if (attempt < retries) {
-        const delay = BASE_DELAY * Math.pow(2, attempt);
+        const isRateLimit = err instanceof WeatherApiError && err.status === 429;
+        const delay = isRateLimit
+          ? 1500 * Math.pow(2, attempt) + Math.random() * 500
+          : BASE_DELAY * Math.pow(2, attempt);
         await new Promise((resolve) => setTimeout(resolve, delay));
       }
     }

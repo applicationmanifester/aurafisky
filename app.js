@@ -132,6 +132,7 @@ const LOCAL_DATA_KEYS = new Set([
   "aurafisky_alert_fired",
   "aurafisky_terminator",
   "aurafisky_map_style",
+  "aurafisky_map_layers_minimized",
   "aurafisky_show_bookmarks_map",
   "aurafisky_dismiss_install_banner",
   "aurafisky_desktop_panel_pos",
@@ -240,6 +241,10 @@ class AurafiskyApp {
     // Bookmark map markers
     this.bookmarkMarkers = []; // Leaflet markers for bookmarked locations
     this.showBookmarksOnMap = localStorage.getItem("aurafisky_show_bookmarks_map") !== "false";
+
+    // Wallpaper preset state
+    this.wallpaperPreset = localStorage.getItem("aurafisky_wallpaper_preset") || "none";
+
 
     // Sunrise countdown timer
     this.sunCountdownTimer = null;
@@ -403,6 +408,10 @@ class AurafiskyApp {
       // Map overlay toggles (modes/terrain, day/night terminator, isobars, extremes)
       mapLayersBtn: document.getElementById("mapLayersBtn"),
       mapLayersFlyout: document.getElementById("mapLayersFlyout"),
+      minimizeMapLayersBtn: document.getElementById("minimizeMapLayersBtn"),
+      mapLayersHeaderTitle: document.getElementById("mapLayersHeaderTitle"),
+      mapLayersActiveBadge: document.getElementById("mapLayersActiveBadge"),
+      mapLayersBody: document.getElementById("mapLayersBody"),
       mapStyleGrid: document.getElementById("mapStyleGrid"),
       settingsMapStyleSelect: document.getElementById("settingsMapStyleSelect"),
       terminatorToggleBtn: document.getElementById("terminatorToggleBtn"),
@@ -1157,12 +1166,49 @@ class AurafiskyApp {
       const savedMapStyle = localStorage.getItem("aurafisky_map_style");
       this.mapStyle = savedMapStyle || (this.isDark ? "dark" : "street");
 
-      this.lightBasemap = new LayerGroup();
-      this.darkBasemap = new LayerGroup();
+      // Map opacity: 0-1 range
+      const savedOpacity = localStorage.getItem("aurafisky_map_opacity");
+      this.mapOpacity = savedOpacity ? parseFloat(savedOpacity) : 1;
+
+      // Terrain overlay toggle
+      const savedTerrain = localStorage.getItem("aurafisky_terrain_overlay");
+      this.terrainOverlayEnabled = savedTerrain !== null ? savedTerrain === "true" : false;
+
+      // Map layers minimized state
+      const savedLayersMin = localStorage.getItem("aurafisky_map_layers_minimized");
+      this.mapLayersMinimized = savedLayersMin === "true";
+      if (this.mapLayersMinimized && this.$.mapLayersFlyout) {
+        this.$.mapLayersFlyout.classList.add("minimized");
+      }
+
+      // Instant global edge raster basemaps so the map paints in <50ms immediately
+      // while OpenFreeMap vector styles stream in the background
+      const instantLightTile = new TileLayer({
+        source: new XYZ({
+          url: "https://{a-c}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png",
+          maxZoom: 19,
+          crossOrigin: "anonymous",
+          cacheSize: 2048,
+          attributions: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/attributions">CARTO</a>'
+        }),
+        zIndex: 0
+      });
+      const instantDarkTile = new TileLayer({
+        source: new XYZ({
+          url: "https://{a-c}.basemaps.cartocdn.com/rastertiles/dark_all/{z}/{x}/{y}{r}.png",
+          maxZoom: 19,
+          crossOrigin: "anonymous",
+          cacheSize: 2048,
+          attributions: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/attributions">CARTO</a>'
+        }),
+        zIndex: 0
+      });
+
+      this.lightBasemap = new LayerGroup({ layers: [instantLightTile] });
+      this.darkBasemap = new LayerGroup({ layers: [instantDarkTile] });
 
       // Satellite basemap: High-resolution Esri World Imagery + Reference Boundaries & Places
-      // maxZoom is set to 18 so OpenLayers oversamples high-res imagery instead of requesting
-      // level 19+ tiles from Esri which lack global coverage and serve "Map data not yet available" placeholders.
+      // Native hardware-accelerated image pipeline with browser edge caching
       this.satelliteBasemap = new LayerGroup({
         layers: [
           new TileLayer({
@@ -1170,37 +1216,18 @@ class AurafiskyApp {
               url: "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
               maxZoom: 18,
               crossOrigin: "anonymous",
-              attributions: "Tiles &copy; Esri &mdash; Source: Esri, Maxar, Earthstar Geographics, and the GIS User Community",
-              tileLoadFunction: (tile, src) => {
-                fetch(src)
-                  .then((res) => {
-                    if (!res.ok) throw new Error("Tile fetch failed");
-                    return res.blob();
-                  })
-                  .then((blob) => {
-                    // Esri serves a ~2521 byte dummy tile with "Map data not yet available"
-                    // when coverage is absent at extreme zooms. Intercept and replace with transparent pixel.
-                    if (blob.size <= 3200 && blob.type.includes("jpeg")) {
-                      tile.getImage().src = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=";
-                    } else {
-                      tile.getImage().src = URL.createObjectURL(blob);
-                    }
-                  })
-                  .catch(() => {
-                    tile.getImage().src = src;
-                  });
-              }
-            }),
-            preload: 1
+              cacheSize: 2048,
+              attributions: "Tiles &copy; Esri &mdash; Source: Esri, Maxar, Earthstar Geographics, and the GIS User Community"
+            })
           }),
           new TileLayer({
             source: new XYZ({
               url: "https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}",
               maxZoom: 18,
-              crossOrigin: "anonymous"
+              crossOrigin: "anonymous",
+              cacheSize: 2048
             }),
-            opacity: 0.95,
-            preload: 1
+            opacity: 0.95
           })
         ]
       });
@@ -1518,6 +1545,25 @@ class AurafiskyApp {
     // ── Bookmarks Favorites ───────────────────────────────────
     this.$.bookmarksBtn.addEventListener("click", (e) => {
       e.stopPropagation();
+      this.showBookmarksOnMap = true;
+      try { localStorage.setItem("aurafisky_show_bookmarks_map", "true"); } catch (_) {}
+      this.updateBookmarksMapToggleUI?.();
+      this.refreshBookmarkPins?.();
+      if (this.bookmarks && this.bookmarks.length > 0) {
+        const coords = this.bookmarks.map((b) => fromLonLat([b.lng, b.lat]));
+        let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+        coords.forEach(([x, y]) => {
+          if (x < minX) minX = x;
+          if (y < minY) minY = y;
+          if (x > maxX) maxX = x;
+          if (y > maxY) maxY = y;
+        });
+        if (this.bookmarks.length === 1) {
+          this.map?.getView().animate({ center: coords[0], zoom: 10, duration: 600 });
+        } else {
+          this.map?.getView().fit([minX, minY, maxX, maxY], { padding: [80, 80, 160, 80], maxZoom: 12, duration: 600 });
+        }
+      }
       this.$.bookmarksDropdown.classList.toggle("hidden");
       this._haptic('selection');
     });
@@ -1545,10 +1591,15 @@ class AurafiskyApp {
       });
       this.updateBookmarksMapToggleUI();
     }
-    this.$.homeToggleBtn.addEventListener("click", () => {
-      // Set/move/remove home to the currently selected location.
-      // (Navigating to home uses the home marker click.)
-      this.toggleHomeLocation();
+    this.$.homeToggleBtn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      if (this.defaultLocation && this.defaultLocation.lat != null) {
+        this.toggleHomeDropdown();
+      } else if (this.selectedLat != null && this.selectedLng != null) {
+        this.setHomeLocation(this.selectedLat, this.selectedLng, this.selectedName);
+      } else {
+        this.showToast("📍 Tap any place on map or search a city, then tap Home to save your home.", "info");
+      }
       this._haptic('light');
     });
     this.$.favoriteToggleBtn.addEventListener("click", () => {
@@ -2050,7 +2101,127 @@ class AurafiskyApp {
       });
     });
 
+    // ── Map Opacity Slider ──────────────────────────
+    const opacitySlider = document.getElementById("mapOpacitySlider");
+    const opacityValue = document.getElementById("mapOpacityValue");
+    if (opacitySlider && opacityValue) {
+      opacitySlider.addEventListener("input", (e) => {
+        const val = parseInt(e.target.value, 10);
+        opacityValue.textContent = `${val}%`;
+        this.mapOpacity = val / 100;
+        try {
+          localStorage.setItem("aurafisky_map_opacity", String(this.mapOpacity));
+        } catch (_) {}
+        this._applyMapOpacity();
+        this._haptic?.('selection');
+      });
+    }
+
+    // ── Terrain Overlay Toggle ──────────────────────
+    const terrainToggle = document.getElementById("terrainOverlayToggle");
+    if (terrainToggle) {
+      terrainToggle.addEventListener("change", (e) => {
+        this.terrainOverlayEnabled = e.target.checked;
+        try {
+          localStorage.setItem("aurafisky_terrain_overlay", String(this.terrainOverlayEnabled));
+        } catch (_) {}
+        this._applyTerrainOverlay();
+        this._haptic?.('selection');
+      });
+    }
+
+
     document.getElementById("closeMapLayersBtn")?.addEventListener("click", (e) => {
+      e.stopPropagation();
+      this.toggleMapLayersFlyout(false);
+      this._haptic?.('selection');
+    });
+
+    const mapModeSelect = document.getElementById("mapModeSelectDropdown");
+    if (mapModeSelect) {
+      const handleModeChange = (e) => {
+        const val = e.target.value;
+        if (val) {
+          this.setMapStyle(val);
+          this._haptic?.('selection');
+        }
+      };
+      mapModeSelect.addEventListener("change", handleModeChange);
+      mapModeSelect.addEventListener("input", handleModeChange);
+    }
+
+    document.getElementById("prevMapModeBtn")?.addEventListener("click", (e) => {
+      e.stopPropagation();
+      this.cycleMapStyle(-1);
+      this._haptic?.('selection');
+    });
+
+    document.getElementById("nextMapModeBtn")?.addEventListener("click", (e) => {
+      e.stopPropagation();
+      this.cycleMapStyle(1);
+      this._haptic?.('selection');
+    });
+
+    // Home Location Dropdown Options
+    document.getElementById("closeHomeDropdownBtn")?.addEventListener("click", (e) => {
+      e.stopPropagation();
+      this.toggleHomeDropdown(false);
+      this._haptic?.('light');
+    });
+
+    document.getElementById("homeDropdownGoBtn")?.addEventListener("click", (e) => {
+      e.stopPropagation();
+      this.toggleHomeDropdown(false);
+      this.goToHomeLocation?.();
+      this._haptic?.('selection');
+    });
+
+    document.getElementById("homeDropdownSetCurrentBtn")?.addEventListener("click", (e) => {
+      e.stopPropagation();
+      this.toggleHomeDropdown(false);
+      if (this.selectedLat != null && this.selectedLng != null) {
+        this.setHomeLocation?.(this.selectedLat, this.selectedLng, this.selectedName);
+      } else {
+        this.showToast("Select a location on the map first.", "info");
+      }
+      this._haptic?.('selection');
+    });
+
+    document.getElementById("homeDropdownRemoveBtn")?.addEventListener("click", (e) => {
+      e.stopPropagation();
+      this.toggleHomeDropdown(false);
+      this.removeHomeLocation?.();
+      this._haptic?.('selection');
+    });
+
+    document.getElementById("minimizeMapLayersBtn")?.addEventListener("click", (e) => {
+      e.stopPropagation();
+      this.toggleMapLayersMinimized();
+      this._haptic?.('selection');
+    });
+
+    document.getElementById("mapLayersHeaderTitle")?.addEventListener("click", (e) => {
+      if (this.$.mapLayersFlyout?.classList.contains("minimized")) {
+        e.stopPropagation();
+        this.toggleMapLayersMinimized(false);
+        this._haptic?.('selection');
+      }
+    });
+
+    document.getElementById("mapLayersActiveBadge")?.addEventListener("click", (e) => {
+      e.stopPropagation();
+      this.cycleMapStyle(1);
+      this._haptic?.('selection');
+    });
+
+    this.$.mapLayersFlyout?.addEventListener("click", (e) => {
+      if (this.$.mapLayersFlyout.classList.contains("minimized") && !e.target.closest("#closeMapLayersBtn") && !e.target.closest("#minimizeMapLayersBtn")) {
+        this.toggleMapLayersMinimized(false);
+        this._haptic?.('selection');
+      }
+    });
+
+    document.getElementById("mapLayersBackdrop")?.addEventListener("click", (e) => {
       e.stopPropagation();
       this.toggleMapLayersFlyout(false);
       this._haptic?.('selection');
@@ -2274,6 +2445,21 @@ class AurafiskyApp {
         if (this.$.timelineTooltip)
           this.$.timelineTooltip.classList.add("hidden");
       }, 2500);
+    });
+
+    // ── Weather Panel Weather Card Preset Buttons ─────────────────
+    document.querySelectorAll("[data-preset]").forEach((btn) => {
+      btn.addEventListener("click", (e) => {
+        e.stopPropagation();
+        const preset = btn.dataset.preset;
+        if (!preset) return;
+        this.wallpaperPreset = preset;
+        try {
+          localStorage.setItem("aurafisky_wallpaper_preset", preset);
+        } catch (_) {}
+        this.wallpaperOverlay?.refresh();
+        this._haptic?.('selection');
+      });
     });
 
     if (this.$.nowIndicator) {
@@ -2633,6 +2819,24 @@ class AurafiskyApp {
       ) {
         this.$.bookmarksDropdown.classList.add("hidden");
       }
+      if (
+        !e.target.closest("#homeDropdown") &&
+        !e.target.closest("#mobileNavMapBtn") &&
+        !e.target.closest("#homeToggleBtn")
+      ) {
+        this.toggleHomeDropdown?.(false);
+      }
+      if (
+        !e.target.closest("#routeDropdown") &&
+        !e.target.closest("#routeBtn") &&
+        !e.target.closest("#mobileNavRouteBtn")
+      ) {
+        if (typeof this.toggleRouteDropdown === "function") {
+          this.toggleRouteDropdown(false);
+        } else {
+          document.getElementById("routeDropdown")?.classList.add("hidden");
+        }
+      }
     };
     document.addEventListener("click", this._boundDocClick);
 
@@ -2733,7 +2937,8 @@ class AurafiskyApp {
 
     // ── Haptic feedback helper ─────────────────────────────────────
     this._haptic = (type = 'light') => {
-      if (!navigator.vibrate) return;
+      if (typeof navigator === 'undefined' || !navigator.vibrate) return;
+      if (navigator.userActivation && !navigator.userActivation.hasBeenActive) return;
       const patterns = {
         light: [5],
         medium: [10],
@@ -2743,7 +2948,9 @@ class AurafiskyApp {
         warning: [20, 50, 20],
         error: [30, 30, 30, 30, 50],
       };
-      navigator.vibrate(patterns[type] || patterns.light);
+      try {
+        navigator.vibrate(patterns[type] || patterns.light);
+      } catch (_) {}
     };
 
     // ── Resize for canvas (RAF-throttled) ────────────────────
@@ -2769,7 +2976,8 @@ class AurafiskyApp {
     this._restoreDesktopPanelPosition();
 
     const dragHandle = document.getElementById("panelDragHandle") || panel.firstElementChild;
-    if (!dragHandle) return;
+    const header = document.getElementById("weatherPanelHeader") || dragHandle?.parentElement || dragHandle;
+    if (!dragHandle && !header) return;
 
     let isDragging = false;
     let startX = 0;
@@ -2777,9 +2985,10 @@ class AurafiskyApp {
     let initialLeft = 0;
     let initialTop = 0;
 
-    const onMouseDown = (e) => {
-      if (window.innerWidth < 768 || e.button !== 0) return;
-      if (e.target.closest("button, input, a, select")) return;
+    const onPointerDown = (e) => {
+      if (window.innerWidth < 768 || (e.button !== undefined && e.button !== 0)) return;
+      // Don't drag if user clicked an interactive control like minimize/close/share/bookmark
+      if (e.target.closest("button:not(#panelDragHandle), input, a, select, [role='button']:not(#panelDragHandle)")) return;
 
       isDragging = true;
       startX = e.clientX;
@@ -2796,54 +3005,70 @@ class AurafiskyApp {
       panel.classList.add("dragging-desktop");
       document.body.style.userSelect = "none";
 
-      window.addEventListener("mousemove", onMouseMove);
-      window.addEventListener("mouseup", onMouseUp);
+      const onPointerMove = (moveEvent) => {
+        if (!isDragging) return;
+        const dx = moveEvent.clientX - startX;
+        const dy = moveEvent.clientY - startY;
+
+        let newLeft = initialLeft + dx;
+        let newTop = initialTop + dy;
+
+        const maxLeft = Math.max(10, window.innerWidth - panel.offsetWidth - 10);
+        const maxTop = Math.max(10, window.innerHeight - 80);
+
+        newLeft = Math.max(10, Math.min(newLeft, maxLeft));
+        newTop = Math.max(50, Math.min(newTop, maxTop));
+
+        panel.style.left = `${newLeft}px`;
+        panel.style.top = `${newTop}px`;
+      };
+
+      const onPointerUp = () => {
+        if (!isDragging) return;
+        isDragging = false;
+        panel.classList.remove("dragging-desktop");
+        document.body.style.userSelect = "";
+
+        window.removeEventListener("pointermove", onPointerMove);
+        window.removeEventListener("pointerup", onPointerUp);
+        window.removeEventListener("pointercancel", onPointerUp);
+        window.removeEventListener("mousemove", onPointerMove);
+        window.removeEventListener("mouseup", onPointerUp);
+
+        const pos = { left: parseInt(panel.style.left, 10), top: parseInt(panel.style.top, 10) };
+        try {
+          localStorage.setItem("aurafisky_desktop_panel_pos", JSON.stringify(pos));
+        } catch (_) {}
+      };
+
+      window.addEventListener("pointermove", onPointerMove);
+      window.addEventListener("pointerup", onPointerUp);
+      window.addEventListener("pointercancel", onPointerUp);
+      window.addEventListener("mousemove", onPointerMove);
+      window.addEventListener("mouseup", onPointerUp);
     };
 
-    const onMouseMove = (e) => {
-      if (!isDragging) return;
-      const dx = e.clientX - startX;
-      const dy = e.clientY - startY;
+    dragHandle?.addEventListener("pointerdown", onPointerDown);
+    dragHandle?.addEventListener("mousedown", onPointerDown);
+    header?.addEventListener("pointerdown", onPointerDown);
+    header?.addEventListener("mousedown", onPointerDown);
 
-      let newLeft = initialLeft + dx;
-      let newTop = initialTop + dy;
-
-      const maxLeft = window.innerWidth - panel.offsetWidth - 10;
-      const maxTop = window.innerHeight - panel.offsetHeight - 10;
-
-      newLeft = Math.max(10, Math.min(newLeft, maxLeft));
-      newTop = Math.max(10, Math.min(newTop, maxTop));
-
-      panel.style.left = `${newLeft}px`;
-      panel.style.top = `${newTop}px`;
-    };
-
-    const onMouseUp = () => {
-      if (!isDragging) return;
-      isDragging = false;
-      panel.classList.remove("dragging-desktop");
-      document.body.style.userSelect = "";
-
-      window.removeEventListener("mousemove", onMouseMove);
-      window.removeEventListener("mouseup", onMouseUp);
-
-      const pos = { left: parseInt(panel.style.left, 10), top: parseInt(panel.style.top, 10) };
-      localStorage.setItem("aurafisky_desktop_panel_pos", JSON.stringify(pos));
-    };
-
-    dragHandle.addEventListener("mousedown", onMouseDown);
-
-    // Double-click drag handle to reset panel position to default
-    dragHandle.addEventListener("dblclick", (e) => {
+    // Double-click drag handle or header to reset panel position to default
+    const onResetPosition = (e) => {
       if (window.innerWidth < 768) return;
-      if (e.target.closest("button, input, a, select")) return;
-      localStorage.removeItem("aurafisky_desktop_panel_pos");
+      if (e.target.closest("button:not(#panelDragHandle), input, a, select")) return;
+      try {
+        localStorage.removeItem("aurafisky_desktop_panel_pos");
+      } catch (_) {}
       panel.style.left = "";
       panel.style.top = "";
       panel.style.right = "";
       panel.style.bottom = "";
       this.showToast("Restored weather card to default position", "info");
-    });
+    };
+
+    dragHandle?.addEventListener("dblclick", onResetPosition);
+    header?.addEventListener("dblclick", onResetPosition);
   }
 
   _restoreDesktopPanelPosition() {
@@ -2856,10 +3081,10 @@ class AurafiskyApp {
       if (saved) {
         const pos = JSON.parse(saved);
         if (typeof pos.left === "number" && typeof pos.top === "number") {
-          const maxLeft = window.innerWidth - 380;
-          const maxTop = window.innerHeight - 300;
+          const maxLeft = Math.max(10, window.innerWidth - (panel.offsetWidth || 380) - 10);
+          const maxTop = Math.max(10, window.innerHeight - 80);
           const left = Math.max(10, Math.min(pos.left, maxLeft));
-          const top = Math.max(10, Math.min(pos.top, maxTop));
+          const top = Math.max(50, Math.min(pos.top, maxTop));
 
           panel.style.right = "auto";
           panel.style.bottom = "auto";
@@ -7494,9 +7719,9 @@ class AurafiskyApp {
       this.$.weatherPanel.style.opacity = '';
       this.$.weatherPanel.style.pointerEvents = '';
       this.$.weatherPanel.classList.remove("sheet-peek", "sheet-half", "sheet-full", "google-maps-sheet");
+      this._restoreDesktopPanelPosition();
     } else {
       this.$.weatherPanel.classList.add("open", "sheet-full", "aura-sheet", "google-maps-sheet");
-      this.$.weatherPanel.classList.remove("sheet-peek", "sheet-half", "minimized");
       this.$.weatherPanel.style.height = '100dvh';
       this.$.weatherPanel.style.maxHeight = '100dvh';
       this.$.weatherPanel.style.top = '0px';
@@ -7504,14 +7729,19 @@ class AurafiskyApp {
       this.$.weatherPanel.style.left = '0px';
       this.$.weatherPanel.style.right = '0px';
       this.$.weatherPanel.style.transform = 'translateY(0)';
+      // Remain below (minimized / peek) on mobile by default so the map stays visible
       if (this.googleMapsMobile) {
-        this.googleMapsMobile.sheetState = 'full';
-        this.googleMapsMobile.snapSheet('full');
+        this.googleMapsMobile.sheetState = 'peek';
+        this.googleMapsMobile.snapSheet('peek');
+      } else {
+        this.toggleMinimizeWeatherPanel();
       }
     }
-    document.body.classList.add("weather-panel-expanded");
-    if (this.$.panelMinimizeBtn) {
-      this.$.panelMinimizeBtn.classList.remove("chevron-flipped");
+    if (!isMobileLayout()) {
+      document.body.classList.add("weather-panel-expanded");
+      if (this.$.panelMinimizeBtn) {
+        this.$.panelMinimizeBtn.classList.remove("chevron-flipped");
+      }
     }
     if (this.$.mobileNavWeatherBtn) {
       this.$.mobileNavWeatherBtn.classList.add("active");
@@ -7599,6 +7829,14 @@ class AurafiskyApp {
   }
 
   toggleMinimizeWeatherPanel() {
+    if (isMobileLayout() && this.googleMapsMobile) {
+      if (this.googleMapsMobile.sheetState === 'full') {
+        this.googleMapsMobile.snapSheet('peek');
+      } else {
+        this.googleMapsMobile.snapSheet('full');
+      }
+      return;
+    }
     this.$.weatherPanel.classList.toggle("minimized");
     const isMin = this.$.weatherPanel.classList.contains("minimized");
     if (!isMobileLayout()) {
@@ -7862,6 +8100,22 @@ class AurafiskyApp {
   }
 
   /**
+   * Toggles the Home Location dropdown options menu.
+   */
+  toggleHomeDropdown(forceState) {
+    const dropdown = document.getElementById("homeDropdown");
+    if (!dropdown) return;
+    const isHidden = dropdown.classList.contains("hidden");
+    const open = typeof forceState === "boolean" ? forceState : isHidden;
+    if (open) {
+      this.updateHomeButton?.();
+      dropdown.classList.remove("hidden");
+    } else {
+      dropdown.classList.add("hidden");
+    }
+  }
+
+  /**
    * Sets up touch-friendly mobile bottom navigation bar listeners.
    */
   initMobileBottomNav() {
@@ -7884,19 +8138,23 @@ class AurafiskyApp {
       this.getMyLocation();
     });
 
-    mapBtn?.addEventListener("click", () => {
-      setActiveBtn(mapBtn);
+    mapBtn?.addEventListener("click", (e) => {
+      e.stopPropagation();
       this.$.bookmarksDropdown?.classList.add("hidden");
       this.toggleMapLayersFlyout(false);
       this.hideComparePanel();
 
-      if (this.selectedLat != null && this.selectedLng != null) {
-        this.toggleHomeLocation();
-      } else if (this.defaultLocation && this.defaultLocation.lat != null) {
-        this.selectLocation(this.defaultLocation.lat, this.defaultLocation.lng, this.defaultLocation.name);
-        this.showToast(`📍 Opening Home: ${(this.defaultLocation.name || 'Home').split(',')[0]}`, 'info');
+      if (this.defaultLocation && this.defaultLocation.lat != null) {
+        // Home is set! Show the Home options dropdown (Go to Home / Remove Home / Set current)
+        setActiveBtn(mapBtn);
+        this.toggleHomeDropdown();
       } else {
-        this.showToast("📍 Tap any place on map or search a city, then tap 'Set Home' to save your home.", "info");
+        // Home not set yet
+        if (this.selectedLat != null && this.selectedLng != null) {
+          this.setHomeLocation(this.selectedLat, this.selectedLng, this.selectedName);
+        } else {
+          this.showToast("📍 Tap any place on map or search a city, then tap 'Set Home' to save your home.", "info");
+        }
       }
       this._haptic("light");
     });
@@ -7905,6 +8163,7 @@ class AurafiskyApp {
       setActiveBtn(weatherBtn);
       this.$.bookmarksDropdown?.classList.add("hidden");
       this.toggleMapLayersFlyout(false);
+      this.toggleHomeDropdown(false);
       if (!this.$.weatherPanel?.classList.contains("open")) {
         if (this.selectedLat != null && this.selectedLng != null) {
           this.showWeatherPanel();
@@ -7926,6 +8185,7 @@ class AurafiskyApp {
     routeBtn?.addEventListener("click", () => {
       setActiveBtn(routeBtn);
       this.hideWeatherPanel();
+      this.toggleHomeDropdown(false);
       if (this.googleMapsMobile) {
         this.googleMapsMobile.sheetState = "dismissed";
         const pill = document.getElementById("restoreSheetPill");
@@ -7933,7 +8193,9 @@ class AurafiskyApp {
       }
       this.$.bookmarksDropdown?.classList.add("hidden");
       this.toggleMapLayersFlyout(false);
-      if (typeof this.openRouteStudio === "function") {
+      if (typeof this.toggleRouteDropdown === "function") {
+        this.toggleRouteDropdown();
+      } else if (typeof this.openRouteStudio === "function") {
         this.openRouteStudio();
       } else if (typeof this.toggleRoute === "function") {
         this.toggleRoute();
@@ -7946,6 +8208,35 @@ class AurafiskyApp {
     savedBtn?.addEventListener("click", (e) => {
       e.stopPropagation();
       this.toggleMapLayersFlyout(false);
+      this.toggleHomeDropdown(false);
+
+      // 1. Display favorite locations on the map!
+      this.showBookmarksOnMap = true;
+      try { localStorage.setItem("aurafisky_show_bookmarks_map", "true"); } catch (_) {}
+      this.updateBookmarksMapToggleUI?.();
+      this.refreshBookmarkPins?.();
+
+      // 2. Pan / fit to favorite locations on map
+      if (this.bookmarks && this.bookmarks.length > 0) {
+        const coords = this.bookmarks.map((b) => fromLonLat([b.lng, b.lat]));
+        let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+        coords.forEach(([x, y]) => {
+          if (x < minX) minX = x;
+          if (y < minY) minY = y;
+          if (x > maxX) maxX = x;
+          if (y > maxY) maxY = y;
+        });
+        if (this.bookmarks.length === 1) {
+          this.map?.getView().animate({ center: coords[0], zoom: 10, duration: 600 });
+        } else {
+          this.map?.getView().fit([minX, minY, maxX, maxY], { padding: [80, 80, 160, 80], maxZoom: 12, duration: 600 });
+        }
+        this.showToast(`⭐ Displaying ${this.bookmarks.length} favorite ${this.bookmarks.length === 1 ? 'location' : 'locations'} on map`, "info");
+      } else {
+        this.showToast("⭐ No favorite locations yet. Tap the star icon on any place to add to favorites.", "info");
+      }
+
+      // 3. Open favorites list dropdown / sheet
       const isHidden = this.$.bookmarksDropdown?.classList.contains("hidden");
       if (isHidden) {
         setActiveBtn(savedBtn);
@@ -9063,20 +9354,36 @@ class AurafiskyApp {
   }
 
   setMapStyle(style) {
-    const validStyles = ['street', 'satellite', 'terrain', 'dark', 'hillshade', 'opentopo', 'ocean', 'natgeo'];
+    const validStyles = ['street', 'satellite', 'terrain', 'hillshade', 'opentopo', 'ocean', 'natgeo', 'dark'];
     if (!validStyles.includes(style)) style = 'street';
     this.mapStyle = style;
     try {
       localStorage.setItem("aurafisky_map_style", style);
     } catch (_) {}
 
+    // Sync opacity slider if visible
+    const opacitySlider = document.getElementById("mapOpacitySlider");
+    const opacityValue = document.getElementById("mapOpacityValue");
+    if (opacitySlider && opacityValue) {
+      opacitySlider.value = Math.round(this.mapOpacity * 100);
+      opacityValue.textContent = `${Math.round(this.mapOpacity * 100)}%`;
+    }
+
     // Synchronize dark theme if user picked dark or street explicitly
     if (style === "dark" && !this.isDark) {
-      this.toggleDarkMode();
-      return;
+      this.isDark = true;
+      document.documentElement.classList.add("dark");
+      try { localStorage.setItem("aurafisky_theme", "dark"); } catch (_) {}
+      this.updateSettingsUIFromLocal?.();
+      this.saveUserDataToCloud?.();
+      this.syncBus?.syncTheme?.(true);
     } else if (style === "street" && this.isDark) {
-      this.toggleDarkMode();
-      return;
+      this.isDark = false;
+      document.documentElement.classList.remove("dark");
+      try { localStorage.setItem("aurafisky_theme", "light"); } catch (_) {}
+      this.updateSettingsUIFromLocal?.();
+      this.saveUserDataToCloud?.();
+      this.syncBus?.syncTheme?.(false);
     }
 
     this._updateActiveBasemap();
@@ -9111,15 +9418,86 @@ class AurafiskyApp {
     const layers = this.map.getLayers();
 
     allGroups.forEach((g) => {
-      if (g && g !== targetGroup && layers.getArray().includes(g)) {
-        layers.remove(g);
+      if (g) {
+        g.setVisible(false);
+        while (layers.getArray().includes(g)) {
+          layers.remove(g);
+        }
       }
     });
 
-    if (targetGroup && !layers.getArray().includes(targetGroup)) {
+    if (targetGroup) {
+      targetGroup.setVisible(true);
+      if (typeof targetGroup.getLayers === "function") {
+        targetGroup.getLayers().forEach((l) => {
+          if (typeof l.setVisible === "function") l.setVisible(true);
+        });
+      }
       layers.insertAt(0, targetGroup);
     }
     this.map.render();
+
+    // Apply opacity and terrain overlay
+    this._applyMapOpacity();
+    this._applyTerrainOverlay();
+  }
+
+  /** Apply map opacity to all base layers */
+  _applyMapOpacity() {
+    if (!this.map) return;
+    const opacity = (typeof this.mapOpacity === "number" && !isNaN(this.mapOpacity)) ? this.mapOpacity : 1;
+    const layers = this.map.getLayers().getArray();
+    layers.forEach(layer => {
+      if (layer instanceof LayerGroup) {
+        layer.getLayers().forEach((l) => {
+          if (typeof l.setOpacity === "function") {
+            l.setOpacity(opacity);
+          }
+        });
+      }
+    });
+  }
+
+  /** Apply terrain overlay layer */
+  _applyTerrainOverlay() {
+    if (!this.map) return;
+    const layers = this.map.getLayers();
+
+    if (this.terrainOverlayEnabled) {
+      // Add terrain overlay layer on top of current base layer
+      if (!this.terrainOverlayLayer) {
+        this.terrainOverlayLayer = new LayerGroup({
+          layers: [
+            new TileLayer({
+              source: new XYZ({
+                url: "https://server.arcgisonline.com/ArcGIS/rest/services/Elevation/World_Hillshade/MapServer/tile/{z}/{y}/{x}",
+                maxZoom: 18,
+                crossOrigin: "anonymous",
+                attributions: "Tiles &copy; Esri &mdash; USGS, NGA, NASA, CGIAR, NCEAS, NLS, OS, NMA, Geodatastyrelsen, GSA, GSI, GIS, NOAA, NOAA NGDC"
+              }),
+              opacity: 0.4,
+              preload: 1
+            })
+          ]
+        });
+      }
+      // Add terrain overlay on top of basemap
+      if (!layers.getArray().includes(this.terrainOverlayLayer)) {
+        const insertIdx = Math.min(1, layers.getLength());
+        layers.insertAt(insertIdx, this.terrainOverlayLayer);
+      }
+    } else {
+      // Remove terrain overlay layer
+      if (this.terrainOverlayLayer && layers.getArray().includes(this.terrainOverlayLayer)) {
+        layers.remove(this.terrainOverlayLayer);
+      }
+    }
+    this.map.render();
+  }
+
+  /** Toggle terrain overlay layer (alias for backward compatibility) */
+  _toggleTerrainOverlay() {
+    return this._applyTerrainOverlay();
   }
 
   _updateMapStyleUI() {
@@ -9138,6 +9516,8 @@ class AurafiskyApp {
       const isCustom = this.mapStyle !== "street" && this.mapStyle !== "dark";
       this.$.mapLayersBtn.classList.toggle("layers-active", isCustom);
     }
+
+    this._updateMapLayersActiveBadge();
   }
 
   toggleMapLayersFlyout(force) {
@@ -9147,9 +9527,61 @@ class AurafiskyApp {
     this.$.mapLayersFlyout.classList.toggle("hidden", !open);
     this.$.mapLayersBtn?.setAttribute("aria-expanded", open ? "true" : "false");
     this.$.mobileNavLayersBtn?.classList.toggle("active", open);
+    const backdrop = document.getElementById("mapLayersBackdrop");
+    if (backdrop) {
+      backdrop.classList.toggle("hidden", !open);
+    }
     if (open) {
       this._updateMapStyleUI();
+      this._updateMapLayersActiveBadge();
     }
+  }
+
+  toggleMapLayersMinimized(force) {
+    if (!this.$.mapLayersFlyout) return;
+    const isMinimized = this.$.mapLayersFlyout.classList.contains("minimized");
+    const target = force !== undefined ? force : !isMinimized;
+    this.$.mapLayersFlyout.classList.toggle("minimized", target);
+    this.mapLayersMinimized = target;
+    try {
+      localStorage.setItem("aurafisky_map_layers_minimized", String(target));
+    } catch (_) {}
+    const minBtn = this.$.minimizeMapLayersBtn;
+    if (minBtn) {
+      minBtn.setAttribute("title", target ? "Expand map modes" : "Minimize map modes");
+      minBtn.setAttribute("aria-label", target ? "Expand map modes" : "Minimize map modes");
+      minBtn.setAttribute("aria-expanded", target ? "false" : "true");
+    }
+    this._updateMapLayersActiveBadge();
+  }
+
+  _updateMapLayersActiveBadge() {
+    const styleNames = {
+      street: "🗺️ Default",
+      satellite: "🛰️ Satellite",
+      terrain: "🏔️ Terrain",
+      hillshade: "⛰️ Hillshade",
+      opentopo: "🧭 OpenTopo",
+      ocean: "🌊 Ocean",
+      natgeo: "🌍 NatGeo",
+      dark: "🌙 Dark",
+    };
+    const badge = document.getElementById("mapLayersActiveBadge");
+    if (badge) {
+      badge.textContent = styleNames[this.mapStyle] || this.mapStyle || "Default";
+    }
+    const dropdown = document.getElementById("mapModeSelectDropdown");
+    if (dropdown && dropdown.value !== this.mapStyle) {
+      dropdown.value = this.mapStyle;
+    }
+  }
+
+  cycleMapStyle(direction = 1) {
+    const validStyles = ['street', 'satellite', 'terrain', 'hillshade', 'opentopo', 'ocean', 'natgeo', 'dark'];
+    let idx = validStyles.indexOf(this.mapStyle);
+    if (idx === -1) idx = 0;
+    const nextIdx = (idx + direction + validStyles.length) % validStyles.length;
+    this.setMapStyle(validStyles[nextIdx]);
   }
 
   /**

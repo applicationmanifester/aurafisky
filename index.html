@@ -161,7 +161,7 @@
             <button id="bookmarksBtn" title="Saved locations" aria-label="Saved locations" aria-haspopup="true" aria-expanded="false" aria-controls="bookmarksDropdown" class="glass-no-border w-11 h-11 rounded-xl flex items-center justify-center hover:bg-white/80 dark:hover:bg-slate-700/50 transition-all active:scale-95 compact-btn">
               <svg class="w-5 h-5 text-amber-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.197-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.784-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z" /></svg>
             </button>
-            <div id="bookmarksDropdown" class="hidden fixed top-20 right-4 sm:absolute sm:top-14 sm:right-0 w-64 sm:w-72 glass rounded-2xl overflow-hidden shadow-2xl border border-slate-200/60 dark:border-slate-600/30 p-2 mt-2 z-[1001] pointer-events-auto" role="menu" aria-label="Favorites">
+            <div id="bookmarksDropdown" class="hidden fixed top-20 right-4 sm:absolute sm:top-14 sm:right-0 w-80 sm:w-88 glass rounded-2xl overflow-hidden shadow-2xl border border-slate-200/60 dark:border-slate-600/30 p-2 mt-2 z-[1001] pointer-events-auto" role="menu" aria-label="Favorites">
               <div class="px-3 py-2 flex items-center justify-between text-xs font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wider">
                 <span>Favorites</span>
                 <div class="flex items-center gap-1.5">
@@ -222,10 +222,10 @@
       <div class="absolute inset-0 bg-white/40 dark:bg-slate-950/65 backdrop-blur-xl"></div>
     </div>
 
-    <!-- Panel Header Container (non-scrollable) -->
-    <div class="flex-shrink-0 border-b border-slate-200/60 dark:border-slate-800/80 bg-surface-light/95 dark:bg-[#202124]/95 backdrop-blur-xl">
+    <!-- Panel Header Container (non-scrollable, draggable on desktop) -->
+    <div id="weatherPanelHeader" class="flex-shrink-0 border-b border-slate-200/60 dark:border-slate-800/80 bg-surface-light/95 dark:bg-[#202124]/95 backdrop-blur-xl sm:cursor-grab active:sm:cursor-grabbing select-none" title="Drag to move weather card • Double-click to reset position">
       <!-- Drag handle indicator (desktop dragging + mobile pull affordance) -->
-      <button id="panelDragHandle" type="button" class="flex justify-center pt-2.5 pb-1 select-none cursor-pointer sm:cursor-grab active:sm:cursor-grabbing w-full bg-transparent border-0" title="Click & drag or swipe to expand/collapse" aria-label="Drag handle">
+      <button id="panelDragHandle" type="button" class="flex justify-center pt-2.5 pb-1 select-none cursor-pointer sm:cursor-grab active:sm:cursor-grabbing w-full bg-transparent border-0" title="Drag to move weather card • Double-click to reset position" aria-label="Drag handle">
         <div class="w-10 h-1 bg-slate-300 dark:bg-slate-600 rounded-full hover:bg-slate-400 dark:hover:bg-slate-500 transition-colors"></div>
       </button>
 
@@ -354,8 +354,8 @@
     <div id="weatherPanelContent" class="flex-1 overflow-y-auto custom-scrollbar px-4 sm:px-5 pb-5 pt-2">
       <!-- ── TAB 1: OVERVIEW ─────────────────────────────────── -->
       <div id="weatherTabOverview" class="weather-tab-panel active space-y-4" role="tabpanel" aria-labelledby="tab-overview">
-        <!-- Main Temperature Display -->
-        <div class="flex items-center gap-4">
+        <!-- Main Temperature Display (Weather Card with Orange Accent) -->
+        <div class="flex items-center gap-4 p-3.5 rounded-2xl bg-orange-500/5 dark:bg-orange-500/10 border-2 border-orange-500/60 dark:border-orange-500/70 shadow-sm">
           <span id="panelIcon" class="text-5xl leading-none" aria-hidden="true">☀️</span>
           <div>
             <div class="flex items-baseline gap-2">
@@ -510,9 +510,21 @@
 
         <!-- Hourly Forecast Scroll Strip -->
         <div id="hourlySection">
-          <div class="flex items-center mb-2.5">
+          <div class="flex items-center justify-between mb-2">
             <h4 class="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Hourly Forecast</h4>
+            <span class="text-[10px] text-slate-400 font-medium">48h Timeline</span>
           </div>
+
+          <!-- Column Header Row -->
+          <div class="hourly-header-row flex items-center gap-1.5 sm:gap-2 px-2 sm:px-3 py-1 text-[9px] sm:text-[10px] font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500 border-b border-slate-200/60 dark:border-slate-700/50 select-none mb-1">
+            <span class="w-7 sm:w-10 flex-shrink-0">Time</span>
+            <span class="w-5 sm:w-7 flex-shrink-0 text-center">Sky</span>
+            <span class="w-7 sm:w-10 flex-shrink-0">Temp</span>
+            <span class="w-7 sm:w-10 flex-shrink-0">Precip</span>
+            <span class="flex-1 min-w-0">Wind</span>
+            <span class="w-7 sm:w-10 flex-shrink-0 text-right">Humidity</span>
+          </div>
+
           <div id="hourlyTabContent" class="space-y-1"></div>
           <div id="hourlyStrip" class="hidden"></div>
         </div>
@@ -841,6 +853,18 @@
           <div id="wallpaperTemp" class="text-5xl sm:text-7xl font-extrabold text-white leading-tight">--°</div>
           <p id="wallpaperDescription" class="text-lg sm:text-xl text-slate-300 mt-2 capitalize">--</p>
           <p id="wallpaperFeelsLike" class="text-sm text-slate-400 mt-1">Feels like --°</p>
+          <!-- Weather Card Preset Controls -->
+          <div class="flex items-center gap-2 mt-3" role="group" aria-label="Wallpaper theme presets">
+            <span class="text-[10px] text-slate-400 uppercase tracking-wider">Theme</span>
+            <button type="button" id="wallpaperPresetNone" class="px-3 py-1 rounded-full bg-white/10 dark:bg-white/5 text-[10px] font-medium text-white/70 hover:bg-white/20 hover:text-white transition-all cursor-pointer border border-white/20 hover:border-white/40 active:scale-95" data-preset="none">None</button>
+            <button type="button" data-preset="golden" class="wallpaper-preset-btn flex-1 px-3 py-1 rounded-full bg-orange-100/20 dark:bg-orange-900/20 text-[10px] font-medium text-orange-600 dark:text-orange-400 hover:bg-orange-50/30 hover:text-orange-400 transition-all cursor-pointer border border-orange-100/30 dark:border-orange-500/30 active:scale-95">Golden Hour</button>
+            <button type="button" data-preset="midnight" class="wallpaper-preset-btn flex-1 px-3 py-1 rounded-full bg-slate-900/20 dark:bg-slate-800/20 text-[10px] font-medium text-slate-400 dark:text-slate-400 hover:bg-slate-50/30 hover:text-white transition-all cursor-pointer border border-slate-300/30 dark:border-slate-600/30 active:scale-95" data-preset="midnight">Midnight</button>
+            <button type="button" data-preset="sunrise" class="wallpaper-preset-btn flex-1 px-3 py-1 rounded-full bg-orange-50/20 dark:bg-orange-900/20 text-[10px] font-medium text-orange-600 dark:text-orange-400 hover:bg-orange-50/30 hover:text-orange-400 transition-all cursor-pointer border border-orange-100/30 dark:border-orange-500/30 active:scale-95" data-preset="sunrise">Sunrise</button>
+            <button type="button" data-preset="forest" class="wallpaper-preset-btn flex-1 px-3 py-1 rounded-full bg-green-50/20 dark:bg-green-900/20 text-[10px] font-medium text-green-600 dark:text-green-400 hover:bg-green-50/30 hover:text-green-400 transition-all cursor-pointer border border-green-100/30 dark:border-green-500/30 active:scale-95" data-preset="forest">Forest</button>
+            <button type="button" data-preset="desert" class="wallpaper-preset-btn flex-1 px-3 py-1 rounded-full bg-orange-50/20 dark:bg-orange-900/20 text-[10px] font-medium text-orange-600 dark:text-orange-400 hover:bg-orange-50/30 hover:text-orange-400 transition-all cursor-pointer border border-orange-100/30 dark:border-orange-500/30 active:scale-95" data-preset="desert">Desert</button>
+            <button type="button" data-preset="aurora" class="wallpaper-preset-btn flex-1 px-3 py-1 rounded-full bg-purple-50/20 dark:bg-purple-900/20 text-[10px] font-medium text-purple-600 dark:text-purple-400 hover:bg-purple-50/30 hover:text-purple-400 transition-all cursor-pointer border border-purple-100/30 dark:border-purple-500/30 active:scale-95" data-preset="aurora">Aurora</button>
+            <button type="button" data-preset="monochrome" class="wallpaper-preset-btn flex-1 px-3 py-1 rounded-full bg-gray-50/20 dark:bg-gray-900/20 text-[10px] font-medium text-slate-600 dark:text-slate-400 hover:bg-gray-50/30 hover:text-white transition-all cursor-pointer border border-gray-100/30 dark:border-gray-700/30 active:scale-95" data-preset="monochrome">Monochrome</button>
+          </div>
         </div>
 
         <!-- Hero right side: High/Low + Sunrise/Sunset + 24h Trend Sparkline -->
@@ -1294,28 +1318,32 @@
     </div>
   </div>
 
-  <!-- Zoom +/- Controls + Radar (minimized below zoom-out) -->
-  <!-- Zoom +/- Controls + Radar (minimized below zoom-out) -->
-  <div id="zoomControls" class="fixed top-1/2 -translate-y-1/2 right-3 sm:right-4 z-[1001] pointer-events-auto flex flex-col gap-1 items-center">
-    <button id="zoomInBtn" class="w-12 h-12 flex items-center justify-center rounded-xl glass-no-border bg-white/80 dark:bg-slate-800/80 hover:bg-white dark:hover:bg-slate-700 transition-all text-slate-600 dark:text-slate-300 text-xl font-bold shadow-lg active:scale-95" title="Zoom in" aria-label="Zoom in">+</button>
-    <button id="zoomOutBtn" class="w-12 h-12 flex items-center justify-center rounded-xl glass-no-border bg-white/80 dark:bg-slate-800/80 hover:bg-white dark:hover:bg-slate-700 transition-all text-slate-600 dark:text-slate-300 text-xl font-bold shadow-lg active:scale-95" title="Zoom out" aria-label="Zoom out">−</button>
+  <!-- ============================================================ -->
+  <!-- ZOOM CONTROLS (Left Centre)                                  -->
+  <!-- ============================================================ -->
+  <div id="zoomControls" class="fixed top-1/2 -translate-y-1/2 left-3 sm:left-4 z-[1001] pointer-events-auto flex flex-col gap-1.5 items-center">
+    <button id="zoomInBtn" class="w-10 h-10 sm:w-11 sm:h-11 flex items-center justify-center rounded-xl glass bg-white/85 dark:bg-slate-800/85 hover:bg-white dark:hover:bg-slate-700 transition-all border border-slate-200/70 dark:border-slate-700/60 text-slate-700 dark:text-slate-200 text-xl font-bold shadow-lg active:scale-95 cursor-pointer" title="Zoom in" aria-label="Zoom in">+</button>
+    <button id="zoomOutBtn" class="w-10 h-10 sm:w-11 sm:h-11 flex items-center justify-center rounded-xl glass bg-white/85 dark:bg-slate-800/85 hover:bg-white dark:hover:bg-slate-700 transition-all border border-slate-200/70 dark:border-slate-700/60 text-slate-700 dark:text-slate-200 text-xl font-bold shadow-lg active:scale-95 cursor-pointer" title="Zoom out" aria-label="Zoom out">−</button>
+  </div>
 
-    <!-- Map Modes & Terrain Switcher (Street, Satellite, Terrain, Dark) -->
+  <!-- ============================================================ -->
+  <!-- ACTION CONTROLS (Right Centre - Single Vertical Column)       -->
+  <!-- ============================================================ -->
+  <div id="mobileMapControls" class="map-controls-right fixed top-1/2 -translate-y-1/2 right-3 sm:right-4 z-[1001] pointer-events-auto flex flex-col gap-1.5 items-center">
+    <!-- 1. Map Modes & Terrain Switcher (Street, Satellite, Terrain, Dark) -->
     <div class="relative pointer-events-auto">
-      <button id="mapLayersBtn" class="w-12 h-12 flex items-center justify-center rounded-xl glass bg-white/80 dark:bg-slate-800/80 hover:bg-white dark:hover:bg-slate-700 transition-all border border-slate-200/60 dark:border-slate-600/30 shadow-lg active:scale-95 group" title="Map terrain & styles (L)" aria-label="Map terrain and styles" aria-expanded="false">
-        <svg class="w-6 h-6 text-slate-700 dark:text-slate-200 transition-transform group-hover:scale-110 duration-200" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+      <button id="mapLayersBtn" class="w-10 h-10 sm:w-11 sm:h-11 flex items-center justify-center rounded-xl glass bg-white/85 dark:bg-slate-800/85 hover:bg-white dark:hover:bg-slate-700 transition-all border border-slate-200/70 dark:border-slate-700/60 shadow-lg active:scale-95 group cursor-pointer" title="Map terrain & styles (L)" aria-label="Map terrain and styles" aria-expanded="false">
+        <svg class="w-5 h-5 text-slate-700 dark:text-slate-200 transition-transform group-hover:scale-110 duration-200" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
           <polygon points="12 2 2 7 12 12 22 7 12 2"></polygon>
           <polyline points="2 17 12 22 22 17"></polyline>
           <polyline points="2 12 12 17 22 12"></polyline>
         </svg>
       </button>
-
-      
     </div>
 
-    <!-- Day/Night Terminator Toggle (Sun / Moon Dual Hemisphere) -->
-    <button id="terminatorToggleBtn" class="w-12 h-12 flex items-center justify-center rounded-xl glass bg-white/80 dark:bg-slate-800/80 hover:bg-white dark:hover:bg-slate-700 transition-all border border-slate-200/60 dark:border-slate-600/30 shadow-lg active:scale-95 group" title="Toggle day/night terminator" aria-label="Toggle day/night terminator" aria-pressed="false">
-      <svg class="w-6 h-6 transition-transform group-hover:rotate-12 duration-300" viewBox="0 0 24 24" fill="none">
+    <!-- 2. Day/Night Terminator Toggle (Sun / Moon Dual Hemisphere) -->
+    <button id="terminatorToggleBtn" class="w-10 h-10 sm:w-11 sm:h-11 flex items-center justify-center rounded-xl glass bg-white/85 dark:bg-slate-800/85 hover:bg-white dark:hover:bg-slate-700 transition-all border border-slate-200/70 dark:border-slate-700/60 shadow-lg active:scale-95 group cursor-pointer" title="Toggle day/night terminator" aria-label="Toggle day/night terminator" aria-pressed="false">
+      <svg class="w-5 h-5 transition-transform group-hover:rotate-12 duration-300" viewBox="0 0 24 24" fill="none">
         <defs>
           <linearGradient id="termSunGrad" x1="0" y1="0" x2="1" y2="1">
             <stop offset="0%" stop-color="#f59e0b"/>
@@ -1338,9 +1366,9 @@
       </svg>
     </button>
 
-    <!-- Explore Global Weather Extremes (Dynamic Globe & Weather Energy Bolt) -->
-    <button id="extremesBtn" class="w-12 h-12 flex items-center justify-center rounded-xl glass bg-white/80 dark:bg-slate-800/80 hover:bg-white dark:hover:bg-slate-700 transition-all border border-slate-200/60 dark:border-slate-600/30 shadow-lg active:scale-95 group" title="Explore global weather extremes" aria-label="Explore global weather extremes">
-      <svg class="w-6 h-6 text-amber-500 dark:text-amber-400 transition-transform group-hover:scale-110 duration-200" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+    <!-- 3. Explore Global Weather Extremes (Dynamic Globe & Weather Energy Bolt) -->
+    <button id="extremesBtn" class="w-10 h-10 sm:w-11 sm:h-11 flex items-center justify-center rounded-xl glass bg-white/85 dark:bg-slate-800/85 hover:bg-white dark:hover:bg-slate-700 transition-all border border-slate-200/70 dark:border-slate-700/60 shadow-lg active:scale-95 group cursor-pointer" title="Explore global weather extremes" aria-label="Explore global weather extremes">
+      <svg class="w-5 h-5 text-amber-500 dark:text-amber-400 transition-transform group-hover:scale-110 duration-200" viewBox="0 0 24 24" fill="none" stroke="currentColor">
         <!-- Globe Outline -->
         <circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="1.5" opacity="0.45"/>
         <ellipse cx="12" cy="12" rx="4.5" ry="9" stroke="currentColor" stroke-width="1.2" opacity="0.35"/>
@@ -1350,97 +1378,40 @@
       </svg>
     </button>
 
-    <!-- Radar Toggle (compact, below zoom) -->
+    <!-- 4. Radar Toggle -->
     <div id="radarControls" class="relative pointer-events-auto">
-      <button id="radarToggleBtn" class="w-12 h-12 flex items-center justify-center rounded-xl glass bg-white/80 dark:bg-slate-800/80 hover:bg-white dark:hover:bg-slate-700 transition-all border border-slate-200/60 dark:border-slate-600/30 shadow-lg active:scale-95" title="Toggle radar overlay" aria-label="Toggle radar overlay" aria-pressed="false">
-        <span id="radarDot" class="w-2.5 h-2.5 rounded-full bg-slate-400 transition-all duration-300" aria-hidden="true"></span>
+      <button id="radarToggleBtn" class="w-10 h-10 sm:w-11 sm:h-11 flex items-center justify-center rounded-xl glass bg-white/85 dark:bg-slate-800/85 hover:bg-white dark:hover:bg-slate-700 transition-all border border-slate-200/70 dark:border-slate-700/60 shadow-lg active:scale-95 cursor-pointer" title="Toggle radar overlay" aria-label="Toggle radar overlay" aria-pressed="false">
+        <span id="radarDot" class="w-3 h-3 rounded-full bg-slate-400 dark:bg-slate-500 transition-all duration-300 shadow-sm" aria-hidden="true"></span>
       </button>
-      <button id="radarCollapsedBtn" class="hidden w-12 h-12 flex items-center justify-center rounded-xl glass bg-white/80 dark:bg-slate-800/80 hover:bg-white dark:hover:bg-slate-700 transition-all border border-slate-200/60 dark:border-slate-600/30 shadow-lg active:scale-95" title="Expand radar panel" aria-label="Expand radar panel">
+      <button id="radarCollapsedBtn" class="hidden w-10 h-10 sm:w-11 sm:h-11 flex items-center justify-center rounded-xl glass bg-white/85 dark:bg-slate-800/85 hover:bg-white dark:hover:bg-slate-700 transition-all border border-slate-200/70 dark:border-slate-700/60 shadow-lg active:scale-95" title="Expand radar panel" aria-label="Expand radar panel">
         <svg class="w-4 h-4 text-slate-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M5 15l7-7 7 7"/></svg>
       </button>
     </div>
 
-    <!-- Floating Map Style Flyout Menu -->
-      <div id="mapLayersFlyout" class="hidden fixed right-16 top-1/2 -translate-y-1/2 z-[1200] p-3 rounded-2xl glass-no-border bg-white/95 dark:bg-slate-900/95 shadow-2xl border border-slate-200/70 dark:border-slate-700/60 w-[260px] animate-in fade-in zoom-in-95 duration-150 backdrop-blur-xl">
-        <div class="flex items-center justify-between px-1 mb-2.5">
-          <span class="text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Map Modes</span>
-          <div class="flex items-center gap-2">
-            <span class="text-[10px] text-slate-400 font-mono hidden sm:inline">Press L</span>
-            <button id="closeMapLayersBtn" type="button" class="p-1 rounded-lg hover:bg-slate-200/60 dark:hover:bg-slate-700/60 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition-colors cursor-pointer" aria-label="Close map modes">
-              <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
-            </button>
-          </div>
-        </div>
-        <div class="grid grid-cols-2 gap-2" id="mapStyleGrid">
-          <!-- Card 1: Default / Street -->
-          <button type="button" data-map-style="street" class="map-style-card flex flex-col items-center gap-1.5 p-2 rounded-xl border border-slate-200 dark:border-slate-700 hover:border-primary transition-all text-center group active:scale-95 cursor-pointer bg-slate-50/80 dark:bg-slate-800/60 relative">
-            <div class="w-full h-12 rounded-lg overflow-hidden relative shadow-sm border border-slate-200/60 dark:border-slate-700/60 bg-[#e5e3df] flex items-center justify-center">
-              <span class="text-xl">🗺️</span>
-            </div>
-            <span class="text-xs font-semibold text-slate-700 dark:text-slate-200">Default</span>
-          </button>
+    <!-- 5. Share Location Button -->
+    <button id="mobileFloatingShareBtn" type="button" class="mobile-floating-control w-10 h-10 sm:w-11 sm:h-11 flex items-center justify-center rounded-xl glass bg-white/85 dark:bg-slate-800/85 hover:bg-white dark:hover:bg-slate-700 transition-all border border-slate-200/70 dark:border-slate-700/60 text-slate-700 dark:text-slate-200 shadow-lg active:scale-95 cursor-pointer" title="Share location" aria-label="Share location">
+      <svg class="w-5 h-5 text-slate-600 dark:text-slate-300" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+        <path stroke-linecap="round" stroke-linejoin="round" d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z" />
+      </svg>
+    </button>
 
-          <!-- Card 2: Satellite -->
-          <button type="button" data-map-style="satellite" class="map-style-card flex flex-col items-center gap-1.5 p-2 rounded-xl border border-slate-200 dark:border-slate-700 hover:border-primary transition-all text-center group active:scale-95 cursor-pointer bg-slate-50/80 dark:bg-slate-800/60 relative">
-            <div class="w-full h-12 rounded-lg overflow-hidden relative shadow-sm border border-slate-200/60 dark:border-slate-700/60 bg-[#142834] flex items-center justify-center">
-              <span class="text-xl">🛰️</span>
-            </div>
-            <span class="text-xs font-semibold text-slate-700 dark:text-slate-200">Satellite</span>
-          </button>
+    <!-- 6. Locate Me / Compass GPS Button -->
+    <button id="mobileLocationFab" type="button" class="sm:hidden mobile-floating-control w-10 h-10 sm:w-11 sm:h-11 flex items-center justify-center rounded-xl glass bg-white/85 dark:bg-slate-800/85 hover:bg-white dark:hover:bg-slate-700 transition-all border border-slate-200/70 dark:border-slate-700/60 text-teal-600 dark:text-teal-400 shadow-lg active:scale-95 cursor-pointer" title="My Location (GPS)" aria-label="Find my location">
+      <svg class="w-5 h-5 text-teal-600 dark:text-teal-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+        <circle cx="12" cy="12" r="3.5"/>
+        <path stroke-linecap="round" stroke-linejoin="round" d="M12 2v3m0 14v3M2 12h3m14 0h3"/>
+      </svg>
+    </button>
 
-          <!-- Card 3: Terrain -->
-          <button type="button" data-map-style="terrain" class="map-style-card flex flex-col items-center gap-1.5 p-2 rounded-xl border border-slate-200 dark:border-slate-700 hover:border-primary transition-all text-center group active:scale-95 cursor-pointer bg-slate-50/80 dark:bg-slate-800/60 relative">
-            <div class="w-full h-12 rounded-lg overflow-hidden relative shadow-sm border border-slate-200/60 dark:border-slate-700/60 bg-[#7c9664] flex items-center justify-center">
-              <span class="text-xl">🏔️</span>
-            </div>
-            <span class="text-xs font-semibold text-slate-700 dark:text-slate-200">Terrain</span>
-          </button>
+    <!-- 7. Directions FAB Button -->
+    <button id="mobileDirectionsFab" type="button" class="w-10 h-10 sm:w-11 sm:h-11 flex items-center justify-center rounded-xl bg-teal-600 hover:bg-teal-500 dark:bg-teal-600 dark:hover:bg-teal-500 text-white transition-all border border-teal-500/70 shadow-lg active:scale-95 cursor-pointer" title="Get Directions" aria-label="Get Directions">
+      <svg class="w-5 h-5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5">
+        <path stroke-linecap="round" stroke-linejoin="round" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
+      </svg>
+    </button>
 
-          <!-- Card 4: Hillshade -->
-          <button type="button" data-map-style="hillshade" class="map-style-card flex flex-col items-center gap-1.5 p-2 rounded-xl border border-slate-200 dark:border-slate-700 hover:border-primary transition-all text-center group active:scale-95 cursor-pointer bg-slate-50/80 dark:bg-slate-800/60 relative">
-            <div class="w-full h-12 rounded-lg overflow-hidden relative shadow-sm border border-slate-200/60 dark:border-slate-700/60 bg-[#9ca3af] flex items-center justify-center">
-              <span class="text-xl">⛰️</span>
-            </div>
-            <span class="text-xs font-semibold text-slate-700 dark:text-slate-200">Hillshade</span>
-          </button>
-
-          <!-- Card 5: OpenTopoMap -->
-          <button type="button" data-map-style="opentopo" class="map-style-card flex flex-col items-center gap-1.5 p-2 rounded-xl border border-slate-200 dark:border-slate-700 hover:border-primary transition-all text-center group active:scale-95 cursor-pointer bg-slate-50/80 dark:bg-slate-800/60 relative">
-            <div class="w-full h-12 rounded-lg overflow-hidden relative shadow-sm border border-slate-200/60 dark:border-slate-700/60 bg-[#d4c5a9] flex items-center justify-center">
-              <span class="text-xl">🧭</span>
-            </div>
-            <span class="text-xs font-semibold text-slate-700 dark:text-slate-200">OpenTopo</span>
-          </button>
-
-          <!-- Card 6: Ocean -->
-          <button type="button" data-map-style="ocean" class="map-style-card flex flex-col items-center gap-1.5 p-2 rounded-xl border border-slate-200 dark:border-slate-700 hover:border-primary transition-all text-center group active:scale-95 cursor-pointer bg-slate-50/80 dark:bg-slate-800/60 relative">
-            <div class="w-full h-12 rounded-lg overflow-hidden relative shadow-sm border border-slate-200/60 dark:border-slate-700/60 bg-[#0c4a6e] flex items-center justify-center">
-              <span class="text-xl">🌊</span>
-            </div>
-            <span class="text-xs font-semibold text-slate-700 dark:text-slate-200">Ocean</span>
-          </button>
-
-          <!-- Card 7: National Geographic -->
-          <button type="button" data-map-style="natgeo" class="map-style-card flex flex-col items-center gap-1.5 p-2 rounded-xl border border-slate-200 dark:border-slate-700 hover:border-primary transition-all text-center group active:scale-95 cursor-pointer bg-slate-50/80 dark:bg-slate-800/60 relative">
-            <div class="w-full h-12 rounded-lg overflow-hidden relative shadow-sm border border-slate-200/60 dark:border-slate-700/60 bg-[#f5e6c8] flex items-center justify-center">
-              <span class="text-xl">🌍</span>
-            </div>
-            <span class="text-xs font-semibold text-slate-700 dark:text-slate-200">NatGeo</span>
-          </button>
-
-          <!-- Card 8: Dark -->
-          <button type="button" data-map-style="dark" class="map-style-card flex flex-col items-center gap-1.5 p-2 rounded-xl border border-slate-200 dark:border-slate-700 hover:border-primary transition-all text-center group active:scale-95 cursor-pointer bg-slate-50/80 dark:bg-slate-800/60 relative">
-            <div class="w-full h-12 rounded-lg overflow-hidden relative shadow-sm border border-slate-200/60 dark:border-slate-700/60 bg-[#1a1d24] flex items-center justify-center">
-              <span class="text-xl">🌙</span>
-            </div>
-            <span class="text-xs font-semibold text-slate-700 dark:text-slate-200">Dark</span>
-          </button>
-        </div>
-      </div>
-
-
-    <!-- Radar Expanded Flyout (hidden by default, appears left of radar button) -->
-    <div id="radarExpandedPanel" class="hidden fixed right-4 bottom-28 sm:right-[52px] sm:bottom-0 flex-col gap-1 pointer-events-auto">
+    <!-- Radar Expanded Flyout (appears to the left of radar button) -->
+    <div id="radarExpandedPanel" class="hidden fixed right-16 top-1/2 -translate-y-1/2 flex-col gap-1 pointer-events-auto z-[1200]">
       <div class="glass-no-border rounded-xl p-2.5 shadow-lg space-y-2 w-[180px]">
         <div class="flex items-center justify-between gap-1">
           <select id="layerTypeSelect" class="flex-1 bg-transparent border-none outline-none text-[10px] font-bold text-slate-700 dark:text-slate-300 cursor-pointer hover:text-primary transition-colors focus:ring-0" aria-label="Radar layer type">
@@ -1485,6 +1456,83 @@
           <div id="legendPrecip" class="flex items-center gap-1 text-[7px] font-semibold text-slate-400"><span>Light</span><div class="w-12 h-1.5 rounded-sm legend-gradient-precip"></div><span>Heavy</span></div>
           <div id="legendTemp" class="hidden flex items-center gap-1 text-[7px] font-semibold text-slate-400"><span>Cold</span><div class="w-12 h-1.5 rounded-sm legend-gradient-temp"></div><span>Hot</span></div>
         </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Mobile Backdrop for Map Layers Flyout -->
+  <div id="mapLayersBackdrop" class="hidden fixed inset-0 z-[1240] bg-black/40 backdrop-blur-[2px] sm:hidden transition-opacity"></div>
+
+  <!-- Floating Map Style Flyout Menu -->
+  <div id="mapLayersFlyout" class="hidden fixed right-16 top-1/2 -translate-y-1/2 z-[1250] p-3.5 rounded-2xl glass-no-border bg-white/95 dark:bg-slate-900/95 shadow-2xl border border-slate-200/70 dark:border-slate-700/60 w-[280px] animate-in fade-in zoom-in-95 duration-150 backdrop-blur-xl">
+    <div id="mapLayersHeader" class="sticky top-0 bg-white/95 dark:bg-slate-900/95 backdrop-blur-md z-10 flex items-center justify-between px-1 pb-2.5 mb-2 border-b border-slate-200/40 dark:border-slate-700/40 select-none">
+      <div class="flex items-center gap-2" id="mapLayersHeaderTitle">
+        <span class="text-xs font-black text-slate-700 dark:text-slate-200 uppercase tracking-wider shrink-0">Map Modes</span>
+        <span id="mapLayersActiveBadge" class="text-[10px] font-bold px-2 py-0.5 rounded-lg bg-primary/15 text-primary dark:bg-primary/25 dark:text-primary-light">Default</span>
+      </div>
+      <div class="flex items-center gap-1">
+        <span class="text-[10px] text-slate-400 font-mono hidden sm:inline mr-1" id="mapLayersShortcutHint">Press L</span>
+        <button id="minimizeMapLayersBtn" type="button" class="w-7 h-7 flex items-center justify-center rounded-lg hover:bg-slate-200/60 dark:hover:bg-slate-700/60 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition-colors cursor-pointer" title="Minimize map modes" aria-label="Minimize map modes">
+          <svg id="minimizeMapLayersIcon" class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+          <svg id="expandMapLayersIcon" class="w-3.5 h-3.5 hidden" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 3 21 3 21 9"></polyline><polyline points="9 21 3 21 3 15"></polyline><line x1="21" y1="3" x2="14" y2="10"></line><line x1="3" y1="21" x2="10" y2="14"></line></svg>
+        </button>
+        <button id="closeMapLayersBtn" type="button" class="w-7 h-7 flex items-center justify-center rounded-lg hover:bg-slate-200/60 dark:hover:bg-slate-700/60 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition-colors cursor-pointer" title="Close map modes" aria-label="Close map modes">
+          <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
+        </button>
+      </div>
+    </div>
+
+    <!-- Collapsible Body for Map Layers -->
+    <div id="mapLayersBody" class="space-y-3 pt-0.5">
+      <!-- Primary Map Mode Dropdown with Stepper Controls -->
+      <div>
+        <label for="mapModeSelectDropdown" class="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider block mb-1.5">Map Mode</label>
+        <div class="flex items-center gap-1.5 w-full">
+          <button id="prevMapModeBtn" type="button" class="w-8 h-8 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 flex items-center justify-center text-slate-600 dark:text-slate-300 transition-colors cursor-pointer flex-shrink-0" title="Previous map mode (Shift+S)" aria-label="Previous map mode">
+            <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M15 19l-7-7 7-7"/></svg>
+          </button>
+          <div class="relative flex-1 min-w-0">
+            <select id="mapModeSelectDropdown" class="w-full bg-slate-100 hover:bg-slate-200/80 dark:bg-slate-800 dark:hover:bg-slate-700/80 text-slate-900 dark:text-slate-100 border border-slate-300/80 dark:border-slate-600/80 rounded-xl px-2.5 py-2 text-xs font-bold cursor-pointer outline-none transition-all appearance-none focus:ring-2 focus:ring-primary/40 focus:border-primary shadow-xs" aria-label="Select map mode">
+              <option value="street">🗺️ Default (Street)</option>
+              <option value="satellite">🛰️ Satellite (Aerial)</option>
+              <option value="terrain">🏔️ Terrain (Topographic)</option>
+              <option value="hillshade">⛰️ Hillshade (Elevation)</option>
+              <option value="opentopo">🧭 OpenTopoMap</option>
+              <option value="ocean">🌊 Ocean (Bathymetry)</option>
+              <option value="natgeo">🌍 National Geographic</option>
+              <option value="dark">🌙 Dark Mode</option>
+            </select>
+            <div class="absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none text-slate-400">
+              <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="6 9 12 15 18 9"></polyline></svg>
+            </div>
+          </div>
+          <button id="nextMapModeBtn" type="button" class="w-8 h-8 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 flex items-center justify-center text-slate-600 dark:text-slate-300 transition-colors cursor-pointer flex-shrink-0" title="Next map mode (S)" aria-label="Next map mode">
+            <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7"/></svg>
+          </button>
+        </div>
+      </div>
+
+      <!-- Layer Opacity Control -->
+      <div class="pt-2 border-t border-slate-200/40 dark:border-slate-700/30">
+        <div class="flex items-center justify-between mb-1.5">
+          <span class="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Map Opacity</span>
+          <span id="mapOpacityValue" class="text-[10px] font-mono text-slate-400 dark:text-slate-400">100%</span>
+        </div>
+        <input id="mapOpacitySlider" type="range" min="0" max="100" value="100" class="w-full h-1 rounded-lg appearance-none bg-slate-200/60 dark:bg-slate-700 accent-primary cursor-pointer" aria-label="Map opacity" />
+      </div>
+
+      <!-- Terrain Elevation Overlay -->
+      <div class="flex items-center justify-between pt-2 border-t border-slate-200/40 dark:border-slate-700/30">
+        <div class="flex items-center gap-2">
+          <div class="w-7 h-7 rounded-lg bg-blue-500/10 text-blue-500 flex items-center justify-center text-xs">
+            <span>🏔️</span>
+          </div>
+          <span class="text-[10px] font-semibold text-slate-700 dark:text-slate-300">Terrain Overlay</span>
+        </div>
+        <label class="relative inline-flex items-center cursor-pointer">
+          <input type="checkbox" id="terrainOverlayToggle" class="sr-only peer" />
+          <div class="w-10 h-5 rounded-full bg-slate-300 peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-primary/30 peer dark:bg-slate-600 peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all dark:border-slate-600 peer-checked:bg-primary dark:peer-checked:bg-primary"></div>
+        </label>
       </div>
     </div>
   </div>
@@ -1592,7 +1640,7 @@
         <div class="border-t border-slate-100 dark:border-slate-800/40 my-3"></div>
 
         <p class="text-xs text-slate-500 dark:text-slate-400">
-          Version 15.0.0 · No API keys, no tracking, and no ads. Weather data provided by Open-Meteo under CC BY 4.0.
+          Version 16.0.0 · No API keys, no tracking, and no ads. Weather data provided by Open-Meteo under CC BY 4.0.
         </p>
       </div>
       <div class="p-4 bg-slate-50 dark:bg-slate-800/50 rounded-b-2xl">
@@ -1905,7 +1953,7 @@
   <!-- TERMS MODAL                                                  -->
   <!-- ============================================================ -->
   <div id="termsModal" class="fixed inset-0 z-[9999] hidden items-center justify-center bg-black/40 backdrop-blur-sm pointer-events-auto" style="display:none" role="dialog" aria-modal="true" aria-labelledby="termsTitle">
-    <div class="bg-white dark:bg-slate-900 rounded-2xl shadow-2xl max-w-2xl w-full mx-4 max-h-[80vh] overflow-y-auto animate-in zoom-in-95"><div class="p-5 border-b border-slate-200/50 dark:border-slate-700/30 flex items-center justify-between"><h3 id="termsTitle" class="text-lg font-bold text-slate-900 dark:text-white">Terms & Privacy</h3><button id="termsCloseBtn" aria-label="Close terms and privacy" class="p-1.5 rounded-lg hover:bg-slate-200/60 dark:hover:bg-slate-600/40 transition-colors"><svg class="w-5 h-5 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" /></svg></button></div><div class="p-5 space-y-4 text-sm text-slate-600 dark:text-slate-300 max-h-[60vh] overflow-y-auto"><p class="text-slate-700 dark:text-slate-200 font-medium">Aurafisky is an interactive, privacy-first weather explorer that blends real-time forecasting, live radar animations, and interactive mapping in a modern, user-friendly interface.</p><h4 class="font-semibold">Data Sources</h4><ul class="list-disc pl-5 space-y-1"><li>Weather: <a href="https://open-meteo.com" target="_blank" rel="noopener" class="text-primary hover:underline">Open-Meteo</a></li><li>Maps: <a href="https://openstreetmap.org" target="_blank" rel="noopener" class="text-primary hover:underline">OpenStreetMap</a> + <a href="https://openfreemap.org" target="_blank" rel="noopener" class="text-primary hover:underline">OpenFreeMap</a></li><li>Radar: <a href="https://rainviewer.com" target="_blank" rel="noopener" class="text-primary hover:underline">RainViewer</a></li><li>Geocoding: <a href="https://nominatim.org" target="_blank" rel="noopener" class="text-primary hover:underline">Nominatim</a></li></ul><h4 class="font-semibold">Privacy</h4><p>No personal data is collected. Location is only used for weather queries and never stored on servers. Favorites & settings sync via Firebase Auth (Google) only if you sign in. For more details, view our <a href="https://sites.google.com/view/aurafisky-privacypolicy/home" target="_blank" rel="noopener" class="text-primary hover:underline font-medium">Full Privacy Policy</a>.</p><h4 class="font-semibold">Offline Use</h4><p>Install as PWA for full offline access. Recent weather data cached in IndexedDB.</p><h4 class="font-semibold">License</h4><p>Version 15.0.0 · Proprietary. All rights reserved. Copyright &copy; 2026 Aurafisky.</p></div><div class="p-4 bg-slate-50 dark:bg-slate-800/50 rounded-b-2xl flex gap-3"><button id="termsAcceptBtn" class="flex-1 bg-primary hover:bg-primary-dark text-white font-semibold py-2.5 rounded-xl transition-colors">Accept & Continue</button><button id="copyContactEmailBtn" class="px-4 py-2.5 bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 font-semibold rounded-xl hover:bg-slate-300 dark:hover:bg-slate-600 transition-colors">Copy contact email</button></div></div></div>
+    <div class="bg-white dark:bg-slate-900 rounded-2xl shadow-2xl max-w-2xl w-full mx-4 max-h-[80vh] overflow-y-auto animate-in zoom-in-95"><div class="p-5 border-b border-slate-200/50 dark:border-slate-700/30 flex items-center justify-between"><h3 id="termsTitle" class="text-lg font-bold text-slate-900 dark:text-white">Terms & Privacy</h3><button id="termsCloseBtn" aria-label="Close terms and privacy" class="p-1.5 rounded-lg hover:bg-slate-200/60 dark:hover:bg-slate-600/40 transition-colors"><svg class="w-5 h-5 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" /></svg></button></div><div class="p-5 space-y-4 text-sm text-slate-600 dark:text-slate-300 max-h-[60vh] overflow-y-auto"><p class="text-slate-700 dark:text-slate-200 font-medium">Aurafisky is an interactive, privacy-first weather explorer that blends real-time forecasting, live radar animations, and interactive mapping in a modern, user-friendly interface.</p><h4 class="font-semibold">Data Sources</h4><ul class="list-disc pl-5 space-y-1"><li>Weather: <a href="https://open-meteo.com" target="_blank" rel="noopener" class="text-primary hover:underline">Open-Meteo</a></li><li>Maps: <a href="https://openstreetmap.org" target="_blank" rel="noopener" class="text-primary hover:underline">OpenStreetMap</a> + <a href="https://openfreemap.org" target="_blank" rel="noopener" class="text-primary hover:underline">OpenFreeMap</a></li><li>Radar: <a href="https://rainviewer.com" target="_blank" rel="noopener" class="text-primary hover:underline">RainViewer</a></li><li>Geocoding: <a href="https://nominatim.org" target="_blank" rel="noopener" class="text-primary hover:underline">Nominatim</a></li></ul><h4 class="font-semibold">Privacy</h4><p>No personal data is collected. Location is only used for weather queries and never stored on servers. Favorites & settings sync via Firebase Auth (Google) only if you sign in. For more details, view our <a href="https://sites.google.com/view/aurafisky-privacypolicy/home" target="_blank" rel="noopener" class="text-primary hover:underline font-medium">Full Privacy Policy</a>.</p><h4 class="font-semibold">Offline Use</h4><p>Install as PWA for full offline access. Recent weather data cached in IndexedDB.</p><h4 class="font-semibold">License</h4><p>Version 16.0.0 · Proprietary. All rights reserved. Copyright &copy; 2026 Aurafisky.</p></div><div class="p-4 bg-slate-50 dark:bg-slate-800/50 rounded-b-2xl flex gap-3"><button id="termsAcceptBtn" class="flex-1 bg-primary hover:bg-primary-dark text-white font-semibold py-2.5 rounded-xl transition-colors">Accept & Continue</button><button id="copyContactEmailBtn" class="px-4 py-2.5 bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 font-semibold rounded-xl hover:bg-slate-300 dark:hover:bg-slate-600 transition-colors">Copy contact email</button></div></div></div>
 
   <!-- ============================================================ -->
   <!-- TURN-BY-TURN NAVIGATION                                      -->
@@ -1966,34 +2014,7 @@
     </div>
   </div>
 
-  <!-- ============================================================ -->
-  <!-- MOBILE FLOATING ACTION BUTTONS (Right Column)                -->
-  <!-- ============================================================ -->
-  <div id="mobileMapControls" class="sm:hidden fixed right-3.5 z-[1001] flex flex-col gap-2.5 items-center pointer-events-auto mobile-controls-safe-bottom">
-    
 
-    <!-- Share Location / Incident Button -->
-    <button id="mobileFloatingShareBtn" type="button" class="mobile-floating-control w-11 h-11 rounded-full bg-white/95 dark:bg-[#282a2d] border border-slate-200/80 dark:border-slate-700/60 text-slate-700 dark:text-slate-200 shadow-lg flex items-center justify-center active:scale-90 transition-all cursor-pointer" title="Share location" aria-label="Share location">
-      <svg class="w-5 h-5 text-slate-600 dark:text-slate-300" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-        <path stroke-linecap="round" stroke-linejoin="round" d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z" />
-      </svg>
-    </button>
-
-    <!-- Locate Me / Compass Button -->
-    <button id="mobileLocationFab" type="button" class="sm:hidden mobile-floating-control w-11 h-11 rounded-full bg-white/95 dark:bg-[#282a2d] border border-slate-200/80 dark:border-slate-700/60 text-slate-700 dark:text-slate-200 shadow-lg flex items-center justify-center active:scale-90 transition-all cursor-pointer" title="My Location (GPS)" aria-label="Find my location">
-      <svg class="w-5 h-5 text-teal-600 dark:text-teal-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-        <circle cx="12" cy="12" r="3.5"/>
-        <path stroke-linecap="round" stroke-linejoin="round" d="M12 2v3m0 14v3M2 12h3m14 0h3"/>
-      </svg>
-    </button>
-
-    <!-- Prominent Teal Directions FAB Button matching Screenshot 1 -->
-    <button id="mobileDirectionsFab" type="button" class="w-13 h-13 rounded-2xl bg-teal-600 hover:bg-teal-500 dark:bg-[#00897b] dark:hover:bg-[#00796b] text-white shadow-xl flex items-center justify-center active:scale-90 transition-all cursor-pointer ring-4 ring-teal-500/25" title="Get Directions" aria-label="Get Directions">
-      <svg class="w-7 h-7 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5">
-        <path stroke-linecap="round" stroke-linejoin="round" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
-      </svg>
-    </button>
-  </div>
 
   <!-- ============================================================ -->
   <!-- AURA MOBILE BOTTOM NAVIGATION BAR (Material Tabs)           -->
@@ -2007,7 +2028,7 @@
           <polyline points="9 22 9 12 15 12 15 22" />
         </svg>
       </div>
-      <span class="text-[11px] font-semibold mt-0.5">Set Home</span>
+      <span id="mobileNavHomeLabel" class="text-[11px] font-semibold mt-0.5">Set Home</span>
     </button>
 
     <!-- 2. Route Weather Tab (Folded Map Icon) -->
@@ -2034,6 +2055,156 @@
     <button id="mobileNavWeatherBtn" type="button" class="mobile-nav-btn hidden" aria-label="Weather card"></button>
     <button id="mobileNavLayersBtn" type="button" class="mobile-nav-btn hidden" aria-label="Map layers"></button>
   </nav>
+
+  <!-- ============================================================ -->
+  <!-- HOME LOCATION DROPDOWN (Mobile & Desktop)                    -->
+  <!-- ============================================================ -->
+  <div id="homeDropdown" class="hidden fixed bottom-16 left-3 sm:left-auto sm:top-14 sm:right-28 sm:bottom-auto w-[280px] glass rounded-2xl overflow-hidden shadow-2xl border border-slate-200/80 dark:border-slate-700/80 p-2 z-[1150] pointer-events-auto" role="menu" aria-label="Home Location Options">
+    <div class="px-3 py-2 flex items-center justify-between border-b border-slate-200/50 dark:border-slate-700/50">
+      <div class="flex items-center gap-1.5">
+        <span class="text-sm">🏠</span>
+        <span class="text-xs font-bold text-slate-800 dark:text-slate-100">Home Location</span>
+      </div>
+      <button id="closeHomeDropdownBtn" type="button" class="p-1 rounded-lg text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer" aria-label="Close home menu">
+        <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
+      </button>
+    </div>
+    <div class="p-1 space-y-1">
+      <!-- 1. Go to Home Option -->
+      <button id="homeDropdownGoBtn" type="button" class="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-left text-xs font-semibold text-slate-800 dark:text-slate-100 hover:bg-primary/10 hover:text-primary dark:hover:text-primary-light transition-all cursor-pointer">
+        <span class="text-base flex-shrink-0">🚀</span>
+        <div class="min-w-0 flex-1">
+          <div class="font-bold">Go to Home</div>
+          <div id="homeDropdownLocationText" class="text-[10px] text-slate-500 dark:text-slate-400 truncate">Not set</div>
+        </div>
+      </button>
+
+      <!-- 2. Set Current Location as Home Option -->
+      <button id="homeDropdownSetCurrentBtn" type="button" class="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-left text-xs font-semibold text-slate-800 dark:text-slate-100 hover:bg-amber-500/10 hover:text-amber-600 dark:hover:text-amber-400 transition-all cursor-pointer">
+        <span class="text-base flex-shrink-0">📍</span>
+        <div class="min-w-0 flex-1">
+          <div class="font-bold">Set Current as Home</div>
+          <div id="homeDropdownCurrentText" class="text-[10px] text-slate-500 dark:text-slate-400 truncate">Select a place first</div>
+        </div>
+      </button>
+
+      <!-- 3. Remove Home Option -->
+      <button id="homeDropdownRemoveBtn" type="button" class="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-left text-xs font-semibold text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/40 transition-all cursor-pointer border-t border-slate-100 dark:border-slate-800/60 pt-2">
+        <span class="text-base flex-shrink-0">🗑️</span>
+        <div class="min-w-0 flex-1">
+          <div class="font-bold">Remove Home</div>
+          <div class="text-[10px] text-rose-400/80">Clear saved home location</div>
+        </div>
+      </button>
+    </div>
+  </div>
+
+  <!-- ============================================================ -->
+  <!-- ROUTE WEATHER & PLANNER DROPDOWN (Mobile & Desktop)          -->
+  <!-- ============================================================ -->
+  <div id="routeDropdown" class="hidden fixed bottom-16 left-3 sm:left-auto sm:top-14 sm:right-16 sm:bottom-auto w-[310px] glass rounded-2xl overflow-hidden shadow-2xl border border-slate-200/80 dark:border-slate-700/80 p-2 z-[1150] pointer-events-auto" role="menu" aria-label="Route Weather & Planner Options">
+    <!-- Header -->
+    <div class="px-3 py-2 flex items-center justify-between border-b border-slate-200/50 dark:border-slate-700/50">
+      <div class="flex items-center gap-1.5 min-w-0">
+        <svg class="w-4 h-4 text-indigo-500 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7" /></svg>
+        <span class="text-xs font-bold text-slate-800 dark:text-slate-100 truncate">Route & Planner</span>
+        <span id="routeDropdownStatusBadge" class="text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-slate-500/10 text-slate-600 dark:text-slate-400 border border-slate-500/20 shrink-0">Ready</span>
+      </div>
+      <button id="closeRouteDropdownBtn" type="button" class="p-1 rounded-lg text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer" aria-label="Close route planner menu">
+        <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
+      </button>
+    </div>
+
+    <!-- Body -->
+    <div class="p-1 space-y-1 max-h-[65vh] overflow-y-auto custom-scrollbar">
+      <!-- 1. Location Selection Section -->
+      <div class="px-2 pt-1 pb-0.5 text-[10px] font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500">Select Locations on Map</div>
+
+      <!-- Set Origin (A) -->
+      <button id="routeDropdownSelectOriginBtn" type="button" class="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-left text-xs font-semibold text-slate-800 dark:text-slate-100 hover:bg-emerald-500/10 hover:text-emerald-600 dark:hover:text-emerald-400 transition-all cursor-pointer">
+        <span class="w-5 h-5 rounded-full bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 flex items-center justify-center text-[10px] font-black shrink-0">A</span>
+        <div class="min-w-0 flex-1">
+          <div class="font-bold flex items-center justify-between">
+            <span>Departure (Origin)</span>
+            <span class="text-[9px] text-emerald-600 dark:text-emerald-400 font-normal">Pick on map</span>
+          </div>
+          <div id="routeDropdownOriginText" class="text-[10px] text-slate-500 dark:text-slate-400 truncate">Tap map to set origin</div>
+        </div>
+      </button>
+
+      <!-- Set Destination (B) -->
+      <button id="routeDropdownSelectDestBtn" type="button" class="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-left text-xs font-semibold text-slate-800 dark:text-slate-100 hover:bg-rose-500/10 hover:text-rose-600 dark:hover:text-rose-400 transition-all cursor-pointer">
+        <span class="w-5 h-5 rounded-full bg-rose-500/20 text-rose-600 dark:text-rose-400 flex items-center justify-center text-[10px] font-black shrink-0">B</span>
+        <div class="min-w-0 flex-1">
+          <div class="font-bold flex items-center justify-between">
+            <span>Destination (Arrival)</span>
+            <span class="text-[9px] text-rose-600 dark:text-rose-400 font-normal">Pick on map</span>
+          </div>
+          <div id="routeDropdownDestText" class="text-[10px] text-slate-500 dark:text-slate-400 truncate">Tap map to set destination</div>
+        </div>
+      </button>
+
+      <!-- Add Intermediate Stop -->
+      <button id="routeDropdownAddStopBtn" type="button" class="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-left text-xs font-semibold text-slate-800 dark:text-slate-100 hover:bg-indigo-500/10 hover:text-indigo-600 dark:hover:text-indigo-400 transition-all cursor-pointer">
+        <span class="w-5 h-5 rounded-full bg-indigo-500/20 text-indigo-600 dark:text-indigo-400 flex items-center justify-center text-xs font-black shrink-0">＋</span>
+        <div class="min-w-0 flex-1">
+          <div class="font-bold">Add Stop on Map</div>
+          <div id="routeDropdownStopsCountText" class="text-[10px] text-slate-500 dark:text-slate-400 truncate">Tap map to insert waypoint</div>
+        </div>
+      </button>
+
+      <!-- Use Currently Selected Map Place (Dynamic if selectedLat != null) -->
+      <button id="routeDropdownUseCurrentBtn" type="button" class="hidden w-full flex items-center gap-2.5 px-3 py-1.5 rounded-xl text-left text-xs font-semibold text-amber-700 dark:text-amber-300 bg-amber-500/10 hover:bg-amber-500/20 transition-all cursor-pointer">
+        <span class="text-sm shrink-0">📍</span>
+        <div class="min-w-0 flex-1">
+          <div class="font-bold truncate" id="routeDropdownCurrentPlaceTitle">Use Selected Place</div>
+          <div id="routeDropdownCurrentPlaceText" class="text-[10px] text-amber-600/80 dark:text-amber-400/80 truncate">Add active pin to route</div>
+        </div>
+      </button>
+
+      <!-- Selected Waypoints Mini List (if pts.length > 0) -->
+      <div id="routeDropdownLocationsContainer" class="hidden pt-1 border-t border-slate-100 dark:border-slate-800/60">
+        <div class="flex items-center justify-between px-2 py-0.5">
+          <span class="text-[10px] font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500">Selected Locations</span>
+          <span id="routeDropdownStopsBadge" class="text-[9px] font-bold text-slate-500 dark:text-slate-400">0 stops</span>
+        </div>
+        <div id="routeDropdownLocationsList" class="space-y-1 max-h-36 overflow-y-auto custom-scrollbar px-1 py-1"></div>
+      </div>
+
+      <!-- Studio Controls Section -->
+      <div class="pt-1 border-t border-slate-100 dark:border-slate-800/60 space-y-1">
+        <!-- Open Weather Studio Option -->
+        <button id="routeDropdownOpenStudioBtn" type="button" class="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-left text-xs font-semibold text-indigo-600 dark:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-950/40 transition-all cursor-pointer">
+          <span class="text-base shrink-0">🌤️</span>
+          <div class="min-w-0 flex-1">
+            <div class="font-bold flex items-center justify-between">
+              <span>Open Weather Studio</span>
+              <span class="text-[9px] px-1.5 py-0.5 rounded bg-indigo-100 dark:bg-indigo-900/50 font-bold">Studio</span>
+            </div>
+            <div class="text-[10px] text-slate-500 dark:text-slate-400 truncate">Analyze route weather & hazards</div>
+          </div>
+        </button>
+
+        <!-- Close Studio Option (conditional: if studio opened) -->
+        <button id="routeDropdownCloseStudioBtn" type="button" class="hidden w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-left text-xs font-semibold text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition-all cursor-pointer">
+          <span class="text-base shrink-0">✕</span>
+          <div class="min-w-0 flex-1">
+            <div class="font-bold">Close Route Studio</div>
+            <div class="text-[10px] text-slate-400 truncate">Exit weather planner view</div>
+          </div>
+        </button>
+      </div>
+
+      <!-- Delete Locations Option (conditional: if user selected locations) -->
+      <button id="routeDropdownDeleteLocationsBtn" type="button" class="hidden w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-left text-xs font-semibold text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/40 transition-all cursor-pointer border-t border-slate-100 dark:border-slate-800/60 pt-2">
+        <span class="text-base shrink-0">🗑️</span>
+        <div class="min-w-0 flex-1">
+          <div class="font-bold">Delete Locations</div>
+          <div id="routeDropdownDeleteSubtext" class="text-[10px] text-rose-400/80">Clear all selected stops</div>
+        </div>
+      </button>
+    </div>
+  </div>
 
   <!-- ============================================================ -->
   <!-- "✨ AURA" — THE AURAFISKY ASSISTANT MODAL / SHEET              -->

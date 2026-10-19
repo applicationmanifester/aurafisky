@@ -158,23 +158,37 @@ export class WeatherService extends BaseService {
     const cacheKey = this._cacheKey(key, options);
     const cached = this._requestCache.get(cacheKey);
     if (cached) {
+      if (cached instanceof Promise) {
+        const resolved = await cached;
+        return resolved?.data;
+      }
       if (Date.now() - cached.ts < ttl) return cached.data;
       this._requestCache.delete(cacheKey);
     }
 
     // Store promise IMMEDIATELY so concurrent callers share it (fixes race condition)
-    const promise = fetchFn().then(data => ({
-      data,
-      ts: Date.now()
-    }));
-    this._requestCache.set(cacheKey, promise);
+    const promise = fetchFn()
+      .then((data) => {
+        const entry = { data, ts: Date.now() };
+        this._setCache(cacheKey, entry);
+        return entry;
+      })
+      .catch((err) => {
+        this._requestCache.delete(cacheKey);
+        throw err;
+      });
+    this._setCache(cacheKey, promise);
 
-    try {
-      const result = await promise;
-      return result.data;
-    } finally {
-      this._requestCache.delete(cacheKey);
+    const result = await promise;
+    return result.data;
+  }
+
+  _setCache(key, value) {
+    if (this._requestCache.size >= this.MAX_CACHE_SIZE) {
+      const oldestKey = this._requestCache.keys().next().value;
+      this._requestCache.delete(oldestKey);
     }
+    this._requestCache.set(key, value);
   }
 
   // ── Cache Management ────────────────────────────────────

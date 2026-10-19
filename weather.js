@@ -203,12 +203,17 @@ const WeatherService = (() => {
   async function fetchForecast(lat, lng, retries = 3, signal) {
     const round = (v) => v.toFixed(4);
     const cacheKey = `${FORECAST_URL}?latitude=${round(lat)}&longitude=${round(lng)}&past_days=${PAST_DAYS}&forecast_days=${FORECAST_DAYS}&timezone=auto`;
+    let staleData = null;
     if (_requestCache.has(cacheKey)) {
       const entry = _requestCache.get(cacheKey);
-      if (Date.now() - entry.ts < REQUEST_CACHE_TTL) {
-        return entry.data instanceof Promise ? await entry.data : entry.data;
+      if (entry) {
+        if (Date.now() - entry.ts < REQUEST_CACHE_TTL) {
+          return entry.data instanceof Promise ? await entry.data : entry.data;
+        }
+        if (entry.data && !(entry.data instanceof Promise) && entry.data.hourly?.time) {
+          staleData = entry.data;
+        }
       }
-      _requestCache.delete(cacheKey);
     }
 
     const fetchPromise = (async () => {
@@ -287,7 +292,14 @@ const WeatherService = (() => {
               attempt--;
               continue;
             }
-            throw new Error(`Weather API error: ${response.status}`);
+            const err = new Error(`Weather API error: ${response.status}`);
+            err.status = response.status;
+            const retryAfter = response.headers?.get?.("Retry-After");
+            if (retryAfter) {
+              const sec = parseInt(retryAfter, 10);
+              if (!isNaN(sec)) err.retryAfterMs = sec * 1000;
+            }
+            throw err;
           }
           const data = await response.json();
           if (!data.hourly?.time || !data.daily)
@@ -295,9 +307,19 @@ const WeatherService = (() => {
           _setCache(cacheKey, { data, ts: Date.now() });
           return data;
         } catch (err) {
-          if (attempt < retries)
-            await new Promise((r) => setTimeout(r, 300 * Math.pow(2, attempt)));
-          else {
+          if (attempt < retries) {
+            let delay = 300 * Math.pow(2, attempt);
+            if (err.status === 429 || String(err).includes("429")) {
+              const backoff = 1500 * Math.pow(2, attempt) + Math.random() * 500;
+              delay = err.retryAfterMs ? Math.max(err.retryAfterMs, backoff) : backoff;
+            }
+            await new Promise((r) => setTimeout(r, delay));
+          } else {
+            if (staleData) {
+              console.warn("Weather API rate-limited (429) or unavailable; falling back to cached forecast.", err);
+              _setCache(cacheKey, { data: staleData, ts: Date.now() - (REQUEST_CACHE_TTL - 60000) });
+              return staleData;
+            }
             _requestCache.delete(cacheKey);
             throw err;
           }
@@ -1051,13 +1073,24 @@ const WeatherService = (() => {
           } finally {
             clearTimeout(timer);
           }
-          if (!response.ok) return null;
+          if (!response.ok) {
+            if (response.status === 429) {
+              const err = new Error("Air quality rate limit 429");
+              err.status = 429;
+              throw err;
+            }
+            return null;
+          }
           const data = await response.json();
           _setCache(cacheKey, { data, ts: Date.now() });
           return data;
         } catch (err) {
           if (attempt < retries) {
-            await new Promise((r) => setTimeout(r, 400 * Math.pow(2, attempt)));
+            let delay = 400 * Math.pow(2, attempt);
+            if (err.status === 429 || String(err).includes("429")) {
+              delay = 1500 * Math.pow(2, attempt) + Math.random() * 500;
+            }
+            await new Promise((r) => setTimeout(r, delay));
           } else {
             _requestCache.delete(cacheKey);
             return null;

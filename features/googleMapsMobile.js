@@ -41,11 +41,13 @@ export class AuraMobileController {
   }
 
   _haptic(type = 'light') {
-    if (typeof navigator !== 'undefined' && navigator.vibrate) {
+    if (typeof navigator === 'undefined' || !navigator.vibrate) return;
+    if (navigator.userActivation && !navigator.userActivation.hasBeenActive) return;
+    try {
       if (type === 'selection') navigator.vibrate(8);
       else if (type === 'medium') navigator.vibrate([15]);
       else navigator.vibrate(12);
-    }
+    } catch (_) {}
   }
 
   /**
@@ -334,24 +336,24 @@ export class AuraMobileController {
       }
     });
 
-    // Chevron minimize button: toggle peek <-> half on mobile, toggle minimize on desktop
+    // Chevron minimize button: toggle peek <-> full on mobile, toggle minimize on desktop
     minBtn?.addEventListener('click', (e) => {
       if (!isMobileLayout()) {
         // On desktop, allow normal app.toggleMinimizeWeatherPanel to run without interference
         return;
       }
       e.stopPropagation();
+      e.stopImmediatePropagation();
       this._haptic('selection');
-      if (this.sheetState === 'full' || this.sheetState === 'half') {
+      if (this.sheetState === 'full' || panel.classList.contains('sheet-full')) {
         this.snapSheet('peek');
       } else {
         this.snapSheet('full');
       }
     });
 
-    // Expand bottom sheet on mobile when tapping drag handle, location name, weather badge, or Aura card
+    // Expand bottom sheet on mobile when tapping location name, weather badge, or Aura card
     const expandTargets = [
-      dragHandle,
       document.getElementById('sheetWeatherAqiBadge'),
       document.getElementById('panelLocationName'),
       document.getElementById('auraBannerCard')
@@ -359,13 +361,24 @@ export class AuraMobileController {
     expandTargets.forEach(el => {
       el?.addEventListener('click', (e) => {
         if (!isMobileLayout()) return;
-        if (this.sheetState === 'peek') {
-          if (e.target.closest('#panelCloseBtn, #panelMinimizeBtn')) return;
+        if (e.target.closest('#panelCloseBtn, #panelMinimizeBtn')) return;
+        if (this.sheetState === 'peek' || panel.classList.contains('sheet-peek') || panel.classList.contains('minimized')) {
           e.stopPropagation();
           this._haptic('selection');
           this.snapSheet('full');
         }
       });
+    });
+
+    // Tapping anywhere on the sheet header in peek mode smoothly expands to full
+    const panelHeader = document.getElementById('weatherPanelHeader');
+    panelHeader?.addEventListener('click', (e) => {
+      if (!isMobileLayout()) return;
+      if (e.target.closest('#panelCloseBtn, #panelMinimizeBtn, button, a')) return;
+      if (this.sheetState === 'peek' || panel.classList.contains('sheet-peek') || panel.classList.contains('minimized')) {
+        this._haptic('selection');
+        this.snapSheet('full');
+      }
     });
 
     // On desktop, clicking the weather & AQI pill toggles minimize or selects overview
@@ -385,24 +398,24 @@ export class AuraMobileController {
     let isDragging = false;
     let startTime = 0;
 
-    const onTouchStart = (e) => {
+    const onDragStart = (clientY) => {
       if (!isMobileLayout()) return;
       isDragging = true;
-      startY = e.touches[0].clientY;
+      startY = clientY;
       initialHeight = panel.getBoundingClientRect().height;
       startTime = Date.now();
       panel.style.transition = 'none';
+      panel.classList.remove('sheet-peek', 'minimized');
     };
 
-    const onTouchMove = (e) => {
+    const onDragMove = (clientY) => {
       if (!isDragging) return;
-      const currentY = e.touches[0].clientY;
-      const deltaY = startY - currentY; // positive = dragging UP
+      const deltaY = startY - clientY; // positive = dragging UP
       const newHeight = initialHeight + deltaY;
       const vh = window.innerHeight;
 
-      // Bound between peek (140px) and 90vh
-      if (newHeight >= 140 && newHeight <= vh * 0.90) {
+      // Bound between peek (140px) and full screen
+      if (newHeight >= 140 && newHeight <= vh) {
         panel.style.height = `${newHeight}px`;
         panel.style.maxHeight = `${newHeight}px`;
         panel.style.transform = 'translateY(0)';
@@ -412,17 +425,16 @@ export class AuraMobileController {
       }
     };
 
-    const onTouchEnd = (e) => {
+    const onDragEnd = (clientY) => {
       if (!isDragging) return;
       isDragging = false;
-      const endY = e.changedTouches[0].clientY;
-      const deltaY = startY - endY;
+      const deltaY = startY - clientY;
       const duration = Date.now() - startTime;
       const velocity = deltaY / (duration || 1); // px per ms
 
-      if (velocity > 0.4) {
+      if (velocity > 0.3 || deltaY > 70) {
         this.snapSheet('full');
-      } else if (velocity < -0.4) {
+      } else if (velocity < -0.3 || deltaY < -70) {
         this.snapSheet('peek');
       } else {
         const currentHeight = panel.getBoundingClientRect().height;
@@ -437,15 +449,29 @@ export class AuraMobileController {
       }
     };
 
-    dragHandle.addEventListener('touchstart', onTouchStart, { passive: true });
-    window.addEventListener('touchmove', onTouchMove, { passive: true });
-    window.addEventListener('touchend', onTouchEnd, { passive: true });
+    dragHandle.addEventListener('touchstart', (e) => onDragStart(e.touches[0].clientY), { passive: true });
+    window.addEventListener('touchmove', (e) => { if (isDragging && e.touches?.[0]) onDragMove(e.touches[0].clientY); }, { passive: true });
+    window.addEventListener('touchend', (e) => { if (isDragging && e.changedTouches?.[0]) onDragEnd(e.changedTouches[0].clientY); }, { passive: true });
 
-    dragHandle.addEventListener('click', () => {
+    dragHandle.addEventListener('pointerdown', (e) => {
+      if (e.pointerType === 'mouse' && e.button === 0) onDragStart(e.clientY);
+    });
+    window.addEventListener('pointermove', (e) => {
+      if (isDragging && e.pointerType === 'mouse') onDragMove(e.clientY);
+    });
+    window.addEventListener('pointerup', (e) => {
+      if (isDragging && e.pointerType === 'mouse') onDragEnd(e.clientY);
+    });
+
+    dragHandle.addEventListener('click', (e) => {
       if (!isMobileLayout()) return;
+      e.stopPropagation();
       this._haptic('selection');
-      if (this.sheetState === 'peek') this.snapSheet('full');
-      else this.snapSheet('peek');
+      if (this.sheetState === 'peek' || panel.classList.contains('sheet-peek') || panel.classList.contains('minimized')) {
+        this.snapSheet('full');
+      } else {
+        this.snapSheet('peek');
+      }
     });
 
     if (isMobileLayout()) {
@@ -530,6 +556,7 @@ export class AuraMobileController {
     panel.style.opacity = '1';
     panel.style.pointerEvents = 'auto';
 
+    const minBtn = document.getElementById('panelMinimizeBtn');
     if (state === 'peek') {
       const targetHeight = 175;
       panel.style.height = `${targetHeight}px`;
@@ -540,7 +567,11 @@ export class AuraMobileController {
       panel.style.right = '';
       panel.style.transform = 'translateY(0)';
       panel.classList.add('minimized');
-      this.app?.$.panelMinimizeBtn?.classList.add('chevron-flipped');
+      panel.classList.remove('sheet-full', 'sheet-half');
+      panel.classList.add('sheet-peek');
+      minBtn?.classList.add('chevron-flipped');
+      minBtn?.setAttribute('title', 'Expand weather details');
+      minBtn?.setAttribute('aria-label', 'Expand weather details');
     } else {
       // 'full' or any expanded state: completely overlap screen on mobile
       panel.style.height = '100dvh';
@@ -550,8 +581,11 @@ export class AuraMobileController {
       panel.style.left = '0px';
       panel.style.right = '0px';
       panel.style.transform = 'translateY(0)';
-      panel.classList.remove('minimized');
-      this.app?.$.panelMinimizeBtn?.classList.remove('chevron-flipped');
+      panel.classList.remove('minimized', 'sheet-peek', 'sheet-half');
+      panel.classList.add('sheet-full');
+      minBtn?.classList.remove('chevron-flipped');
+      minBtn?.setAttribute('title', 'Minimize weather panel');
+      minBtn?.setAttribute('aria-label', 'Minimize weather panel');
     }
 
     this._haptic('selection');

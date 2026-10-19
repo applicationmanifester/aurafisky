@@ -61,6 +61,26 @@ const SCENES = {
   fog: { sky: ['#6b7280', '#9ca3af', '#d1d5db'], sun: '#e5e7eb', terrain: ['#374151', '#4b5563', '#6b7280'], accent: '#e5e7eb' },
 };
 
+// ── Preset palettes ──
+// Named color overlays the user can apply over any weather scene.
+// Each preset has tint colors layered over the scene, plus an optional
+// vignette intensity. These are purely cosmetic on top of the weather-driven
+// scene below.
+const WALLPAPER_PRESETS = {
+  none: { label: 'None', description: 'No overlay', tint: null },
+  golden: { label: 'Golden Hour', description: 'Warm sunset glow', tint: ['rgba(251,191,36,0.35)', 'rgba(244,114,182,0.22)', 'rgba(56,189,248,0)'] },
+  midnight: { label: 'Midnight', description: 'Deep navy nightscape', tint: ['rgba(2,6,23,0.5)', 'rgba(15,23,42,0.5)', 'rgba(15,23,42,0.5)'] },
+  sunrise: { label: 'Sunrise Glow', description: 'Soft peach and pink morning', tint: ['rgba(255,204,153,0.4)', 'rgba(255,178,178,0.3)', 'rgba(255,224,178,0.2)'] },
+  twilight: { label: 'Twilight', description: 'Deep purple and teal dusk', tint: ['rgba(76,29,149,0.4)', 'rgba(102,102,238,0.3)', 'rgba(63,132,247,0.2)'] },
+  forest: { label: 'Forest Haze', description: 'Cool green forest mist', tint: ['rgba(74,122,74,0.35)', 'rgba(94,153,94,0.25)', 'rgba(126,184,126,0.15)'] },
+  desert: { label: 'Desert Heat', description: 'Warm orange desert haze', tint: ['rgba(237,137,32,0.4)', 'rgba(234,88,12,0.3)', 'rgba(220,38,38,0.15)'] },
+  aurora: { label: 'Aurora', description: 'Vivid green and purple aurora', tint: ['rgba(34,197,94,0.35)', 'rgba(139,92,246,0.25)', 'rgba(16,185,129,0.15)'] },
+  monochrome: { label: 'Monochrome', description: 'Black and white classic', tint: ['rgba(255,255,255,0.3)', 'rgba(255,255,255,0.2)', 'rgba(255,255,255,0.1)'] },
+};
+
+// Export for use by UI/registry if needed.
+export { WALLPAPER_PRESETS };
+
 /** Maps a WMO code + day/night onto a scene key. */
 function sceneKey(code, isDay) {
   if (typeof code !== 'number' || Number.isNaN(code)) {
@@ -138,6 +158,9 @@ export class WallpaperRenderer {
     this._reducedMotion =
       typeof window !== 'undefined' &&
       window.matchMedia?.('(prefers-reduced-motion: reduce)')?.matches === true;
+    // Preset overlay state
+    this.presetName = 'none';
+    this.presetOpacity = 0.4;
   }
 
   setup() {
@@ -421,6 +444,21 @@ export class WallpaperRenderer {
       }
     }
 
+    // ── Preset overlay tint ──
+    if (this.presetName && this.presetName !== 'none') {
+      const preset = WALLPAPER_PRESETS[this.presetName];
+      if (preset && preset.tint) {
+        const g = ctx.createLinearGradient(0, 0, 0, h);
+        g.addColorStop(0, preset.tint[0]);
+        g.addColorStop(0.5, preset.tint[1]);
+        g.addColorStop(1, preset.tint[2]);
+        ctx.fillStyle = g;
+        ctx.globalAlpha = this.presetOpacity;
+        ctx.fillRect(0, 0, w, h);
+        ctx.globalAlpha = 1;
+      }
+    }
+
     // ── Vignette + scrim so the overlaid text always stays legible ──
     const vig = ctx.createRadialGradient(w / 2, h / 2, Math.min(w, h) * 0.25, w / 2, h / 2, Math.max(w, h) * 0.75);
     vig.addColorStop(0, 'rgba(0,0,0,0)');
@@ -650,10 +688,12 @@ export class WallpaperRenderer {
   }
 
   _haptic(type = 'light') {
-    if (typeof navigator !== 'undefined' && navigator.vibrate) {
+    if (typeof navigator === 'undefined' || !navigator.vibrate) return;
+    if (navigator.userActivation && !navigator.userActivation.hasBeenActive) return;
+    try {
       if (type === 'medium') navigator.vibrate([15]);
       else navigator.vibrate(12);
-    }
+    } catch (_) {}
   }
 
   /**

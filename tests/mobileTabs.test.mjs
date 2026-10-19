@@ -280,6 +280,21 @@ describe('Mobile Tabs & Navigation Layout', () => {
     expect(appJs).toContain("this.$.weatherPanel.classList.add(\"open\", \"sheet-full\"");
     expect(appJs).toContain("this.$.weatherPanel.style.height = '100dvh'");
   });
+
+  it('ensures sheet-full overrides peek/minimized styles and header click expands sheet on mobile', () => {
+    const css = fs.readFileSync('styles.css', 'utf-8');
+    expect(css).toContain('.weather-panel.open.google-maps-sheet.sheet-peek:not(.sheet-full)');
+    expect(css).toContain('.weather-panel.open.google-maps-sheet.minimized:not(.sheet-full)');
+
+    const mobileJs = fs.readFileSync('features/googleMapsMobile.js', 'utf-8');
+    expect(mobileJs).toContain("weatherPanelHeader");
+    expect(mobileJs).toContain("panel.classList.add('sheet-full');");
+    expect(mobileJs).toContain("panel.classList.remove('minimized', 'sheet-peek', 'sheet-half');");
+
+    const appJs = fs.readFileSync('app.js', 'utf-8');
+    expect(appJs).toContain("this.googleMapsMobile.snapSheet('full')");
+    expect(appJs).toContain("this.googleMapsMobile.snapSheet('peek')");
+  });
 });
 
 

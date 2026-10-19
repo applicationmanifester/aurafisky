@@ -628,11 +628,13 @@ export class AuraAssistant {
   }
 
   _haptic(type = 'light') {
-    if (typeof navigator !== 'undefined' && navigator.vibrate) {
+    if (typeof navigator === 'undefined' || !navigator.vibrate) return;
+    if (navigator.userActivation && !navigator.userActivation.hasBeenActive) return;
+    try {
       if (type === 'selection') navigator.vibrate(8);
       else if (type === 'medium') navigator.vibrate([15]);
       else navigator.vibrate(12);
-    }
+    } catch (_) {}
   }
 
   _wakeSheet() {

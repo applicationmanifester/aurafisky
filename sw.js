@@ -180,6 +180,11 @@ self.addEventListener("fetch", (e) => {
           const networkResponse = await fetch(e.request);
           if (networkResponse && networkResponse.status === 200) {
             cache.put(e.request, networkResponse.clone());
+            return networkResponse;
+          }
+          if (networkResponse && networkResponse.status === 429) {
+            const cached = await cache.match(e.request);
+            if (cached) return cached;
           }
           return networkResponse;
         } catch (err) {

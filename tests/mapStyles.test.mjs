@@ -41,4 +41,63 @@ describe("Map Modes & Terrain Styles", () => {
     expect(sanitizeStyle("satellite")).toBe("satellite");
     expect(sanitizeStyle("terrain")).toBe("terrain");
   });
+
+  test("persists mapLayersMinimized state to localStorage", () => {
+    localStorage.setItem("aurafisky_map_layers_minimized", "true");
+    expect(localStorage.getItem("aurafisky_map_layers_minimized")).toBe("true");
+
+    localStorage.setItem("aurafisky_map_layers_minimized", "false");
+    expect(localStorage.getItem("aurafisky_map_layers_minimized")).toBe("false");
+  });
+
+  test("index.html contains map layers minimize button, active badge, and collapsible body", () => {
+    const fs = require("fs");
+    const html = fs.readFileSync("index.html", "utf-8");
+    expect(html).toContain('id="minimizeMapLayersBtn"');
+    expect(html).toContain('id="mapLayersActiveBadge"');
+    expect(html).toContain('id="mapLayersBody"');
+    expect(html).toContain('id="mapLayersFlyout"');
+  });
+
+  test("styles.css contains styling for #mapLayersFlyout.minimized", () => {
+    const fs = require("fs");
+    const css = fs.readFileSync("styles.css", "utf-8");
+    expect(css).toContain("#mapLayersFlyout.minimized");
+  });
+
+  test("index.html contains mapModeSelectDropdown with all mode options", () => {
+    const fs = require("fs");
+    const html = fs.readFileSync("index.html", "utf-8");
+    expect(html).toContain('id="mapModeSelectDropdown"');
+    expect(html).toContain('value="street"');
+    expect(html).toContain('value="satellite"');
+    expect(html).toContain('value="terrain"');
+    expect(html).toContain('value="dark"');
+  });
+
+  test("index.html contains hourly forecast column headers", () => {
+    const fs = require("fs");
+    const html = fs.readFileSync("index.html", "utf-8");
+    expect(html).toContain("hourly-header-row");
+    expect(html).toContain("Time");
+    expect(html).toContain("Sky");
+    expect(html).toContain("Temp");
+    expect(html).toContain("Precip");
+    expect(html).toContain("Wind");
+    expect(html).toContain("Humidity");
+  });
+
+  test("features/routes.js includes loading indicator for multi-stop route data", () => {
+    const fs = require("fs");
+    const code = fs.readFileSync("features/routes.js", "utf-8");
+    expect(code).toContain("showRoutePanelLoading");
+    expect(code).toContain("Loading Route & Weather Data");
+  });
+
+  test("index.html only uses dropdown for map modes and removes mapStyleGrid cards", () => {
+    const fs = require("fs");
+    const html = fs.readFileSync("index.html", "utf-8");
+    expect(html).not.toContain('id="mapStyleGrid"');
+    expect(html).toContain('id="mapModeSelectDropdown"');
+  });
 });

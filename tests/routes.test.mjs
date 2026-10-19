@@ -333,11 +333,12 @@ test("Route Weather & Planner Dropdown exists with all required options", () => 
   const routesCode = fs.readFileSync("features/routes.js", "utf-8");
   const css = fs.readFileSync("styles.css", "utf-8");
 
-  // Dropdown markup in index.html
+  // Dropdown markup in index.html - streamlined to single unified "Add Stop on Map" action
   expect(html).toContain('id="routeDropdown"');
-  expect(html).toContain('id="routeDropdownSelectOriginBtn"');
-  expect(html).toContain('id="routeDropdownSelectDestBtn"');
+  expect(html).not.toContain('id="routeDropdownSelectOriginBtn"');
+  expect(html).not.toContain('id="routeDropdownSelectDestBtn"');
   expect(html).toContain('id="routeDropdownAddStopBtn"');
+  expect(html).toContain('Origin, stops, destination');
   expect(html).toContain('id="routeDropdownOpenStudioBtn"');
   expect(html).toContain('id="routeDropdownCloseStudioBtn"');
   expect(html).toContain('id="routeDropdownDeleteLocationsBtn"');

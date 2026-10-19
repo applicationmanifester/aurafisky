@@ -721,12 +721,16 @@ export function updateRouteDropdownUI() {
     }
   }
 
-  // Intermediate stops text
+  // Intermediate stops text (brief: origin, stops, destination)
   if (stopsCountText) {
-    if (pts.length > 2) {
-      stopsCountText.textContent = `${pts.length - 2} intermediate stop${pts.length - 2 > 1 ? "s" : ""} added`;
+    if (pts.length === 0) {
+      stopsCountText.textContent = "Origin, stops, destination • Tap map to add";
+    } else if (pts.length === 1) {
+      stopsCountText.textContent = "Origin set • Tap map for destination";
+    } else if (pts.length === 2) {
+      stopsCountText.textContent = "Route set • Tap map to add more stops";
     } else {
-      stopsCountText.textContent = "Tap map to insert waypoint";
+      stopsCountText.textContent = `${pts.length} points (Origin, ${pts.length - 2} stop${pts.length - 2 > 1 ? "s" : ""}, Destination)`;
     }
   }
 
@@ -860,7 +864,13 @@ function initRouteDropdownListeners() {
     e.stopPropagation();
     toggleRouteDropdown(false);
     activateMapPickMode("stop");
-    appRef?.showToast?.("➕ Tap map to add intermediate stop", "info");
+    if (pts.length === 0) {
+      appRef?.showToast?.("📍 Tap map to set Departure / Origin (A)", "info");
+    } else if (pts.length === 1) {
+      appRef?.showToast?.("🏁 Tap map to set Destination (B)", "info");
+    } else {
+      appRef?.showToast?.("➕ Tap map to add stop to route", "info");
+    }
   });
 
   const useCurrentBtn = document.getElementById("routeDropdownUseCurrentBtn");
@@ -1512,11 +1522,13 @@ async function onMapClick(e) {
 
   if (isPanelOpen) {
     await fetchAndRenderRoutePlan();
-  } else if (isMobileLayout()) {
+  } else {
     if (pts.length === 1) {
-      appRef?.showToast?.("📍 Start point set! Now tap map for Destination (B)", "info");
+      appRef?.showToast?.("📍 Start point (A) set! Tap map for Destination (B)", "info");
     } else if (pts.length === 2) {
-      appRef?.showToast?.("🏁 Route ready! Tap 'Analyze' on the top HUD to view full route weather.", "success");
+      appRef?.showToast?.("🏁 Destination (B) set! Route ready. Tap map to add more stops or tap 'Analyze'.", "success");
+    } else if (pts.length > 2) {
+      appRef?.showToast?.(`➕ Stop ${pts.length - 2} added to route`, "info");
     }
   }
 }

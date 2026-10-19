@@ -2117,36 +2117,15 @@
       <!-- 1. Location Selection Section -->
       <div class="px-2 pt-1 pb-0.5 text-[10px] font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500">Select Locations on Map</div>
 
-      <!-- Set Origin (A) -->
-      <button id="routeDropdownSelectOriginBtn" type="button" class="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-left text-xs font-semibold text-slate-800 dark:text-slate-100 hover:bg-emerald-500/10 hover:text-emerald-600 dark:hover:text-emerald-400 transition-all cursor-pointer">
-        <span class="w-5 h-5 rounded-full bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 flex items-center justify-center text-[10px] font-black shrink-0">A</span>
+      <!-- Add Stop on Map (Origin, Stops, Destination) -->
+      <button id="routeDropdownAddStopBtn" type="button" class="w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-left text-xs font-semibold text-slate-800 dark:text-slate-100 hover:bg-indigo-500/10 hover:text-indigo-600 dark:hover:text-indigo-400 transition-all cursor-pointer">
+        <span class="w-6 h-6 rounded-full bg-indigo-500/20 text-indigo-600 dark:text-indigo-400 flex items-center justify-center text-xs font-black shrink-0">＋</span>
         <div class="min-w-0 flex-1">
           <div class="font-bold flex items-center justify-between">
-            <span>Departure (Origin)</span>
-            <span class="text-[9px] text-emerald-600 dark:text-emerald-400 font-normal">Pick on map</span>
+            <span>Add Stop on Map</span>
+            <span class="text-[9px] text-indigo-600 dark:text-indigo-400 font-normal">Pick on map</span>
           </div>
-          <div id="routeDropdownOriginText" class="text-[10px] text-slate-500 dark:text-slate-400 truncate">Tap map to set origin</div>
-        </div>
-      </button>
-
-      <!-- Set Destination (B) -->
-      <button id="routeDropdownSelectDestBtn" type="button" class="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-left text-xs font-semibold text-slate-800 dark:text-slate-100 hover:bg-rose-500/10 hover:text-rose-600 dark:hover:text-rose-400 transition-all cursor-pointer">
-        <span class="w-5 h-5 rounded-full bg-rose-500/20 text-rose-600 dark:text-rose-400 flex items-center justify-center text-[10px] font-black shrink-0">B</span>
-        <div class="min-w-0 flex-1">
-          <div class="font-bold flex items-center justify-between">
-            <span>Destination (Arrival)</span>
-            <span class="text-[9px] text-rose-600 dark:text-rose-400 font-normal">Pick on map</span>
-          </div>
-          <div id="routeDropdownDestText" class="text-[10px] text-slate-500 dark:text-slate-400 truncate">Tap map to set destination</div>
-        </div>
-      </button>
-
-      <!-- Add Intermediate Stop -->
-      <button id="routeDropdownAddStopBtn" type="button" class="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-left text-xs font-semibold text-slate-800 dark:text-slate-100 hover:bg-indigo-500/10 hover:text-indigo-600 dark:hover:text-indigo-400 transition-all cursor-pointer">
-        <span class="w-5 h-5 rounded-full bg-indigo-500/20 text-indigo-600 dark:text-indigo-400 flex items-center justify-center text-xs font-black shrink-0">＋</span>
-        <div class="min-w-0 flex-1">
-          <div class="font-bold">Add Stop on Map</div>
-          <div id="routeDropdownStopsCountText" class="text-[10px] text-slate-500 dark:text-slate-400 truncate">Tap map to insert waypoint</div>
+          <div id="routeDropdownStopsCountText" class="text-[10px] text-slate-500 dark:text-slate-400 truncate">Origin, stops, destination &bull; Tap map to add</div>
         </div>
       </button>
 

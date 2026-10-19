@@ -68,14 +68,14 @@ const SCENES = {
 // scene below.
 const WALLPAPER_PRESETS = {
   none: { label: 'None', description: 'No overlay', tint: null },
-  golden: { label: 'Golden Hour', description: 'Warm sunset glow', tint: ['rgba(251,191,36,0.35)', 'rgba(244,114,182,0.22)', 'rgba(56,189,248,0)'] },
-  midnight: { label: 'Midnight', description: 'Deep navy nightscape', tint: ['rgba(2,6,23,0.5)', 'rgba(15,23,42,0.5)', 'rgba(15,23,42,0.5)'] },
-  sunrise: { label: 'Sunrise Glow', description: 'Soft peach and pink morning', tint: ['rgba(255,204,153,0.4)', 'rgba(255,178,178,0.3)', 'rgba(255,224,178,0.2)'] },
-  twilight: { label: 'Twilight', description: 'Deep purple and teal dusk', tint: ['rgba(76,29,149,0.4)', 'rgba(102,102,238,0.3)', 'rgba(63,132,247,0.2)'] },
-  forest: { label: 'Forest Haze', description: 'Cool green forest mist', tint: ['rgba(74,122,74,0.35)', 'rgba(94,153,94,0.25)', 'rgba(126,184,126,0.15)'] },
-  desert: { label: 'Desert Heat', description: 'Warm orange desert haze', tint: ['rgba(237,137,32,0.4)', 'rgba(234,88,12,0.3)', 'rgba(220,38,38,0.15)'] },
-  aurora: { label: 'Aurora', description: 'Vivid green and purple aurora', tint: ['rgba(34,197,94,0.35)', 'rgba(139,92,246,0.25)', 'rgba(16,185,129,0.15)'] },
-  monochrome: { label: 'Monochrome', description: 'Black and white classic', tint: ['rgba(255,255,255,0.3)', 'rgba(255,255,255,0.2)', 'rgba(255,255,255,0.1)'] },
+  golden: { label: 'Golden Hour', description: 'Warm sunset glow', tint: ['rgba(251,146,60,0.55)', 'rgba(245,158,11,0.45)', 'rgba(217,119,6,0.35)'] },
+  midnight: { label: 'Midnight', description: 'Deep navy nightscape', tint: ['rgba(2,6,23,0.7)', 'rgba(15,23,42,0.65)', 'rgba(30,41,59,0.55)'] },
+  sunrise: { label: 'Sunrise Glow', description: 'Soft peach and pink morning', tint: ['rgba(255,182,193,0.55)', 'rgba(254,215,170,0.5)', 'rgba(253,186,116,0.35)'] },
+  twilight: { label: 'Twilight', description: 'Deep purple and teal dusk', tint: ['rgba(76,29,149,0.55)', 'rgba(102,102,238,0.45)', 'rgba(63,132,247,0.35)'] },
+  forest: { label: 'Forest Haze', description: 'Cool green forest mist', tint: ['rgba(20,83,45,0.6)', 'rgba(34,197,94,0.45)', 'rgba(16,185,129,0.35)'] },
+  desert: { label: 'Desert Heat', description: 'Warm orange desert haze', tint: ['rgba(234,88,12,0.6)', 'rgba(249,115,22,0.5)', 'rgba(251,146,60,0.35)'] },
+  aurora: { label: 'Aurora', description: 'Vivid green and purple aurora', tint: ['rgba(16,185,129,0.55)', 'rgba(139,92,246,0.5)', 'rgba(59,130,246,0.35)'] },
+  monochrome: { label: 'Monochrome', description: 'Black and white classic', tint: ['rgba(128,128,128,0.5)', 'rgba(100,100,100,0.5)', 'rgba(60,60,60,0.5)'] },
 };
 
 // Export for use by UI/registry if needed.
@@ -159,8 +159,36 @@ export class WallpaperRenderer {
       typeof window !== 'undefined' &&
       window.matchMedia?.('(prefers-reduced-motion: reduce)')?.matches === true;
     // Preset overlay state
-    this.presetName = 'none';
-    this.presetOpacity = 0.4;
+    let savedPreset = 'none';
+    try {
+      if (typeof localStorage !== 'undefined') {
+        savedPreset = localStorage.getItem('aurafisky_wallpaper_preset') || 'none';
+      }
+    } catch (_) {}
+    this.presetName = (savedPreset && (savedPreset === 'none' || WALLPAPER_PRESETS[savedPreset])) ? savedPreset : 'none';
+    this.presetOpacity = 0.55;
+  }
+
+  setPreset(name) {
+    this.presetName = (name && WALLPAPER_PRESETS[name]) ? name : 'none';
+    try {
+      if (typeof localStorage !== 'undefined') {
+        localStorage.setItem('aurafisky_wallpaper_preset', this.presetName);
+      }
+    } catch (_) {}
+
+    if (this.canvas) {
+      const rect = this.canvas.getBoundingClientRect();
+      if (rect.width && rect.height) {
+        this.ctx = this._fitCanvas(this.canvas, rect.width, rect.height);
+        const ratio = Math.min(window.devicePixelRatio || 1, 2);
+        const w = this.canvas.width / ratio;
+        const h = this.canvas.height / ratio;
+        this.ctx.clearRect(0, 0, w, h);
+        this.paintScene(this.ctx, w, h, this.scene(), 0);
+        this.paintUserPhoto(this.ctx, w, h);
+      }
+    }
   }
 
   setup() {
@@ -447,15 +475,23 @@ export class WallpaperRenderer {
     // ── Preset overlay tint ──
     if (this.presetName && this.presetName !== 'none') {
       const preset = WALLPAPER_PRESETS[this.presetName];
-      if (preset && preset.tint) {
-        const g = ctx.createLinearGradient(0, 0, 0, h);
-        g.addColorStop(0, preset.tint[0]);
-        g.addColorStop(0.5, preset.tint[1]);
-        g.addColorStop(1, preset.tint[2]);
-        ctx.fillStyle = g;
-        ctx.globalAlpha = this.presetOpacity;
-        ctx.fillRect(0, 0, w, h);
-        ctx.globalAlpha = 1;
+      if (preset) {
+        if (this.presetName === 'monochrome') {
+          ctx.save();
+          ctx.globalCompositeOperation = 'color';
+          ctx.fillStyle = '#808080';
+          ctx.fillRect(0, 0, w, h);
+          ctx.restore();
+        } else if (preset.tint) {
+          const g = ctx.createLinearGradient(0, 0, 0, h);
+          g.addColorStop(0, preset.tint[0]);
+          g.addColorStop(0.5, preset.tint[1]);
+          g.addColorStop(1, preset.tint[2]);
+          ctx.fillStyle = g;
+          ctx.globalAlpha = this.presetOpacity || 0.55;
+          ctx.fillRect(0, 0, w, h);
+          ctx.globalAlpha = 1;
+        }
       }
     }
 

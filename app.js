@@ -2453,11 +2453,7 @@ class AurafiskyApp {
         e.stopPropagation();
         const preset = btn.dataset.preset;
         if (!preset) return;
-        this.wallpaperPreset = preset;
-        try {
-          localStorage.setItem("aurafisky_wallpaper_preset", preset);
-        } catch (_) {}
-        this.wallpaperOverlay?.refresh();
+        this.setWallpaperPreset(preset);
         this._haptic?.('selection');
       });
     });
@@ -6047,6 +6043,7 @@ class AurafiskyApp {
     this.renderWallpaperTabs();
     this.refreshWallpaperDisplay();
     this.startWallpaperBgAnimation();
+    this.setWallpaperPreset(this.wallpaperPreset || localStorage.getItem("aurafisky_wallpaper_preset") || "none");
 
     // Immersive features
     if (this.wallpaperBrandEnabled) {
@@ -7423,6 +7420,42 @@ class AurafiskyApp {
    */
   refreshWallpaperPhotoBg() {
     this.wallpaperPhotoEnabled && this.wallpaper?.refresh?.();
+  }
+
+  /**
+   * Applies the selected wallpaper atmosphere/theme preset across both
+   * the procedural canvas scene and the overlay container.
+   */
+  setWallpaperPreset(preset = "none") {
+    this.wallpaperPreset = preset;
+    try {
+      localStorage.setItem("aurafisky_wallpaper_preset", preset);
+    } catch (_) {}
+
+    // Update preset on the wallpaper canvas renderer
+    if (this.wallpaper && typeof this.wallpaper.setPreset === "function") {
+      this.wallpaper.setPreset(preset);
+    } else if (this.wallpaper) {
+      this.wallpaper.presetName = preset;
+      this.refreshWallpaperPhotoBg();
+    }
+
+    // Update preset theme classes on wallpaper overlay
+    const overlay = this.$.wallpaperOverlay || document.getElementById("wallpaperOverlay");
+    if (overlay) {
+      const allPresets = ["none", "golden", "midnight", "sunrise", "forest", "desert", "aurora", "monochrome", "twilight"];
+      allPresets.forEach((p) => overlay.classList.remove(`preset-${p}`));
+      if (preset && preset !== "none") {
+        overlay.classList.add(`preset-${preset}`);
+      }
+    }
+
+    // Update active UI state on theme preset buttons
+    document.querySelectorAll("[data-preset]").forEach((btn) => {
+      const isCurrent = btn.dataset.preset === preset;
+      btn.classList.toggle("active", isCurrent);
+      btn.setAttribute("aria-selected", isCurrent ? "true" : "false");
+    });
   }
 
   openWallpaperAddTabModal() {

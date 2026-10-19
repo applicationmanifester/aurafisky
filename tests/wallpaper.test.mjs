@@ -4,7 +4,7 @@
 // scene looks like — condition mapping, solar phase, and the location seed —
 // is deterministic and testable without a DOM.
 import { test, expect, describe } from "vitest";
-import { sceneKey, sunPhase, seedFor } from "../features/wallpaper.js";
+import { sceneKey, sunPhase, seedFor, WALLPAPER_PRESETS, WallpaperRenderer } from "../features/wallpaper.js";
 
 describe("sceneKey", () => {
   test("maps WMO codes onto the right scene", () => {
@@ -89,5 +89,38 @@ describe("seedFor", () => {
       expect(Number.isInteger(s)).toBe(true);
       expect(s).toBeGreaterThanOrEqual(0);
     }
+  });
+});
+
+describe("wallpaper presets & renderer", () => {
+  test("defines all standard themes with tint configurations", () => {
+    const required = ["none", "golden", "midnight", "sunrise", "forest", "desert", "aurora", "monochrome"];
+    for (const key of required) {
+      expect(WALLPAPER_PRESETS[key]).toBeDefined();
+      expect(WALLPAPER_PRESETS[key].label).toBeTypeOf("string");
+    }
+    expect(WALLPAPER_PRESETS.golden.tint).toBeInstanceOf(Array);
+    expect(WALLPAPER_PRESETS.midnight.tint).toBeInstanceOf(Array);
+  });
+
+  test("WallpaperRenderer setPreset updates presetName reliably", () => {
+    const fakeApp = {
+      wallpaperLocations: [],
+      activeWallpaperIndex: 0,
+    };
+    const renderer = new WallpaperRenderer(fakeApp);
+    expect(renderer.presetName).toBe("none");
+
+    renderer.setPreset("golden");
+    expect(renderer.presetName).toBe("golden");
+
+    renderer.setPreset("midnight");
+    expect(renderer.presetName).toBe("midnight");
+
+    renderer.setPreset("invalid_preset_name");
+    expect(renderer.presetName).toBe("none");
+
+    renderer.setPreset("aurora");
+    expect(renderer.presetName).toBe("aurora");
   });
 });

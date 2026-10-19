@@ -300,8 +300,12 @@ function _resetNavState() {
  * geolocation *watch* (continuous, battery-relevant) isn't requested until
  * they've actually committed.
  */
-async function startNavigationPreview() {
-  if (this.selectedLat == null || this.selectedLng == null) {
+async function startNavigationPreview(destLat, destLng, destName) {
+  const targetLat = destLat != null ? destLat : this.selectedLat;
+  const targetLng = destLng != null ? destLng : this.selectedLng;
+  const targetName = destName || this.selectedName || "destination";
+
+  if (targetLat == null || targetLng == null) {
     this.showToast("Pick a location first.", "info");
     return;
   }
@@ -312,10 +316,17 @@ async function startNavigationPreview() {
 
   this._resetNavState();
   this._navDestination = {
-    lat: this.selectedLat,
-    lng: this.selectedLng,
-    name: this.selectedName || "destination",
+    lat: targetLat,
+    lng: targetLng,
+    name: targetName,
   };
+
+  // If weather panel is open, snap it down to peek so the navigation route is visible on the map
+  if (this.googleMapsMobile && typeof this.googleMapsMobile.snapSheet === "function") {
+    this.googleMapsMobile.snapSheet("peek");
+  } else if (this.$.weatherPanel && !this.$.weatherPanel.classList.contains("minimized")) {
+    this.toggleMinimizeWeatherPanel?.();
+  }
 
   this.$.navPanel?.classList.remove("hidden");
   this.$.navPreview?.classList.remove("hidden");

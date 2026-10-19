@@ -2813,13 +2813,10 @@ button, a, input, select, textarea, [role="button"] {
   box-shadow: 0 4px 14px rgba(0, 0, 0, 0.45) !important;
 }
 
-/* Prominent Directions FAB Button */
+/* Directions FAB Button */
 #mobileDirectionsFab {
-  width: 52px;
-  height: 52px;
-  border-radius: 1.125rem;
   background-color: #00897b;
-  box-shadow: 0 6px 20px rgba(0, 137, 123, 0.45);
+  box-shadow: 0 4px 14px rgba(0, 137, 123, 0.4);
 }
 #mobileDirectionsFab:hover {
   background-color: #00796b;

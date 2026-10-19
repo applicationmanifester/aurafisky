@@ -300,13 +300,19 @@ export class AuraMobileController {
     directionsFab?.addEventListener('click', (e) => {
       e.stopPropagation();
       this._haptic('medium');
-      this.sheetState = 'dismissed';
-      this.app?.hideWeatherPanel?.();
-      const pill = document.getElementById('restoreSheetPill');
-      if (pill) pill.classList.add('hidden');
-      if (typeof this.app.openRouteStudio === 'function') {
+      if (this.app?.selectedLat != null && typeof this.app.startNavigationPreview === 'function') {
+        this.app.startNavigationPreview();
+      } else if (typeof this.app.openRouteStudio === 'function') {
+        this.sheetState = 'dismissed';
+        this.app?.hideWeatherPanel?.();
+        const pill = document.getElementById('restoreSheetPill');
+        if (pill) pill.classList.add('hidden');
         this.app.openRouteStudio();
       } else if (typeof this.app.toggleRoute === 'function') {
+        this.sheetState = 'dismissed';
+        this.app?.hideWeatherPanel?.();
+        const pill = document.getElementById('restoreSheetPill');
+        if (pill) pill.classList.add('hidden');
         this.app.toggleRoute();
       } else {
         const routeBtn = document.getElementById('routeBtn');

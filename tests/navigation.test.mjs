@@ -98,3 +98,31 @@ test("maneuverIcon maps modifiers to arrows and special-cases arrive/depart", ()
   assert.equal(maneuverIcon({ type: "turn", modifier: "left" }), "⬅️");
   assert.equal(maneuverIcon({ type: "roundabout" }), "🔄");
 });
+
+test("navigateHereBtn and mobileDirectionsFab share identical icon, stroke, and Get Directions title", async () => {
+  const fs = await import("fs");
+  const { JSDOM } = await import("jsdom");
+  const html = fs.readFileSync("index.html", "utf-8");
+  const dom = new JSDOM(html);
+  const doc = dom.window.document;
+
+  const navigateBtn = doc.getElementById("navigateHereBtn");
+  const fabBtn = doc.getElementById("mobileDirectionsFab");
+
+  assert.ok(navigateBtn, "navigateHereBtn must exist in DOM");
+  assert.ok(fabBtn, "mobileDirectionsFab must exist in DOM");
+
+  assert.equal(navigateBtn.getAttribute("title"), "Get Directions");
+  assert.equal(fabBtn.getAttribute("title"), "Get Directions");
+  assert.equal(navigateBtn.getAttribute("aria-label"), "Get Directions");
+  assert.equal(fabBtn.getAttribute("aria-label"), "Get Directions");
+
+  const navPath = navigateBtn.querySelector("svg path")?.getAttribute("d")?.trim();
+  const fabPath = fabBtn.querySelector("svg path")?.getAttribute("d")?.trim();
+  assert.ok(navPath, "navigateHereBtn must contain SVG path");
+  assert.equal(navPath, fabPath, "both buttons must use the exact same navigation icon path");
+
+  const navStroke = navigateBtn.querySelector("svg")?.getAttribute("stroke-width");
+  const fabStroke = fabBtn.querySelector("svg")?.getAttribute("stroke-width");
+  assert.equal(navStroke, fabStroke, "both buttons must use consistent stroke-width");
+});

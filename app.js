@@ -9173,6 +9173,11 @@ class AurafiskyApp {
     this.updateHomeMarker();
     this.loadBookmarks();
     this.updateSettingsUIFromLocal();
+
+    if (this._unsubscribeUserDoc) {
+      try { this._unsubscribeUserDoc(); } catch (_) {}
+      this._unsubscribeUserDoc = null;
+    }
   }
 
   async loadUserDataFromCloud(showToast = false) {
@@ -9313,6 +9318,37 @@ class AurafiskyApp {
         this.updateHomeButton();
         this.updateHomeMarker();
         this.updateSettingsUIFromLocal();
+      }
+
+      // Live real-time Firestore sync: when favorites or home location change on another device,
+      // update this device immediately without requiring a page reload.
+      if (typeof this._fb?.onSnapshot === "function") {
+        if (this._unsubscribeUserDoc) {
+          try { this._unsubscribeUserDoc(); } catch (_) {}
+          this._unsubscribeUserDoc = null;
+        }
+        this._unsubscribeUserDoc = this._fb.onSnapshot(userDocRef, (snap) => {
+          if (!snap.exists() || snap.metadata?.hasPendingWrites) return;
+          const liveData = snap.data();
+          if (liveData.bookmarks && Array.isArray(liveData.bookmarks)) {
+            if (JSON.stringify(liveData.bookmarks) !== JSON.stringify(this.bookmarks)) {
+              this.bookmarks = liveData.bookmarks;
+              this.renderBookmarksList();
+              this.updateStarUI();
+              this.refreshBookmarkPins();
+            }
+          }
+          if (liveData.defaultLocation !== undefined) {
+            if (JSON.stringify(liveData.defaultLocation) !== JSON.stringify(this.defaultLocation)) {
+              this.defaultLocation = liveData.defaultLocation;
+              this.updateHomeButton();
+              this.updateHomeMarker();
+              this.updateSettingsUIFromLocal();
+            }
+          }
+        }, (err) => {
+          console.warn("Real-time cloud sync listener notice:", err);
+        });
       }
     } catch (e) {
       console.error("Error loading data from Firestore:", e);

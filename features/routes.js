@@ -953,6 +953,7 @@ export function closeRouteStudio() {
   closeWaypointPopover();
   routeMode = false;
   isPanelOpen = false;
+  appRef?.popHistoryOverlay?.("route");
 
   if (appRef) {
     appRef._routeModeActive = false;
@@ -982,6 +983,7 @@ export function openRouteStudio() {
   if (!appRef || !appRef.map) return;
   routeMode = true;
   appRef._routeModeActive = true;
+  appRef.pushHistoryOverlay?.("route");
 
   const targetEl = appRef.map.getTargetElement();
   ensureRouteLayers();

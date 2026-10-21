@@ -545,6 +545,7 @@ export class AuraAssistant {
     const { modal, input } = this._els;
     if (!modal) return;
     this.isOpen = true;
+    this.app?.pushHistoryOverlay?.("aura");
     modal.classList.remove('hidden');
     // Restart the entry animation on every open.
     const panel = modal.firstElementChild;
@@ -597,6 +598,7 @@ export class AuraAssistant {
   close() {
     if (!this._els.modal) return;
     this.isOpen = false;
+    this.app?.popHistoryOverlay?.("aura");
     this._streamToken++; // cancel any in-flight answer
     this._saveMemory();
     this._els.modal.classList.add('hidden');

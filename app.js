@@ -910,6 +910,7 @@ class AurafiskyApp {
     this.initKeyboardShortcuts();
     this.initWeatherPanelTabs();
     this.initMobileBottomNav();
+    this.initMobileHistoryBack();
 
     // Initialize Firebase integrations & bind user profile / settings triggers
     this.initFirebase();
@@ -3529,9 +3530,21 @@ class AurafiskyApp {
             this._renderLocationAddressCard(this.selectedAddress, this.selectedDisplayName, lat, lng);
             // Sync map marker pin so map pin and weather card show the exact same name!
             if (this.marker) {
-              const currentWeather = this.currentWeather || (this.weatherData ? WeatherService.getHourlyAtIndex(this.weatherData, this.currentHourIndex) : null);
+              const timeOffset = this.timeline24hMode ? this._getTimelineOffset?.() || 0 : 0;
+              const targetIdx = parseInt(this.$.timelineSlider?.value || 0, 10) + timeOffset;
+              const currentWeather = this.weatherData ? WeatherService.getHourlyAtIndex(this.weatherData, targetIdx) : null;
               if (currentWeather) {
                 this.marker.setHtml(this._buildMarkerHtml(currentWeather), locationName, "location-tooltip");
+              }
+              const cityEl = this.marker.element?.querySelector(".weather-marker-city");
+              if (cityEl) {
+                const displayName = shortPlaceName(locationName).trim();
+                cityEl.textContent = displayName;
+                cityEl.title = displayName;
+              }
+              const pinRoot = this.marker.element?.querySelector(".aurafisky-location-pin");
+              if (pinRoot) {
+                pinRoot.setAttribute("aria-label", locationName);
               }
             }
             this.updateOfflineBadge(false);
@@ -3735,8 +3748,30 @@ class AurafiskyApp {
         this.selectedAddress = locationAddress;
         this.selectedDisplayName = displayName || fallbackName || "";
         this.addressResolvedForLat = lat;
-        this.addressResolvedForLng = lng;
         this._renderLocationAddressCard(this.selectedAddress, this.selectedDisplayName, lat, lng);
+
+        if (locationName && (!this.selectedName || /^\s*[-+]?\d+\.\d+\s*,\s*[-+]?\d+\.\d+\s*$/.test(this.selectedName))) {
+          this.selectedName = locationName;
+          this._updateHeaderLocationAndCoords(locationName, lat, lng);
+        }
+        if (this.marker) {
+          const timeOffset = this.timeline24hMode ? this._getTimelineOffset?.() || 0 : 0;
+          const targetIdx = parseInt(this.$.timelineSlider?.value || 0, 10) + timeOffset;
+          const currentWeather = this.weatherData ? WeatherService.getHourlyAtIndex(this.weatherData, targetIdx) : null;
+          if (currentWeather) {
+            this.marker.setHtml(this._buildMarkerHtml(currentWeather), this.selectedName, "location-tooltip");
+          }
+          const cityEl = this.marker.element?.querySelector(".weather-marker-city");
+          if (cityEl) {
+            const displayName = shortPlaceName(this.selectedName).trim();
+            cityEl.textContent = displayName;
+            cityEl.title = displayName;
+          }
+          const pinRoot = this.marker.element?.querySelector(".aurafisky-location-pin");
+          if (pinRoot) {
+            pinRoot.setAttribute("aria-label", this.selectedName);
+          }
+        }
 
         // Update cache with resolved address and verified coordinates
         if (this.weatherData) {
@@ -4302,9 +4337,16 @@ class AurafiskyApp {
    */
   _buildMarkerHtml(weather) {
     const isCoordString = /^\s*[-+]?\d+\.\d+\s*,\s*[-+]?\d+\.\d+\s*$/.test(this.selectedName || "");
-    const cityName = this.selectedName && !isCoordString
-      ? shortPlaceName(this.selectedName).trim()
-      : (isCoordString ? "Locating..." : (weather?.description || ""));
+    let cityName = "";
+    if (this.selectedName && !isCoordString) {
+      cityName = shortPlaceName(this.selectedName).trim();
+    } else if (this.selectedAddress) {
+      const b = breakdownAddress(this.selectedAddress, this.selectedDisplayName, this.selectedLat, this.selectedLng);
+      cityName = (b.area || b.city || b.taluk || "").trim();
+    }
+    if (!cityName) {
+      cityName = isCoordString ? "Locating..." : (weather?.description || "");
+    }
     return `
         <div class="aurafisky-location-pin group" role="button" tabindex="0" aria-label="${cityName}">
           <div class="weather-marker relative bg-white/95 dark:bg-slate-800/95 backdrop-blur-md rounded-2xl pl-2.5 pr-2 py-1.5 shadow-2xl border border-slate-200/80 dark:border-slate-700/80 flex items-center gap-2 select-none min-w-[90px]">
@@ -8128,6 +8170,7 @@ class AurafiskyApp {
     this.$.weatherPanel.removeAttribute("inert");
     this.$.weatherPanel.style.opacity = "";
     this.$.weatherPanel.style.pointerEvents = "";
+    this.pushHistoryOverlay("weather");
     this.$.weatherPanel.style.transform = "";
     this.$.weatherPanel.style.transition = "";
 
@@ -8193,6 +8236,7 @@ class AurafiskyApp {
     this.$.weatherPanel.setAttribute("inert", "");
     this.$.weatherPanel.style.opacity = "0";
     this.$.weatherPanel.style.pointerEvents = "none";
+    this.popHistoryOverlay("weather");
     this.$.weatherPanel.style.transform = "translateY(110%)";
     this.$.weatherPanel.style.transition = "";
     if (this.googleMapsMobile) {
@@ -8537,9 +8581,11 @@ class AurafiskyApp {
     const isHidden = dropdown.classList.contains("hidden");
     const open = typeof forceState === "boolean" ? forceState : isHidden;
     if (open) {
+      this.pushHistoryOverlay("home");
       this.updateHomeButton?.();
       dropdown.classList.remove("hidden");
     } else {
+      this.popHistoryOverlay("home");
       dropdown.classList.add("hidden");
     }
   }
@@ -8672,9 +8718,11 @@ class AurafiskyApp {
         if (typeof this.renderBookmarksList === "function") this.renderBookmarksList();
         this.updateBookmarksMapToggleUI?.();
         this.$.bookmarksDropdown?.classList.remove("hidden");
+        this.pushHistoryOverlay("bookmarks");
       } else {
         this.$.bookmarksDropdown?.classList.add("hidden");
         this.syncMobileBottomNavState();
+        this.popHistoryOverlay("bookmarks");
       }
       this._haptic("light");
     });
@@ -8692,6 +8740,139 @@ class AurafiskyApp {
       }
       this._haptic("light");
     });
+  }
+
+  /**
+   * Intercepts mobile device back gesture/button (popstate) to close the topmost open
+   * tab, sheet, modal, or panel instead of closing the web app.
+   */
+  initMobileHistoryBack() {
+    if (typeof window === "undefined") return;
+    window.addEventListener("popstate", () => {
+      if (this._ignoreNextPopState) {
+        this._ignoreNextPopState = false;
+        return;
+      }
+      this.closeTopmostOverlay();
+    });
+  }
+
+  pushHistoryOverlay(id) {
+    if (typeof window === "undefined" || !window.history) return;
+    try {
+      const currentState = window.history.state || {};
+      if (currentState.aurafiskyOverlay !== id) {
+        window.history.pushState({ aurafiskyOverlay: id, depth: (currentState.depth || 0) + 1 }, "");
+      }
+    } catch (_) {}
+  }
+
+  popHistoryOverlay(id) {
+    if (typeof window === "undefined" || !window.history) return;
+    try {
+      if (window.history.state && window.history.state.aurafiskyOverlay) {
+        if (!id || window.history.state.aurafiskyOverlay === id) {
+          this._ignoreNextPopState = true;
+          window.history.back();
+        }
+      }
+    } catch (_) {}
+  }
+
+  closeTopmostOverlay() {
+    // 1. Settings Panel
+    if (this.$.settingsPanel && !this.$.settingsPanel.classList.contains("hidden")) {
+      this.toggleSettingsPanel(false);
+      return true;
+    }
+    // 2. Aura Chatbot Modal
+    const auraModal = document.getElementById("auraModal");
+    if (auraModal && !auraModal.classList.contains("hidden")) {
+      if (this.aura && typeof this.aura.close === "function") {
+        this.aura.close();
+      } else {
+        auraModal.classList.add("hidden");
+      }
+      return true;
+    }
+    // 3. Share Modal
+    const shareModal = document.getElementById("shareModal") || this.$.shareModal;
+    if (shareModal && !shareModal.classList.contains("hidden")) {
+      shareModal.classList.add("hidden");
+      shareModal.classList.remove("flex");
+      return true;
+    }
+    // 4. Account Dialog
+    if (this.$.accountDialog && !this.$.accountDialog.classList.contains("hidden")) {
+      this.toggleAccountDialog(false);
+      return true;
+    }
+    // 5. Time Machine Modal
+    const timeMachine = document.getElementById("timeMachineModal");
+    if (timeMachine && !timeMachine.classList.contains("hidden")) {
+      timeMachine.classList.add("hidden");
+      return true;
+    }
+    // 6. Compare Panel
+    const comparePanel = document.getElementById("comparePanel");
+    if (comparePanel && !comparePanel.classList.contains("hidden")) {
+      this.hideComparePanel?.();
+      return true;
+    }
+    // 7. Bookmarks / Favorites Dropdown / Sheet
+    if (this.$.bookmarksDropdown && !this.$.bookmarksDropdown.classList.contains("hidden")) {
+      this.$.bookmarksDropdown.classList.add("hidden");
+      this.syncMobileBottomNavState?.();
+      return true;
+    }
+    // 8. Home Dropdown
+    const homeDropdown = document.getElementById("homeDropdown");
+    if (homeDropdown && !homeDropdown.classList.contains("hidden")) {
+      this.toggleHomeDropdown?.(false);
+      this.syncMobileBottomNavState?.();
+      return true;
+    }
+    // 9. Route Dropdown
+    const routeDropdown = document.getElementById("routeDropdown");
+    if (routeDropdown && !routeDropdown.classList.contains("hidden")) {
+      if (typeof this.toggleRouteDropdown === "function") {
+        this.toggleRouteDropdown(false);
+      } else {
+        routeDropdown.classList.add("hidden");
+      }
+      return true;
+    }
+    // 10. Route Studio / Route Panel
+    const routePanel = document.getElementById("routePanel");
+    if (routePanel && !routePanel.classList.contains("hidden")) {
+      if (typeof this.closeRouteStudio === "function") {
+        this.closeRouteStudio();
+      } else if (typeof this.hideRoutePanel === "function") {
+        this.hideRoutePanel();
+      } else {
+        routePanel.classList.add("hidden");
+      }
+      this.syncMobileBottomNavState?.();
+      return true;
+    }
+    // 11. Map Layers Flyout
+    if (this.$.mapLayersFlyout && !this.$.mapLayersFlyout.classList.contains("hidden")) {
+      this.toggleMapLayersFlyout(false);
+      this.syncMobileBottomNavState?.();
+      return true;
+    }
+    // 12. Weather tabs (if on secondary tab like hourly/daily/metrics/astronomy)
+    if (this.currentWeatherTab && this.currentWeatherTab !== "overview" && this.$.weatherPanel?.classList.contains("open")) {
+      this.switchWeatherTab("overview");
+      return true;
+    }
+    // 13. Weather Panel (if open on mobile)
+    if (this.$.weatherPanel && this.$.weatherPanel.classList.contains("open") && !this.$.weatherPanel.classList.contains("minimized")) {
+      this.hideWeatherPanel();
+      this.syncMobileBottomNavState?.();
+      return true;
+    }
+    return false;
   }
 
   // ================================================================
@@ -9448,6 +9629,11 @@ class AurafiskyApp {
     if (!this.$.accountDialog) return;
     const isHidden = this.$.accountDialog.classList.contains("hidden");
     const show = force !== undefined ? force : isHidden;
+    if (show) {
+      this.pushHistoryOverlay("account");
+    } else {
+      this.popHistoryOverlay("account");
+    }
     this.$.accountDialog.classList.toggle("hidden", !show);
   }
 
@@ -9456,9 +9642,11 @@ class AurafiskyApp {
     const isHidden = this.$.settingsPanel.classList.contains("hidden");
     const show = force !== undefined ? force : isHidden;
     if (show) {
+      this.pushHistoryOverlay("settings");
       this.$.settingsPanel.classList.remove("hidden");
       setTimeout(() => this.$.settingsPanel.classList.add("open"), 10);
     } else {
+      this.popHistoryOverlay("settings");
       this.$.settingsPanel.classList.remove("open");
       setTimeout(() => this.$.settingsPanel.classList.add("hidden"), 400);
     }
@@ -10021,8 +10209,11 @@ class AurafiskyApp {
       backdrop.classList.toggle("hidden", !open);
     }
     if (open) {
+      this.pushHistoryOverlay("layers");
       this._updateMapStyleUI();
       this._updateMapLayersActiveBadge();
+    } else {
+      this.popHistoryOverlay("layers");
     }
   }
 

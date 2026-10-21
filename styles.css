@@ -2838,19 +2838,27 @@ button, a, input, select, textarea, [role="button"] {
     transition: transform 0.15s ease, background-color 0.15s ease;
   }
 
-  /* Settings panel mobile bottom sheet */
+  /* Settings panel on mobile: start from top, full height, no empty space */
   #settingsPanel > div:nth-child(2) {
-    top: auto !important;
+    top: 0 !important;
     bottom: 0 !important;
     left: 0 !important;
     right: 0 !important;
     width: 100% !important;
     max-width: 100% !important;
-    height: auto !important;
-    max-height: calc(88vh - env(safe-area-inset-bottom, 0px)) !important;
-    border-radius: 1.5rem 1.5rem 0 0 !important;
-    padding-bottom: env(safe-area-inset-bottom, 0px);
-    box-shadow: 0 -8px 32px rgba(0, 0, 0, 0.25) !important;
+    height: 100% !important;
+    height: 100dvh !important;
+    max-height: 100% !important;
+    max-height: 100dvh !important;
+    border-radius: 0 !important;
+    box-shadow: 0 0 40px rgba(0, 0, 0, 0.3) !important;
+  }
+  #settingsPanel > div:nth-child(2) > div:first-child {
+    padding-top: max(1rem, calc(0.75rem + env(safe-area-inset-top, 0px))) !important;
+    padding-bottom: 0.875rem !important;
+  }
+  #settingsPanel > div:nth-child(2) > div:nth-child(2) {
+    padding-bottom: max(1.5rem, calc(1rem + env(safe-area-inset-bottom, 0px))) !important;
   }
 
   /* Share modal mobile bottom sheet */

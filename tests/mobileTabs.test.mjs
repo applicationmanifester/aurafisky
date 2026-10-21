@@ -344,6 +344,30 @@ describe('Mobile Tabs & Navigation Layout', () => {
     expect(appJs).toContain('this.getMyLocation({');
     expect(appJs).toContain('silent: true');
   });
+
+  it('ensures settings panel starts from top with zero empty space on mobile', () => {
+    const css = fs.readFileSync('styles.css', 'utf-8');
+    expect(css).toContain('#settingsPanel > div:nth-child(2) {');
+    expect(css).toContain('top: 0 !important;');
+    expect(css).toContain('height: 100% !important;');
+    expect(css).toContain('height: 100dvh !important;');
+  });
+
+  it('implements mobile history back navigation to close open overlays instead of the app', () => {
+    const appJs = fs.readFileSync('app.js', 'utf-8');
+    expect(appJs).toContain('initMobileHistoryBack()');
+    expect(appJs).toContain('pushHistoryOverlay(id)');
+    expect(appJs).toContain('popHistoryOverlay(id)');
+    expect(appJs).toContain('closeTopmostOverlay()');
+    expect(appJs).toContain('window.addEventListener("popstate"');
+  });
+
+  it('updates map pin weather-marker-city when reverse geocoding resolves place name', () => {
+    const appJs = fs.readFileSync('app.js', 'utf-8');
+    expect(appJs).toContain('cityEl.textContent = displayName;');
+    expect(appJs).toContain('this._renderLocationAddressCard');
+  });
 });
+
 
 

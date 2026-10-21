@@ -2466,7 +2466,7 @@ class AurafiskyApp {
       });
     });
 
-    // ── Location Address Details Copy Button ─────────────────────
+    // ── Location Address Details Toggle & Copy ─────────────────────
     const copyAddressBtn = document.getElementById("copyAddressBtn");
     if (copyAddressBtn) {
       copyAddressBtn.addEventListener("click", async (e) => {
@@ -2484,6 +2484,50 @@ class AurafiskyApp {
           }, 2000);
         } catch (_) {
           this.showToast(textToCopy, "info");
+        }
+      });
+    }
+
+    const toggleAddressBtn = document.getElementById("toggleAddressCardBtn");
+    const addressHeader = document.getElementById("locationAddressHeader");
+    const addressContent = document.getElementById("locationAddressContent");
+    const addressToggleIcon = document.getElementById("toggleAddressCardIcon");
+    const addressToggleText = document.getElementById("toggleAddressCardText");
+
+    const toggleAddressDetails = (force) => {
+      if (!addressContent) return;
+      const isCurrentlyHidden = addressContent.classList.contains("hidden");
+      const shouldShow = force !== undefined ? force : isCurrentlyHidden;
+      if (shouldShow) {
+        addressContent.classList.remove("hidden");
+        if (addressToggleText) addressToggleText.textContent = "Hide";
+        if (addressToggleIcon) addressToggleIcon.classList.add("rotate-180");
+        toggleAddressBtn?.setAttribute("aria-expanded", "true");
+        addressHeader?.setAttribute("aria-expanded", "true");
+      } else {
+        addressContent.classList.add("hidden");
+        if (addressToggleText) addressToggleText.textContent = "Details";
+        if (addressToggleIcon) addressToggleIcon.classList.remove("rotate-180");
+        toggleAddressBtn?.setAttribute("aria-expanded", "false");
+        addressHeader?.setAttribute("aria-expanded", "false");
+      }
+    };
+
+    if (toggleAddressBtn) {
+      toggleAddressBtn.addEventListener("click", (e) => {
+        e.stopPropagation();
+        toggleAddressDetails();
+      });
+    }
+    if (addressHeader) {
+      addressHeader.addEventListener("click", (e) => {
+        if (e.target.closest("#copyAddressBtn")) return;
+        toggleAddressDetails();
+      });
+      addressHeader.addEventListener("keydown", (e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          toggleAddressDetails();
         }
       });
     }
@@ -3545,8 +3589,9 @@ class AurafiskyApp {
   }
 
   _renderLocationAddressCard(address, displayName, lat, lng) {
+    const summaryEl = document.getElementById("locationAddressSummary");
     const content = document.getElementById("locationAddressContent");
-    if (!content) return;
+    if (!summaryEl && !content) return;
 
     const b = breakdownAddress(address, displayName, lat, lng);
     this._currentFullAddress = b.fullAddress;
@@ -3557,42 +3602,60 @@ class AurafiskyApp {
     const stateVal = b.state || "—";
     const metaBottom = [b.postcode, b.country].filter(Boolean).join(", ");
 
-    content.innerHTML = `
-      <div class="grid grid-cols-2 gap-x-2 gap-y-2 text-[11px] select-text">
-        <div class="flex flex-col min-w-0 select-text">
-          <span class="text-[9px] uppercase font-bold text-slate-400 tracking-wider select-text">Area / Locality</span>
-          <span class="font-semibold text-slate-800 dark:text-slate-200 truncate select-text cursor-text" title="${areaVal}">${areaVal}</span>
-        </div>
-        <div class="flex flex-col min-w-0 select-text">
-          <span class="text-[9px] uppercase font-bold text-slate-400 tracking-wider select-text">Taluk / Tehsil</span>
-          <span class="font-semibold text-slate-800 dark:text-slate-200 truncate select-text cursor-text" title="${talukVal}">${talukVal}</span>
-        </div>
-        <div class="flex flex-col min-w-0 select-text">
-          <span class="text-[9px] uppercase font-bold text-slate-400 tracking-wider select-text">District</span>
-          <span class="font-semibold text-slate-800 dark:text-slate-200 truncate select-text cursor-text" title="${districtVal}">${districtVal}</span>
-        </div>
-        <div class="flex flex-col min-w-0 select-text">
-          <span class="text-[9px] uppercase font-bold text-slate-400 tracking-wider select-text">State / Province</span>
-          <span class="font-semibold text-slate-800 dark:text-slate-200 truncate select-text cursor-text" title="${stateVal}">${stateVal}</span>
-        </div>
-      </div>
-      <div class="mt-2 pt-1.5 border-t border-slate-200/60 dark:border-slate-700/50 flex items-center justify-between text-[11px] text-slate-500 dark:text-slate-400 select-text">
-        <span class="truncate pr-1 font-medium select-text cursor-text">${metaBottom || (lat != null && lng != null ? `${lat.toFixed(4)}°, ${lng.toFixed(4)}°` : "Global")}</span>
-        <button id="viewFullAddressBtn" type="button" class="text-[10px] text-teal-600 dark:text-teal-400 font-bold flex-shrink-0 cursor-pointer hover:underline select-none">Full Address</button>
-      </div>
-      <div id="fullAddressDetail" class="hidden mt-1 p-2 bg-slate-100/90 dark:bg-slate-800/70 rounded-xl text-[10.5px] font-mono text-slate-600 dark:text-slate-300 leading-snug break-words border border-slate-200/60 dark:border-slate-700/40 select-all select-text cursor-text">
-        ${b.fullAddress || "No additional street address available for these coordinates."}
-      </div>
-    `;
+    // Build concise 1-line summary breadcrumb for the compact bar
+    const summaryParts = [
+      b.area || b.city,
+      b.taluk && b.taluk !== b.area ? b.taluk : null,
+      b.district && b.district !== b.area && b.district !== b.taluk ? b.district : null,
+      b.state
+    ].filter(Boolean);
+    const summaryText = summaryParts.length > 0
+      ? summaryParts.join(" • ")
+      : (b.fullAddress || (lat != null && lng != null ? `${lat.toFixed(4)}°, ${lng.toFixed(4)}°` : "Location Address"));
 
-    const toggleBtn = content.querySelector("#viewFullAddressBtn");
-    const fullDetail = content.querySelector("#fullAddressDetail");
-    if (toggleBtn && fullDetail) {
-      toggleBtn.addEventListener("click", (e) => {
-        e.stopPropagation();
-        fullDetail.classList.toggle("hidden");
-        toggleBtn.textContent = fullDetail.classList.contains("hidden") ? "Full Address" : "Hide Details";
-      });
+    if (summaryEl) {
+      summaryEl.textContent = summaryText;
+      summaryEl.title = b.fullAddress ? `${summaryText}\n${b.fullAddress}` : summaryText;
+    }
+
+    if (content) {
+      content.innerHTML = `
+        <div class="grid grid-cols-2 gap-x-2 gap-y-1.5 text-[10.5px] select-text">
+          <div class="flex flex-col min-w-0 select-text">
+            <span class="text-[8.5px] uppercase font-bold text-slate-400 tracking-wider select-text">Area / Locality</span>
+            <span class="font-semibold text-slate-800 dark:text-slate-200 truncate select-text cursor-text" title="${areaVal}">${areaVal}</span>
+          </div>
+          <div class="flex flex-col min-w-0 select-text">
+            <span class="text-[8.5px] uppercase font-bold text-slate-400 tracking-wider select-text">Taluk / Tehsil</span>
+            <span class="font-semibold text-slate-800 dark:text-slate-200 truncate select-text cursor-text" title="${talukVal}">${talukVal}</span>
+          </div>
+          <div class="flex flex-col min-w-0 select-text">
+            <span class="text-[8.5px] uppercase font-bold text-slate-400 tracking-wider select-text">District</span>
+            <span class="font-semibold text-slate-800 dark:text-slate-200 truncate select-text cursor-text" title="${districtVal}">${districtVal}</span>
+          </div>
+          <div class="flex flex-col min-w-0 select-text">
+            <span class="text-[8.5px] uppercase font-bold text-slate-400 tracking-wider select-text">State / Province</span>
+            <span class="font-semibold text-slate-800 dark:text-slate-200 truncate select-text cursor-text" title="${stateVal}">${stateVal}</span>
+          </div>
+        </div>
+        <div class="mt-1.5 pt-1 border-t border-slate-200/60 dark:border-slate-700/50 flex items-center justify-between text-[10px] text-slate-500 dark:text-slate-400 select-text">
+          <span class="truncate pr-1 font-medium select-text cursor-text">${metaBottom || (lat != null && lng != null ? `${lat.toFixed(4)}°, ${lng.toFixed(4)}°` : "")}</span>
+          <button id="viewFullAddressBtn" type="button" class="text-[9.5px] text-teal-600 dark:text-teal-400 font-bold flex-shrink-0 cursor-pointer hover:underline select-none">Full Address</button>
+        </div>
+        <div id="fullAddressDetail" class="hidden mt-1 p-1.5 bg-slate-100/90 dark:bg-slate-800/70 rounded-lg text-[10px] font-mono text-slate-600 dark:text-slate-300 leading-snug break-words border border-slate-200/60 dark:border-slate-700/40 select-all select-text cursor-text">
+          ${b.fullAddress || "No additional street address available for these coordinates."}
+        </div>
+      `;
+
+      const toggleBtn = content.querySelector("#viewFullAddressBtn");
+      const fullDetail = content.querySelector("#fullAddressDetail");
+      if (toggleBtn && fullDetail) {
+        toggleBtn.addEventListener("click", (e) => {
+          e.stopPropagation();
+          fullDetail.classList.toggle("hidden");
+          toggleBtn.textContent = fullDetail.classList.contains("hidden") ? "Full Address" : "Hide Details";
+        });
+      }
     }
   }
 
@@ -3754,6 +3817,10 @@ class AurafiskyApp {
       this._currentFullAddress = '';
       this.addressResolvedForLat = null;
       this.addressResolvedForLng = null;
+      const summaryEl = document.getElementById("locationAddressSummary");
+      if (summaryEl) {
+        summaryEl.innerHTML = '<span class="text-slate-400">Resolving address...</span>';
+      }
       this.updateSettingsUIFromLocal();
 
       this._cachedDecomposition = null;

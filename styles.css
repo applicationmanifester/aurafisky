@@ -3303,3 +3303,27 @@ button, a, input, select, textarea, [role="button"] {
 .weather-panel.dragging-desktop .weather-panel-drag-bar {
   cursor: grabbing !important;
 }
+
+/* Compact & Collapsible Location Address Card */
+#locationAddressCard {
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  box-sizing: border-box;
+}
+
+#locationAddressSummary {
+  display: -webkit-box;
+  -webkit-line-clamp: 1;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+@media (max-width: 640px) {
+  #locationAddressCard {
+    margin-top: 0.25rem !important;
+    margin-bottom: 0.25rem !important;
+    padding: 0.35rem 0.6rem !important;
+    border-radius: 0.75rem !important;
+  }
+}

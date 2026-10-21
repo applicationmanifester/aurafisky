@@ -972,16 +972,36 @@ const WeatherService = (() => {
    */
   function formatTimeOnly(timeStr) {
     if (!timeStr) return "";
-    const parts = timeStr.split("T");
-    if (parts.length < 2) return timeStr;
-    const timeParts = parts[1].split(":");
-    const hours = parseInt(timeParts[0], 10);
-    const minutes = parseInt(timeParts[1], 10);
-    if (isNaN(hours) || isNaN(minutes)) return timeStr;
-    const ampm = hours >= 12 ? "PM" : "AM";
-    const displayHours = hours % 12 === 0 ? 12 : hours % 12;
-    const displayMinutes = String(minutes).padStart(2, "0");
-    return `${displayHours}:${displayMinutes} ${ampm}`;
+    if (timeStr instanceof Date) {
+      if (isNaN(timeStr.getTime())) return "";
+      try {
+        return timeStr.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
+      } catch {
+        return "";
+      }
+    }
+    const str = String(timeStr);
+    let timePart = str;
+    const parts = str.split("T");
+    if (parts.length >= 2) {
+      timePart = parts[1];
+    }
+    const timeParts = timePart.split(":");
+    if (timeParts.length >= 2) {
+      const hours = parseInt(timeParts[0], 10);
+      const minutes = parseInt(timeParts[1], 10);
+      if (!isNaN(hours) && !isNaN(minutes)) {
+        const ampm = hours >= 12 ? "PM" : "AM";
+        const displayHours = hours % 12 === 0 ? 12 : hours % 12;
+        const displayMinutes = String(minutes).padStart(2, "0");
+        return `${displayHours}:${displayMinutes} ${ampm}`;
+      }
+    }
+    const d = new Date(str);
+    if (!isNaN(d.getTime())) {
+      return d.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
+    }
+    return str;
   }
 
   /**
@@ -1015,6 +1035,52 @@ const WeatherService = (() => {
       minute: "2-digit",
       hour12: true,
     });
+  }
+
+  /**
+   * Formats current local date and time at the location specified by timezone/offset.
+   *
+   * @param {string} [timezone] - IANA timezone (e.g. "Asia/Kolkata")
+   * @param {number} [utcOffsetSeconds=0] - UTC offset in seconds
+   * @returns {string} e.g. "Tue, Oct 20 · 5:18 PM"
+   */
+  function getFormattedLocationCurrentDateTime(timezone, utcOffsetSeconds = 0) {
+    const now = new Date();
+    if (timezone) {
+      try {
+        const dStr = now.toLocaleDateString("en-US", {
+          timeZone: timezone,
+          weekday: "short",
+          month: "short",
+          day: "numeric",
+        });
+        const tStr = now.toLocaleTimeString("en-US", {
+          timeZone: timezone,
+          hour: "numeric",
+          minute: "2-digit",
+          hour12: true,
+        });
+        return `${dStr} · ${tStr}`;
+      } catch (e) {
+        // Fallback to offset calculation below
+      }
+    }
+    const locMs =
+      now.getTime() +
+      (utcOffsetSeconds || 0) * 1000 +
+      now.getTimezoneOffset() * 60 * 1000;
+    const locDate = new Date(locMs);
+    const dStr = locDate.toLocaleDateString("en-US", {
+      weekday: "short",
+      month: "short",
+      day: "numeric",
+    });
+    const tStr = locDate.toLocaleTimeString("en-US", {
+      hour: "numeric",
+      minute: "2-digit",
+      hour12: true,
+    });
+    return `${dStr} · ${tStr}`;
   }
 
   /**
@@ -2500,6 +2566,7 @@ const WeatherService = (() => {
     formatDateTime,
     formatTimeOnly,
     getFormattedLocationCurrentTime,
+    getFormattedLocationCurrentDateTime,
     getTempClass,
     fetchAirQuality,
     getAQIInfo,

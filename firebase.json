@@ -3,6 +3,7 @@
     "source": "push-sender/functions"
   },
   "hosting": {
+    "site": "aurafisky",
     "public": "dist",
     "ignore": [
       "firebase.json",

@@ -362,7 +362,7 @@ export class AuraMobileController {
     const expandTargets = [
       document.getElementById('sheetWeatherAqiBadge'),
       document.getElementById('panelLocationName'),
-      document.getElementById('auraBannerCard')
+      document.getElementById('locationAddressCard')
     ];
     expandTargets.forEach(el => {
       el?.addEventListener('click', (e) => {

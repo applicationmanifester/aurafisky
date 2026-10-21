@@ -1,13 +1,14 @@
-// -- MY LOCATION --
-
-function getMyLocation() {
+function getMyLocation(options = {}) {
+    const { silent = false, onFail = null } = options;
     if (typeof window !== "undefined" && window.isSecureContext === false) {
-      this.showToast("Location requires HTTPS or localhost (insecure connection).", "error");
+      if (!silent) this.showToast("Location requires HTTPS or localhost (insecure connection).", "error");
+      if (typeof onFail === "function") onFail(new Error("insecure_context"));
       return;
     }
 
     if (!navigator.geolocation) {
-      this.showToast("Geolocation is not supported by your browser.", "error");
+      if (!silent) this.showToast("Geolocation is not supported by your browser.", "error");
+      if (typeof onFail === "function") onFail(new Error("unsupported"));
       return;
     }
 
@@ -23,7 +24,7 @@ function getMyLocation() {
       } else if (typeof this._debouncedHandleMapClick === "function") {
         this._debouncedHandleMapClick(latitude, longitude);
       }
-    } else {
+    } else if (!silent) {
       this.showToast("Finding your location...", "info");
     }
 
@@ -49,7 +50,7 @@ function getMyLocation() {
     };
 
     const onLocationError = (err) => {
-      if (!this._lastKnownGpsCoords) {
+      if (!this._lastKnownGpsCoords && !silent) {
         if (err.code === 1) {
           this.showToast(
             "Location permission denied. Click the lock/site settings icon in your address bar to allow location.",
@@ -66,6 +67,9 @@ function getMyLocation() {
           this.showToast("Could not get your location.", "error");
         }
       }
+      if (typeof onFail === "function") {
+        onFail(err);
+      }
     };
 
     // First attempt: High Accuracy (GPS hardware on mobile / cellular tablets)
@@ -78,13 +82,13 @@ function getMyLocation() {
           navigator.geolocation.getCurrentPosition(
             onLocationSuccess,
             onLocationError,
-            { enableHighAccuracy: false, timeout: 10000, maximumAge: 600000 },
+            { enableHighAccuracy: false, timeout: 8000, maximumAge: 600000 },
           );
         } else {
           onLocationError(err);
         }
       },
-      { enableHighAccuracy: true, timeout: 7000, maximumAge: 300000 },
+      { enableHighAccuracy: true, timeout: silent ? 4000 : 7000, maximumAge: 300000 },
     );
   }
 

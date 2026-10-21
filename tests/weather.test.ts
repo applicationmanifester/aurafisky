@@ -27,7 +27,9 @@ const {
   // Formatting
   formatDayLabel,
   formatHourLabel,
+  formatTimeOnly,
   formatDateTime,
+  getFormattedLocationCurrentDateTime,
   getTempClass,
   // AQI & Pollen
   getAQIInfo,
@@ -396,10 +398,25 @@ it('formatPressure returns inHg', () => {
       expect(formatHourLabel('2024-01-15T23:00', 0)).toBe('11 PM');
     });
 
+    it('formatTimeOnly formats time with exact minutes', () => {
+      expect(formatTimeOnly('2024-01-15T06:08')).toBe('6:08 AM');
+      expect(formatTimeOnly('2024-01-15T17:55')).toBe('5:55 PM');
+      expect(formatTimeOnly('2024-01-15T00:00')).toBe('12:00 AM');
+      expect(formatTimeOnly('2024-01-15T12:00')).toBe('12:00 PM');
+      expect(formatTimeOnly('06:08')).toBe('6:08 AM');
+      expect(formatTimeOnly('17:55')).toBe('5:55 PM');
+    });
+
     it('formatDateTime returns formatted string', () => {
       const result = formatDateTime('2024-01-15T12:00', 'America/New_York', -18000);
       expect(result).toContain('Jan');
       expect(result).toContain('15');
+    });
+
+    it('getFormattedLocationCurrentDateTime returns formatted date and exact time with minutes', () => {
+      const result = getFormattedLocationCurrentDateTime('Asia/Kolkata', 19800);
+      // Format should be "Day, Mon D · H:MM AM/PM"
+      expect(result).toMatch(/^[A-Z][a-z]{2},\s+[A-Z][a-z]{2}\s+\d+\s+·\s+\d{1,2}:\d{2}\s+(?:AM|PM)$/);
     });
   });
 

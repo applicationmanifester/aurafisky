@@ -123,4 +123,14 @@ describe("wallpaper presets & renderer", () => {
     renderer.setPreset("aurora");
     expect(renderer.presetName).toBe("aurora");
   });
+
+  test("index.html contains wallpaperPresetSelect dropdown with all required theme options", async () => {
+    const fs = await import("fs");
+    const html = fs.readFileSync("index.html", "utf-8");
+    expect(html).toContain('id="wallpaperPresetSelect"');
+    const required = ["none", "golden", "midnight", "sunrise", "forest", "desert", "aurora", "monochrome"];
+    for (const key of required) {
+      expect(html).toContain(`value="${key}"`);
+    }
+  });
 });

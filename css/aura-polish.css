@@ -545,7 +545,7 @@ input[type='range'].timeline-slider:focus-visible {
   }
 }
 
-/* Very small phones: density without losing info */
+/* Very small phones (e.g. Galaxy Z Flip/Fold cover screen, iPhone SE): density & adaptiveness without losing info */
 @media (max-width: 359px) {
   #panelTemp {
     font-size: 2.1rem;
@@ -554,15 +554,61 @@ input[type='range'].timeline-slider:focus-visible {
     font-size: 2.3rem;
   }
   .weather-tab-btn {
-    padding-left: 0.6rem;
-    padding-right: 0.6rem;
+    padding-left: 0.5rem;
+    padding-right: 0.5rem;
+    font-size: 10px !important;
   }
   #todaySummaryGrid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
+  #googleMapsSearchPill {
+    padding-left: 6px;
+    padding-right: 6px;
+    gap: 3px;
+  }
+  #searchInput {
+    font-size: 13px;
+  }
+  .aura-pill-indicator,
+  .google-pill-indicator {
+    padding: 2px 8px !important;
+  }
+  .mobile-nav-btn span {
+    font-size: 9px !important;
+  }
+  #mobileMapControls {
+    right: 0.35rem !important;
+    gap: 2px !important;
+  }
+  #mobileMapControls button,
+  #mobileMapControls .mobile-floating-control,
+  #radarControls > button,
+  #mapLayersBtn,
+  #terminatorToggleBtn,
+  #extremesBtn,
+  #mobileFloatingShareBtn,
+  #mobileLocationFab,
+  #mobileDirectionsFab {
+    width: 29px !important;
+    height: 29px !important;
+    min-width: 29px !important;
+    min-height: 29px !important;
+    border-radius: 8px !important;
+  }
+  #mobileMapControls svg,
+  #mapLayersBtn svg,
+  #terminatorToggleBtn svg,
+  #extremesBtn svg,
+  #mobileFloatingShareBtn svg,
+  #mobileLocationFab svg,
+  #mobileDirectionsFab svg {
+    width: 13.5px !important;
+    height: 13.5px !important;
+  }
 }
-/* Landscape phones: compact header, calm sheet */
-@media (orientation: landscape) and (max-height: 500px) {
+
+/* Landscape phones & short screens: compact header, calm sheet, adaptive icons that fit all vertical spaces */
+@media (orientation: landscape) and (max-height: 550px), (max-height: 520px) {
   #weatherPanel {
     border-radius: var(--aura-radius-lg);
   }
@@ -577,6 +623,87 @@ input[type='range'].timeline-slider:focus-visible {
   }
   #timelineBar {
     display: none;
+  }
+  #mobileMapControls {
+    top: 50% !important;
+    transform: translateY(-50%) !important;
+    gap: 2px !important;
+    max-height: calc(100dvh - 100px) !important;
+    padding: 2px !important;
+    right: max(0.4rem, env(safe-area-inset-right, 0px)) !important;
+  }
+  #mobileMapControls button,
+  #mobileMapControls .mobile-floating-control,
+  #radarControls > button,
+  #mapLayersBtn,
+  #terminatorToggleBtn,
+  #extremesBtn,
+  #mobileFloatingShareBtn,
+  #mobileLocationFab,
+  #mobileDirectionsFab {
+    width: 28px !important;
+    height: 28px !important;
+    min-width: 28px !important;
+    min-height: 28px !important;
+    border-radius: 8px !important;
+  }
+  #mobileMapControls svg,
+  #mapLayersBtn svg,
+  #terminatorToggleBtn svg,
+  #extremesBtn svg,
+  #mobileFloatingShareBtn svg,
+  #mobileLocationFab svg,
+  #mobileDirectionsFab svg {
+    width: 14px !important;
+    height: 14px !important;
+    max-width: 14px !important;
+    max-height: 14px !important;
+  }
+  #zoomControls {
+    gap: 2px !important;
+    left: max(0.4rem, env(safe-area-inset-left, 0px)) !important;
+  }
+  #zoomControls > button {
+    width: 28px !important;
+    height: 28px !important;
+    min-width: 28px !important;
+    min-height: 28px !important;
+    border-radius: 8px !important;
+    font-size: 1rem !important;
+  }
+  #mobileBottomNav {
+    height: calc(2.65rem + env(safe-area-inset-bottom, 0px)) !important;
+  }
+  .mobile-nav-btn {
+    min-height: 38px !important;
+    padding: 2px 4px !important;
+    flex-direction: row !important;
+    gap: 6px !important;
+  }
+  .aura-pill-indicator,
+  .google-pill-indicator {
+    padding: 2px 6px !important;
+  }
+  .mobile-nav-btn svg {
+    width: 16px !important;
+    height: 16px !important;
+  }
+  .mobile-nav-btn span {
+    font-size: 10px !important;
+  }
+}
+
+/* Very short viewports (height <= 400px): split controls into compact dual columns so zero scrolling is required */
+@media (max-height: 400px) {
+  #mobileMapControls {
+    max-height: calc(100dvh - 75px) !important;
+    display: grid !important;
+    grid-template-columns: repeat(2, 28px) !important;
+    gap: 3px !important;
+  }
+  #mobileMapControls .hidden,
+  #mobileMapControls button.hidden {
+    display: none !important;
   }
 }
 
@@ -768,7 +895,7 @@ input[type='range'].timeline-slider:focus-visible {
     border-top-color: rgba(100, 116, 139, 0.2);
   }
   .search-dropdown.open {
-    max-height: min(56vh, calc(var(--app-height, 100dvh) - 8rem));
+    max-height: min(340px, calc(100dvh - 180px), calc(var(--visual-viewport-height, 100vh) - 130px)) !important;
   }
 }
 /* Dynamic viewport units where supported (Chrome/Android URL bar) */
@@ -893,3 +1020,224 @@ input[type='range'].timeline-slider:focus-visible {
     }
   }
 }
+
+/* ── 16. Universal Icon Adaptiveness & Screen Fitting ───────── */
+
+/* Universal SVG vector crispness, precision & layout safety */
+svg {
+  shape-rendering: geometricPrecision;
+  text-rendering: geometricPrecision;
+  flex-shrink: 0;
+}
+
+button svg,
+a svg,
+[role="button"] svg {
+  flex-shrink: 0;
+  pointer-events: none;
+}
+
+/* Optical centering for zoom controls characters (+ and −) */
+#zoomControls > button {
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  line-height: 1 !important;
+  text-align: center !important;
+  font-family: var(--aura-font), system-ui, -apple-system, sans-serif !important;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+/* Floating Search Pill Icon Adaptiveness */
+#googleMapsSearchPill {
+  height: clamp(40px, 5.2vh, 48px);
+  padding-right: 6px !important;
+}
+#googleMapsSearchPill svg:not(.hidden) {
+  width: clamp(17px, 2.4vw, 20px);
+  height: clamp(17px, 2.4vw, 20px);
+}
+#voiceSearchBtn,
+#searchClearBtn {
+  min-width: 36px;
+  min-height: 36px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+#myLocationBtn {
+  width: 34px !important;
+  height: 34px !important;
+  min-width: 34px !important;
+  min-height: 34px !important;
+  border-radius: 9999px !important;
+  border: 1.5px solid #f97316 !important;
+  color: #f97316 !important;
+  background: rgba(249, 115, 22, 0.08) !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  flex-shrink: 0 !important;
+  transition: all 0.2s ease !important;
+}
+#myLocationBtn:hover {
+  background: rgba(249, 115, 22, 0.18) !important;
+}
+#myLocationBtn svg {
+  width: 18px !important;
+  height: 18px !important;
+  color: #f97316 !important;
+  stroke: #f97316 !important;
+}
+.dark #myLocationBtn {
+  border-color: #fb923c !important;
+  color: #fb923c !important;
+  background: rgba(249, 115, 22, 0.15) !important;
+}
+.dark #myLocationBtn:hover {
+  background: rgba(249, 115, 22, 0.25) !important;
+}
+.dark #myLocationBtn svg {
+  color: #fb923c !important;
+  stroke: #fb923c !important;
+}
+#profileBtn {
+  width: clamp(30px, 4.4vw, 36px);
+  height: clamp(30px, 4.4vw, 36px);
+  margin-right: 0 !important;
+  flex-shrink: 0 !important;
+}
+#profileIconGeneric.hidden,
+#profileAvatarImg.hidden,
+#profileAvatarFallback.hidden {
+  display: none !important;
+}
+/* Strict mutual exclusion: either generic icon OR profile pic, never both */
+#profileBtn:has(#profileAvatarImg:not(.hidden):not([src=""])) #profileIconGeneric {
+  display: none !important;
+}
+#profileBtn:has(#profileIconGeneric:not(.hidden)) #profileAvatarImg.hidden {
+  display: none !important;
+}
+
+/* Quick Action Chips & Icons Adaptiveness */
+#mobileQuickChips {
+  gap: clamp(4px, 1.2vw, 8px);
+  padding: 2px clamp(2px, 1vw, 6px);
+  overscroll-behavior-x: contain;
+}
+.mobile-quick-chip {
+  padding: clamp(4px, 0.7vh, 6px) clamp(8px, 2.2vw, 12px) !important;
+  font-size: clamp(10.5px, 2.4vw, 12px) !important;
+  gap: clamp(4px, 1.2vw, 6px) !important;
+}
+.mobile-quick-chip span:first-child {
+  font-size: clamp(12px, 2.6vw, 14px) !important;
+  line-height: 1 !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+}
+
+/* Bottom Navigation Bar Icon Adaptiveness */
+#mobileBottomNav {
+  height: calc(clamp(3.2rem, 7.5vh, 3.6rem) + env(safe-area-inset-bottom, 0px));
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+  padding-left: max(0.5rem, env(safe-area-inset-left, 0px));
+  padding-right: max(0.5rem, env(safe-area-inset-right, 0px));
+}
+.mobile-nav-btn {
+  min-height: 44px;
+}
+.aura-pill-indicator,
+.google-pill-indicator {
+  padding: 3px clamp(10px, 3.2vw, 18px);
+  border-radius: 9999px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.mobile-nav-btn svg {
+  width: clamp(18px, 4.4vw, 22px);
+  height: clamp(18px, 4.4vw, 22px);
+}
+.mobile-nav-btn span {
+  font-size: clamp(9.5px, 2.5vw, 11px);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  overflow: hidden;
+  max-width: 100%;
+}
+
+/* Map Action Controls (#mobileMapControls) Fluid Scaling & Universal Fitting */
+#mobileMapControls {
+  gap: clamp(3px, 0.7vh, 6px) !important;
+  max-height: calc(100dvh - 180px - env(safe-area-inset-bottom, 0px)) !important;
+  padding: 3px !important;
+  right: max(0.45rem, env(safe-area-inset-right, 0px)) !important;
+}
+#mobileMapControls button,
+#mobileMapControls .mobile-floating-control,
+#radarControls > button,
+#mapLayersBtn,
+#terminatorToggleBtn,
+#extremesBtn,
+#mobileFloatingShareBtn,
+#mobileLocationFab,
+#mobileDirectionsFab {
+  width: clamp(32px, 4.6vmin, 40px) !important;
+  height: clamp(32px, 4.6vmin, 40px) !important;
+  min-width: clamp(32px, 4.6vmin, 40px) !important;
+  min-height: clamp(32px, 4.6vmin, 40px) !important;
+  border-radius: clamp(8px, 1.2vmin, 12px) !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+}
+#mobileMapControls svg,
+#mapLayersBtn svg,
+#terminatorToggleBtn svg,
+#extremesBtn svg,
+#mobileFloatingShareBtn svg,
+#mobileLocationFab svg,
+#mobileDirectionsFab svg {
+  width: clamp(15px, 2.3vmin, 19px) !important;
+  height: clamp(15px, 2.3vmin, 19px) !important;
+  max-width: clamp(15px, 2.3vmin, 19px) !important;
+  max-height: clamp(15px, 2.3vmin, 19px) !important;
+}
+#zoomControls > button {
+  width: clamp(34px, 4.8vmin, 42px) !important;
+  height: clamp(34px, 4.8vmin, 42px) !important;
+  min-width: clamp(34px, 4.8vmin, 42px) !important;
+  min-height: clamp(34px, 4.8vmin, 42px) !important;
+  border-radius: clamp(9px, 1.4vmin, 12px) !important;
+  font-size: clamp(1.1rem, 2.4vmin, 1.35rem) !important;
+}
+
+/* Weather Panel Header Action Buttons Row */
+#panelActionsRow button {
+  min-height: 44px;
+}
+#panelActionsRow svg {
+  width: clamp(16px, 3.8vw, 18px);
+  height: clamp(16px, 3.8vw, 18px);
+}
+#panelActionsRow span {
+  font-size: clamp(9.5px, 2.5vw, 11px);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Weather Metric & Summary Cards Icons */
+.metric-card > div:first-child,
+#todaySummaryGrid > div > div:first-child {
+  flex-shrink: 0;
+}
+.metric-card svg,
+#todaySummaryGrid svg {
+  flex-shrink: 0;
+}
+

@@ -41,7 +41,10 @@ export {
   formatPressure,
   formatDayLabel,
   formatHourLabel,
+  formatTimeOnly,
   formatDateTime,
+  getFormattedLocationCurrentTime,
+  getFormattedLocationCurrentDateTime,
   parseIsoLocal,
 } from './src/weather/formatting/dates.js';
 
@@ -128,7 +131,8 @@ import {
 
 import {
   formatTemp, formatWind, formatPrecip, formatVisibility, formatPressure,
-  formatDayLabel, formatHourLabel, formatDateTime, parseIsoLocal,
+  formatDayLabel, formatHourLabel, formatTimeOnly, formatDateTime,
+  getFormattedLocationCurrentTime, getFormattedLocationCurrentDateTime, parseIsoLocal,
 } from './src/weather/formatting/dates.js';
 
 import { getAQIInfo, getPollenLevel } from './src/weather/analysis/aqi.js';
@@ -211,7 +215,8 @@ export const WeatherService = {
 
   // Formatting
   formatTemp, formatWind, formatPrecip, formatVisibility, formatPressure,
-  formatDayLabel, formatHourLabel, formatDateTime, parseIsoLocal,
+  formatDayLabel, formatHourLabel, formatTimeOnly, formatDateTime,
+  getFormattedLocationCurrentTime, getFormattedLocationCurrentDateTime, parseIsoLocal,
   getTempClass, getWeeklyUV,
 
   // AQI / Pollen

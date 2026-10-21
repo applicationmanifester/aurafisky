@@ -99,18 +99,38 @@ export function formatDateTime(
 /**
  * Format an ISO time string to time-only string (timezone-independent).
  */
-export function formatTimeOnly(timeStr: string | null | undefined): string {
+export function formatTimeOnly(timeStr: string | Date | null | undefined): string {
   if (!timeStr) return '';
-  const parts = timeStr.split('T');
-  if (parts.length < 2) return timeStr;
-  const timeParts = parts[1].split(':');
-  const hours = parseInt(timeParts[0], 10);
-  const minutes = parseInt(timeParts[1], 10);
-  if (isNaN(hours) || isNaN(minutes)) return timeStr;
-  const ampm = hours >= 12 ? 'PM' : 'AM';
-  const displayHours = hours % 12 === 0 ? 12 : hours % 12;
-  const displayMinutes = String(minutes).padStart(2, '0');
-  return `${displayHours}:${displayMinutes} ${ampm}`;
+  if (timeStr instanceof Date) {
+    if (isNaN(timeStr.getTime())) return '';
+    try {
+      return timeStr.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
+    } catch {
+      return '';
+    }
+  }
+  const str = String(timeStr);
+  let timePart = str;
+  const parts = str.split('T');
+  if (parts.length >= 2) {
+    timePart = parts[1];
+  }
+  const timeParts = timePart.split(':');
+  if (timeParts.length >= 2) {
+    const hours = parseInt(timeParts[0], 10);
+    const minutes = parseInt(timeParts[1], 10);
+    if (!isNaN(hours) && !isNaN(minutes)) {
+      const ampm = hours >= 12 ? 'PM' : 'AM';
+      const displayHours = hours % 12 === 0 ? 12 : hours % 12;
+      const displayMinutes = String(minutes).padStart(2, '0');
+      return `${displayHours}:${displayMinutes} ${ampm}`;
+    }
+  }
+  const d = new Date(str);
+  if (!isNaN(d.getTime())) {
+    return d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
+  }
+  return str;
 }
 
 /**
@@ -141,6 +161,49 @@ export function getFormattedLocationCurrentTime(
     minute: '2-digit',
     hour12: true,
   });
+}
+
+/**
+ * Get formatted current local date and time at a location.
+ */
+export function getFormattedLocationCurrentDateTime(
+  timezone?: string,
+  utcOffsetSeconds = 0
+): string {
+  const now = new Date();
+  if (timezone) {
+    try {
+      const dStr = now.toLocaleDateString('en-US', {
+        timeZone: timezone,
+        weekday: 'short',
+        month: 'short',
+        day: 'numeric',
+      });
+      const tStr = now.toLocaleTimeString('en-US', {
+        timeZone: timezone,
+        hour: 'numeric',
+        minute: '2-digit',
+        hour12: true,
+      });
+      return `${dStr} · ${tStr}`;
+    } catch {
+      // Fallback to offset calculation
+    }
+  }
+  const locMs =
+    now.getTime() + utcOffsetSeconds * 1000 + now.getTimezoneOffset() * 60 * 1000;
+  const locDate = new Date(locMs);
+  const dStr = locDate.toLocaleDateString('en-US', {
+    weekday: 'short',
+    month: 'short',
+    day: 'numeric',
+  });
+  const tStr = locDate.toLocaleTimeString('en-US', {
+    hour: 'numeric',
+    minute: '2-digit',
+    hour12: true,
+  });
+  return `${dStr} · ${tStr}`;
 }
 
 /**

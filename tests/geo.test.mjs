@@ -20,6 +20,7 @@ import {
   formatDistance,
   describeProximity,
   describeCoordinates,
+  breakdownAddress,
 } from "../modules/geo.js";
 
 // 12.9716, 77.5946 — central Bengaluru. Note how much of the ladder a
@@ -133,6 +134,13 @@ describe("shortPlaceName / mediumPlaceName", () => {
 
   test("short does not repeat a duplicated name", () => {
     expect(shortPlaceName("Singapore, Singapore")).toBe("Singapore");
+  });
+
+  test("short pairs non-Latin primary segment with Latin parent settlement", () => {
+    expect(shortPlaceName("ಬನ್ನೂರು, Puttur Taluk, Dakshina Kannada, Karnataka, India"))
+      .toBe("Puttur (ಬನ್ನೂರು)");
+    expect(shortPlaceName("गांधीनगर, Jaipur District, Rajasthan, India"))
+      .toBe("Jaipur (गांधीनगर)");
   });
 
   test("medium keeps two segments so list items are distinguishable", () => {
@@ -304,5 +312,60 @@ describe("describeCoordinates", () => {
   test("normalises multi-world longitudes", () => {
     // A click three worlds to the right arrives as lng 900.
     expect(describeCoordinates(0, 900)).toBe(describeCoordinates(0, -180));
+  });
+});
+
+describe("breakdownAddress", () => {
+  test("extracts area, taluk, district, province/state for urban addresses", () => {
+    const res = breakdownAddress(ASHOKANAGAR, "", 12.9716, 77.5946);
+    expect(res.area).toContain("Vittal Mallya Road");
+    expect(res.area).toContain("Ashokanagar");
+    expect(res.city).toBe("Bengaluru");
+    expect(res.taluk).toBe("Bangalore North");
+    expect(res.district).toBe("Bengaluru Urban");
+    expect(res.state).toBe("Karnataka");
+    expect(res.postcode).toBe("560001");
+    expect(res.country).toBe("India");
+    expect(res.fullAddress).toContain("Vittal Mallya Road");
+    expect(res.fullAddress).toContain("Bengaluru");
+    expect(res.fullAddress).toContain("Karnataka");
+  });
+
+  test("handles rural addresses without city", () => {
+    const res = breakdownAddress(YALDURU, "", 13.2875, 78.2905);
+    expect(res.area).toBe("Yalduru");
+    expect(res.taluk).toBe("Kolar");
+    expect(res.district).toBe("Kolar");
+    expect(res.state).toBe("Karnataka");
+    expect(res.country).toBe("India");
+  });
+
+  test("handles remote regions and addresses with minimal fields", () => {
+    const res = breakdownAddress(KHARDUNG_LA, "", 34.1526, 77.5771);
+    expect(res.area).toContain("Khardung La Road");
+    expect(res.city).toBe("Leh");
+    expect(res.district).toBe("Leh district");
+    expect(res.state).toBe("Ladakh");
+  });
+
+  test("falls back gracefully when address object is empty or null", () => {
+    const res = breakdownAddress(null, "Custom Display Name", 12.34, 56.78);
+    expect(res.area).toBe("");
+    expect(res.city).toBe("");
+    expect(res.taluk).toBe("");
+    expect(res.district).toBe("");
+    expect(res.state).toBe("");
+    expect(res.fullAddress).toBe("Custom Display Name");
+
+    const resEmpty = breakdownAddress({}, "", 12.3456, 78.9012);
+    expect(resEmpty.fullAddress).toBe("12.3456, 78.9012");
+  });
+
+  test("extracts administrative components from comma-separated displayName when address is empty", () => {
+    const res = breakdownAddress(null, "Chitvel, Kadapa, Andhra Pradesh, India", 14.1612, 79.3037);
+    expect(res.area).toBe("Chitvel");
+    expect(res.district).toBe("Kadapa");
+    expect(res.state).toBe("Andhra Pradesh");
+    expect(res.fullAddress).toBe("Chitvel, Kadapa, Andhra Pradesh, India");
   });
 });

@@ -16,6 +16,15 @@ describe("User Profile Avatar & Compact Mode Removal", () => {
       expect(indexHtml).toContain('<span id="profileAvatarFallback" class="hidden text-xs font-bold text-white tracking-wider select-none"></span>');
       // profileAvatarImg must be hidden initially
       expect(indexHtml).toContain('<img id="profileAvatarImg" class="w-full h-full object-cover hidden"');
+      // Search pill terminates cleanly with pr-1.5 so white bar does not extend past profile icon
+      expect(indexHtml).toContain('id="googleMapsSearchPill" class="flex-1 min-w-0 pointer-events-auto rounded-full relative h-12 shadow-lg bg-white/95 dark:bg-[#282a2d] border border-slate-200/80 dark:border-slate-700/60 flex items-center pl-3 pr-1.5 gap-1.5');
+    });
+
+    it("enforces strict mutual exclusion between generic icon and profile pic in styles.css", () => {
+      expect(stylesCss).toContain("#profileIconGeneric.hidden");
+      expect(stylesCss).toContain("#profileAvatarImg.hidden");
+      expect(stylesCss).toContain("#profileBtn:has(#profileAvatarImg:not(.hidden)");
+      expect(stylesCss).toContain("display: none !important;");
     });
 
     it("defines _computeInitials in app.js that extracts clean 2-letter initials", () => {
@@ -82,4 +91,25 @@ describe("User Profile Avatar & Compact Mode Removal", () => {
       expect(minimalModeJs).toContain('document.documentElement.classList.remove("compact")');
     });
   });
+
+  describe("My Location Button and Workbox resilience", () => {
+    it("should configure #myLocationBtn with orange color and orange circular outline", () => {
+      const html = fs.readFileSync("index.html", "utf-8");
+      expect(html).toContain('id="myLocationBtn"');
+      expect(html).toContain('border-orange-500');
+      expect(html).toContain('text-orange-500');
+
+      const polishCss = fs.readFileSync("css/aura-polish.css", "utf-8");
+      expect(polishCss).toContain('#myLocationBtn');
+      expect(polishCss).toContain('border: 1.5px solid #f97316');
+      expect(polishCss).toContain('border-radius: 9999px');
+    });
+
+    it("should include handlerDidError in vite.config.js Workbox runtimeCaching to prevent no-response crashes", () => {
+      const viteConfig = fs.readFileSync("vite.config.js", "utf-8");
+      expect(viteConfig).toContain("handlerDidError");
+      expect(viteConfig).toContain("503");
+    });
+  });
 });
+

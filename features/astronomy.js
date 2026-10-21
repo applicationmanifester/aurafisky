@@ -25,6 +25,9 @@ function updateAstronomyWidget(weather, _hourIndex) {
       // on a polar day/night as on any other, and above the early return.
       this.updateStargazingWidget(weather, currentDayData, currentTime);
 
+      // Compute & render real planetary and prominent star positions
+      this.updateCelestialBodies(currentTime);
+
       // Inside the polar circles the sun can stay up (or down) for the whole
       // day, and the API reports sunrise and sunset as the same instant. That
       // makes the day length zero, so the sun-arc fraction below becomes 0/0
@@ -212,6 +215,225 @@ function _renderPolarDayCycle(currentTime, isPolarDay) {
     this._renderMoonPhase(currentTime);
   }
 
+function updateCelestialBodies(currentTime) {
+    const lat = this.selectedLat;
+    const lng = this.selectedLng;
+    if (lat == null || lng == null || isNaN(lat) || isNaN(lng)) return;
+
+    const planetsList = document.getElementById("celestialPlanetsList");
+    const starsList = document.getElementById("celestialStarsList");
+    const planetsBadge = document.getElementById("planetsVisibleBadge");
+    const starsBadge = document.getElementById("starsVisibleBadge");
+
+    if (!planetsList || !starsList) return;
+
+    try {
+      import("./celestial.js").then(({ calculateCelestialSky, projectToSkyDome }) => {
+        const sky = calculateCelestialSky(lat, lng, currentTime || new Date());
+        if (!sky) return;
+
+        // 1. Update Badges
+        if (planetsBadge) {
+          planetsBadge.textContent = `${sky.visiblePlanetsCount} visible`;
+          planetsBadge.className = sky.visiblePlanetsCount > 0
+            ? "text-[9px] font-bold px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-600 dark:text-emerald-400"
+            : "text-[9px] font-bold px-2 py-0.5 rounded-full bg-slate-200 dark:bg-slate-700 text-slate-500 dark:text-slate-400";
+        }
+
+        if (starsBadge) {
+          starsBadge.textContent = `${sky.visibleStarsCount} visible`;
+          starsBadge.className = sky.visibleStarsCount > 0
+            ? "text-[9px] font-bold px-2 py-0.5 rounded-full bg-indigo-500/15 text-indigo-600 dark:text-indigo-400"
+            : "text-[9px] font-bold px-2 py-0.5 rounded-full bg-slate-200 dark:bg-slate-700 text-slate-500 dark:text-slate-400";
+        }
+
+        // 2. Render Interactive 2D Sky Dome SVG
+        const domeGroup = document.getElementById("skyDomeObjectsGroup");
+        if (domeGroup) {
+          const domeElements = [];
+          const occupiedPositions = [];
+
+          // Helper to offset overlapping labels
+          const getCleanLabelOffset = (x, y) => {
+            let offsetY = -6;
+            for (const occ of occupiedPositions) {
+              if (Math.hypot(occ.x - x, occ.y - y) < 14) {
+                offsetY = occ.offsetY > 0 ? -(Math.abs(occ.offsetY) + 7) : (Math.abs(occ.offsetY) + 7);
+              }
+            }
+            occupiedPositions.push({ x, y, offsetY });
+            return offsetY;
+          };
+
+          // Add Moon to dome if above horizon
+          if (sky.moon.isAboveHorizon) {
+            const mPos = projectToSkyDome(sky.moon.altitude, sky.moon.azimuth, 80, 100, 100);
+            if (mPos.isVisible) {
+              const labelY = getCleanLabelOffset(mPos.x, mPos.y);
+              domeElements.push(`
+                <g transform="translate(${mPos.x.toFixed(1)}, ${mPos.y.toFixed(1)})" class="cursor-pointer">
+                  <circle cx="0" cy="0" r="5.5" fill="#fef08a" filter="drop-shadow(0 0 4px rgba(254,240,138,0.9))"/>
+                  <text x="0" y="${labelY}" text-anchor="middle" font-size="6" font-weight="bold" fill="#fef08a" stroke="#090d16" stroke-width="2" paint-order="stroke">Moon</text>
+                </g>
+              `);
+            }
+          }
+
+          // Add Planets to dome
+          sky.planets.forEach((p) => {
+            if (p.isAboveHorizon) {
+              const pos = projectToSkyDome(p.altitude, p.azimuth, 80, 100, 100);
+              if (pos.isVisible) {
+                const glow = p.isCurrentlyVisible ? "filter=\"drop-shadow(0 0 3px rgba(254,215,170,0.8))\"" : "";
+                const labelY = getCleanLabelOffset(pos.x, pos.y);
+                domeElements.push(`
+                  <g transform="translate(${pos.x.toFixed(1)}, ${pos.y.toFixed(1)})">
+                    <circle cx="0" cy="0" r="3.5" fill="${p.color}" ${glow} />
+                    <text x="0" y="${labelY}" text-anchor="middle" font-size="5.5" font-weight="bold" fill="${p.color}" stroke="#090d16" stroke-width="1.8" paint-order="stroke">${p.name}</text>
+                  </g>
+                `);
+              }
+            }
+          });
+
+          // Add Stars to dome (only brightest or visible to avoid overcrowding)
+          sky.stars.forEach((s) => {
+            if (s.isAboveHorizon) {
+              const pos = projectToSkyDome(s.altitude, s.azimuth, 80, 100, 100);
+              if (pos.isVisible) {
+                const r = s.magnitude < 0 ? 3 : s.magnitude < 1 ? 2.2 : 1.6;
+                const labelY = getCleanLabelOffset(pos.x, pos.y);
+                domeElements.push(`
+                  <g transform="translate(${pos.x.toFixed(1)}, ${pos.y.toFixed(1)})">
+                    <circle cx="0" cy="0" r="${r}" fill="${s.color}" />
+                    <text x="0" y="${labelY}" text-anchor="middle" font-size="5" fill="#cbd5e1" stroke="#090d16" stroke-width="1.6" paint-order="stroke" opacity="0.9">${s.name}</text>
+                  </g>
+                `);
+              }
+            }
+          });
+
+          domeGroup.innerHTML = domeElements.join("");
+        }
+
+        // 3. Render Bortle Light Pollution Card
+        const bortleTitle = document.getElementById("bortleTitle");
+        const bortleDesc = document.getElementById("bortleDescription");
+        const bortleBadge = document.getElementById("bortleBadge");
+        if (bortleTitle && sky.lightPollution) {
+          bortleTitle.textContent = sky.lightPollution.title;
+          if (bortleDesc) bortleDesc.textContent = sky.lightPollution.description;
+          if (bortleBadge) {
+            bortleBadge.textContent = sky.lightPollution.badge;
+            bortleBadge.style.color = sky.lightPollution.color;
+            bortleBadge.style.backgroundColor = `${sky.lightPollution.color}20`;
+          }
+        }
+
+        // 4. Render Meteor Shower Card
+        const meteorTitle = document.getElementById("meteorShowerTitle");
+        const meteorDetail = document.getElementById("meteorShowerDetail");
+        const meteorBadge = document.getElementById("meteorStatusBadge");
+        if (meteorTitle && sky.meteorShowers?.length > 0) {
+          const primaryShower = sky.meteorShowers[0];
+          meteorTitle.textContent = `${primaryShower.name} Shower`;
+          if (meteorDetail) {
+            meteorDetail.textContent = primaryShower.isActive
+              ? `Active now! Peak in ${primaryShower.daysUntilPeak}d (${primaryShower.peakDateStr}) • ~${primaryShower.zhr} meteors/hr`
+              : `Peaks on ${primaryShower.peakDateStr} (in ${primaryShower.daysUntilPeak} days) • Radiant: ${primaryShower.constellation}`;
+          }
+          if (meteorBadge) {
+            meteorBadge.textContent = primaryShower.isActive ? "Active Now 🔥" : `In ${primaryShower.daysUntilPeak}d`;
+            meteorBadge.className = primaryShower.isActive
+              ? "text-[8px] font-bold px-1.5 py-0.5 rounded bg-rose-500/15 text-rose-600 dark:text-rose-400"
+              : "text-[8px] font-bold px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-600 dark:text-amber-400";
+          }
+        }
+
+        // 5. Render Next Eclipse Card
+        const eclipseTitle = document.getElementById("eclipseTitle");
+        const eclipseDetail = document.getElementById("eclipseDetail");
+        const eclipseBadge = document.getElementById("eclipseBadge");
+        if (eclipseTitle && sky.eclipses) {
+          const nextEclipse = sky.eclipses.lunar || sky.eclipses.solar;
+          if (nextEclipse) {
+            const isLunar = Boolean(sky.eclipses.lunar);
+            eclipseTitle.textContent = `${isLunar ? "🌕 Lunar" : "☀️ Solar"} Eclipse (${nextEclipse.kind})`;
+            if (eclipseDetail) {
+              eclipseDetail.textContent = `Next occurrence: ${nextEclipse.dateStr}`;
+            }
+            if (eclipseBadge) {
+              eclipseBadge.textContent = isLunar ? "Lunar" : "Solar";
+            }
+          }
+        }
+
+        // 6. Render Planets List
+        planetsList.innerHTML = sky.planets.map((planet) => {
+          const isVis = planet.isCurrentlyVisible;
+          const statusClass = isVis
+            ? "bg-emerald-500/10 dark:bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30"
+            : planet.isAboveHorizon
+              ? "bg-amber-500/10 dark:bg-amber-500/20 text-amber-600 dark:text-amber-400"
+              : "bg-slate-200/50 dark:bg-slate-800/50 text-slate-400";
+
+          return `
+            <div class="bg-slate-100/70 dark:bg-slate-800/60 rounded-xl p-2.5 flex items-center justify-between border border-slate-200/50 dark:border-slate-700/50 transition-all hover:border-slate-300 dark:hover:border-slate-600">
+              <div class="flex items-center gap-2.5 min-w-0">
+                <span class="text-xl flex-shrink-0" aria-hidden="true">${planet.icon}</span>
+                <div class="min-w-0">
+                  <div class="flex items-center gap-1.5">
+                    <span class="text-xs font-bold text-slate-800 dark:text-slate-200">${planet.name}</span>
+                    <span class="text-[9px] text-slate-400">mag ${planet.magnitude.toFixed(1)}</span>
+                  </div>
+                  <div class="text-[9px] text-slate-500 dark:text-slate-400 flex items-center gap-1 mt-0.5">
+                    <span>${planet.direction}</span>
+                    <span>•</span>
+                    <span>Alt: ${Math.round(planet.altitude)}°</span>
+                  </div>
+                </div>
+              </div>
+              <span class="text-[8px] font-bold px-1.5 py-0.5 rounded-md flex-shrink-0 ${statusClass}">
+                ${isVis ? "Visible" : planet.isAboveHorizon ? "In Sky" : "Below"}
+              </span>
+            </div>
+          `;
+        }).join("");
+
+        // 7. Render Stars List
+        starsList.innerHTML = sky.stars.map((star) => {
+          const isVis = star.isCurrentlyVisible;
+          const statusClass = isVis
+            ? "text-indigo-600 dark:text-indigo-400 font-bold"
+            : "text-slate-400";
+
+          return `
+            <div class="bg-slate-100/70 dark:bg-slate-800/60 rounded-xl p-2 flex flex-col justify-between border border-slate-200/50 dark:border-slate-700/50">
+              <div class="flex items-start justify-between">
+                <div class="min-w-0">
+                  <div class="text-xs font-bold text-slate-800 dark:text-slate-200 truncate flex items-center gap-1">
+                    <span class="w-1.5 h-1.5 rounded-full inline-block flex-shrink-0" style="background-color: ${star.color}"></span>
+                    <span>${star.name}</span>
+                  </div>
+                  <div class="text-[8px] text-slate-400 truncate mt-0.5">${star.constellation}</div>
+                </div>
+                <span class="text-[8px] font-semibold text-slate-400">m ${star.magnitude.toFixed(1)}</span>
+              </div>
+              <div class="text-[8px] ${statusClass} flex items-center justify-between mt-2 pt-1.5 border-t border-slate-200/40 dark:border-slate-700/40">
+                <span>${star.direction} (${Math.round(star.altitude)}°)</span>
+                <span>${isVis ? "Visible" : star.isAboveHorizon ? "Day" : "Set"}</span>
+              </div>
+            </div>
+          `;
+        }).join("");
+      }).catch((err) => {
+        console.warn("Celestial calculation error:", err);
+      });
+    } catch (e) {
+      console.warn("Failed to load celestial sky module:", e);
+    }
+  }
+
 function _renderMoonPhase(currentTime) {
     const moon = WeatherService.getMoonPhase(currentTime);
     this.$.moonPhaseLabel.textContent = moon.label;
@@ -247,6 +469,7 @@ function getMoonSvgPath(p, cx = 20, cy = 20, r = 18) {
 
 export function init(app) {
   app.updateAstronomyWidget = updateAstronomyWidget;
+  app.updateCelestialBodies = updateCelestialBodies;
   app.getMoonSvgPath = getMoonSvgPath;
   app._renderPolarDayCycle = _renderPolarDayCycle;
   app._nextSunEvent = _nextSunEvent;

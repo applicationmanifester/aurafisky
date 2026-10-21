@@ -44,6 +44,7 @@ import {
   formatPlaceName,
   shortPlaceName,
   mediumPlaceName,
+  breakdownAddress,
   formatCoordinates,
   formatCoordinateAccuracy,
   haversineMeters,
@@ -248,6 +249,7 @@ class AurafiskyApp {
 
     // Sunrise countdown timer
     this.sunCountdownTimer = null;
+    this._panelClockTimer = null;
     this.thunderInterval = null;
     this.birdsInterval = null;
 
@@ -779,15 +781,28 @@ class AurafiskyApp {
     if (panelEl) this._weatherPanelTemplate = panelEl.outerHTML;
 
     // Global error boundary — surface unexpected errors without killing the app.
+    const isBenignError = (err) => {
+      const msg = (err?.message || String(err || "")).toLowerCase();
+      return (
+        msg.includes("message channel closed") ||
+        msg.includes("listener indicated an asynchronous response") ||
+        msg.includes("quic_peer_going_away") ||
+        msg.includes("err_quic_protocol_error") ||
+        msg.includes("resizeobserver loop") ||
+        msg.includes("cancelled") ||
+        msg.includes("aborted")
+      );
+    };
+
     window.addEventListener("error", (e) => {
+      if (isBenignError(e.error || e.message)) {
+        e.preventDefault();
+        return;
+      }
       console.error("Unhandled error:", e.error || e.message);
     });
     window.addEventListener("unhandledrejection", (e) => {
-      const msg = e.reason?.message || String(e.reason || "");
-      if (
-        msg.includes("message channel closed") ||
-        msg.includes("listener indicated an asynchronous response")
-      ) {
+      if (isBenignError(e.reason)) {
         e.preventDefault();
         return;
       }
@@ -873,23 +888,6 @@ class AurafiskyApp {
     if (this.deviceProfile && this.syncBus?.syncDeviceProfile) {
       this.syncBus.syncDeviceProfile(this.deviceProfile);
     }
-
-    // Global error boundary — catch unhandled errors and show a friendly banner
-    // instead of a blank white screen.
-    window.addEventListener("error", (e) => {
-      console.error("Unhandled error:", e.error || e.message);
-      this.showError(
-        e.error?.message || "An unexpected error occurred.",
-        "Something went wrong"
-      );
-    });
-    window.addEventListener("unhandledrejection", (e) => {
-      console.error("Unhandled promise rejection:", e.reason);
-      this.showError(
-        e.reason?.message || "An unexpected error occurred.",
-        "Something went wrong"
-      );
-    });
 
     // Load bookmarks (in-memory until cloud sync)
 
@@ -2448,7 +2446,16 @@ class AurafiskyApp {
       }, 2500);
     });
 
-    // ── Weather Panel Weather Card Preset Buttons ─────────────────
+    // ── Weather Panel Weather Card Preset Buttons & Dropdown ─────────────────
+    const presetSelect = document.getElementById("wallpaperPresetSelect");
+    if (presetSelect) {
+      presetSelect.addEventListener("change", (e) => {
+        const val = e.target.value;
+        if (!val) return;
+        this.setWallpaperPreset(val);
+        this._haptic?.('selection');
+      });
+    }
     document.querySelectorAll("[data-preset]").forEach((btn) => {
       btn.addEventListener("click", (e) => {
         e.stopPropagation();
@@ -2458,6 +2465,28 @@ class AurafiskyApp {
         this._haptic?.('selection');
       });
     });
+
+    // ── Location Address Details Copy Button ─────────────────────
+    const copyAddressBtn = document.getElementById("copyAddressBtn");
+    if (copyAddressBtn) {
+      copyAddressBtn.addEventListener("click", async (e) => {
+        e.stopPropagation();
+        const textToCopy = this._currentFullAddress || this.selectedName || "";
+        if (!textToCopy) return;
+        try {
+          await navigator.clipboard.writeText(textToCopy);
+          const btnText = document.getElementById("copyAddressBtnText");
+          if (btnText) btnText.textContent = "Copied!";
+          this.showToast("📍 Address copied to clipboard", "success");
+          this._haptic?.('selection');
+          setTimeout(() => {
+            if (btnText) btnText.textContent = "Copy";
+          }, 2000);
+        } catch (_) {
+          this.showToast(textToCopy, "info");
+        }
+      });
+    }
 
     if (this.$.nowIndicator) {
       this.$.nowIndicator.addEventListener("click", () => this.jumpToNow());
@@ -2972,9 +3001,8 @@ class AurafiskyApp {
 
     this._restoreDesktopPanelPosition();
 
-    const dragHandle = document.getElementById("panelDragHandle") || panel.firstElementChild;
-    const header = document.getElementById("weatherPanelHeader") || dragHandle?.parentElement || dragHandle;
-    if (!dragHandle && !header) return;
+    const dragHandle = document.getElementById("panelDragHandle") || panel.querySelector(".weather-panel-drag-bar");
+    if (!dragHandle) return;
 
     let isDragging = false;
     let startX = 0;
@@ -2984,8 +3012,11 @@ class AurafiskyApp {
 
     const onPointerDown = (e) => {
       if (window.innerWidth < 768 || (e.button !== undefined && e.button !== 0)) return;
-      // Don't drag if user clicked an interactive control like minimize/close/share/bookmark
-      if (e.target.closest("button:not(#panelDragHandle), input, a, select, [role='button']:not(#panelDragHandle)")) return;
+      // Strictly restrict dragging to the top drag handle bar
+      const isTopHandle = e.target.closest("#panelDragHandle, .weather-panel-drag-bar");
+      if (!isTopHandle) return;
+      // Don't drag if user clicked an interactive control or selectable text element
+      if (e.target.closest("button:not(#panelDragHandle), input, a, select, [role='button']:not(#panelDragHandle), #locationAddressCard, #panelCoordinates, #panelActionsRow, #weatherPanelTabs, #weatherPanelContent")) return;
 
       isDragging = true;
       startX = e.clientX;
@@ -3045,15 +3076,13 @@ class AurafiskyApp {
       window.addEventListener("mouseup", onPointerUp);
     };
 
-    dragHandle?.addEventListener("pointerdown", onPointerDown);
-    dragHandle?.addEventListener("mousedown", onPointerDown);
-    header?.addEventListener("pointerdown", onPointerDown);
-    header?.addEventListener("mousedown", onPointerDown);
+    dragHandle.addEventListener("pointerdown", onPointerDown);
+    dragHandle.addEventListener("mousedown", onPointerDown);
 
-    // Double-click drag handle or header to reset panel position to default
+    // Double-click drag handle strictly to reset panel position to default
     const onResetPosition = (e) => {
       if (window.innerWidth < 768) return;
-      if (e.target.closest("button:not(#panelDragHandle), input, a, select")) return;
+      if (!e.target.closest("#panelDragHandle, .weather-panel-drag-bar")) return;
       try {
         localStorage.removeItem("aurafisky_desktop_panel_pos");
       } catch (_) {}
@@ -3064,8 +3093,7 @@ class AurafiskyApp {
       this.showToast("Restored weather card to default position", "info");
     };
 
-    dragHandle?.addEventListener("dblclick", onResetPosition);
-    header?.addEventListener("dblclick", onResetPosition);
+    dragHandle.addEventListener("dblclick", onResetPosition);
   }
 
   _restoreDesktopPanelPosition() {
@@ -3230,6 +3258,7 @@ class AurafiskyApp {
   }
 
   async _loadInitialStartupLocation() {
+    this._sweepStaleCache();
     await this._loadLocalCache();
 
     // 1. Priority 1: Check if page was opened via a shared link URL (?lat=...&lng=...&name=...)
@@ -3237,22 +3266,70 @@ class AurafiskyApp {
       return;
     }
 
-    // 2. Priority 2: Restored previous session
+    // Fallback runner to restore previous session or default home
+    const restoreFallback = () => {
+      if (this._restoreSession()) {
+        return true;
+      }
+      if (this.defaultLocation && this.defaultLocation.lat != null) {
+        this.selectLocation(this.defaultLocation.lat, this.defaultLocation.lng, this.defaultLocation.name);
+        if (this.defaultLocationNotify) {
+          this.setupHourlyNotifications();
+        }
+        return true;
+      }
+      return false;
+    };
+
+    // 2. Mobile-first Smart Hybrid auto-location check
+    // On mobile devices, if geolocation permission is already granted or in a native app (Capacitor),
+    // open the user's current location immediately.
+    // If not yet determined or if permission is prompt/denied, instantly render the cached session / home
+    // without raising an unexpected intrusive prompt or blocking the screen.
+    const isMobile = isMobileLayout();
+    const isNativeApp = typeof window !== "undefined" && Boolean(window.Capacitor?.isNativePlatform?.());
+
+    if (isMobile) {
+      let permissionState = null;
+      try {
+        if (typeof navigator !== "undefined" && navigator.permissions?.query) {
+          const perm = await navigator.permissions.query({ name: "geolocation" });
+          permissionState = perm?.state;
+        }
+      } catch (e) {
+        // Permission query not supported on some WebViews
+      }
+
+      if (isNativeApp || permissionState === "granted" || this._lastKnownGpsCoords) {
+        // Instantly render optimistic cached session/home so screen is never blank
+        const restored = restoreFallback();
+
+        // Concurrently get fresh user location and smoothly transition to where the user currently is
+        this.getMyLocation({
+          silent: true,
+          onFail: () => {
+            if (!restored) restoreFallback();
+          },
+        });
+        return;
+      }
+    }
+
+    // 3. Desktop or mobile without pre-granted location: Restored previous session
     if (this._restoreSession()) {
       return;
     }
 
-    // 3. Priority 3: Default Home location
+    // 4. Default Home location
     if (this.defaultLocation && this.defaultLocation.lat != null) {
       this.selectLocation(this.defaultLocation.lat, this.defaultLocation.lng, this.defaultLocation.name);
-      // Re-register periodic sync if notifications were previously enabled
       if (this.defaultLocationNotify) {
         this.setupHourlyNotifications();
       }
       return;
     }
 
-    // 4. Priority 4: Geolocation fallback
+    // 5. Geolocation fallback
     this.getMyLocation();
   }
 
@@ -3338,10 +3415,14 @@ class AurafiskyApp {
         // Localized reverse geocoding: names come back in the user's
         // device language (updated, official names) instead of English.
         const userLang = (() => {
+          if (this.mapLanguage && this.mapLanguage !== 'native') {
+            return `${this.mapLanguage},en;q=0.9,en-US;q=0.8`;
+          }
           try {
-            return (navigator.language || "en").split(/[-_,]/)[0] || "en";
+            const nav = (navigator.language || "en").split(/[-_,]/)[0] || "en";
+            return `${nav},en;q=0.9,en-US;q=0.8`;
           } catch (e) {
-            return "en";
+            return "en,en-US;q=0.9";
           }
         })();
         // Two zoom levels, because Nominatim's answer depends on the detail level
@@ -3386,18 +3467,24 @@ class AurafiskyApp {
         if (coarseLevel || fineLevel) {
           // Merge policy lives in modules/reverseGeocode.js so it can be
           // tested without the network.
-          const { name: locationName } = labelFromReverse(coarseLevel, fineLevel, {
+          const { name: locationName, address: locationAddress } = labelFromReverse(coarseLevel, fineLevel, {
             sanitize,
-            // Two thirds of the planet has no street address. Nominatim returns
-            // nothing for open ocean and most of Antarctica, and the old code
-            // left raw decimals in the header. Fall back to the geographic
-            // region so the location at least reads as a place.
             describeFallback: this._describeCoordinates(lat, lng),
           });
 
           if (locationName && this.selectedLat === lat && this.selectedLng === lng) {
             this.selectedName = locationName;
+            this.selectedAddress = locationAddress;
+            this.selectedDisplayName = fineLevel?.display_name || coarseLevel?.display_name || locationName;
             this._updateHeaderLocationAndCoords(locationName, lat, lng);
+            this._renderLocationAddressCard(this.selectedAddress, this.selectedDisplayName, lat, lng);
+            // Sync map marker pin so map pin and weather card show the exact same name!
+            if (this.marker) {
+              const currentWeather = this.currentWeather || (this.weatherData ? WeatherService.getHourlyAtIndex(this.weatherData, this.currentHourIndex) : null);
+              if (currentWeather) {
+                this.marker.setHtml(this._buildMarkerHtml(currentWeather), locationName, "location-tooltip");
+              }
+            }
             this.updateOfflineBadge(false);
             this._persistSession(lat, lng, locationName);
           }
@@ -3446,6 +3533,200 @@ class AurafiskyApp {
     }
   }
 
+  _renderLocationAddressLoading() {
+    const content = document.getElementById("locationAddressContent");
+    if (!content) return;
+    content.innerHTML = `
+      <div class="py-1 text-[11px] text-slate-400 flex items-center gap-2 animate-pulse">
+        <span class="w-3 h-3 rounded-full border-2 border-teal-500/30 border-t-teal-500 animate-spin flex-shrink-0"></span>
+        <span class="truncate">Resolving address details...</span>
+      </div>
+    `;
+  }
+
+  _renderLocationAddressCard(address, displayName, lat, lng) {
+    const content = document.getElementById("locationAddressContent");
+    if (!content) return;
+
+    const b = breakdownAddress(address, displayName, lat, lng);
+    this._currentFullAddress = b.fullAddress;
+
+    const areaVal = b.area || b.city || "—";
+    const talukVal = b.taluk || "—";
+    const districtVal = b.district || "—";
+    const stateVal = b.state || "—";
+    const metaBottom = [b.postcode, b.country].filter(Boolean).join(", ");
+
+    content.innerHTML = `
+      <div class="grid grid-cols-2 gap-x-2 gap-y-2 text-[11px] select-text">
+        <div class="flex flex-col min-w-0 select-text">
+          <span class="text-[9px] uppercase font-bold text-slate-400 tracking-wider select-text">Area / Locality</span>
+          <span class="font-semibold text-slate-800 dark:text-slate-200 truncate select-text cursor-text" title="${areaVal}">${areaVal}</span>
+        </div>
+        <div class="flex flex-col min-w-0 select-text">
+          <span class="text-[9px] uppercase font-bold text-slate-400 tracking-wider select-text">Taluk / Tehsil</span>
+          <span class="font-semibold text-slate-800 dark:text-slate-200 truncate select-text cursor-text" title="${talukVal}">${talukVal}</span>
+        </div>
+        <div class="flex flex-col min-w-0 select-text">
+          <span class="text-[9px] uppercase font-bold text-slate-400 tracking-wider select-text">District</span>
+          <span class="font-semibold text-slate-800 dark:text-slate-200 truncate select-text cursor-text" title="${districtVal}">${districtVal}</span>
+        </div>
+        <div class="flex flex-col min-w-0 select-text">
+          <span class="text-[9px] uppercase font-bold text-slate-400 tracking-wider select-text">State / Province</span>
+          <span class="font-semibold text-slate-800 dark:text-slate-200 truncate select-text cursor-text" title="${stateVal}">${stateVal}</span>
+        </div>
+      </div>
+      <div class="mt-2 pt-1.5 border-t border-slate-200/60 dark:border-slate-700/50 flex items-center justify-between text-[11px] text-slate-500 dark:text-slate-400 select-text">
+        <span class="truncate pr-1 font-medium select-text cursor-text">${metaBottom || (lat != null && lng != null ? `${lat.toFixed(4)}°, ${lng.toFixed(4)}°` : "Global")}</span>
+        <button id="viewFullAddressBtn" type="button" class="text-[10px] text-teal-600 dark:text-teal-400 font-bold flex-shrink-0 cursor-pointer hover:underline select-none">Full Address</button>
+      </div>
+      <div id="fullAddressDetail" class="hidden mt-1 p-2 bg-slate-100/90 dark:bg-slate-800/70 rounded-xl text-[10.5px] font-mono text-slate-600 dark:text-slate-300 leading-snug break-words border border-slate-200/60 dark:border-slate-700/40 select-all select-text cursor-text">
+        ${b.fullAddress || "No additional street address available for these coordinates."}
+      </div>
+    `;
+
+    const toggleBtn = content.querySelector("#viewFullAddressBtn");
+    const fullDetail = content.querySelector("#fullAddressDetail");
+    if (toggleBtn && fullDetail) {
+      toggleBtn.addEventListener("click", (e) => {
+        e.stopPropagation();
+        fullDetail.classList.toggle("hidden");
+        toggleBtn.textContent = fullDetail.classList.contains("hidden") ? "Full Address" : "Hide Details";
+      });
+    }
+  }
+
+  async resolveLocationAddress(lat, lng, fallbackName) {
+    if (lat == null || lng == null || isNaN(lat) || isNaN(lng)) {
+      this._renderLocationAddressCard(null, fallbackName, lat, lng);
+      return;
+    }
+
+    // 1. If we have a verified cached address for these exact coordinates, render immediately
+    const cacheKey = `weathermap_cache_${lat.toFixed(3)}_${lng.toFixed(3)}`;
+    try {
+      const cached = this.getNearestCachedLocation(lat, lng);
+      if (
+        cached?.address &&
+        cached.addressLat != null &&
+        cached.addressLng != null &&
+        haversineMeters(cached.addressLat, cached.addressLng, lat, lng) < 1500
+      ) {
+        this.selectedAddress = cached.address;
+        this.selectedDisplayName = cached.displayName || cached.name || fallbackName;
+        this.addressResolvedForLat = lat;
+        this.addressResolvedForLng = lng;
+        this._renderLocationAddressCard(this.selectedAddress, this.selectedDisplayName, lat, lng);
+        return;
+      }
+    } catch (_) {}
+
+    // 2. Fetch reverse geocoding from Nominatim (with timeout and abort controller)
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 6000);
+    const userLang = (navigator.language || "en").split("-")[0];
+    const urls = reverseUrls(lat, lng, userLang);
+
+    const fetchReverse = async (url) => {
+      try {
+        const res = await fetch(url, { signal: controller.signal });
+        return res.ok ? await res.json() : null;
+      } catch (_) {
+        return null;
+      }
+    };
+
+    try {
+      const [coarseLevel, fineLevel] = await Promise.all([
+        fetchReverse(urls.coarse),
+        fetchReverse(urls.fine),
+      ]);
+      clearTimeout(timeoutId);
+
+      const sanitize = (str) => {
+        if (typeof DOMPurify !== "undefined" && DOMPurify.sanitize)
+          return DOMPurify.sanitize(String(str || ""));
+        return String(str || "").replace(/[<>&]/g, "");
+      };
+
+      if (this.selectedLat === lat && this.selectedLng === lng) {
+        let locationAddress = null;
+        let displayName = "";
+        let locationName = "";
+
+        if (coarseLevel || fineLevel) {
+          const res = labelFromReverse(coarseLevel, fineLevel, {
+            sanitize,
+            describeFallback: this._describeCoordinates(lat, lng),
+          });
+          locationAddress = res.address;
+          locationName = res.name;
+          displayName = fineLevel?.display_name || coarseLevel?.display_name || locationName || fallbackName;
+        }
+
+        this.selectedAddress = locationAddress;
+        this.selectedDisplayName = displayName || fallbackName || "";
+        this.addressResolvedForLat = lat;
+        this.addressResolvedForLng = lng;
+        this._renderLocationAddressCard(this.selectedAddress, this.selectedDisplayName, lat, lng);
+
+        // Update cache with resolved address and verified coordinates
+        if (this.weatherData) {
+          this._persistWeatherCache(cacheKey, {
+            forecast: this.weatherData,
+            airQuality: this.airQualityData,
+            ts: this.freshnessTimestamp || Date.now(),
+            name: this.selectedName || fallbackName,
+            address: this.selectedAddress,
+            displayName: this.selectedDisplayName,
+            addressLat: lat,
+            addressLng: lng,
+          });
+        }
+      }
+    } catch (e) {
+      clearTimeout(timeoutId);
+      if (this.selectedLat === lat && this.selectedLng === lng) {
+        this._renderLocationAddressCard(null, fallbackName || this.selectedName, lat, lng);
+      }
+    }
+  }
+
+  _updatePanelTimeLabel(weather, hourIndex) {
+    if (!this.$.panelTimeLabel) return;
+    const nowIdx = WeatherService.getCurrentHourIndex(
+      this.weatherData,
+      this.weatherData?.utc_offset_seconds || 0,
+    );
+    const isNow = hourIndex == null || hourIndex === nowIdx;
+    if (isNow && WeatherService.getFormattedLocationCurrentDateTime) {
+      this.$.panelTimeLabel.textContent = WeatherService.getFormattedLocationCurrentDateTime(
+        this.weatherData?.timezone,
+        this.weatherData?.utc_offset_seconds || 0,
+      );
+    } else if (weather?.time) {
+      this.$.panelTimeLabel.textContent = WeatherService.formatDateTime(
+        weather.time,
+        this.weatherData?.timezone,
+        this.weatherData?.utc_offset_seconds,
+      );
+    }
+  }
+
+  _startPanelClockTicker() {
+    if (this._panelClockTimer) return;
+    this._panelClockTimer = setInterval(() => {
+      if (!this.weatherData || !this.$.panelTimeLabel) return;
+      const nowIdx = WeatherService.getCurrentHourIndex(
+        this.weatherData,
+        this.weatherData?.utc_offset_seconds || 0,
+      );
+      if (this.currentHourIndex === nowIdx) {
+        this._updatePanelTimeLabel(this.currentWeather, this.currentHourIndex);
+      }
+    }, 10000);
+  }
+
   async selectLocation(lat, lng, name) {
     if (lat == null || lng == null || isNaN(lat) || isNaN(lng)) {
       return;
@@ -3468,6 +3749,11 @@ class AurafiskyApp {
       this.selectedLat = lat;
       this.selectedLng = lng;
       this.selectedName = name;
+      this.selectedAddress = null;
+      this.selectedDisplayName = null;
+      this._currentFullAddress = '';
+      this.addressResolvedForLat = null;
+      this.addressResolvedForLng = null;
       this.updateSettingsUIFromLocal();
 
       this._cachedDecomposition = null;
@@ -3489,6 +3775,8 @@ class AurafiskyApp {
 
       // Refresh UI panel state
       this._updateHeaderLocationAndCoords(name, lat, lng);
+      this._renderLocationAddressLoading();
+      this.resolveLocationAddress(lat, lng, name);
       this.$.panelTimeLabel.textContent = "Fetching weather...";
 
       // Clear the AI briefing — it describes the *previous* location, so leaving
@@ -3561,7 +3849,18 @@ class AurafiskyApp {
         this.$.timelineSlider.disabled = false;
         this.updateWeatherDisplay(this.currentHourIndex);
         if (this._ensembleReady) this.renderEnsemble(lat, lng);
-        this.createWeatherMarker(lat, lng, this.currentHourIndex);
+        if (
+          cached.address &&
+          cached.addressLat != null &&
+          cached.addressLng != null &&
+          haversineMeters(cached.addressLat, cached.addressLng, lat, lng) < 1500
+        ) {
+          this.selectedAddress = cached.address;
+          this.selectedDisplayName = cached.displayName || cached.name || '';
+          this.addressResolvedForLat = lat;
+          this.addressResolvedForLng = lng;
+          this._renderLocationAddressCard(this.selectedAddress, this.selectedDisplayName, lat, lng);
+        }
         const fl = document.getElementById("freshnessLabel");
         if (fl)
           fl.textContent = `Cached ${Math.round(
@@ -3606,12 +3905,23 @@ class AurafiskyApp {
 
         // Store freshness timestamp and persist cache for offline fallback
         this.freshnessTimestamp = Date.now();
-        this._persistWeatherCache(cacheKey, {
+        const cachePayload = {
           forecast,
           airQuality,
           ts: this.freshnessTimestamp,
           name,
-        });
+        };
+        if (
+          this.selectedAddress &&
+          this.addressResolvedForLat != null &&
+          haversineMeters(this.addressResolvedForLat, this.addressResolvedForLng, lat, lng) < 1500
+        ) {
+          cachePayload.address = this.selectedAddress;
+          cachePayload.displayName = this.selectedDisplayName;
+          cachePayload.addressLat = this.addressResolvedForLat;
+          cachePayload.addressLng = this.addressResolvedForLng;
+        }
+        this._persistWeatherCache(cacheKey, cachePayload);
 
         // If air quality resolves slightly later, update smoothly in background
         if (!airQuality) {
@@ -3876,7 +4186,16 @@ class AurafiskyApp {
         if (!key || !key.startsWith("weathermap_cache_")) continue;
         try {
           const data = JSON.parse(localStorage.getItem(key) || "{}");
-          if (data.ts == null || data.ts < cutoff) localStorage.removeItem(key);
+          if (data.ts == null || data.ts < cutoff) {
+            localStorage.removeItem(key);
+            continue;
+          }
+          // Sanitize legacy unverified addresses that lack verified coordinates
+          if (data.address && (data.addressLat == null || data.addressLng == null)) {
+            delete data.address;
+            delete data.displayName;
+            localStorage.setItem(key, JSON.stringify(data));
+          }
         } catch {
           localStorage.removeItem(key);
         }
@@ -3910,18 +4229,21 @@ class AurafiskyApp {
    * Single source of truth for the marker template (#4/#9).
    */
   _buildMarkerHtml(weather) {
-    const cityName = this.selectedName ? shortPlaceName(this.selectedName).trim() : (weather.description || "");
+    const isCoordString = /^\s*[-+]?\d+\.\d+\s*,\s*[-+]?\d+\.\d+\s*$/.test(this.selectedName || "");
+    const cityName = this.selectedName && !isCoordString
+      ? shortPlaceName(this.selectedName).trim()
+      : (isCoordString ? "Locating..." : (weather?.description || ""));
     return `
         <div class="aurafisky-location-pin group" role="button" tabindex="0" aria-label="${cityName}">
-          <div class="weather-marker relative bg-white/95 dark:bg-slate-800/95 backdrop-blur-md rounded-2xl px-3 py-2 shadow-2xl border border-slate-200/80 dark:border-slate-700/80 flex items-center gap-2 select-none min-w-[84px]">
-            <button type="button" class="marker-close-btn absolute -top-1.5 -right-1.5 w-5 h-5 rounded-full bg-slate-100 hover:bg-rose-500 dark:bg-slate-700 dark:hover:bg-rose-500 text-slate-400 hover:text-white dark:text-slate-300 dark:hover:text-white flex items-center justify-center shadow-md transition-all border border-slate-200/80 dark:border-slate-600/80 cursor-pointer z-20" title="Close location" aria-label="Close location">
-              <svg class="w-3 h-3 pointer-events-none" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
-            </button>
-            <div class="text-2xl leading-none flex-shrink-0">${weather.icon}</div>
-            <div class="flex flex-col text-left leading-none min-w-0">
-              <span class="text-sm font-extrabold text-slate-800 dark:text-white leading-tight">${WeatherService.formatTemp(weather.temperature)}</span>
-              <span class="text-[10px] font-medium text-slate-500 dark:text-slate-400 truncate max-w-[85px] mt-0.5">${cityName}</span>
+          <div class="weather-marker relative bg-white/95 dark:bg-slate-800/95 backdrop-blur-md rounded-2xl pl-2.5 pr-2 py-1.5 shadow-2xl border border-slate-200/80 dark:border-slate-700/80 flex items-center gap-2 select-none min-w-[90px]">
+            <div class="weather-marker-icon text-xl leading-none flex-shrink-0">${weather.icon}</div>
+            <div class="weather-marker-info flex flex-col text-left leading-none min-w-0 pr-0.5">
+              <span class="weather-marker-temp text-sm font-extrabold text-slate-800 dark:text-white leading-tight">${WeatherService.formatTemp(weather.temperature)}</span>
+              <span class="weather-marker-city text-[10px] font-medium text-slate-500 dark:text-slate-400 truncate max-w-[85px] mt-0.5 leading-tight" title="${cityName}">${cityName}</span>
             </div>
+            <button type="button" class="marker-close-btn flex-shrink-0" title="Close location" aria-label="Close location">
+              <svg class="marker-close-svg pointer-events-none" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
+            </button>
           </div>
           <div class="pin-stem"></div>
           <div class="pin-ground-anchor">
@@ -4015,12 +4337,8 @@ class AurafiskyApp {
 
     // Header labels
     this._updateHeaderLocationAndCoords(this.selectedName, this.selectedLat, this.selectedLng);
-    // Use the weather data's time for the selected hour, not current time
-    this.$.panelTimeLabel.textContent = WeatherService.formatDateTime(
-      weather.time,
-      this.weatherData?.timezone,
-      this.weatherData?.utc_offset_seconds
-    );
+    this._updatePanelTimeLabel(weather, hourIndex);
+    this._startPanelClockTicker();
 
     // Weather type display (emoji — consistent with share/hourly/bookmark surfaces)
     this.$.panelIcon.textContent = weather.icon;
@@ -4387,13 +4705,13 @@ class AurafiskyApp {
     setText(
       "todaySunrise",
       daily.sunrise?.[dayIdx]
-        ? WeatherService.formatHourLabel(daily.sunrise[dayIdx], utcOffset)
+        ? WeatherService.formatTimeOnly(daily.sunrise[dayIdx]) || "--"
         : "--",
     );
     setText(
       "todaySunset",
       daily.sunset?.[dayIdx]
-        ? WeatherService.formatHourLabel(daily.sunset[dayIdx], utcOffset)
+        ? WeatherService.formatTimeOnly(daily.sunset[dayIdx]) || "--"
         : "--",
     );
     setText(
@@ -7451,12 +7769,16 @@ class AurafiskyApp {
       }
     }
 
-    // Update active UI state on theme preset buttons
+    // Update active UI state on theme preset buttons & select dropdown
     document.querySelectorAll("[data-preset]").forEach((btn) => {
       const isCurrent = btn.dataset.preset === preset;
       btn.classList.toggle("active", isCurrent);
       btn.setAttribute("aria-selected", isCurrent ? "true" : "false");
     });
+    const presetSelectDropdown = document.getElementById("wallpaperPresetSelect");
+    if (presetSelectDropdown && presetSelectDropdown.value !== preset) {
+      presetSelectDropdown.value = preset;
+    }
   }
 
   openWallpaperAddTabModal() {
@@ -7725,6 +8047,7 @@ class AurafiskyApp {
     if (this.sunCountdownTimer) clearInterval(this.sunCountdownTimer);
     if (this._navWatchId != null) navigator.geolocation.clearWatch(this._navWatchId);
     if (this._terminatorTimer) clearInterval(this._terminatorTimer);
+    if (this._panelClockTimer) clearInterval(this._panelClockTimer);
   }
 
   showWeatherPanel() {
@@ -8518,7 +8841,18 @@ class AurafiskyApp {
 
       const app = fbApp.initializeApp(this.firebaseConfig);
       const auth = fbAuth.getAuth(app);
-      const db = fbFirestore.getFirestore(app);
+      let db;
+      try {
+        if (typeof fbFirestore.initializeFirestore === "function") {
+          db = fbFirestore.initializeFirestore(app, {
+            experimentalAutoDetectLongPolling: true,
+          });
+        } else {
+          db = fbFirestore.getFirestore(app);
+        }
+      } catch {
+        db = fbFirestore.getFirestore(app);
+      }
       let messaging = null;
       try {
         if ("Notification" in window) messaging = fbMessaging.getMessaging(app);
@@ -8624,9 +8958,14 @@ class AurafiskyApp {
 
     const showPersonIcon = () => {
       this.$.profileIconGeneric?.classList.remove("hidden");
+      if (this.$.profileIconGeneric) this.$.profileIconGeneric.style.display = "";
       this.$.profileAvatarImg?.classList.add("hidden");
-      if (this.$.profileAvatarImg) this.$.profileAvatarImg.src = "";
+      if (this.$.profileAvatarImg) {
+        this.$.profileAvatarImg.src = "";
+        this.$.profileAvatarImg.style.display = "none";
+      }
       this.$.profileAvatarFallback?.classList.add("hidden");
+      if (this.$.profileAvatarFallback) this.$.profileAvatarFallback.style.display = "none";
       if (this.$.profileBtn) {
         this.$.profileBtn.className = "w-8 h-8 sm:w-9 sm:h-9 rounded-full overflow-hidden flex items-center justify-center bg-slate-100/90 hover:bg-slate-200/80 dark:bg-slate-800/80 dark:hover:bg-slate-700/80 text-slate-600 dark:text-slate-300 border border-slate-200/80 dark:border-slate-700/80 flex-shrink-0 cursor-pointer active:scale-95 transition-all shadow-xs ring-1 ring-slate-900/5 dark:ring-white/10";
       }
@@ -8646,9 +8985,12 @@ class AurafiskyApp {
           if (this.$.profileAvatarImg) {
             this.$.profileAvatarImg.src = photo;
             this.$.profileAvatarImg.classList.remove("hidden");
+            this.$.profileAvatarImg.style.display = "block";
           }
           this.$.profileIconGeneric?.classList.add("hidden");
+          if (this.$.profileIconGeneric) this.$.profileIconGeneric.style.display = "none";
           this.$.profileAvatarFallback?.classList.add("hidden");
+          if (this.$.profileAvatarFallback) this.$.profileAvatarFallback.style.display = "none";
           if (this.$.profileBtn) {
             this.$.profileBtn.className = "w-8 h-8 sm:w-9 sm:h-9 rounded-full overflow-hidden flex items-center justify-center border border-slate-200/80 dark:border-slate-700/80 ring-2 ring-teal-500/40 flex-shrink-0 cursor-pointer active:scale-95 transition-all shadow-xs";
           }
@@ -8728,15 +9070,19 @@ class AurafiskyApp {
   }
 
   onUserSignOut() {
-    if (this.$.profileIconGeneric)
+    if (this.$.profileIconGeneric) {
       this.$.profileIconGeneric.classList.remove("hidden");
+      this.$.profileIconGeneric.style.display = "";
+    }
     if (this.$.profileAvatarImg) {
       this.$.profileAvatarImg.src = "";
       this.$.profileAvatarImg.classList.add("hidden");
+      this.$.profileAvatarImg.style.display = "none";
     }
     if (this.$.profileAvatarFallback) {
       this.$.profileAvatarFallback.textContent = "";
       this.$.profileAvatarFallback.classList.add("hidden");
+      this.$.profileAvatarFallback.style.display = "none";
     }
     if (this.$.profileBtn) {
       this.$.profileBtn.title = "User Profile";

@@ -165,16 +165,38 @@
     overscroll-behavior-x: contain !important;
   }
 
-  /* Search dropdown full width */
+  /* Search dropdown full width inside search pill */
   .search-dropdown {
-    position: fixed !important;
-    left: 0.75rem !important;
-    right: 0.75rem !important;
-    top: 3.5rem !important;
-    max-height: 50vh !important;
+    position: absolute !important;
+    left: 0 !important;
+    right: 0 !important;
+    top: calc(100% + 8px) !important;
+    width: 100% !important;
+    max-height: 0 !important;
+    opacity: 0 !important;
+    visibility: hidden !important;
+    pointer-events: none !important;
+    overflow-y: auto !important;
+    -webkit-overflow-scrolling: touch;
   }
   .search-dropdown.open {
-    max-height: calc(50vh - env(safe-area-inset-top, 0px)) !important;
+    max-height: min(340px, calc(100dvh - 180px), calc(var(--visual-viewport-height, 100vh) - 130px)) !important;
+    opacity: 1 !important;
+    visibility: visible !important;
+    pointer-events: auto !important;
+  }
+  #searchResults {
+    display: flex !important;
+    flex-direction: column !important;
+    width: 100% !important;
+  }
+  .search-dropdown [role="option"],
+  .search-result-item {
+    min-height: 48px !important;
+    display: flex !important;
+    flex-direction: row !important;
+    align-items: center !important;
+    width: 100% !important;
   }
 
   /* Quick chips */

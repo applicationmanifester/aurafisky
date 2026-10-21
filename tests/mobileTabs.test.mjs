@@ -273,7 +273,9 @@ describe('Mobile Tabs & Navigation Layout', () => {
     expect(css).toContain('z-index: 1200 !important;');
     expect(css).toContain('border-radius: 0 !important;');
 
-    const mobileJs = fs.readFileSync('features/googleMapsMobile.js', 'utf-8');
+    const mobileJs = fs.existsSync('features/auraMapsMobile.js')
+      ? fs.readFileSync('features/auraMapsMobile.js', 'utf-8')
+      : fs.readFileSync('features/googleMapsMobile.js', 'utf-8');
     expect(mobileJs).toContain("this.snapSheet('full');");
 
     const appJs = fs.readFileSync('app.js', 'utf-8');
@@ -286,7 +288,9 @@ describe('Mobile Tabs & Navigation Layout', () => {
     expect(css).toContain('.weather-panel.open.google-maps-sheet.sheet-peek:not(.sheet-full)');
     expect(css).toContain('.weather-panel.open.google-maps-sheet.minimized:not(.sheet-full)');
 
-    const mobileJs = fs.readFileSync('features/googleMapsMobile.js', 'utf-8');
+    const mobileJs = fs.existsSync('features/auraMapsMobile.js')
+      ? fs.readFileSync('features/auraMapsMobile.js', 'utf-8')
+      : fs.readFileSync('features/googleMapsMobile.js', 'utf-8');
     expect(mobileJs).toContain("weatherPanelHeader");
     expect(mobileJs).toContain("panel.classList.add('sheet-full');");
     expect(mobileJs).toContain("panel.classList.remove('minimized', 'sheet-peek', 'sheet-half');");
@@ -294,6 +298,51 @@ describe('Mobile Tabs & Navigation Layout', () => {
     const appJs = fs.readFileSync('app.js', 'utf-8');
     expect(appJs).toContain("this.googleMapsMobile.snapSheet('full')");
     expect(appJs).toContain("this.googleMapsMobile.snapSheet('peek')");
+  });
+
+  it('redesigns marker close button with compact 20px sizing, dedicated flex placement, and touch protection', () => {
+    const appJs = fs.readFileSync('app.js', 'utf-8');
+    expect(appJs).toContain('weather-marker-icon');
+    expect(appJs).toContain('weather-marker-info');
+    expect(appJs).toContain('weather-marker-temp');
+    expect(appJs).toContain('weather-marker-city');
+    expect(appJs).toContain('marker-close-btn');
+    expect(appJs).toContain('marker-close-svg');
+
+    const css = fs.readFileSync('styles.css', 'utf-8');
+    expect(css).toContain('.marker-close-btn');
+    expect(css).toContain('width: 20px !important;');
+    expect(css).toContain('height: 20px !important;');
+    expect(css).toContain('button:not(.marker-close-btn)');
+    expect(css).toContain('.marker-close-btn::before');
+  });
+
+  it('keeps search dropdown and right map controls fully responsive from bottom on mobile', () => {
+    const css = fs.readFileSync('styles.css', 'utf-8');
+    // Search dropdown responsiveness
+    expect(css).toContain('#searchResults {');
+    expect(css).toContain('flex-direction: column !important;');
+    expect(css).toContain('top: calc(100% + 8px) !important;');
+    expect(css).toContain('overflow-y: auto !important;');
+
+    // Right map controls responsiveness from bottom
+    expect(css).toContain('bottom: calc(4.25rem + env(safe-area-inset-bottom, 0px)) !important;');
+    expect(css).toContain('body:has(#searchInput:focus) #mobileMapControls');
+  });
+
+  it('implements smart hybrid auto-location on mobile startup', () => {
+    const appJs = fs.readFileSync('app.js', 'utf-8');
+    const myLocationJs = fs.readFileSync('features/myLocation.js', 'utf-8');
+
+    // myLocation options support
+    expect(myLocationJs).toContain('function getMyLocation(options = {})');
+    expect(myLocationJs).toContain('const { silent = false, onFail = null } = options;');
+
+    // Smart hybrid startup check in app.js
+    expect(appJs).toContain('const isMobile = isMobileLayout();');
+    expect(appJs).toContain('permissionState === "granted"');
+    expect(appJs).toContain('this.getMyLocation({');
+    expect(appJs).toContain('silent: true');
   });
 });
 

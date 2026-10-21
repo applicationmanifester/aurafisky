@@ -2098,7 +2098,7 @@ export class AuraAssistant {
       bullets.push({ k: 'Solar irradiance', v: `${Math.round(radiation)} W/m²` });
     }
     if (ctx.today?.sunrise && ctx.today?.sunset) {
-      bullets.push({ k: 'Effective daylight', v: `${ctx.today.sunrise} – ${ctx.today.sunset}` });
+      bullets.push({ k: 'Effective daylight', v: `${this._fmtHour(ctx.today.sunrise)} – ${this._fmtHour(ctx.today.sunset)}` });
     }
 
     return {

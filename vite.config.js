@@ -52,7 +52,7 @@ export default defineConfig(({ mode }) => {
             './features/deviceProfile.js',
             './features/tvNavigation.js',
             './features/navigation.js',
-            './features/googleMapsMobile.js',
+            './features/auraMapsMobile.js',
           ],
           // Heavy features (aura, routes, timeMachine, compareCities) are
           // dynamically imported from registry.js — no eager chunk.
@@ -121,7 +121,21 @@ export default defineConfig(({ mode }) => {
                 maxEntries: 20,
                 maxAgeSeconds: 2 * 60 * 60 // 2h
               },
-              cacheableResponse: { statuses: [0, 200] }
+              cacheableResponse: { statuses: [0, 200] },
+              plugins: [
+                {
+                  handlerDidError: async () => {
+                    return new Response(
+                      JSON.stringify({ error: true, offline: true, reason: 'no-response' }),
+                      {
+                        status: 503,
+                        statusText: 'Service Unavailable',
+                        headers: { 'Content-Type': 'application/json' }
+                      }
+                    );
+                  }
+                }
+              ]
             }
           },
           {
@@ -133,7 +147,14 @@ export default defineConfig(({ mode }) => {
                 maxEntries: 150,
                 maxAgeSeconds: 60 * 60 * 24 * 7 // 7d
               },
-              cacheableResponse: { statuses: [0, 200] }
+              cacheableResponse: { statuses: [0, 200] },
+              plugins: [
+                {
+                  handlerDidError: async () => {
+                    return new Response('', { status: 404, statusText: 'Tile Not Found' });
+                  }
+                }
+              ]
             }
           },
           {
@@ -148,7 +169,18 @@ export default defineConfig(({ mode }) => {
                 maxEntries: 30,
                 maxAgeSeconds: 60 * 60 * 24 // 1d
               },
-              cacheableResponse: { statuses: [0, 200] }
+              cacheableResponse: { statuses: [0, 200] },
+              plugins: [
+                {
+                  handlerDidError: async () => {
+                    return new Response('{}', {
+                      status: 503,
+                      statusText: 'Service Unavailable',
+                      headers: { 'Content-Type': 'application/json' }
+                    });
+                  }
+                }
+              ]
             }
           }
         ]

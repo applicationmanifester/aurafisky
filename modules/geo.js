@@ -145,8 +145,26 @@ export function formatPlaceName(address, opts = {}) {
  * parent share a name does not become "Singapore, Singapore".
  */
 export function shortPlaceName(fullName) {
-  const first = clean(fullName).split(',')[0];
-  return first || clean(fullName);
+  const cleaned = clean(fullName);
+  if (!cleaned) return '';
+  const segments = cleaned.split(',').map(clean).filter(Boolean);
+  if (segments.length <= 1) return segments[0] || cleaned;
+
+  const first = segments[0];
+  // If the first part is in a non-Latin script and there's a Latin parent (e.g. "ಬನ್ನೂರು, Puttur Taluk"),
+  // combine them so the map's English name is immediately identifiable: "Puttur (ಬನ್ನೂರು)"
+  const hasNonLatin = /[\u0600-\u06FF\u0750-\u077F\u0900-\u0D7F\u4E00-\u9FFF]/.test(first);
+  if (hasNonLatin) {
+    const latinParent = segments.slice(1).find((s) => /[a-zA-Z]/.test(s) && !looseEquals(s, 'India'));
+    if (latinParent) {
+      const cleanParent = latinParent.replace(/\s+(taluk|taluku|district|mandal|tehsil|block|panchayat)$/i, '').trim();
+      if (cleanParent) {
+        return `${cleanParent} (${first})`;
+      }
+    }
+  }
+
+  return first;
 }
 
 /**
@@ -342,4 +360,111 @@ export function describeCoordinates(lat, lng) {
 
   if (basin === 'Indian Ocean') return basin;
   return `${lat >= 0 ? 'North' : 'South'} ${basin}`;
+}
+
+/**
+ * Decomposes a Nominatim address object and display_name into a structured
+ * hierarchy: Area/Locality, Town/City, Taluk/Tehsil, District, State/Province,
+ * Postal Code, Country, and a full clean address string.
+ *
+ * @param {object} address - Nominatim address details
+ * @param {string} [displayName] - Full raw or fallback display name
+ * @param {number} [lat] - Latitude
+ * @param {number} [lng] - Longitude
+ * @returns {{ area: string, city: string, taluk: string, district: string, state: string, postcode: string, country: string, fullAddress: string }}
+ */
+export function breakdownAddress(address = {}, displayName = '', lat = null, lng = null) {
+  const a = (address && typeof address === 'object') ? address : {};
+
+  // 1. Area / Locality: road, suburb, neighbourhood, quarter, village, hamlet
+  const subArea = clean(a.suburb || a.quarter || a.neighbourhood || a.residential);
+  const road = clean(a.road || a.pedestrian || a.street);
+  let area = '';
+  if (subArea && road && !looseEquals(subArea, road)) {
+    area = `${road}, ${subArea}`;
+  } else {
+    area = subArea || road || clean(a.village || a.hamlet || a.isolated_dwelling || '');
+  }
+
+  // 2. City / Town
+  let city = clean(a.city || a.town || a.municipality || '');
+  if (!city && clean(a.village) && (!area || !looseEquals(clean(a.village), area))) {
+    city = clean(a.village);
+  }
+
+  // 3. Taluk / Tehsil / Sub-district / County
+  let taluk = clean(a.taluk || a.taluku || a.tehsil || a.subdistrict || a.mandal || '');
+  if (!taluk && clean(a.county)) {
+    taluk = clean(a.county);
+  }
+
+  // 4. District
+  let district = clean(a.state_district || a.district || '');
+  if (!district && clean(a.county) && !/taluk|taluku|tehsil|mandal|subdistrict/i.test(clean(a.county))) {
+    district = clean(a.county);
+  }
+
+  // 5. State / Province
+  let state = clean(a.state || a.province || a.region || '');
+
+  // Fallback: If structured address fields are missing, extract from comma-separated displayName
+  if (!area && !city && !taluk && !district && !state && displayName && String(displayName).includes(',')) {
+    const rawSegments = String(displayName).split(',').map(s => s.trim()).filter(Boolean);
+    if (rawSegments.length >= 5) {
+      area = rawSegments[0] || '';
+      taluk = rawSegments[1] || '';
+      district = rawSegments[2] || '';
+      state = rawSegments[3] || '';
+    } else if (rawSegments.length === 4) {
+      area = rawSegments[0] || '';
+      district = rawSegments[1] || '';
+      state = rawSegments[2] || '';
+    } else if (rawSegments.length === 3) {
+      area = rawSegments[0] || '';
+      district = rawSegments[1] || '';
+      state = rawSegments[2] || '';
+    } else if (rawSegments.length === 2) {
+      area = rawSegments[0] || '';
+      state = rawSegments[1] || '';
+    }
+  }
+
+  // 6. Postcode
+  const postcode = clean(a.postcode || '');
+
+  // 7. Country
+  let country = clean(a.country || '');
+  if (!country && displayName && String(displayName).includes(',')) {
+    const rawSegments = String(displayName).split(',').map(s => s.trim()).filter(Boolean);
+    if (rawSegments.length >= 3) {
+      country = rawSegments[rawSegments.length - 1] || '';
+    }
+  }
+
+  // 8. Full Address String
+  const parts = [];
+  if (road && !parts.some(p => looseEquals(p, road))) parts.push(road);
+  if (subArea && !parts.some(p => looseEquals(p, subArea))) parts.push(subArea);
+  if (area && !parts.some(p => looseEquals(p, area))) parts.push(area);
+  if (city && !parts.some(p => looseEquals(p, city))) parts.push(city);
+  if (taluk && !parts.some(p => looseEquals(p, taluk))) parts.push(taluk);
+  if (district && !parts.some(p => looseEquals(p, district))) parts.push(district);
+  if (state && !parts.some(p => looseEquals(p, state))) parts.push(state);
+  if (postcode && !parts.some(p => looseEquals(p, postcode))) parts.push(postcode);
+  if (country && !parts.some(p => looseEquals(p, country))) parts.push(country);
+
+  const fullAddress = (clean(displayName) && String(displayName).includes(','))
+    ? clean(displayName)
+    : (parts.length > 0 ? parts.join(', ') : clean(displayName) || (lat != null && lng != null ? `${lat.toFixed(4)}, ${lng.toFixed(4)}` : ''));
+
+  return {
+    area,
+    city,
+    taluk,
+    district,
+    state,
+    postcode,
+    country,
+    fullAddress,
+  };
 }

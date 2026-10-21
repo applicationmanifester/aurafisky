@@ -1174,12 +1174,9 @@ class AurafiskyApp {
       const savedTerrain = localStorage.getItem("aurafisky_terrain_overlay");
       this.terrainOverlayEnabled = savedTerrain !== null ? savedTerrain === "true" : false;
 
-      // Map layers minimized state
-      const savedLayersMin = localStorage.getItem("aurafisky_map_layers_minimized");
-      this.mapLayersMinimized = savedLayersMin === "true";
-      if (this.mapLayersMinimized && this.$.mapLayersFlyout) {
-        this.$.mapLayersFlyout.classList.add("minimized");
-      }
+      // Map layers flyout state
+      localStorage.removeItem("aurafisky_map_layers_minimized");
+      this.mapLayersMinimized = false;
 
       // Instant global edge raster basemaps so the map paints in <50ms immediately
       // while OpenFreeMap vector styles stream in the background
@@ -10209,6 +10206,7 @@ class AurafiskyApp {
       backdrop.classList.toggle("hidden", !open);
     }
     if (open) {
+      this.$.mapLayersFlyout.classList.remove("minimized");
       this.pushHistoryOverlay("layers");
       this._updateMapStyleUI();
       this._updateMapLayersActiveBadge();

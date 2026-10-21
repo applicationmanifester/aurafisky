@@ -100,4 +100,15 @@ describe("Map Modes & Terrain Styles", () => {
     expect(html).not.toContain('id="mapStyleGrid"');
     expect(html).toContain('id="mapModeSelectDropdown"');
   });
+
+  test("mapLayersFlyout does not contain duplicate upper Map Modes header and contains closeMapLayersBtn alongside Map Mode label", () => {
+    const fs = require("fs");
+    const html = fs.readFileSync("index.html", "utf-8");
+    const flyoutMatch = html.match(/id="mapLayersFlyout"[\s\S]*?id="shortcutsModal"/);
+    expect(flyoutMatch).not.toBeNull();
+    const flyoutHtml = flyoutMatch[0];
+    expect(flyoutHtml).not.toContain(">Map Modes<");
+    expect(flyoutHtml).toContain(">Map Mode<");
+    expect(flyoutHtml).toContain('id="closeMapLayersBtn"');
+  });
 });

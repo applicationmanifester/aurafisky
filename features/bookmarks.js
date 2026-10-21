@@ -299,6 +299,7 @@ function renderBookmarksList() {
       btn.title = b.name;
       btn.addEventListener("click", () => {
         this.$.bookmarksDropdown.classList.add("hidden");
+        this.syncMobileBottomNavState?.();
         this.selectLocation(b.lat, b.lng, b.name);
       });
       container.appendChild(btn);
@@ -317,6 +318,7 @@ function renderBookmarksList() {
       compareBtn.addEventListener("click", (e) => {
         e.stopPropagation();
         this.$.bookmarksDropdown.classList.add("hidden");
+        this.syncMobileBottomNavState?.();
         this.compareWeatherWithActive?.(this.bookmarks[idx]);
       });
       actions.appendChild(compareBtn);

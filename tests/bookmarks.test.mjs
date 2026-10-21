@@ -72,4 +72,27 @@ describe('Bookmarks UI and Delete Icon', () => {
     expect(starIcon).not.toBeNull();
     expect(starIcon.querySelector('polygon')).not.toBeNull();
   });
+
+  it('places bookmarksDropdown as a top-level overlay outside desktop-only topControlButtons for mobile screen support', () => {
+    const html = fs.readFileSync('index.html', 'utf-8');
+    const dom = new JSDOM(html);
+    const dropdown = dom.window.document.getElementById('bookmarksDropdown');
+    expect(dropdown).not.toBeNull();
+
+    // Must NOT be nested inside hidden sm:flex desktop-only container
+    const desktopContainer = dom.window.document.getElementById('topControlButtons');
+    expect(desktopContainer).not.toBeNull();
+    expect(desktopContainer.contains(dropdown)).toBe(false);
+
+    // Must contain required action controls
+    expect(dropdown.querySelector('#toggleBookmarksMapBtn')).not.toBeNull();
+    expect(dropdown.querySelector('#closeBookmarksBtn')).not.toBeNull();
+    expect(dropdown.querySelector('#bookmarksList')).not.toBeNull();
+  });
+
+  it('excludes mobileNavSavedBtn from document outside-click handler in app.js', () => {
+    const appCode = fs.readFileSync('app.js', 'utf-8');
+    expect(appCode).toContain('!e.target.closest("#mobileNavSavedBtn")');
+  });
 });
+

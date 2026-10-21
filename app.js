@@ -1577,6 +1577,7 @@ class AurafiskyApp {
     this.$.closeBookmarksBtn?.addEventListener("click", (e) => {
       e.stopPropagation();
       this.$.bookmarksDropdown.classList.add("hidden");
+      this.syncMobileBottomNavState?.();
       this._haptic('selection');
     });
     if (this.$.toggleBookmarksMapBtn) {
@@ -2885,9 +2886,13 @@ class AurafiskyApp {
       }
       if (
         !e.target.closest("#bookmarksBtn") &&
-        !e.target.closest("#bookmarksDropdown")
+        !e.target.closest("#bookmarksDropdown") &&
+        !e.target.closest("#mobileNavSavedBtn")
       ) {
-        this.$.bookmarksDropdown.classList.add("hidden");
+        if (!this.$.bookmarksDropdown?.classList.contains("hidden")) {
+          this.$.bookmarksDropdown?.classList.add("hidden");
+          this.syncMobileBottomNavState?.();
+        }
       }
       if (
         !e.target.closest("#homeDropdown") &&
@@ -8665,6 +8670,7 @@ class AurafiskyApp {
       if (isHidden) {
         setActiveBtn(savedBtn);
         if (typeof this.renderBookmarksList === "function") this.renderBookmarksList();
+        this.updateBookmarksMapToggleUI?.();
         this.$.bookmarksDropdown?.classList.remove("hidden");
       } else {
         this.$.bookmarksDropdown?.classList.add("hidden");

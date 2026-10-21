@@ -2675,6 +2675,7 @@ button, a, input, select, textarea, [role="button"] {
     right: 0.75rem !important;
     width: auto !important;
     max-height: 60vh !important;
+    border-radius: 1.25rem !important;
     -webkit-overflow-scrolling: touch;
   }
 

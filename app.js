@@ -1943,7 +1943,7 @@ class AurafiskyApp {
           this._lastKnownGpsCoords = pos.coords;
         },
         () => {},
-        { enableHighAccuracy: true, timeout: 5000, maximumAge: 300000 }
+        { enableHighAccuracy: true, timeout: 5000, maximumAge: 10000 }
       );
     };
     if (navigator.permissions?.query) {
@@ -3360,13 +3360,14 @@ class AurafiskyApp {
         // Permission query not supported on some WebViews
       }
 
-      if (isNativeApp || permissionState === "granted" || this._lastKnownGpsCoords) {
-        // Instantly render optimistic cached session/home so screen is never blank
+      if (isNativeApp || permissionState === "granted" || permissionState !== "denied" || this._lastKnownGpsCoords) {
+        // Instantly render optimistic cached session/home so screen is never blank while GPS locks
         const restored = restoreFallback();
 
         // Concurrently get fresh user location and smoothly transition to where the user currently is
         this.getMyLocation({
           silent: true,
+          precise: true,
           onFail: () => {
             if (!restored) restoreFallback();
           },
@@ -3452,14 +3453,16 @@ class AurafiskyApp {
     return describeCoordinates(lat, lng);
   }
 
-  async handleMapClick(lat, lng) {
+  async handleMapClick(lat, lng, options = {}) {
       if (lat == null || lng == null || isNaN(lat) || isNaN(lng)) {
         return;
       }
       const defaultName = `${lat.toFixed(4)}, ${lng.toFixed(4)}`;
 
+      // Use street/neighborhood zoom on GPS fix
+      const zoom = options.zoom ?? (options.isGps ? (isMobileLayout() ? 14 : 13) : undefined);
       // Call selectLocation IMMEDIATELY on click so weather card opens/updates instantly (1st click)
-      const selectPromise = this.selectLocation(lat, lng, defaultName);
+      const selectPromise = this.selectLocation(lat, lng, defaultName, { zoom });
 
       // Perform reverse geocoding asynchronously in background
       try {
@@ -3840,7 +3843,7 @@ class AurafiskyApp {
     }, 10000);
   }
 
-  async selectLocation(lat, lng, name) {
+  async selectLocation(lat, lng, name, options = {}) {
     if (lat == null || lng == null || isNaN(lat) || isNaN(lng)) {
       return;
     }
@@ -3887,7 +3890,7 @@ class AurafiskyApp {
 
       this.map.updateSize();
       const view = this.map.getView();
-      const targetZoom = Math.min(Math.max(view.getZoom(), 9), 17);
+      const targetZoom = options.zoom ?? Math.min(Math.max(view.getZoom(), 9), 17);
       view.animate({ center: fromLonLat([lng, viewCenterLat]), zoom: targetZoom });
 
       // Refresh UI panel state

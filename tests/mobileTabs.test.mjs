@@ -337,12 +337,18 @@ describe('Mobile Tabs & Navigation Layout', () => {
     // myLocation options support
     expect(myLocationJs).toContain('function getMyLocation(options = {})');
     expect(myLocationJs).toContain('const { silent = false, onFail = null } = options;');
+    expect(myLocationJs).toContain('const { precise = false } = options;');
+    expect(myLocationJs).toContain('window.Capacitor?.Plugins?.Geolocation');
+    expect(myLocationJs).toContain('enableHighAccuracy: true');
+    expect(myLocationJs).toContain('precise ? 0 : 5000');
 
     // Smart hybrid startup check in app.js
     expect(appJs).toContain('const isMobile = isMobileLayout();');
     expect(appJs).toContain('permissionState === "granted"');
+    expect(appJs).toContain('permissionState !== "denied"');
     expect(appJs).toContain('this.getMyLocation({');
     expect(appJs).toContain('silent: true');
+    expect(appJs).toContain('precise: true');
   });
 
   it('ensures settings panel starts from top with zero empty space on mobile', () => {

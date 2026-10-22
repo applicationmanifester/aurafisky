@@ -2557,12 +2557,23 @@ button, a, input, select, textarea, [role="button"] {
     display: none !important;
   }
 
-  /* Radar expanded panel sits to the left of the radar button */
+  /* Radar expanded panel: on mobile, anchor to bottom above nav bar with z-index 1250 */
   #radarExpandedPanel {
-    right: 3.25rem !important;
-    top: 50% !important;
-    bottom: auto !important;
-    transform: translateY(-50%) !important;
+    position: fixed !important;
+    left: 50% !important;
+    right: auto !important;
+    top: auto !important;
+    bottom: calc(4.2rem + env(safe-area-inset-bottom, 0px)) !important;
+    transform: translateX(-50%) !important;
+    width: min(300px, calc(100vw - 2rem)) !important;
+    max-width: 300px !important;
+    max-height: calc(72vh - env(safe-area-inset-bottom, 0px)) !important;
+    margin: 0 !important;
+    z-index: 1250 !important;
+    overflow-y: auto !important;
+    -webkit-overflow-scrolling: touch;
+    box-shadow: 0 20px 50px rgba(0, 0, 0, 0.5) !important;
+    border-radius: 1.25rem !important;
   }
 
   /* Map layers flyout: on mobile, anchor to bottom above nav bar with z-index 1250 */

@@ -111,4 +111,14 @@ describe("Map Modes & Terrain Styles", () => {
     expect(flyoutHtml).toContain(">Map Mode<");
     expect(flyoutHtml).toContain('id="closeMapLayersBtn"');
   });
+
+  test("basemaps have correct provider maxZoom to prevent Esri placeholder tiles", () => {
+    const fs = require("fs");
+    const appJs = fs.readFileSync("app.js", "utf-8");
+    expect(appJs).toMatch(/terrainBasemap\s*=\s*new LayerGroup\(\{[\s\S]*?maxZoom:\s*17/);
+    expect(appJs).toMatch(/hillshadeBasemap\s*=\s*new LayerGroup\(\{[\s\S]*?maxZoom:\s*16/);
+    expect(appJs).toMatch(/oceanBasemap\s*=\s*new LayerGroup\(\{[\s\S]*?maxZoom:\s*10/);
+    expect(appJs).toMatch(/natGeoBasemap\s*=\s*new LayerGroup\(\{[\s\S]*?maxZoom:\s*12/);
+  });
 });
+

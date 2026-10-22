@@ -6,10 +6,44 @@ function _mapHasLayer(map, layer) {
   return map.getLayers().getArray().includes(layer);
 }
 
-async function toggleRadar() {
-    this.radarActive = !this.radarActive;
+async function toggleRadar(forceState) {
+    if (typeof forceState === "boolean") {
+      this.radarActive = forceState;
+    } else {
+      this.radarActive = !this.radarActive;
+    }
 
     this.$.radarDot.classList.toggle("active", this.radarActive);
+
+    // Expand/collapse the control panel immediately to match radar state
+    if (this.$.radarExpandedPanel) {
+      this.$.radarExpandedPanel.classList.toggle("hidden", !this.radarActive);
+    }
+    const radarBackdrop = document.getElementById("radarBackdrop");
+    if (radarBackdrop) {
+      radarBackdrop.classList.toggle("hidden", !this.radarActive);
+    }
+    if (this.$.radarCollapsedBtn) {
+      this.$.radarCollapsedBtn.classList.toggle("hidden", this.radarActive);
+    }
+
+    // Synchronize mobile quick action chip and controller state
+    const radarChip = document.querySelector('.mobile-quick-chip[data-category="radar"]');
+    if (radarChip) {
+      radarChip.classList.toggle("active", this.radarActive);
+    }
+    if (this.auraMapsMobile) {
+      this.auraMapsMobile.activeCategory = this.radarActive ? "radar" : null;
+    }
+    if (this.googleMapsMobile) {
+      this.googleMapsMobile.activeCategory = this.radarActive ? "radar" : null;
+    }
+
+    if (this.radarActive) {
+      this.pushHistoryOverlay?.("radar");
+    } else {
+      this.popHistoryOverlay?.("radar");
+    }
 
     if (this.overlayType === "temperature" || this.overlayType === "wind") {
       this.$.radarPlayback.classList.add("hidden");
@@ -57,14 +91,6 @@ async function toggleRadar() {
       this.activeEffectType = "none";
       if (this.$.legendPrecip) this.$.legendPrecip.classList.remove("hidden");
       if (this.$.legendTemp) this.$.legendTemp.classList.add("hidden");
-    }
-
-    // Expand/collapse the control panel to match radar state
-    if (this.$.radarExpandedPanel) {
-      this.$.radarExpandedPanel.classList.toggle("hidden", !this.radarActive);
-    }
-    if (this.$.radarCollapsedBtn) {
-      this.$.radarCollapsedBtn.classList.toggle("hidden", this.radarActive);
     }
   }
 

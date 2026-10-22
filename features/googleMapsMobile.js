@@ -138,6 +138,12 @@ export class AuraMobileController {
     const allChips = document.querySelectorAll('.mobile-quick-chip');
 
     if (this.activeCategory === category && category !== 'aura') {
+      // If user tapped radar chip while radar is active, but panel is closed/minimized: reopen panel!
+      if (category === 'radar' && this.app.radarActive && this.app.$.radarExpandedPanel?.classList.contains('hidden')) {
+        this.toggleRadarOverlay(true);
+        chipEl.classList.add('active');
+        return;
+      }
       this.activeCategory = null;
       allChips.forEach(c => c.classList.remove('active'));
       if (category === 'route-weather') {
@@ -147,7 +153,7 @@ export class AuraMobileController {
           this.app.toggleRoute();
         }
       } else if (category === 'radar') {
-        this.toggleRadarOverlay();
+        this.toggleRadarOverlay(false);
       }
       return;
     }
@@ -159,7 +165,7 @@ export class AuraMobileController {
     if (category === 'aura') {
       this.openAura();
     } else if (category === 'radar') {
-      this.toggleRadarOverlay();
+      this.toggleRadarOverlay(true);
     } else if (category === 'route-weather') {
       this.openRouteWeather();
     } else if (category === 'wind') {
@@ -188,9 +194,19 @@ export class AuraMobileController {
     document.getElementById('auraModal')?.classList.remove('hidden');
   }
 
-  toggleRadarOverlay() {
+  toggleRadarOverlay(forceState) {
+    if (forceState === true && this.app.radarActive) {
+      this.app.$.radarExpandedPanel?.classList.remove('hidden');
+      document.getElementById('radarBackdrop')?.classList.remove('hidden');
+      this.app.$.radarCollapsedBtn?.classList.add('hidden');
+      return;
+    }
     if (typeof this.app.toggleRadar === 'function') {
-      this.app.toggleRadar();
+      if (typeof forceState === 'boolean') {
+        this.app.toggleRadar(forceState);
+      } else {
+        this.app.toggleRadar();
+      }
     } else {
       const radarBtn = document.getElementById('radarToggleBtn');
       radarBtn?.click();

@@ -1235,7 +1235,7 @@ class AurafiskyApp {
           new TileLayer({
             source: new XYZ({
               url: "https://server.arcgisonline.com/ArcGIS/rest/services/World_Topo_Map/MapServer/tile/{z}/{y}/{x}",
-              maxZoom: 18,
+              maxZoom: 17,
               crossOrigin: "anonymous",
               attributions: "Tiles &copy; Esri &mdash; Esri, DeLorme, NAVTEQ, TomTom, Intermap, USGS, FAO, NPS, NRCAN"
             }),
@@ -1252,7 +1252,7 @@ class AurafiskyApp {
           new TileLayer({
             source: new XYZ({
               url: "https://server.arcgisonline.com/ArcGIS/rest/services/Elevation/World_Hillshade/MapServer/tile/{z}/{y}/{x}",
-              maxZoom: 18,
+              maxZoom: 16,
               crossOrigin: "anonymous",
               attributions: "Tiles &copy; Esri &mdash; USGS, NGA, NASA, CGIAR, NCEAS, NLS, OS, NMA, Geodatastyrelsen, GSA, GSI, GIS, NOAA, NOAA NGDC"
             }),
@@ -1278,7 +1278,7 @@ class AurafiskyApp {
           new TileLayer({
             source: new XYZ({
               url: "https://server.arcgisonline.com/ArcGIS/rest/services/Ocean/World_Ocean_Base/MapServer/tile/{z}/{y}/{x}",
-              maxZoom: 18,
+              maxZoom: 10,
               crossOrigin: "anonymous",
               attributions: "Tiles &copy; Esri &mdash; Esri, GEBCO, NOAA, National Geographic, DeLorme, GEBCO, NOAA NGDC, and other contributors"
             }),
@@ -1287,7 +1287,7 @@ class AurafiskyApp {
           new TileLayer({
             source: new XYZ({
               url: "https://server.arcgisonline.com/ArcGIS/rest/services/Ocean/World_Ocean_Reference/MapServer/tile/{z}/{y}/{x}",
-              maxZoom: 18,
+              maxZoom: 10,
               crossOrigin: "anonymous"
             }),
             opacity: 0.9,
@@ -1300,7 +1300,7 @@ class AurafiskyApp {
           new TileLayer({
             source: new XYZ({
               url: "https://server.arcgisonline.com/ArcGIS/rest/services/NatGeo_World_Map/MapServer/tile/{z}/{y}/{x}",
-              maxZoom: 18,
+              maxZoom: 12,
               crossOrigin: "anonymous",
               attributions: "Tiles &copy; Esri &mdash; National Geographic, Esri, DeLorme, NAVTEQ, UNEP-WCMC, USGS, NASA, ESA, METI, NRCAN, GEBCO, NOAA, iPC"
             }),
@@ -2601,15 +2601,28 @@ class AurafiskyApp {
     ) {
       this.$.radarMinimizeBtn.addEventListener("click", () => {
         this.$.radarExpandedPanel.classList.add("hidden");
+        document.getElementById("radarBackdrop")?.classList.add("hidden");
         this.$.radarCollapsedBtn.classList.remove("hidden");
+        this.popHistoryOverlay?.("radar");
         this._haptic('selection');
       });
       this.$.radarCollapsedBtn.addEventListener("click", () => {
         this.$.radarCollapsedBtn.classList.add("hidden");
         this.$.radarExpandedPanel.classList.remove("hidden");
+        document.getElementById("radarBackdrop")?.classList.remove("hidden");
+        this.pushHistoryOverlay?.("radar");
         this._haptic('selection');
       });
     }
+
+    document.getElementById("radarBackdrop")?.addEventListener("click", (e) => {
+      e.stopPropagation();
+      this.$.radarExpandedPanel?.classList.add("hidden");
+      document.getElementById("radarBackdrop")?.classList.add("hidden");
+      this.$.radarCollapsedBtn?.classList.remove("hidden");
+      this.popHistoryOverlay?.("radar");
+      this._haptic?.('selection');
+    });
     this.$.layerTypeSelect.addEventListener("change", (e) => {
       this._haptic('selection');
       this.overlayType = e.target.value;
@@ -8858,6 +8871,13 @@ class AurafiskyApp {
       this.syncMobileBottomNavState?.();
       return true;
     }
+    // 12. Radar Expanded Panel
+    if (this.$.radarExpandedPanel && !this.$.radarExpandedPanel.classList.contains("hidden")) {
+      this.$.radarExpandedPanel.classList.add("hidden");
+      document.getElementById("radarBackdrop")?.classList.add("hidden");
+      this.$.radarCollapsedBtn?.classList.remove("hidden");
+      return true;
+    }
     // 12. Weather tabs (if on secondary tab like hourly/daily/metrics/astronomy)
     if (this.currentWeatherTab && this.currentWeatherTab !== "overview" && this.$.weatherPanel?.classList.contains("open")) {
       this.switchWeatherTab("overview");
@@ -10145,7 +10165,7 @@ class AurafiskyApp {
             new TileLayer({
               source: new XYZ({
                 url: "https://server.arcgisonline.com/ArcGIS/rest/services/Elevation/World_Hillshade/MapServer/tile/{z}/{y}/{x}",
-                maxZoom: 18,
+                maxZoom: 16,
                 crossOrigin: "anonymous",
                 attributions: "Tiles &copy; Esri &mdash; USGS, NGA, NASA, CGIAR, NCEAS, NLS, OS, NMA, Geodatastyrelsen, GSA, GSI, GIS, NOAA, NOAA NGDC"
               }),

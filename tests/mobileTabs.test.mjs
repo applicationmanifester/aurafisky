@@ -362,6 +362,20 @@ describe('Mobile Tabs & Navigation Layout', () => {
     expect(appJs).toContain('window.addEventListener("popstate"');
   });
 
+  it('places radarExpandedPanel and radarBackdrop outside mobileMapControls for mobile responsiveness', () => {
+    const radarPanel = doc.getElementById('radarExpandedPanel');
+    expect(radarPanel).not.toBeNull();
+    expect(radarPanel.closest('#mobileMapControls')).toBeNull();
+
+    const radarBackdrop = doc.getElementById('radarBackdrop');
+    expect(radarBackdrop).not.toBeNull();
+
+    const css = fs.readFileSync('styles.css', 'utf-8');
+    expect(css).toContain('#radarExpandedPanel {');
+    expect(css).toContain('z-index: 1250 !important;');
+    expect(css).toContain('bottom: calc(4.2rem + env(safe-area-inset-bottom, 0px)) !important;');
+  });
+
   it('updates map pin weather-marker-city when reverse geocoding resolves place name', () => {
     const appJs = fs.readFileSync('app.js', 'utf-8');
     expect(appJs).toContain('cityEl.textContent = displayName;');

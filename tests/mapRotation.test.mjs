@@ -6,11 +6,24 @@ describe("Map Rotation & Compass Reset", () => {
   const html = fs.readFileSync("index.html", "utf-8");
   const appJs = fs.readFileSync("app.js", "utf-8");
 
-  test("index.html contains compassBtn and compassNeedle in zoomControls", () => {
+  test("index.html contains compassBtn and compassNeedle with cardinal NSEW markings", () => {
     expect(html).toContain('id="compassBtn"');
     expect(html).toContain('id="compassNeedle"');
     expect(html).toContain('title="Reset North orientation"');
     expect(html).toContain('aria-label="Reset North orientation"');
+    // Compass rose must contain all four cardinal direction indicators
+    expect(html).toMatch(/<text[^>]*>N<\/text>/);
+    expect(html).toMatch(/<text[^>]*>S<\/text>/);
+    expect(html).toMatch(/<text[^>]*>E<\/text>/);
+    expect(html).toMatch(/<text[^>]*>W<\/text>/);
+  });
+
+  test("compassBtn is visible by default in zoomControls so users can locate it", () => {
+    // Should not be hidden with opacity-0 pointer-events-none at initial render
+    const compassMatch = html.match(/<button id="compassBtn"[^>]*class="([^"]*)"/);
+    expect(compassMatch).toBeTruthy();
+    expect(compassMatch[1]).not.toContain("opacity-0");
+    expect(compassMatch[1]).not.toContain("pointer-events-none");
   });
 
   test("app.js has compassBtn and compassNeedle registered in element cache", () => {
@@ -18,9 +31,10 @@ describe("Map Rotation & Compass Reset", () => {
     expect(appJs).toContain('compassNeedle: document.getElementById("compassNeedle")');
   });
 
-  test("app.js enables map rotation gestures in defaultInteractions", () => {
+  test("app.js enables map rotation gestures in defaultInteractions and Alt-drag", () => {
     expect(appJs).toContain("altShiftDragRotate: true");
     expect(appJs).toContain("pinchRotate: true");
+    expect(appJs).toContain("new DragRotate({ condition: altKeyOnly })");
     expect(appJs).not.toMatch(/interactions:\s*defaultInteractions\(\s*\{\s*altShiftDragRotate:\s*false/);
   });
 

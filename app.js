@@ -36,6 +36,8 @@ import LayerGroup from "ol/layer/Group.js";
 import TileLayer from "ol/layer/Tile.js";
 import XYZ from "ol/source/XYZ.js";
 import { defaults as defaultInteractions } from "ol/interaction/defaults.js";
+import DragRotate from "ol/interaction/DragRotate.js";
+import { altKeyOnly } from "ol/events/condition.js";
 import { fromLonLat, toLonLat } from "ol/proj.js";
 import { apply as applyMapboxStyle, applyStyle as applyMapboxLayerStyle, getLayers as getMapboxLayers } from "ol-mapbox-style";
 import { HtmlMarker } from "./modules/ol-marker.js";
@@ -1000,21 +1002,21 @@ class AurafiskyApp {
     this._haptic?.('selection');
   }
 
-  // Update compass needle rotation and button visibility based on view rotation
+  // Update compass needle rotation and button active state based on view rotation
   _updateCompass() {
     if (!this.map || !this.$.compassBtn) return;
     const rotation = this.map.getView()?.getRotation() || 0;
     const isRotated = Math.abs(rotation) > 0.005; // > ~0.3 degrees
     if (isRotated) {
-      this.$.compassBtn.classList.remove('opacity-0', 'pointer-events-none', 'scale-90');
-      this.$.compassBtn.classList.add('opacity-100', 'pointer-events-auto', 'scale-100');
+      this.$.compassBtn.classList.add('ring-2', 'ring-primary-500/60', 'border-primary-500/70', 'shadow-primary-500/25', 'bg-white', 'dark:bg-slate-700');
+      this.$.compassBtn.setAttribute('title', 'Map rotated — Click to reset North (Alt+drag or twist to rotate)');
       if (this.$.compassNeedle) {
         const deg = -rotation * (180 / Math.PI);
         this.$.compassNeedle.style.transform = `rotate(${deg}deg)`;
       }
     } else {
-      this.$.compassBtn.classList.add('opacity-0', 'pointer-events-none', 'scale-90');
-      this.$.compassBtn.classList.remove('opacity-100', 'pointer-events-auto', 'scale-100');
+      this.$.compassBtn.classList.remove('ring-2', 'ring-primary-500/60', 'border-primary-500/70', 'shadow-primary-500/25', 'bg-white', 'dark:bg-slate-700');
+      this.$.compassBtn.setAttribute('title', 'Reset North orientation');
       if (this.$.compassNeedle) {
         this.$.compassNeedle.style.transform = 'rotate(0deg)';
       }
@@ -1181,12 +1183,14 @@ class AurafiskyApp {
           multiWorld: true,
         }),
         controls: [], // zoom controls are integrated into the radar panel instead
-        // Map rotation is supported via two-finger twist on mobile and Alt+Shift-drag on desktop,
+        // Map rotation is supported via two-finger twist on mobile and Alt+drag or Alt+Shift-drag on desktop,
         // with the interactive compass needle button resetting back to North.
         interactions: defaultInteractions({
           altShiftDragRotate: true,
           pinchRotate: true,
-        }),
+        }).extend([
+          new DragRotate({ condition: altKeyOnly }),
+        ]),
       });
 
       // Update compass button whenever map rotation changes

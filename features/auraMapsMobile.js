@@ -1202,7 +1202,13 @@ export class AuraMobileController {
 
       const locName = rawName || this.currentLocationName;
       this.currentLocationName = locName;
-      const shortName = shortPlaceName(locName) || 'Selected Location';
+
+      // If the name is still a raw coordinate string (e.g. "13.2817, 78.1234"),
+      // shortPlaceName() would split on the comma and show only "13.2817" (the
+      // latitude). Show a neutral placeholder instead and wait for the async
+      // reverse-geocode result to overwrite it with a real place name.
+      const isCoordString = /^\s*[-+]?\d+\.?\d*\s*,\s*[-+]?\d+\.?\d*\s*$/.test(locName);
+      const shortName = isCoordString ? 'Locating...' : (shortPlaceName(locName) || 'Selected Location');
 
       // Update primary location header
       const locEl = document.getElementById('panelLocationName');

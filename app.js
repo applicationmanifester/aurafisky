@@ -75,6 +75,7 @@ import './modules/toast.js';
 import './src/icons.js';
 import { initFeatures } from './features/registry.js';
 import { initWebVitals } from './features/analytics.js';
+import { init as initErrorHandler } from './features/errorHandler.js';
 
 // Wallpaper backgrounds are generated procedurally on a canvas by
 // features/wallpaper.js rather than pulled from a stock-photo CDN. That
@@ -443,6 +444,8 @@ class AurafiskyApp {
       radarExpandedPanel: document.getElementById("radarExpandedPanel"),
       zoomInBtn: document.getElementById("zoomInBtn"),
       zoomOutBtn: document.getElementById("zoomOutBtn"),
+      compassBtn: document.getElementById("compassBtn"),
+      compassNeedle: document.getElementById("compassNeedle"),
 
       // SVG Sparkline
       trendSvg: document.getElementById("trendSvg"),
@@ -873,6 +876,10 @@ class AurafiskyApp {
     // eagerly and synchronously, before anything below binds an event handler or
     // calls one directly — avoids a load-order race where a listener could fire
     // before its handler method exists (see features/registry.js).
+    // Global error handler — must be first so it catches errors from
+    // feature init, map setup, and everything else downstream.
+    initErrorHandler(this);
+
     initFeatures(this);
 
     // Web Vitals tracking (LCP, FID/INP, CLS) — privacy-first, no network
@@ -983,6 +990,35 @@ class AurafiskyApp {
     if (!this.map) return;
     const view = this.map.getView();
     view.animate({ zoom: view.getZoom() + delta, duration: 200 });
+  }
+
+  // Animate map rotation back to North (0 radians)
+  resetRotation() {
+    if (!this.map) return;
+    const view = this.map.getView();
+    view.animate({ rotation: 0, duration: 300 });
+    this._haptic?.('selection');
+  }
+
+  // Update compass needle rotation and button visibility based on view rotation
+  _updateCompass() {
+    if (!this.map || !this.$.compassBtn) return;
+    const rotation = this.map.getView()?.getRotation() || 0;
+    const isRotated = Math.abs(rotation) > 0.005; // > ~0.3 degrees
+    if (isRotated) {
+      this.$.compassBtn.classList.remove('opacity-0', 'pointer-events-none', 'scale-90');
+      this.$.compassBtn.classList.add('opacity-100', 'pointer-events-auto', 'scale-100');
+      if (this.$.compassNeedle) {
+        const deg = -rotation * (180 / Math.PI);
+        this.$.compassNeedle.style.transform = `rotate(${deg}deg)`;
+      }
+    } else {
+      this.$.compassBtn.classList.add('opacity-0', 'pointer-events-none', 'scale-90');
+      this.$.compassBtn.classList.remove('opacity-100', 'pointer-events-auto', 'scale-100');
+      if (this.$.compassNeedle) {
+        this.$.compassNeedle.style.transform = 'rotate(0deg)';
+      }
+    }
   }
 
   // Set --app-height to the true visible viewport height so layout using
@@ -1145,15 +1181,17 @@ class AurafiskyApp {
           multiWorld: true,
         }),
         controls: [], // zoom controls are integrated into the radar panel instead
-        // This is a weather map, not a navigation tool — nothing in the UI
-        // ever rotates it back, so an accidental two-finger twist on mobile
-        // or Alt+Shift-drag on desktop just leaves the map stuck sideways
-        // with no way back short of a reload. Drop both rotate gestures;
-        // every other default interaction (pan, zoom, keyboard) stays.
+        // Map rotation is supported via two-finger twist on mobile and Alt+Shift-drag on desktop,
+        // with the interactive compass needle button resetting back to North.
         interactions: defaultInteractions({
-          altShiftDragRotate: false,
-          pinchRotate: false,
+          altShiftDragRotate: true,
+          pinchRotate: true,
         }),
+      });
+
+      // Update compass button whenever map rotation changes
+      this.map.getView().on("change:rotation", () => {
+        this._updateCompass();
       });
 
       // Language preference: 'en' for English, 'native' for each place's local name
@@ -2561,6 +2599,9 @@ class AurafiskyApp {
       this._zoomBy(-1);
       this._haptic('selection');
     });
+    this.$.compassBtn?.addEventListener("click", () => {
+      this.resetRotation();
+    });
     this.$.resetViewBtn?.addEventListener("click", () => this.resetView());
     this.$.radarToggleBtn.addEventListener("click", () => {
       this.toggleRadar();
@@ -3467,7 +3508,7 @@ class AurafiskyApp {
       // Perform reverse geocoding asynchronously in background
       try {
         const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 2000);
+        const timeoutId = setTimeout(() => controller.abort(), 5000);
         // Nominatim serves permissive CORS headers, so call it directly. Routing
         // through a third-party proxy both violates our connect-src CSP and hands
         // the user's coordinates to an unaffiliated service.
@@ -5486,7 +5527,7 @@ class AurafiskyApp {
   resetView() {
     if (!this.map) return;
     this.map.updateSize();
-    this.map.getView().animate({ center: fromLonLat([0.0, 20.0]), zoom: 3 });
+    this.map.getView().animate({ center: fromLonLat([0.0, 20.0]), zoom: 3, rotation: 0 });
     this.showToast("Map view reset", "info");
   }
 

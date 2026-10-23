@@ -46,7 +46,6 @@ import * as analytics from './analytics.js';
 import * as nativeBridge from './nativeBridge.js';
 import * as animatedShare from './animatedShare.js';
 import * as auraMapsMobile from './auraMapsMobile.js';
-const googleMapsMobile = auraMapsMobile;
 import * as deviceProfile from './deviceProfile.js';
 import * as tvNavigation from './tvNavigation.js';
 import * as sync from './sync.js';
@@ -86,7 +85,6 @@ const featureModules = {
   shareCard,
   wallpaper,
   auraMapsMobile,
-  googleMapsMobile,
   analytics,
   nativeBridge,
   animatedShare,

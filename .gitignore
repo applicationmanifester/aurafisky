@@ -1,16 +1,38 @@
-.firebase/
-*.log
-firebase-debug.log
+# Build outputs
 dist/
-node_modules/
-*.bak
-nul
-*.timestamp-*
-.uploads/
-lighthouse-report.json
-*.tmp
 aurafisky-desktop/
+
+# Dependencies
+node_modules/
+
+# Firebase
+.firebase/
+firebase-debug.log
+
+# Environment
 .env
 .env.*
 !.env.example
+
+# Vite / Vitest temp files
+*.timestamp-*
+*.tmp
+
+# Logs
+*.log
+
+# OS / Editor junk
+nul
+*.bak
+.DS_Store
+Thumbs.db
+
+# Uploads & backups
+.uploads/
 .ai_backups/
+
+# Reports (regenerate locally)
+lighthouse-report.json
+
+# Scratch / temporary
+scratch/

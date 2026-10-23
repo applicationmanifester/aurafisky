@@ -3556,10 +3556,11 @@ class AurafiskyApp {
           }
         };
 
-        const [coarseLevel, fineLevel] = await Promise.all([
-          fetchReverse(urls.coarse),
-          fetchReverse(urls.fine),
-        ]);
+        const coarseLevel = await fetchReverse(urls.coarse);
+        let fineLevel = null;
+        if (!controller.signal.aborted) {
+          fineLevel = await fetchReverse(urls.fine);
+        }
         clearTimeout(timeoutId);
 
         const sanitize = (str) => {
@@ -3620,7 +3621,9 @@ class AurafiskyApp {
     if (this.$.panelLocationName) {
       const existingBadge = this.$.panelLocationName.querySelector(".home-badge");
       if (existingBadge) existingBadge.remove();
-      this.$.panelLocationName.textContent = targetName;
+      const isCoord = /^\s*[-+]?\d+\.?\d*°?\s*[NSEW]?\s*,\s*[-+]?\d+\.?\d*°?\s*[NSEW]?\s*$/i.test(targetName);
+      const displayHeader = isCoord ? "Locating..." : (shortPlaceName(targetName) || targetName);
+      this.$.panelLocationName.textContent = displayHeader;
       this.$.panelLocationName.title = targetName;
     }
 
@@ -3681,9 +3684,11 @@ class AurafiskyApp {
       b.district && b.district !== b.area && b.district !== b.taluk ? b.district : null,
       b.state
     ].filter(Boolean);
+    const isCoordString = /^\s*[-+]?\d+\.?\d*°?\s*[NSEW]?\s*,\s*[-+]?\d+\.?\d*°?\s*[NSEW]?\s*$/i.test(b.fullAddress || "");
+    const formattedCoords = lat != null && lng != null ? `${lat.toFixed(4)}°, ${lng.toFixed(4)}°` : "Location Address";
     const summaryText = summaryParts.length > 0
       ? summaryParts.join(" • ")
-      : (b.fullAddress || (lat != null && lng != null ? `${lat.toFixed(4)}°, ${lng.toFixed(4)}°` : "Location Address"));
+      : (isCoordString || !b.fullAddress ? formattedCoords : b.fullAddress);
 
     if (summaryEl) {
       summaryEl.textContent = summaryText;
@@ -3772,10 +3777,11 @@ class AurafiskyApp {
     };
 
     try {
-      const [coarseLevel, fineLevel] = await Promise.all([
-        fetchReverse(urls.coarse),
-        fetchReverse(urls.fine),
-      ]);
+      const coarseLevel = await fetchReverse(urls.coarse);
+      let fineLevel = null;
+      if (!controller.signal.aborted) {
+        fineLevel = await fetchReverse(urls.fine);
+      }
       clearTimeout(timeoutId);
 
       const sanitize = (str) => {

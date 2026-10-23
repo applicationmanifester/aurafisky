@@ -368,4 +368,16 @@ describe("breakdownAddress", () => {
     expect(res.state).toBe("Andhra Pradesh");
     expect(res.fullAddress).toBe("Chitvel, Kadapa, Andhra Pradesh, India");
   });
+
+  test("never extracts raw coordinate strings into address hierarchy fields or shortPlaceName", () => {
+    const res = breakdownAddress(null, "16.4106, 77.6953", 16.4106, 77.6953);
+    expect(res.area).toBe("");
+    expect(res.taluk).toBe("");
+    expect(res.district).toBe("");
+    expect(res.state).toBe("");
+    expect(res.fullAddress).toBe("16.4106, 77.6953");
+
+    expect(shortPlaceName("16.4106, 77.6953")).toBe("Locating...");
+    expect(shortPlaceName("16.4106° N, 77.6953° E")).toBe("Locating...");
+  });
 });

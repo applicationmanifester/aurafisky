@@ -147,6 +147,10 @@ export function formatPlaceName(address, opts = {}) {
 export function shortPlaceName(fullName) {
   const cleaned = clean(fullName);
   if (!cleaned) return '';
+  // Coordinate string guard: never split raw coordinates on comma and return latitude
+  if (/^\s*[-+]?\d+\.?\d*°?\s*[NSEW]?\s*,\s*[-+]?\d+\.?\d*°?\s*[NSEW]?\s*$/i.test(cleaned)) {
+    return 'Locating...';
+  }
   const segments = cleaned.split(',').map(clean).filter(Boolean);
   if (segments.length <= 1) return segments[0] || cleaned;
 
@@ -407,8 +411,10 @@ export function breakdownAddress(address = {}, displayName = '', lat = null, lng
   // 5. State / Province
   let state = clean(a.state || a.province || a.region || '');
 
-  // Fallback: If structured address fields are missing, extract from comma-separated displayName
-  if (!area && !city && !taluk && !district && !state && displayName && String(displayName).includes(',')) {
+  // Fallback: If structured address fields are missing, extract from comma-separated displayName,
+  // but NEVER when displayName is a raw coordinate string (e.g. "16.4106, 77.6953").
+  const isCoordString = /^\s*[-+]?\d+\.?\d*°?\s*[NSEW]?\s*,\s*[-+]?\d+\.?\d*°?\s*[NSEW]?\s*$/i.test(displayName || '');
+  if (!isCoordString && !area && !city && !taluk && !district && !state && displayName && String(displayName).includes(',')) {
     const rawSegments = String(displayName).split(',').map(s => s.trim()).filter(Boolean);
     if (rawSegments.length >= 5) {
       area = rawSegments[0] || '';
@@ -434,7 +440,7 @@ export function breakdownAddress(address = {}, displayName = '', lat = null, lng
 
   // 7. Country
   let country = clean(a.country || '');
-  if (!country && displayName && String(displayName).includes(',')) {
+  if (!country && !isCoordString && displayName && String(displayName).includes(',')) {
     const rawSegments = String(displayName).split(',').map(s => s.trim()).filter(Boolean);
     if (rawSegments.length >= 3) {
       country = rawSegments[rawSegments.length - 1] || '';
@@ -453,9 +459,11 @@ export function breakdownAddress(address = {}, displayName = '', lat = null, lng
   if (postcode && !parts.some(p => looseEquals(p, postcode))) parts.push(postcode);
   if (country && !parts.some(p => looseEquals(p, country))) parts.push(country);
 
-  const fullAddress = (clean(displayName) && String(displayName).includes(','))
+  const fullAddress = (!isCoordString && clean(displayName) && String(displayName).includes(','))
     ? clean(displayName)
-    : (parts.length > 0 ? parts.join(', ') : clean(displayName) || (lat != null && lng != null ? `${lat.toFixed(4)}, ${lng.toFixed(4)}` : ''));
+    : (parts.length > 0
+        ? parts.join(', ')
+        : (!isCoordString ? clean(displayName) : '') || (lat != null && lng != null ? `${lat.toFixed(4)}, ${lng.toFixed(4)}` : ''));
 
   return {
     area,

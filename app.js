@@ -1012,12 +1012,14 @@ class AurafiskyApp {
       this.$.compassBtn.setAttribute('title', 'Map rotated — Click to reset North (Alt+drag or twist to rotate)');
       if (this.$.compassNeedle) {
         const deg = -rotation * (180 / Math.PI);
+        this.$.compassNeedle.style.transformOrigin = 'center';
         this.$.compassNeedle.style.transform = `rotate(${deg}deg)`;
       }
     } else {
       this.$.compassBtn.classList.remove('ring-2', 'ring-primary-500/60', 'border-primary-500/70', 'shadow-primary-500/25', 'bg-white', 'dark:bg-slate-700');
       this.$.compassBtn.setAttribute('title', 'Reset North orientation');
       if (this.$.compassNeedle) {
+        this.$.compassNeedle.style.transformOrigin = 'center';
         this.$.compassNeedle.style.transform = 'rotate(0deg)';
       }
     }

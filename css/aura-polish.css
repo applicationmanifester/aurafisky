@@ -386,6 +386,13 @@ input[type='range'].timeline-slider:focus-visible {
   min-width: var(--aura-tap);
   min-height: var(--aura-tap);
 }
+#compassBtn {
+  overflow: hidden;
+}
+#compassNeedle {
+  transform-origin: center center !important;
+  transform-box: fill-box;
+}
 #mapLayersFlyout,
 #radarExpandedPanel > div {
   border-radius: var(--aura-radius-lg);

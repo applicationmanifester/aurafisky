@@ -18,12 +18,20 @@ describe("Map Rotation & Compass Reset", () => {
     expect(html).toMatch(/<text[^>]*>W<\/text>/);
   });
 
-  test("compassBtn is visible by default in zoomControls so users can locate it", () => {
+  test("compassBtn is visible by default in zoomControls and has overflow contained", () => {
     // Should not be hidden with opacity-0 pointer-events-none at initial render
     const compassMatch = html.match(/<button id="compassBtn"[^>]*class="([^"]*)"/);
     expect(compassMatch).toBeTruthy();
     expect(compassMatch[1]).not.toContain("opacity-0");
     expect(compassMatch[1]).not.toContain("pointer-events-none");
+    expect(compassMatch[1]).toContain("overflow-hidden");
+  });
+
+  test("compassNeedle rotates around center so it turns strictly within the tab", () => {
+    // Should use transform-origin: center rather than fixed pixel dimensions
+    expect(html).toContain('style="transform-origin: center;"');
+    expect(html).not.toContain('style="transform-origin: 16px 16px;"');
+    expect(appJs).toContain("this.$.compassNeedle.style.transformOrigin = 'center'");
   });
 
   test("app.js has compassBtn and compassNeedle registered in element cache", () => {

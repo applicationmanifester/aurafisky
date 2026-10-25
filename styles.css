@@ -2467,6 +2467,15 @@ button, a, input, select, textarea, [role="button"] {
     max-height: 1.2rem !important;
   }
 
+  #compassBtn {
+    overflow: hidden !important;
+  }
+
+  #compassNeedle {
+    transform-origin: center center !important;
+    transform-box: fill-box;
+  }
+
   #mobileMapControls svg,
   #mapLayersBtn svg,
   #terminatorToggleBtn svg,

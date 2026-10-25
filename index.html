@@ -262,10 +262,17 @@
       <!-- Location Detailed Address Card (Compact & Collapsible) -->
       <div id="locationAddressCard" class="mx-3 sm:mx-4 my-1 sm:my-1.5 p-2 sm:p-2.5 rounded-xl bg-white/95 dark:bg-[#25272a] border border-slate-200/80 dark:border-slate-700/60 shadow-2xs text-left transition-all select-text">
         <div id="locationAddressHeader" class="flex items-center justify-between gap-1.5 cursor-pointer select-none" role="button" tabindex="0" aria-expanded="false" aria-controls="locationAddressContent" title="Click to view or hide address details">
-          <div class="flex items-center gap-1.5 min-w-0 flex-1">
-            <span class="text-xs flex-shrink-0" aria-hidden="true">📍</span>
-            <div id="locationAddressSummary" class="text-[11px] font-medium text-slate-700 dark:text-slate-200 truncate select-text cursor-pointer" title="Click to view full address details">
-              <span class="text-slate-400">Resolving address...</span>
+          <div class="flex flex-col min-w-0 flex-1 justify-center py-0.5">
+            <div class="flex items-center gap-1.5 min-w-0">
+              <span class="text-xs flex-shrink-0" aria-hidden="true">📍</span>
+              <div id="locationAddressSummary" class="text-[11px] font-medium text-slate-700 dark:text-slate-200 truncate select-text cursor-pointer" title="Click to view full address details">
+                <span class="text-slate-400">Resolving address...</span>
+              </div>
+            </div>
+            <!-- Dedicated Lat / Long Coordinates line (visible on mobile and compact screens in address tab) -->
+            <div id="locationAddressCoords" class="flex sm:hidden items-center gap-1.5 pl-4 mt-0.5 text-[10px] font-mono text-slate-500 dark:text-slate-400 select-text cursor-pointer" title="Click to copy coordinates">
+              <span class="text-[9px] font-sans font-bold tracking-wider text-teal-600 dark:text-teal-400 bg-teal-50 dark:bg-teal-950/60 border border-teal-200/70 dark:border-teal-800/60 px-1 py-0.2 rounded flex-shrink-0 select-none">GPS</span>
+              <span id="locationAddressCoordsText" class="truncate font-mono select-text hover:underline"></span>
             </div>
           </div>
           <div class="flex items-center gap-1 flex-shrink-0">

@@ -387,6 +387,17 @@ describe('Mobile Tabs & Navigation Layout', () => {
     expect(appJs).toContain('cityEl.textContent = displayName;');
     expect(appJs).toContain('this._renderLocationAddressCard');
   });
+
+  it('renders dedicated coordinates line in locationAddressCard for mobile screens', () => {
+    const html = fs.readFileSync('index.html', 'utf-8');
+    const appJs = fs.readFileSync('app.js', 'utf-8');
+
+    expect(html).toContain('id="locationAddressCoords"');
+    expect(html).toContain('id="locationAddressCoordsText"');
+    expect(appJs).toContain('locationAddressCoords: document.getElementById("locationAddressCoords")');
+    expect(appJs).toContain('locationAddressCoordsText: document.getElementById("locationAddressCoordsText")');
+    expect(appJs).toContain('Coordinates (Lat, Long)');
+  });
 });
 
 

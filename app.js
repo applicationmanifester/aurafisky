@@ -459,6 +459,8 @@ class AurafiskyApp {
       // Panel details
       panelLocationName: document.getElementById("panelLocationName"),
       panelCoordinates: document.getElementById("panelCoordinates"),
+      locationAddressCoords: document.getElementById("locationAddressCoords"),
+      locationAddressCoordsText: document.getElementById("locationAddressCoordsText"),
       panelTimeLabel: document.getElementById("panelTimeLabel"),
       panelIcon: document.getElementById("panelIcon"),
       panelTemp: document.getElementById("panelTemp"),
@@ -2562,9 +2564,25 @@ class AurafiskyApp {
         toggleAddressDetails();
       });
     }
+    const locationAddressCoords = document.getElementById("locationAddressCoords");
+    if (locationAddressCoords) {
+      locationAddressCoords.addEventListener("click", async (e) => {
+        e.stopPropagation();
+        const coordsText = document.getElementById("locationAddressCoordsText")?.textContent?.trim();
+        if (!coordsText) return;
+        try {
+          await navigator.clipboard.writeText(coordsText);
+          this.showToast(`📍 Coordinates copied: ${coordsText}`, "success");
+          this._haptic?.('selection');
+        } catch (_) {
+          this.showToast(coordsText, "info");
+        }
+      });
+    }
+
     if (addressHeader) {
       addressHeader.addEventListener("click", (e) => {
-        if (e.target.closest("#copyAddressBtn")) return;
+        if (e.target.closest("#copyAddressBtn, #locationAddressCoords")) return;
         toggleAddressDetails();
       });
       addressHeader.addEventListener("keydown", (e) => {
@@ -3648,13 +3666,19 @@ class AurafiskyApp {
       this.googleMapsMobile.syncCurrentLocationInfo(null, targetName);
     }
 
-    if (this.$.panelCoordinates && targetLat != null && targetLng != null && !isNaN(targetLat) && !isNaN(targetLng)) {
+    if (targetLat != null && targetLng != null && !isNaN(targetLat) && !isNaN(targetLng)) {
       const decimals = 4;
-      this.$.panelCoordinates.textContent = `📍 ${formatCoordinates(targetLat, targetLng, { precision: decimals })}`;
-      // The tooltip explains what the precision actually means, because four
-      // decimal places is ~11 m in latitude but only ~5 m in longitude at 60°N.
+      const formatted = formatCoordinates(targetLat, targetLng, { precision: decimals });
       const accuracy = formatCoordinateAccuracy(targetLat, decimals);
-      this.$.panelCoordinates.title = `${targetLat.toFixed(6)}, ${targetLng.toFixed(6)} — resolution ${accuracy}`;
+      if (this.$.panelCoordinates) {
+        this.$.panelCoordinates.textContent = `📍 ${formatted}`;
+        this.$.panelCoordinates.title = `${targetLat.toFixed(6)}, ${targetLng.toFixed(6)} — resolution ${accuracy}`;
+      }
+      const mobileCoords = this.$.locationAddressCoordsText || document.getElementById("locationAddressCoordsText");
+      if (mobileCoords) {
+        mobileCoords.textContent = formatted;
+        mobileCoords.title = `${targetLat.toFixed(6)}, ${targetLng.toFixed(6)} — resolution ${accuracy} (Click to copy)`;
+      }
     }
   }
 
@@ -3683,6 +3707,19 @@ class AurafiskyApp {
     const stateVal = b.state || "—";
     const metaBottom = [b.postcode, b.country].filter(Boolean).join(", ");
 
+    // Sync mobile address tab coordinates
+    const mobileCoords = this.$.locationAddressCoordsText || document.getElementById("locationAddressCoordsText");
+    const effLat = lat ?? this.selectedLat;
+    const effLng = lng ?? this.selectedLng;
+    const hasValidCoords = effLat != null && effLng != null && !isNaN(effLat) && !isNaN(effLng);
+    const coordFormatted = hasValidCoords ? formatCoordinates(effLat, effLng, { precision: 4 }) : "—";
+    const coordAccuracy = hasValidCoords ? `${effLat.toFixed(6)}, ${effLng.toFixed(6)} — resolution ${formatCoordinateAccuracy(effLat, 4)}` : "";
+
+    if (mobileCoords && hasValidCoords) {
+      mobileCoords.textContent = coordFormatted;
+      mobileCoords.title = `${coordAccuracy} (Click to copy)`;
+    }
+
     // Build concise 1-line summary breadcrumb for the compact bar
     const summaryParts = [
       b.area || b.city,
@@ -3691,7 +3728,7 @@ class AurafiskyApp {
       b.state
     ].filter(Boolean);
     const isCoordString = /^\s*[-+]?\d+\.?\d*°?\s*[NSEW]?\s*,\s*[-+]?\d+\.?\d*°?\s*[NSEW]?\s*$/i.test(b.fullAddress || "");
-    const formattedCoords = lat != null && lng != null ? `${lat.toFixed(4)}°, ${lng.toFixed(4)}°` : "Location Address";
+    const formattedCoords = hasValidCoords ? coordFormatted : "Location Address";
     const summaryText = summaryParts.length > 0
       ? summaryParts.join(" • ")
       : (isCoordString || !b.fullAddress ? formattedCoords : b.fullAddress);
@@ -3720,9 +3757,13 @@ class AurafiskyApp {
             <span class="text-[8.5px] uppercase font-bold text-slate-400 tracking-wider select-text">State / Province</span>
             <span class="font-semibold text-slate-800 dark:text-slate-200 truncate select-text cursor-text" title="${stateVal}">${stateVal}</span>
           </div>
+          <div class="col-span-2 flex flex-col min-w-0 select-text pt-1 border-t border-slate-200/50 dark:border-slate-700/40">
+            <span class="text-[8.5px] uppercase font-bold text-slate-400 tracking-wider select-text">Coordinates (Lat, Long)</span>
+            <span class="font-mono font-semibold text-teal-700 dark:text-teal-300 truncate select-text cursor-text" title="${coordAccuracy}">📍 ${coordFormatted}</span>
+          </div>
         </div>
         <div class="mt-1.5 pt-1 border-t border-slate-200/60 dark:border-slate-700/50 flex items-center justify-between text-[10px] text-slate-500 dark:text-slate-400 select-text">
-          <span class="truncate pr-1 font-medium select-text cursor-text">${metaBottom || (lat != null && lng != null ? `${lat.toFixed(4)}°, ${lng.toFixed(4)}°` : "")}</span>
+          <span class="truncate pr-1 font-medium select-text cursor-text">${metaBottom || (hasValidCoords ? coordFormatted : "")}</span>
           <button id="viewFullAddressBtn" type="button" class="text-[9.5px] text-teal-600 dark:text-teal-400 font-bold flex-shrink-0 cursor-pointer hover:underline select-none">Full Address</button>
         </div>
         <div id="fullAddressDetail" class="hidden mt-1 p-1.5 bg-slate-100/90 dark:bg-slate-800/70 rounded-lg text-[10px] font-mono text-slate-600 dark:text-slate-300 leading-snug break-words border border-slate-200/60 dark:border-slate-700/40 select-all select-text cursor-text">

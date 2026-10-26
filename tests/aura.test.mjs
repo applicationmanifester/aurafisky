@@ -26,6 +26,8 @@ describe("classify", () => {
     ["how is traffic on my commute", "commute"],
     ["should I drive or take the train", "commute"],
     ["road grip on the highway", "commute"],
+    ["best time to leave", "departure"],
+    ["when should I leave", "departure"],
     ["can I go for a run", "outdoor"],
     ["best time for a workout today", "outdoor"],
     ["is it good for cycling", "cycling"],

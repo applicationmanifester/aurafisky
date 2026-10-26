@@ -4,12 +4,15 @@
 // coordinate (13.5146, 78.2258), captured live. That point is 7 m from
 // Gaunipalli's own centroid, yet zoom 18 answers "Kottahudya" and zoom 14
 // answers "Gaunipalli". These tests lock in the rule that resolves that.
-import { test, expect, describe } from "vitest";
+import { test, expect, describe, beforeEach, vi } from "vitest";
 import {
   pickSettlement,
   mergeReverseAddresses,
   labelFromReverse,
   reverseUrls,
+  reverseGeocode,
+  clearGeocodeCache,
+  getGeocodeCache,
 } from "../modules/reverseGeocode.js";
 
 // zoom=14 -> the correct settlement
@@ -177,5 +180,68 @@ describe("reverseUrls", () => {
 
   test("defaults to English", () => {
     expect(reverseUrls(1, 2).coarse).toContain("accept-language=en");
+  });
+});
+
+describe("reverseGeocode service", () => {
+  beforeEach(() => {
+    clearGeocodeCache();
+  });
+
+  test("resolves and caches location successfully", async () => {
+    let fetchCount = 0;
+    const mockFetch = vi.fn(async (url) => {
+      fetchCount++;
+      if (url.includes("zoom=14")) {
+        return { ok: true, json: async () => GAUNIPALLI_Z14 };
+      }
+      return { ok: true, json: async () => KOTTAHUDYA_Z18 };
+    });
+
+    const res1 = await reverseGeocode(13.5146, 78.2258, { fetchFn: mockFetch });
+    expect(res1.name).toContain("Gaunipalli");
+    expect(res1.cached).toBe(false);
+    expect(fetchCount).toBe(2);
+
+    // Second call should hit cache (0 fetch calls)
+    const res2 = await reverseGeocode(13.5146, 78.2258, { fetchFn: mockFetch });
+    expect(res2.name).toContain("Gaunipalli");
+    expect(res2.cached).toBe(true);
+    expect(fetchCount).toBe(2);
+  });
+
+  test("deduplicates simultaneous in-flight requests", async () => {
+    let fetchCount = 0;
+    const mockFetch = vi.fn(async (url) => {
+      fetchCount++;
+      await new Promise((r) => setTimeout(r, 20));
+      return { ok: true, json: async () => ASHOKANAGAR_Z14 };
+    });
+
+    // Fire 3 simultaneous lookups for identical coordinates
+    const [p1, p2, p3] = await Promise.all([
+      reverseGeocode(12.9716, 77.5946, { fetchFn: mockFetch }),
+      reverseGeocode(12.9716, 77.5946, { fetchFn: mockFetch }),
+      reverseGeocode(12.9716, 77.5946, { fetchFn: mockFetch }),
+    ]);
+
+    expect(p1.name).toBe(p2.name);
+    expect(p2.name).toBe(p3.name);
+    // Coarse + Fine = 2 fetches only, not 6
+    expect(fetchCount).toBe(2);
+  });
+
+  test("falls back gracefully when network fails", async () => {
+    const mockFetch = vi.fn(async () => {
+      throw new Error("Network error");
+    });
+
+    const res = await reverseGeocode(0, 0, {
+      fetchFn: mockFetch,
+      describeFallback: "Middle of the Ocean",
+    });
+
+    expect(res.name).toBe("Middle of the Ocean");
+    expect(res.cached).toBe(false);
   });
 });

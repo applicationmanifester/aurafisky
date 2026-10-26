@@ -53,7 +53,7 @@ import {
   describeProximity,
   describeCoordinates,
 } from "./modules/geo.js";
-import { reverseUrls, labelFromReverse } from "./modules/reverseGeocode.js";
+import { reverseUrls, labelFromReverse, reverseGeocode } from "./modules/reverseGeocode.js";
 import { applyViewportHeight, watchViewport } from "./modules/viewport.js";
 import { t, detectLocale, setLocale, supportedLocales } from "./modules/i18n.js";
 import { isMobileLayout } from "./features/breakpoints.js";
@@ -374,11 +374,21 @@ class AurafiskyApp {
       toastContainer: document.getElementById("toastContainer"),
       offlineBanner: document.getElementById("offlineBanner"),
       weatherPanelSkeleton: document.getElementById("weatherPanelSkeleton"),
+      weatherPanelError: document.getElementById("weatherPanelError"),
+      weatherErrorTitle: document.getElementById("weatherErrorTitle"),
+      weatherErrorMessage: document.getElementById("weatherErrorMessage"),
+      weatherErrorIcon: document.getElementById("weatherErrorIcon"),
+      weatherRetryBtn: document.getElementById("weatherRetryBtn"),
+      weatherViewCachedBtn: document.getElementById("weatherViewCachedBtn"),
       weatherPanelContent: document.getElementById("weatherPanelContent"),
       weatherPanelTabs: document.getElementById("weatherPanelTabs"),
       overviewAQIChip: document.getElementById("overviewAQIChip"),
       overviewWindChip: document.getElementById("overviewWindChip"),
       overviewHumidityChip: document.getElementById("overviewHumidityChip"),
+      nowcastSection: document.getElementById("nowcastSection"),
+      nowcastIcon: document.getElementById("nowcastIcon"),
+      nowcastHeadline: document.getElementById("nowcastHeadline"),
+      nowcastBars: document.getElementById("nowcastBars"),
       mobileBottomNav: document.getElementById("mobileBottomNav"),
       mobileNavMapBtn: document.getElementById("mobileNavMapBtn"),
       mobileNavWeatherBtn: document.getElementById("mobileNavWeatherBtn"),
@@ -472,6 +482,8 @@ class AurafiskyApp {
       panelPressure: document.getElementById("panelPressure"),
       panelClouds: document.getElementById("panelClouds"),
       panelUV: document.getElementById("panelUV"),
+      panelUVBadge: document.getElementById("panelUVBadge"),
+      panelUVAdvice: document.getElementById("panelUVAdvice"),
       panelPrecip: document.getElementById("panelPrecip"),
       panelDewPoint: document.getElementById("panelDewPoint"),
       panelWindGusts: document.getElementById("panelWindGusts"),
@@ -869,12 +881,23 @@ class AurafiskyApp {
     // visitors; toggleDarkMode() below keeps this in sync going forward.
     let initialDark = false;
     try {
-      initialDark = localStorage.getItem("aurafisky_theme") === "dark";
+      const savedMapStyle = localStorage.getItem("aurafisky_map_style");
+      if (savedMapStyle) {
+        // Only dark mode map style should have dark tabs / theme; all other map modes are light
+        initialDark = savedMapStyle === "dark";
+      } else {
+        initialDark = localStorage.getItem("aurafisky_theme") === "dark";
+      }
     } catch (e) {
       // ignore — storage unavailable, fall back to light
     }
     this.isDark = initialDark;
     document.documentElement.classList.toggle("dark", this.isDark);
+    if (this.isDark) {
+      document.documentElement.setAttribute("data-theme", "dark");
+    } else {
+      document.documentElement.removeAttribute("data-theme");
+    }
 
     // Attach feature-module methods (radar, bookmarks, audio, canvas effects, etc.)
     // eagerly and synchronously, before anything below binds an event handler or
@@ -2636,6 +2659,30 @@ class AurafiskyApp {
       this.startNavigationPreview();
       this._haptic('light');
     });
+    this.$.weatherRetryBtn?.addEventListener("click", () => {
+      this._haptic('light');
+      if (this.selectedLat != null && this.selectedLng != null) {
+        this.selectLocation(this.selectedLat, this.selectedLng, this.selectedName);
+      }
+    });
+    this.$.weatherViewCachedBtn?.addEventListener("click", () => {
+      this._haptic('light');
+      if (this.selectedLat != null && this.selectedLng != null) {
+        const cached = this.getNearestCachedLocation(this.selectedLat, this.selectedLng);
+        if (cached?.forecast) {
+          this.weatherData = cached.forecast;
+          this.airQualityData = cached.airQuality;
+          this.currentHourIndex = WeatherService.getCurrentHourIndex(
+            this.weatherData,
+            this.weatherData?.utc_offset_seconds || 0,
+          );
+          this.updateOfflineBadge(true);
+          this.initTimeline();
+          this.updateWeatherDisplay(this.currentHourIndex);
+          this._setWeatherPanelState("content");
+        }
+      }
+    });
     this.$.navCancelPreviewBtn?.addEventListener("click", () => this.cancelNavigation());
     this.$.navStartBtn?.addEventListener("click", () => this.beginTurnByTurn());
     this.$.navStopBtn?.addEventListener("click", () => this.cancelNavigation());
@@ -3519,123 +3566,17 @@ class AurafiskyApp {
   }
 
   async handleMapClick(lat, lng, options = {}) {
-      if (lat == null || lng == null || isNaN(lat) || isNaN(lng)) {
-        return;
-      }
-      const defaultName = `${lat.toFixed(4)}, ${lng.toFixed(4)}`;
-
-      // Use street/neighborhood zoom on GPS fix
-      const zoom = options.zoom ?? (options.isGps ? (isMobileLayout() ? 14 : 13) : undefined);
-      // Call selectLocation IMMEDIATELY on click so weather card opens/updates instantly (1st click)
-      const selectPromise = this.selectLocation(lat, lng, defaultName, { zoom });
-
-      // Perform reverse geocoding asynchronously in background
-      try {
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 5000);
-        // Nominatim serves permissive CORS headers, so call it directly. Routing
-        // through a third-party proxy both violates our connect-src CSP and hands
-        // the user's coordinates to an unaffiliated service.
-        // zoom=18 + addressdetails=1 is what unlocks the full administrative
-        // ladder (suburb / quarter / neighbourhood / city_district). Without
-        // it Nominatim only returns the city level, which is why every point
-        // inside a city used to be labelled with the city name.
-        // Localized reverse geocoding: names come back in the user's
-        // device language (updated, official names) instead of English.
-        const userLang = (() => {
-          if (this.mapLanguage && this.mapLanguage !== 'native') {
-            return `${this.mapLanguage},en;q=0.9,en-US;q=0.8`;
-          }
-          try {
-            const nav = (navigator.language || "en").split(/[-_,]/)[0] || "en";
-            return `${nav},en;q=0.9,en-US;q=0.8`;
-          } catch (e) {
-            return "en,en-US;q=0.9";
-          }
-        })();
-        // Two zoom levels, because Nominatim's answer depends on the detail level
-        // in a way that produces genuinely wrong labels at the extremes.
-        //
-        // At zoom 18 it walks down to the nearest *address* node — often a
-        // road or a school — and reports whatever administrative boundary
-        // contains that node. When a point sits just outside a small
-        // settlement's polygon, that boundary is a different, larger village
-        // entirely: clicking 13.5146,78.2258 (which IS Gaunipalli, whose own
-        // centroid is 7 m away) returns "Kottahudya" at zoom 16/17/18 but the
-        // correct "Gaunipalli" at zoom 14.
-        //
-        // Zoom 14 resolves to the settlement level — the thing a person means
-        // by "where am I" — so it is the primary answer. Zoom 18 is kept only
-        // for the finer levels (suburb/quarter/neighbourhood) that matter
-        // inside cities, which zoom 14 does not carry. When the two disagree
-        // about the *settlement*, the coarser one wins.
-        const urls = reverseUrls(lat, lng, userLang);
-
-        const fetchReverse = async (url) => {
-          try {
-            const res = await fetch(url, { signal: controller.signal });
-            return res.ok ? await res.json() : null;
-          } catch (e) {
-            return null;
-          }
-        };
-
-        const coarseLevel = await fetchReverse(urls.coarse);
-        let fineLevel = null;
-        if (!controller.signal.aborted) {
-          fineLevel = await fetchReverse(urls.fine);
-        }
-        clearTimeout(timeoutId);
-
-        const sanitize = (str) => {
-          if (typeof DOMPurify !== "undefined" && DOMPurify.sanitize)
-            return DOMPurify.sanitize(String(str || ""));
-          return String(str || "").replace(/[<>&]/g, "");
-        };
-
-        if (coarseLevel || fineLevel) {
-          // Merge policy lives in modules/reverseGeocode.js so it can be
-          // tested without the network.
-          const { name: locationName, address: locationAddress } = labelFromReverse(coarseLevel, fineLevel, {
-            sanitize,
-            describeFallback: this._describeCoordinates(lat, lng),
-          });
-
-          if (locationName && this.selectedLat === lat && this.selectedLng === lng) {
-            this.selectedName = locationName;
-            this.selectedAddress = locationAddress;
-            this.selectedDisplayName = fineLevel?.display_name || coarseLevel?.display_name || locationName;
-            this._updateHeaderLocationAndCoords(locationName, lat, lng);
-            this._renderLocationAddressCard(this.selectedAddress, this.selectedDisplayName, lat, lng);
-            // Sync map marker pin so map pin and weather card show the exact same name!
-            if (this.marker) {
-              const timeOffset = this.timeline24hMode ? this._getTimelineOffset?.() || 0 : 0;
-              const targetIdx = parseInt(this.$.timelineSlider?.value || 0, 10) + timeOffset;
-              const currentWeather = this.weatherData ? WeatherService.getHourlyAtIndex(this.weatherData, targetIdx) : null;
-              if (currentWeather) {
-                this.marker.setHtml(this._buildMarkerHtml(currentWeather), locationName, "location-tooltip");
-              }
-              const cityEl = this.marker.element?.querySelector(".weather-marker-city");
-              if (cityEl) {
-                const displayName = shortPlaceName(locationName).trim();
-                cityEl.textContent = displayName;
-                cityEl.title = displayName;
-              }
-              const pinRoot = this.marker.element?.querySelector(".aurafisky-location-pin");
-              if (pinRoot) {
-                pinRoot.setAttribute("aria-label", locationName);
-              }
-            }
-            this.updateOfflineBadge(false);
-            this._persistSession(lat, lng, locationName);
-          }
-        }
-      } catch (e) {
-        console.warn("Nominatim reverse geocode lookup failed or timed out:", e);
-      }
-
-      await selectPromise;
+    if (lat == null || lng == null || isNaN(lat) || isNaN(lng)) {
+      return;
     }
+    const defaultName = `${lat.toFixed(4)}, ${lng.toFixed(4)}`;
+
+    // Use street/neighborhood zoom on GPS fix
+    const zoom = options.zoom ?? (options.isGps ? (isMobileLayout() ? 14 : 13) : undefined);
+    // Call selectLocation IMMEDIATELY on click so weather card opens/updates instantly (1st click)
+    // Address resolution runs centrally with in-flight deduplication and caching in resolveLocationAddress
+    await this.selectLocation(lat, lng, defaultName, { zoom });
+  }
 
   _updateHeaderLocationAndCoords(name, lat, lng) {
     const targetName = name || this.selectedName || "Unknown Location";
@@ -3789,77 +3730,42 @@ class AurafiskyApp {
       return;
     }
 
-    // 1. If we have a verified cached address for these exact coordinates, render immediately
     const cacheKey = `weathermap_cache_${lat.toFixed(3)}_${lng.toFixed(3)}`;
-    try {
-      const cached = this.getNearestCachedLocation(lat, lng);
-      if (
-        cached?.address &&
-        cached.addressLat != null &&
-        cached.addressLng != null &&
-        haversineMeters(cached.addressLat, cached.addressLng, lat, lng) < 1500
-      ) {
-        this.selectedAddress = cached.address;
-        this.selectedDisplayName = cached.displayName || cached.name || fallbackName;
-        this.addressResolvedForLat = lat;
-        this.addressResolvedForLng = lng;
-        this._renderLocationAddressCard(this.selectedAddress, this.selectedDisplayName, lat, lng);
-        return;
+    const userLang = (() => {
+      if (this.mapLanguage && this.mapLanguage !== 'native') {
+        return this.mapLanguage;
       }
-    } catch (_) {}
-
-    // 2. Fetch reverse geocoding from Nominatim (with timeout and abort controller)
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 6000);
-    const userLang = (navigator.language || "en").split("-")[0];
-    const urls = reverseUrls(lat, lng, userLang);
-
-    const fetchReverse = async (url) => {
       try {
-        const res = await fetch(url, { signal: controller.signal });
-        return res.ok ? await res.json() : null;
-      } catch (_) {
-        return null;
+        return (navigator.language || "en").split(/[-_,]/)[0] || "en";
+      } catch (e) {
+        return "en";
       }
+    })();
+
+    const sanitize = (str) => {
+      if (typeof DOMPurify !== "undefined" && DOMPurify.sanitize)
+        return DOMPurify.sanitize(String(str || ""));
+      return String(str || "").replace(/[<>&]/g, "");
     };
 
     try {
-      const coarseLevel = await fetchReverse(urls.coarse);
-      let fineLevel = null;
-      if (!controller.signal.aborted) {
-        fineLevel = await fetchReverse(urls.fine);
-      }
-      clearTimeout(timeoutId);
-
-      const sanitize = (str) => {
-        if (typeof DOMPurify !== "undefined" && DOMPurify.sanitize)
-          return DOMPurify.sanitize(String(str || ""));
-        return String(str || "").replace(/[<>&]/g, "");
-      };
+      const res = await reverseGeocode(lat, lng, {
+        lang: userLang,
+        timeoutMs: 6000,
+        sanitize,
+        describeFallback: this._describeCoordinates(lat, lng),
+      });
 
       if (this.selectedLat === lat && this.selectedLng === lng) {
-        let locationAddress = null;
-        let displayName = "";
-        let locationName = "";
-
-        if (coarseLevel || fineLevel) {
-          const res = labelFromReverse(coarseLevel, fineLevel, {
-            sanitize,
-            describeFallback: this._describeCoordinates(lat, lng),
-          });
-          locationAddress = res.address;
-          locationName = res.name;
-          displayName = fineLevel?.display_name || coarseLevel?.display_name || locationName || fallbackName;
-        }
-
-        this.selectedAddress = locationAddress;
-        this.selectedDisplayName = displayName || fallbackName || "";
+        this.selectedAddress = res.address;
+        this.selectedDisplayName = res.displayName || fallbackName || "";
         this.addressResolvedForLat = lat;
+        this.addressResolvedForLng = lng;
         this._renderLocationAddressCard(this.selectedAddress, this.selectedDisplayName, lat, lng);
 
-        if (locationName && (!this.selectedName || /^\s*[-+]?\d+\.\d+\s*,\s*[-+]?\d+\.\d+\s*$/.test(this.selectedName))) {
-          this.selectedName = locationName;
-          this._updateHeaderLocationAndCoords(locationName, lat, lng);
+        if (res.name && (!this.selectedName || /^\s*[-+]?\d+\.\d+\s*,\s*[-+]?\d+\.\d+\s*$/.test(this.selectedName))) {
+          this.selectedName = res.name;
+          this._updateHeaderLocationAndCoords(res.name, lat, lng);
         }
         if (this.marker) {
           const timeOffset = this.timeline24hMode ? this._getTimelineOffset?.() || 0 : 0;
@@ -3895,7 +3801,7 @@ class AurafiskyApp {
         }
       }
     } catch (e) {
-      clearTimeout(timeoutId);
+      console.warn("Reverse geocode failed:", e);
       if (this.selectedLat === lat && this.selectedLng === lng) {
         this._renderLocationAddressCard(null, fallbackName || this.selectedName, lat, lng);
       }
@@ -3935,6 +3841,33 @@ class AurafiskyApp {
         this._updatePanelTimeLabel(this.currentWeather, this.currentHourIndex);
       }
     }, 10000);
+  }
+
+  _setWeatherPanelState(state, options = {}) {
+    // state: 'loading' | 'content' | 'error'
+    if (this.$.weatherPanelSkeleton) {
+      this.$.weatherPanelSkeleton.classList.toggle("hidden", state !== "loading");
+    }
+    if (this.$.weatherPanelContent) {
+      this.$.weatherPanelContent.classList.toggle("hidden", state !== "content");
+    }
+    if (this.$.weatherPanelError) {
+      this.$.weatherPanelError.classList.toggle("hidden", state !== "error");
+      if (state === "error") {
+        if (this.$.weatherErrorTitle && options.title) {
+          this.$.weatherErrorTitle.textContent = options.title;
+        }
+        if (this.$.weatherErrorMessage && options.message) {
+          this.$.weatherErrorMessage.textContent = options.message;
+        }
+        if (this.$.weatherErrorIcon && options.icon) {
+          this.$.weatherErrorIcon.textContent = options.icon;
+        }
+        if (this.$.weatherViewCachedBtn) {
+          this.$.weatherViewCachedBtn.classList.toggle("hidden", !options.hasCachedData);
+        }
+      }
+    }
   }
 
   async selectLocation(lat, lng, name, options = {}) {
@@ -4033,11 +3966,8 @@ class AurafiskyApp {
       );
 
       if (!hasValidCache) {
-        // Only show loading skeleton if we have no valid cache
-        if (this.$.weatherPanelSkeleton && this.$.weatherPanelContent) {
-          this.$.weatherPanelContent.classList.add("hidden");
-          this.$.weatherPanelSkeleton.classList.remove("hidden");
-        }
+        // Show loading skeleton if no valid cache
+        this._setWeatherPanelState("loading");
       }
 
       if (hasValidCache) {
@@ -4053,10 +3983,7 @@ class AurafiskyApp {
           cached.forecast?.utc_offset_seconds || 0,
         );
         // Reveal cached content instead of the skeleton
-        if (this.$.weatherPanelSkeleton && this.$.weatherPanelContent) {
-          this.$.weatherPanelContent.classList.remove("hidden");
-          this.$.weatherPanelSkeleton.classList.add("hidden");
-        }
+        this._setWeatherPanelState("content");
         this.initTimeline();
         const timeOffset = this.timeline24hMode ? this._getTimelineOffset() : 0;
         this.$.timelineSlider.value = this.currentHourIndex - timeOffset;
@@ -4186,14 +4113,11 @@ class AurafiskyApp {
         this.updateHomeButton();
         this.updateHomeMarker();
 
-        // Hide loading skeleton and show main content (#13)
-        if (this.$.weatherPanelSkeleton && this.$.weatherPanelContent) {
-          this.$.weatherPanelContent.classList.remove("hidden");
-          this.$.weatherPanelSkeleton.classList.add("hidden");
-          requestAnimationFrame(() => {
-            this.$.weatherPanelContent.scrollTop = 0;
-          });
-        }
+        // Reveal content cleanly
+        this._setWeatherPanelState("content");
+        requestAnimationFrame(() => {
+          if (this.$.weatherPanelContent) this.$.weatherPanelContent.scrollTop = 0;
+        });
       } catch (error) {
         console.warn(
           "Live weather fetch failed, attempting cache recovery:",
@@ -4227,14 +4151,10 @@ class AurafiskyApp {
           this.updateHomeButton();
           this.updateHomeMarker();
 
-          // Hide loading skeleton and show content even for cached recovery
-          if (this.$.weatherPanelSkeleton && this.$.weatherPanelContent) {
-            this.$.weatherPanelContent.classList.remove("hidden");
-            this.$.weatherPanelSkeleton.classList.add("hidden");
-            requestAnimationFrame(() => {
-              this.$.weatherPanelContent.scrollTop = 0;
-            });
-          }
+          this._setWeatherPanelState("content");
+          requestAnimationFrame(() => {
+            if (this.$.weatherPanelContent) this.$.weatherPanelContent.scrollTop = 0;
+          });
         } else {
           this.showToast(
             this.isOffline
@@ -4243,21 +4163,25 @@ class AurafiskyApp {
             "error",
           );
 
-          if (this.weatherData) {
-            // Restore previous content view instead of leaving it stuck in skeleton
-            if (this.$.weatherPanelSkeleton && this.$.weatherPanelContent) {
-              this.$.weatherPanelContent.classList.remove("hidden");
-              this.$.weatherPanelSkeleton.classList.add("hidden");
-            }
-          } else {
-            this.hideWeatherPanel();
-          }
+          // Clear prior location's weather data so we NEVER present one city's weather under another!
+          this.weatherData = null;
+          this.airQualityData = null;
+
+          this._setWeatherPanelState("error", {
+            title: this.isOffline ? "You are Offline" : "Weather Data Unavailable",
+            message: this.isOffline
+              ? "No saved forecast found for this location. Reconnect and tap Retry."
+              : "Unable to retrieve live conditions for this point. Tap Retry to reconnect.",
+            icon: this.isOffline ? "📶" : "⚠️",
+            hasCachedData: false,
+          });
         }
       }
 
       this.updateHomeButton();
       this.updateHomeMarker();
       this.updateWallpaperButtonUI();
+
 
 
     } finally {
@@ -4548,9 +4472,14 @@ class AurafiskyApp {
   // ================================================================
 
   updateWeatherDisplay(hourIndex) {
+    if (!this.weatherData?.hourly?.time?.length) {
+      return;
+    }
+    const maxIdx = this.weatherData.hourly.time.length - 1;
+    const safeHourIndex = Math.max(0, Math.min(maxIdx, typeof hourIndex === "number" ? hourIndex : 0));
     const weather = WeatherService.getHourlyAtIndex(
       this.weatherData,
-      hourIndex,
+      safeHourIndex,
     );
     if (!weather) return;
 
@@ -4579,6 +4508,22 @@ class AurafiskyApp {
     this.$.panelClouds.textContent = `${weather.cloudCover ?? "--"}%`;
     this.$.panelUV.textContent =
       weather.uvIndex != null ? weather.uvIndex.toFixed(1) : "--";
+    if (this.$.panelUVBadge || this.$.panelUVAdvice) {
+      const uvGuidance = WeatherService.getUVGuidance(weather.uvIndex);
+      if (this.$.panelUVBadge) {
+        if (weather.uvIndex != null) {
+          this.$.panelUVBadge.textContent = uvGuidance.level;
+          this.$.panelUVBadge.className = `text-[9px] font-bold px-1.5 py-0.5 rounded-full ${uvGuidance.badgeBg}`;
+          this.$.panelUVBadge.classList.remove("hidden");
+        } else {
+          this.$.panelUVBadge.classList.add("hidden");
+        }
+      }
+      if (this.$.panelUVAdvice) {
+        this.$.panelUVAdvice.textContent = uvGuidance.advice;
+        this.$.panelUVAdvice.title = `${uvGuidance.advice} (Estimated burn time: ${uvGuidance.burnTime})`;
+      }
+    }
     this.$.panelPrecip.textContent = WeatherService.formatPrecip(
       weather.precipitation,
     );
@@ -4628,6 +4573,9 @@ class AurafiskyApp {
 
     // Sync Overview Quick Stats Chips
     this._updateOverviewChips(weather, aqiVal);
+
+    // Precipitation Nowcast (Phase 2 P0)
+    this._renderNowcast(hourIndex);
 
     // Comfort Index
     const comfortScore = WeatherService.getComfortIndex(weather, aqiVal);
@@ -6200,10 +6148,23 @@ class AurafiskyApp {
     this.isDark = !this.isDark;
 
     document.documentElement.classList.toggle("dark", this.isDark);
+    if (this.isDark) {
+      document.documentElement.setAttribute("data-theme", "dark");
+    } else {
+      document.documentElement.removeAttribute("data-theme");
+    }
     try {
       localStorage.setItem("aurafisky_theme", this.isDark ? "dark" : "light");
     } catch (e) {
       // ignore — storage unavailable
+    }
+
+    if (this.isDark) {
+      this.mapStyle = "dark";
+      try { localStorage.setItem("aurafisky_map_style", "dark"); } catch (_) {}
+    } else if (this.mapStyle === "dark") {
+      this.mapStyle = "street";
+      try { localStorage.setItem("aurafisky_map_style", "street"); } catch (_) {}
     }
 
     // Swap basemap style (handles language preference)
@@ -7537,7 +7498,7 @@ class AurafiskyApp {
           this.$.wallpaperMoonLitPath.setAttribute("d", `M 30 3 A 27 27 0 0 1 30 57 A ${Math.abs(rx).toFixed(2)} 27 0 0 ${sweep} 30 3`);
         } else {
           const rx = r - 4 * r * (p - 0.5);
-          const sweep = rx < 0 ? 0 : 1;
+          const sweep = rx < 0 ? 1 : 0;
           this.$.wallpaperMoonLitPath.setAttribute("d", `M 30 3 A 27 27 0 0 0 30 57 A ${Math.abs(rx).toFixed(2)} 27 0 0 ${sweep} 30 3`);
         }
       }
@@ -8645,6 +8606,45 @@ class AurafiskyApp {
     }
     if (this.$.overviewHumidityChip && weather) {
       this.$.overviewHumidityChip.textContent = `${weather.humidity ?? "--"}%`;
+    }
+  }
+
+  /**
+   * Renders the 2-hour minute-by-minute precipitation nowcast.
+   * @param {number} [hourIndex=0]
+   */
+  _renderNowcast(hourIndex = 0) {
+    if (!this.$.nowcastSection || !this.weatherData) return;
+    const nowcast = WeatherService.getPrecipitationNowcast(this.weatherData, hourIndex);
+    if (!nowcast || !nowcast.intervals?.length) {
+      this.$.nowcastSection.classList.add("hidden");
+      return;
+    }
+
+    this.$.nowcastSection.classList.remove("hidden");
+    if (this.$.nowcastHeadline) {
+      this.$.nowcastHeadline.textContent = nowcast.summary;
+    }
+    if (this.$.nowcastIcon) {
+      this.$.nowcastIcon.textContent = nowcast.icon;
+    }
+
+    if (this.$.nowcastBars) {
+      const maxMm = Math.max(0.5, ...nowcast.intervals.map((i) => i.mm || 0));
+      this.$.nowcastBars.innerHTML = nowcast.intervals
+        .map((interval) => {
+          const heightPx = Math.max(4, Math.min(36, Math.round(((interval.mm || 0) / maxMm) * 36)));
+          let colorClass = "bg-slate-200 dark:bg-slate-700";
+          if (interval.intensity === "heavy") {
+            colorClass = "bg-indigo-600 dark:bg-indigo-500";
+          } else if (interval.intensity === "moderate") {
+            colorClass = "bg-blue-500 dark:bg-blue-400";
+          } else if (interval.intensity === "light") {
+            colorClass = "bg-sky-400 dark:bg-sky-400";
+          }
+          return `<div class="flex-1 rounded-sm transition-all duration-300 ${colorClass}" style="height: ${heightPx}px" title="${interval.label}: ${(interval.mm || 0).toFixed(2)} mm (${interval.prob}% chance)" role="img" aria-label="${interval.label}: ${interval.intensity} precipitation"></div>`;
+        })
+        .join("");
     }
   }
 
@@ -10136,9 +10136,13 @@ class AurafiskyApp {
   _switchBasemapTheme() {
     if (!this.map || !this.lightBasemap || !this.darkBasemap) return;
     if (this.isDark) {
-      if (this.mapStyle === 'street') this.mapStyle = 'dark';
+      this.mapStyle = 'dark';
+      try { localStorage.setItem("aurafisky_map_style", "dark"); } catch (_) {}
     } else {
-      if (this.mapStyle === 'dark') this.mapStyle = 'street';
+      if (this.mapStyle === 'dark') {
+        this.mapStyle = 'street';
+        try { localStorage.setItem("aurafisky_map_style", "street"); } catch (_) {}
+      }
     }
     this._updateActiveBasemap();
     this._updateMapStyleUI();
@@ -10160,21 +10164,31 @@ class AurafiskyApp {
       opacityValue.textContent = `${Math.round(this.mapOpacity * 100)}%`;
     }
 
-    // Synchronize dark theme if user picked dark or street explicitly
-    if (style === "dark" && !this.isDark) {
-      this.isDark = true;
-      document.documentElement.classList.add("dark");
-      try { localStorage.setItem("aurafisky_theme", "dark"); } catch (_) {}
-      this.updateSettingsUIFromLocal?.();
-      this.saveUserDataToCloud?.();
-      this.syncBus?.syncTheme?.(true);
-    } else if (style === "street" && this.isDark) {
-      this.isDark = false;
-      document.documentElement.classList.remove("dark");
-      try { localStorage.setItem("aurafisky_theme", "light"); } catch (_) {}
-      this.updateSettingsUIFromLocal?.();
-      this.saveUserDataToCloud?.();
-      this.syncBus?.syncTheme?.(false);
+    // Synchronize dark theme: only in darkmode tabs/UI should be in dark, not in other map modes
+    if (style === "dark") {
+      if (!this.isDark) {
+        this.isDark = true;
+        document.documentElement.classList.add("dark");
+        document.documentElement.setAttribute("data-theme", "dark");
+        try { localStorage.setItem("aurafisky_theme", "dark"); } catch (_) {}
+        const meta = document.querySelector('meta[name="theme-color"]');
+        if (meta) meta.content = "#0f172a";
+        this.updateSettingsUIFromLocal?.();
+        this.saveUserDataToCloud?.();
+        this.syncBus?.syncTheme?.(true);
+      }
+    } else {
+      if (this.isDark) {
+        this.isDark = false;
+        document.documentElement.classList.remove("dark");
+        document.documentElement.removeAttribute("data-theme");
+        try { localStorage.setItem("aurafisky_theme", "light"); } catch (_) {}
+        const meta = document.querySelector('meta[name="theme-color"]');
+        if (meta) meta.content = "#6366f1";
+        this.updateSettingsUIFromLocal?.();
+        this.saveUserDataToCloud?.();
+        this.syncBus?.syncTheme?.(false);
+      }
     }
 
     this._updateActiveBasemap();

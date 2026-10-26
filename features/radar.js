@@ -121,9 +121,12 @@ async function initRadarLayers() {
       if (this.overlayType === "radar") {
         const pastFrames = data.radar.past || [];
         const nowcastFrames = data.radar.nowcast || [];
-        allFrames = [...pastFrames, ...nowcastFrames].slice(-6);
+        // Capture up to 8 historical past frames (~80 min) + up to 4 nowcast forecast frames (~40 min)
+        const recentPast = pastFrames.slice(-8);
+        const upcoming = nowcastFrames.slice(0, 4);
+        allFrames = [...recentPast, ...upcoming];
       } else {
-        allFrames = (data.satellite.infrared || []).slice(-6);
+        allFrames = (data.satellite.infrared || []).slice(-8);
       }
 
       this.clearRadarLayers();
@@ -265,17 +268,30 @@ function clearRadarLayers() {
   }
 
 function updateRadarTimeLabel() {
-    if (this.radarTimestamps[this.radarIndex]) {
-      const timestamp = this.radarTimestamps[this.radarIndex];
-      const date = new Date(timestamp * 1000);
-      this.$.radarTimeLabel.textContent = date.toLocaleTimeString([], {
-        hour: "2-digit",
-        minute: "2-digit",
-      });
+  if (this.radarTimestamps && this.radarTimestamps[this.radarIndex]) {
+    const timestamp = this.radarTimestamps[this.radarIndex];
+    const date = new Date(timestamp * 1000);
+    const timeStr = date.toLocaleTimeString([], {
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+    const nowSec = Math.floor(Date.now() / 1000);
+    const diffMin = Math.round((timestamp - nowSec) / 60);
+
+    let status = "";
+    if (Math.abs(diffMin) <= 4) {
+      status = "LIVE";
+    } else if (diffMin < 0) {
+      status = `${Math.abs(diffMin)}m ago`;
     } else {
-      this.$.radarTimeLabel.textContent = "--:--";
+      status = `+${diffMin}m`;
     }
+
+    this.$.radarTimeLabel.textContent = `${timeStr} (${status})`;
+  } else {
+    this.$.radarTimeLabel.textContent = "--:--";
   }
+}
 
 export function init(app) {
   app.toggleRadar = toggleRadar;

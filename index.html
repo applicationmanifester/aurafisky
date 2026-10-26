@@ -352,6 +352,28 @@
       <div class="grid grid-cols-2 sm:grid-cols-4 gap-3"><div class="col-span-2 h-14 bg-slate-200 dark:bg-slate-700/60 rounded-xl"></div><div class="col-span-2 h-10 bg-slate-200 dark:bg-slate-700/60 rounded-xl"></div><div class="h-16 bg-slate-200 dark:bg-slate-700/60 rounded-xl"></div><div class="h-16 bg-slate-200 dark:bg-slate-700/60 rounded-xl"></div><div class="h-16 bg-slate-200 dark:bg-slate-700/60 rounded-xl"></div><div class="h-16 bg-slate-200 dark:bg-slate-700/60 rounded-xl"></div></div>
     </div>
 
+    <!-- Error State (Proper error states + retry logic) -->
+    <div id="weatherPanelError" class="hidden flex-1 flex flex-col items-center justify-center p-6 text-center space-y-4" role="alert" aria-live="polite">
+      <div class="w-14 h-14 rounded-2xl bg-amber-500/15 dark:bg-amber-500/25 text-amber-500 dark:text-amber-400 flex items-center justify-center text-2xl shadow-inner">
+        <span id="weatherErrorIcon" aria-hidden="true">⚠️</span>
+      </div>
+      <div class="space-y-1.5 max-w-[280px]">
+        <h3 id="weatherErrorTitle" class="text-sm font-bold text-slate-800 dark:text-slate-100">Weather Data Unavailable</h3>
+        <p id="weatherErrorMessage" class="text-xs text-slate-500 dark:text-slate-400 leading-relaxed">Could not retrieve live conditions for this point. Check your connection or retry below.</p>
+      </div>
+      <div class="flex items-center gap-2 pt-1">
+        <button id="weatherRetryBtn" type="button" class="inline-flex items-center gap-1.5 px-3.5 py-1.5 text-xs font-semibold rounded-xl bg-teal-600 hover:bg-teal-500 text-white shadow-sm hover:shadow transition-all active:scale-95 cursor-pointer">
+          <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5" aria-hidden="true">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+          </svg>
+          <span>Retry</span>
+        </button>
+        <button id="weatherViewCachedBtn" type="button" class="hidden inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-xl bg-slate-200/80 hover:bg-slate-300 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 transition-all active:scale-95 cursor-pointer">
+          <span>View Offline Data</span>
+        </button>
+      </div>
+    </div>
+
     <!-- Scrollable Content with Organized Tabs -->
     <div id="weatherPanelContent" class="flex-1 overflow-y-auto custom-scrollbar px-4 sm:px-5 pb-5 pt-2">
       <!-- ── TAB 1: OVERVIEW ─────────────────────────────────── -->
@@ -386,6 +408,27 @@
             <div class="text-[10px] text-slate-400 font-medium">💧 Humidity</div>
             <div id="overviewHumidityChip" class="text-xs font-bold text-slate-800 dark:text-slate-100 truncate mt-0.5">--</div>
           </button>
+        </div>
+
+        <!-- Minute-by-Minute Precipitation Nowcast (Phase 2 P0) -->
+        <div id="nowcastSection" class="hidden p-3.5 rounded-2xl bg-slate-100/70 dark:bg-slate-800/60 border border-slate-200/60 dark:border-slate-700/60 shadow-xs transition-all">
+          <div class="flex items-center justify-between mb-2">
+            <div class="flex items-center gap-1.5 text-xs font-bold text-slate-800 dark:text-slate-100">
+              <span id="nowcastIcon" class="text-sm">🌧️</span>
+              <span id="nowcastHeadline">Precipitation Nowcast</span>
+            </div>
+            <span class="text-[10px] font-semibold text-teal-600 dark:text-teal-400 bg-teal-500/10 px-2 py-0.5 rounded-full uppercase tracking-wider">Next 2 Hours</span>
+          </div>
+          <div id="nowcastBars" class="flex items-end gap-1.5 h-10 pt-1" aria-label="Precipitation intensity over next 2 hours">
+            <!-- Dynamic 15-minute bars injected by JS -->
+          </div>
+          <div class="flex justify-between text-[9px] text-slate-400 font-medium mt-1.5">
+            <span>Now</span>
+            <span>+30m</span>
+            <span>+60m</span>
+            <span>+90m</span>
+            <span>+120m</span>
+          </div>
         </div>
 
         <!-- Today at a Glance — daily summary strip (sun, rain, UV, wind, precip) -->
@@ -585,7 +628,14 @@
           <div class="metric-card bg-slate-100/60 dark:bg-slate-700/40 rounded-xl px-3.5 py-3"><div class="text-xs text-slate-500 dark:text-slate-400 mb-1 flex items-center gap-1.5"><span aria-hidden="true">💨</span> Gusts</div><div id="panelWindGusts" class="text-lg font-semibold text-slate-800 dark:text-slate-100">--</div></div>
           <div class="metric-card bg-slate-100/60 dark:bg-slate-700/40 rounded-xl px-3.5 py-3"><div class="text-xs text-slate-500 dark:text-slate-400 mb-1 flex items-center gap-1.5"><span aria-hidden="true">📊</span> Pressure</div><div id="panelPressure" class="text-lg font-semibold text-slate-800 dark:text-slate-100">-- hPa</div><div id="pressureTendency" class="text-[10px] font-medium text-slate-400 mt-0.5"></div></div>
           <div class="metric-card bg-slate-100/60 dark:bg-slate-700/40 rounded-xl px-3.5 py-3"><div class="text-xs text-slate-500 dark:text-slate-400 mb-1 flex items-center gap-1.5"><span aria-hidden="true">☁️</span> Clouds</div><div id="panelClouds" class="text-lg font-semibold text-slate-800 dark:text-slate-100">--%</div></div>
-          <div class="metric-card bg-slate-100/60 dark:bg-slate-700/40 rounded-xl px-3.5 py-3"><div class="text-xs text-slate-500 dark:text-slate-400 mb-1 flex items-center gap-1.5"><span aria-hidden="true">☀️</span> UV Index</div><div id="panelUV" class="text-lg font-semibold text-slate-800 dark:text-slate-100">--</div></div>
+          <div class="metric-card bg-slate-100/60 dark:bg-slate-700/40 rounded-xl px-3.5 py-3">
+            <div class="text-xs text-slate-500 dark:text-slate-400 mb-1 flex items-center justify-between">
+              <span class="flex items-center gap-1.5"><span aria-hidden="true">☀️</span> UV Index</span>
+              <span id="panelUVBadge" class="hidden text-[9px] font-bold px-1.5 py-0.5 rounded-full"></span>
+            </div>
+            <div id="panelUV" class="text-lg font-semibold text-slate-800 dark:text-slate-100">--</div>
+            <div id="panelUVAdvice" class="text-[10px] font-medium text-slate-400 mt-0.5 truncate"></div>
+          </div>
           <div class="metric-card bg-slate-100/60 dark:bg-slate-700/40 rounded-xl px-3.5 py-3"><div class="text-xs text-slate-500 dark:text-slate-400 mb-1 flex items-center gap-1.5"><span aria-hidden="true">🌧️</span> Precip</div><div id="panelPrecip" class="text-lg font-semibold text-slate-800 dark:text-slate-100">-- mm</div></div>
           <div class="metric-card bg-slate-100/60 dark:bg-slate-700/40 rounded-xl px-3.5 py-3"><div class="text-xs text-slate-500 dark:text-slate-400 mb-1 flex items-center gap-1.5"><span aria-hidden="true">👁️</span> Visibility</div><div id="panelVisibility" class="text-lg font-semibold text-slate-800 dark:text-slate-100">--</div></div>
           <div class="metric-card bg-slate-100/60 dark:bg-slate-700/40 rounded-xl px-3.5 py-3"><div class="text-xs text-slate-500 dark:text-slate-400 mb-1 flex items-center gap-1.5"><span aria-hidden="true">🌧️</span> Rain Chance</div><div id="panelPrecipProb" class="text-lg font-semibold text-slate-800 dark:text-slate-100">--</div></div>
@@ -1768,7 +1818,7 @@
         <div class="border-t border-slate-100 dark:border-slate-800/40 my-3"></div>
 
         <p class="text-xs text-slate-500 dark:text-slate-400">
-          Version 16.0.0 · No API keys, no tracking, and no ads. Weather data provided by Open-Meteo under CC BY 4.0.
+          Version 17.0.0 · No API keys, no tracking, and no ads. Weather data provided by Open-Meteo under CC BY 4.0.
         </p>
       </div>
       <div class="p-4 bg-slate-50 dark:bg-slate-800/50 rounded-b-2xl">
@@ -2081,7 +2131,7 @@
   <!-- TERMS MODAL                                                  -->
   <!-- ============================================================ -->
   <div id="termsModal" class="fixed inset-0 z-[9999] hidden items-center justify-center bg-black/40 backdrop-blur-sm pointer-events-auto" style="display:none" role="dialog" aria-modal="true" aria-labelledby="termsTitle">
-    <div class="bg-white dark:bg-slate-900 rounded-2xl shadow-2xl max-w-2xl w-full mx-4 max-h-[80vh] overflow-y-auto animate-in zoom-in-95"><div class="p-5 border-b border-slate-200/50 dark:border-slate-700/30 flex items-center justify-between"><h3 id="termsTitle" class="text-lg font-bold text-slate-900 dark:text-white">Terms & Privacy</h3><button id="termsCloseBtn" aria-label="Close terms and privacy" class="p-1.5 rounded-lg hover:bg-slate-200/60 dark:hover:bg-slate-600/40 transition-colors"><svg class="w-5 h-5 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" /></svg></button></div><div class="p-5 space-y-4 text-sm text-slate-600 dark:text-slate-300 max-h-[60vh] overflow-y-auto"><p class="text-slate-700 dark:text-slate-200 font-medium">Aurafisky is an interactive, privacy-first weather explorer that blends real-time forecasting, live radar animations, and interactive mapping in a modern, user-friendly interface.</p><h4 class="font-semibold">Data Sources</h4><ul class="list-disc pl-5 space-y-1"><li>Weather: <a href="https://open-meteo.com" target="_blank" rel="noopener" class="text-primary hover:underline">Open-Meteo</a></li><li>Maps: <a href="https://openstreetmap.org" target="_blank" rel="noopener" class="text-primary hover:underline">OpenStreetMap</a> + <a href="https://openfreemap.org" target="_blank" rel="noopener" class="text-primary hover:underline">OpenFreeMap</a></li><li>Radar: <a href="https://rainviewer.com" target="_blank" rel="noopener" class="text-primary hover:underline">RainViewer</a></li><li>Geocoding: <a href="https://nominatim.org" target="_blank" rel="noopener" class="text-primary hover:underline">Nominatim</a></li></ul><h4 class="font-semibold">Privacy</h4><p>No personal data is collected. Location is only used for weather queries and never stored on servers. Favorites & settings sync via Firebase Auth (Google) only if you sign in. For more details, view our <a href="https://sites.google.com/view/aurafisky-privacypolicy/home" target="_blank" rel="noopener" class="text-primary hover:underline font-medium">Full Privacy Policy</a>.</p><h4 class="font-semibold">Offline Use</h4><p>Install as PWA for full offline access. Recent weather data cached in IndexedDB.</p><h4 class="font-semibold">License</h4><p>Version 16.0.0 · Proprietary. All rights reserved. Copyright &copy; 2026 Aurafisky.</p></div><div class="p-4 bg-slate-50 dark:bg-slate-800/50 rounded-b-2xl flex gap-3"><button id="termsAcceptBtn" class="flex-1 bg-primary hover:bg-primary-dark text-white font-semibold py-2.5 rounded-xl transition-colors">Accept & Continue</button><button id="copyContactEmailBtn" class="px-4 py-2.5 bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 font-semibold rounded-xl hover:bg-slate-300 dark:hover:bg-slate-600 transition-colors">Copy contact email</button></div></div></div>
+    <div class="bg-white dark:bg-slate-900 rounded-2xl shadow-2xl max-w-2xl w-full mx-4 max-h-[80vh] overflow-y-auto animate-in zoom-in-95"><div class="p-5 border-b border-slate-200/50 dark:border-slate-700/30 flex items-center justify-between"><h3 id="termsTitle" class="text-lg font-bold text-slate-900 dark:text-white">Terms & Privacy</h3><button id="termsCloseBtn" aria-label="Close terms and privacy" class="p-1.5 rounded-lg hover:bg-slate-200/60 dark:hover:bg-slate-600/40 transition-colors"><svg class="w-5 h-5 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" /></svg></button></div><div class="p-5 space-y-4 text-sm text-slate-600 dark:text-slate-300 max-h-[60vh] overflow-y-auto"><p class="text-slate-700 dark:text-slate-200 font-medium">Aurafisky is an interactive, privacy-first weather explorer that blends real-time forecasting, live radar animations, and interactive mapping in a modern, user-friendly interface.</p><h4 class="font-semibold">Data Sources</h4><ul class="list-disc pl-5 space-y-1"><li>Weather: <a href="https://open-meteo.com" target="_blank" rel="noopener" class="text-primary hover:underline">Open-Meteo</a></li><li>Maps: <a href="https://openstreetmap.org" target="_blank" rel="noopener" class="text-primary hover:underline">OpenStreetMap</a> + <a href="https://openfreemap.org" target="_blank" rel="noopener" class="text-primary hover:underline">OpenFreeMap</a></li><li>Radar: <a href="https://rainviewer.com" target="_blank" rel="noopener" class="text-primary hover:underline">RainViewer</a></li><li>Geocoding: <a href="https://nominatim.org" target="_blank" rel="noopener" class="text-primary hover:underline">Nominatim</a></li></ul><h4 class="font-semibold">Privacy</h4><p>No personal data is collected. Location is only used for weather queries and never stored on servers. Favorites & settings sync via Firebase Auth (Google) only if you sign in. For more details, view our <a href="https://sites.google.com/view/aurafisky-privacypolicy/home" target="_blank" rel="noopener" class="text-primary hover:underline font-medium">Full Privacy Policy</a>.</p><h4 class="font-semibold">Offline Use</h4><p>Install as PWA for full offline access. Recent weather data cached in IndexedDB.</p><h4 class="font-semibold">License</h4><p>Version 17.0.0 · Proprietary. All rights reserved. Copyright &copy; 2026 Aurafisky.</p></div><div class="p-4 bg-slate-50 dark:bg-slate-800/50 rounded-b-2xl flex gap-3"><button id="termsAcceptBtn" class="flex-1 bg-primary hover:bg-primary-dark text-white font-semibold py-2.5 rounded-xl transition-colors">Accept & Continue</button><button id="copyContactEmailBtn" class="px-4 py-2.5 bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 font-semibold rounded-xl hover:bg-slate-300 dark:hover:bg-slate-600 transition-colors">Copy contact email</button></div></div></div>
 
   <!-- ============================================================ -->
   <!-- TURN-BY-TURN NAVIGATION                                      -->

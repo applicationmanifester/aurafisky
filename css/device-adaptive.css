@@ -102,9 +102,11 @@
   }
   #weatherPanel.minimized #weatherPanelContent,
   #weatherPanel.minimized #weatherPanelSkeleton,
+  #weatherPanel.minimized #weatherPanelError,
   #weatherPanel.minimized #weatherPanelTabs,
   #weatherPanel.sheet-peek #weatherPanelContent,
   #weatherPanel.sheet-peek #weatherPanelSkeleton,
+  #weatherPanel.sheet-peek #weatherPanelError,
   #weatherPanel.sheet-peek #weatherPanelTabs {
     display: none !important;
   }

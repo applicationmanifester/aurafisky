@@ -108,3 +108,196 @@ export function reverseUrls(lat, lng, lang = 'en') {
     fine: `${base}&zoom=18&addressdetails=1`,
   };
 }
+
+// ── Reverse Geocode Cache & In-Flight Deduplication ─────────────────
+const GEOCODE_CACHE_KEY = 'aurafisky_geocode_cache_v1';
+const MAX_MEM_CACHE = 150;
+const memCache = new Map();
+const inFlightRequests = new Map();
+
+function getCacheKey(lat, lng, lang = 'en') {
+  return `${Number(lat).toFixed(4)},${Number(lng).toFixed(4)},${lang.toLowerCase().split(/[-_,]/)[0] || 'en'}`;
+}
+
+export function clearGeocodeCache() {
+  memCache.clear();
+  inFlightRequests.clear();
+  try {
+    if (typeof localStorage !== 'undefined') {
+      localStorage.removeItem(GEOCODE_CACHE_KEY);
+    }
+  } catch (_) {}
+}
+
+export function getGeocodeCache(lat, lng, lang = 'en') {
+  const key = getCacheKey(lat, lng, lang);
+  if (memCache.has(key)) {
+    return memCache.get(key);
+  }
+  try {
+    if (typeof localStorage !== 'undefined') {
+      const stored = localStorage.getItem(GEOCODE_CACHE_KEY);
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        if (parsed[key]) {
+          memCache.set(key, parsed[key]);
+          return parsed[key];
+        }
+      }
+    }
+  } catch (_) {}
+  return null;
+}
+
+function persistGeocodeCache(key, data) {
+  if (memCache.size >= MAX_MEM_CACHE) {
+    const oldestKey = memCache.keys().next().value;
+    memCache.delete(oldestKey);
+  }
+  memCache.set(key, data);
+
+  try {
+    if (typeof localStorage !== 'undefined') {
+      const raw = localStorage.getItem(GEOCODE_CACHE_KEY);
+      const store = raw ? JSON.parse(raw) : {};
+      const keys = Object.keys(store);
+      if (keys.length >= 60) {
+        delete store[keys[0]];
+      }
+      store[key] = data;
+      localStorage.setItem(GEOCODE_CACHE_KEY, JSON.stringify(store));
+    }
+  } catch (_) {}
+}
+
+/**
+ * High-reliability reverse geocode lookup with:
+ * 1. In-memory and persistent caching (0ms hit)
+ * 2. In-flight request deduplication (prevents parallel identical queries)
+ * 3. Graceful fallback on network timeout or HTTP 429
+ *
+ * @param {number} lat
+ * @param {number} lng
+ * @param {object} [opts]
+ * @param {string} [opts.lang='en']
+ * @param {AbortSignal} [opts.signal]
+ * @param {number} [opts.timeoutMs=6000]
+ * @param {(s:string)=>string} [opts.sanitize]
+ * @param {string} [opts.describeFallback]
+ * @param {Function} [opts.fetchFn] - customizable fetch for tests
+ * @returns {Promise<{ name: string, address: object, settlement: string, displayName: string, coarse: object|null, fine: object|null, cached: boolean }>}
+ */
+export async function reverseGeocode(lat, lng, opts = {}) {
+  if (lat == null || lng == null || isNaN(lat) || isNaN(lng)) {
+    return {
+      name: opts.describeFallback || '',
+      address: {},
+      settlement: '',
+      displayName: opts.describeFallback || '',
+      coarse: null,
+      fine: null,
+      cached: false,
+    };
+  }
+
+  const lang = opts.lang || 'en';
+  const key = getCacheKey(lat, lng, lang);
+
+  // 1. Check Cache
+  const cached = getGeocodeCache(lat, lng, lang);
+  if (cached) {
+    return { ...cached, cached: true };
+  }
+
+  // 2. Check In-Flight deduplication
+  if (inFlightRequests.has(key)) {
+    return inFlightRequests.get(key);
+  }
+
+  const fetchFn = opts.fetchFn || globalThis.fetch;
+  const timeoutMs = opts.timeoutMs || 6000;
+
+  const promise = (async () => {
+    const urls = reverseUrls(lat, lng, lang);
+    const controller = new AbortController();
+    let timeoutId = null;
+
+    if (opts.signal) {
+      if (opts.signal.aborted) {
+        controller.abort();
+      } else {
+        opts.signal.addEventListener('abort', () => controller.abort(), { once: true });
+      }
+    }
+
+    if (timeoutMs > 0) {
+      timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+    }
+
+    const safeFetch = async (url) => {
+      try {
+        const res = await fetchFn(url, { signal: controller.signal });
+        if (res && res.ok) {
+          return await res.json();
+        }
+      } catch (_) {}
+      return null;
+    };
+
+    try {
+      // Coarse first (zoom 14 gives settlement identity)
+      const coarse = await safeFetch(urls.coarse);
+      let fine = null;
+      if (!controller.signal.aborted) {
+        fine = await safeFetch(urls.fine);
+      }
+
+      if (timeoutId) clearTimeout(timeoutId);
+
+      const labeled = labelFromReverse(coarse, fine, {
+        sanitize: opts.sanitize,
+        describeFallback: opts.describeFallback,
+        fallback: opts.describeFallback,
+      });
+
+      const displayName = fine?.display_name || coarse?.display_name || labeled.name;
+
+      const result = {
+        name: labeled.name,
+        address: labeled.address || {},
+        settlement: labeled.settlement || '',
+        displayName: displayName || labeled.name,
+        coarse: coarse || null,
+        fine: fine || null,
+        cached: false,
+      };
+
+      if (coarse || fine) {
+        persistGeocodeCache(key, {
+          name: result.name,
+          address: result.address,
+          settlement: result.settlement,
+          displayName: result.displayName,
+        });
+      }
+
+      return result;
+    } catch (_) {
+      return {
+        name: opts.describeFallback || `${Number(lat).toFixed(4)}, ${Number(lng).toFixed(4)}`,
+        address: {},
+        settlement: '',
+        displayName: opts.describeFallback || '',
+        coarse: null,
+        fine: null,
+        cached: false,
+      };
+    } finally {
+      if (timeoutId) clearTimeout(timeoutId);
+      inFlightRequests.delete(key);
+    }
+  })();
+
+  inFlightRequests.set(key, promise);
+  return promise;
+}

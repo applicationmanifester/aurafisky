@@ -78,4 +78,31 @@ describe('Celestial Astronomy Engine', () => {
     expect(calculateCelestialSky(null, 78.13)).toBeNull();
     expect(calculateCelestialSky(NaN, 78.13)).toBeNull();
   });
+
+  it('renders moon SVG path correctly for all lunar phases without collapsing to dark', async () => {
+    const { getMoonSvgPath } = await import('../features/astronomy.js');
+    expect(getMoonSvgPath(0.01)).toBe(''); // New moon (dark)
+    expect(getMoonSvgPath(0.99)).toBe(''); // New moon (dark)
+
+    // Full moon (0.50)
+    const full = getMoonSvgPath(0.50);
+    expect(full).toContain('M 20 2 A 18 18 0 0 1 20 38 A 18 18 0 0 1 20 2');
+
+    // Waning Gibbous right after full moon (p = 0.54)
+    const waningGibbous = getMoonSvgPath(0.54);
+    expect(waningGibbous).not.toBe('');
+    // Terminator must sweep=0 (counter-clockwise across right side) to enclose the filled gibbous moon
+    expect(waningGibbous).toContain('A 18 18 0 0 0 20 38');
+    expect(waningGibbous).toMatch(/A \d+\.\d+ 18 0 0 0 20 2$/);
+
+    // Third Quarter (p = 0.75)
+    const thirdQuarter = getMoonSvgPath(0.75);
+    expect(thirdQuarter).not.toBe('');
+    expect(thirdQuarter).toContain('A 18 18 0 0 0 20 38');
+
+    // Waning Crescent (p = 0.85)
+    const waningCrescent = getMoonSvgPath(0.85);
+    expect(waningCrescent).not.toBe('');
+    expect(waningCrescent).toMatch(/A \d+\.\d+ 18 0 0 1 20 2$/);
+  });
 });

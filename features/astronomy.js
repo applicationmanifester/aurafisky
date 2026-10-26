@@ -460,9 +460,9 @@ function getMoonSvgPath(p, cx = 20, cy = 20, r = 18) {
       const sweep = rx < 0 ? 1 : 0;
       return `M ${cx} ${topY} A ${r} ${r} 0 0 1 ${cx} ${botY} A ${Math.abs(rx).toFixed(2)} ${r} 0 0 ${sweep} ${cx} ${topY}`;
     } else {
-      // Lit on the left side
+      // Lit on the left side (waning)
       const rx = r - 4 * r * (p - 0.5);
-      const sweep = rx < 0 ? 0 : 1;
+      const sweep = rx < 0 ? 1 : 0;
       return `M ${cx} ${topY} A ${r} ${r} 0 0 0 ${cx} ${botY} A ${Math.abs(rx).toFixed(2)} ${r} 0 0 ${sweep} ${cx} ${topY}`;
     }
   }
@@ -475,3 +475,5 @@ export function init(app) {
   app._nextSunEvent = _nextSunEvent;
   app._renderMoonPhase = _renderMoonPhase;
 }
+
+export { getMoonSvgPath };

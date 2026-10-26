@@ -600,6 +600,7 @@ html, body {
 /* ── Weather Panel Minimized State ─────────────────────────── */
 .weather-panel.minimized #weatherPanelContent,
 .weather-panel.minimized #weatherPanelSkeleton,
+.weather-panel.minimized #weatherPanelError,
 .weather-panel.minimized #weatherPanelTabs {
   display: none !important;
 }

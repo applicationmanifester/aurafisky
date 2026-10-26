@@ -15,6 +15,9 @@ import {
   calculateRelativeWind,
   solve2OptTSP,
   generateAuraCopilotBriefing,
+  getRouteFeatureStyle,
+  getRouteGlowFeatureStyle,
+  updateRouteSegmentColors,
 } from "../features/routes.js";
 
 test("formatRouteDistance correctly formats metric and imperial values", () => {
@@ -361,6 +364,35 @@ test("Driving and flight durations in analytics are calculated separately", () =
   // Flight includes 30 min takeoff/climb + 800km/h cruise; drive is 80 km/h
   // Ensure they are not arbitrarily forced equal
   expect(driveSec).not.toEqual(flightSec);
+});
+
+test("getRouteFeatureStyle and getRouteGlowFeatureStyle dynamically color code routes based on weather hazards", () => {
+  const mockFeature = (level) => ({
+    get: (key) => (key === "hazardLevel" ? level : null),
+  });
+
+  // Clear conditions -> Emerald Green (#10b981)
+  const clearStyle = getRouteFeatureStyle(mockFeature("clear"));
+  expect(clearStyle.getStroke().getColor()).toBe("#10b981");
+
+  // Warning conditions (rain, gusts) -> Amber (#f59e0b)
+  const warningStyle = getRouteFeatureStyle(mockFeature("warning"));
+  expect(warningStyle.getStroke().getColor()).toBe("#f59e0b");
+
+  // Danger conditions (storm, freezing) -> Rose Red (#ef4444)
+  const dangerStyle = getRouteFeatureStyle(mockFeature("danger"));
+  expect(dangerStyle.getStroke().getColor()).toBe("#ef4444");
+
+  // Default prior to weather -> Indigo (#6366f1)
+  const defaultStyle = getRouteFeatureStyle(mockFeature(null));
+  expect(defaultStyle.getStroke().getColor()).toBe("#6366f1");
+
+  // Glow styles also reflect matching danger/warning/clear colors
+  const clearGlow = getRouteGlowFeatureStyle(mockFeature("clear"));
+  expect(clearGlow.getStroke().getColor()).toContain("16, 185, 129");
+
+  const dangerGlow = getRouteGlowFeatureStyle(mockFeature("danger"));
+  expect(dangerGlow.getStroke().getColor()).toContain("239, 68, 68");
 });
 
 

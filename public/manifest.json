@@ -46,6 +46,32 @@
     }
   ],
   "categories": ["weather", "utilities"],
+  "widgets": [
+    {
+      "name": "Current Weather",
+      "short_name": "Weather",
+      "description": "Current live conditions and temperature for your location",
+      "tag": "weather-widget",
+      "template": "widgets/template",
+      "data": "widgets/data",
+      "type": "application/json",
+      "screenshots": [
+        {
+          "src": "/icon-512.png",
+          "sizes": "512x512",
+          "label": "Aurafisky Current Weather Widget"
+        }
+      ],
+      "icons": [
+        {
+          "src": "/icon-192.png",
+          "sizes": "192x192"
+        }
+      ],
+      "auth": false,
+      "update": 1800
+    }
+  ],
   "screenshots": [],
   "prefer_related_applications": false
 }

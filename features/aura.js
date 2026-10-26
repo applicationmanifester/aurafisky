@@ -37,6 +37,7 @@ const INTENT_DEFS = [
   { id: 'help', priority: 90, phrases: ['what can you do', 'what do you do', 'help', 'help me', 'capabilities', 'commands', 'who are you', 'how do you work', 'what do i ask'] },
   { id: 'place', priority: 88, phrases: ['weather in', 'weather at', 'weather for', 'forecast for', 'how is it in', "what's the weather in"] },
   { id: 'alert', priority: 86, phrases: ['notify me', 'alert me', 'remind me', 'tell me when', 'set an alert', 'warn me', 'let me know when'] },
+  { id: 'departure', priority: 72, phrases: ['best time to leave', 'when should i leave', 'best departure time', 'when to depart', 'safe time to drive', 'leave now or later', 'departure window', 'when can i leave', 'good time to leave'] },
   { id: 'compare', priority: 70, phrases: ['compare', 'versus', ' vs ', 'difference between', 'other city', 'another city'] },
   { id: 'astronomy', priority: 68, phrases: ['sunset', 'sunrise', 'sun set', 'sun rise', 'golden hour', 'blue hour', 'stargazing', 'stars', 'star gazing', 'moon', 'moonlight', 'night sky', 'photography', 'photo', 'photo shoot', 'aurora', 'meteor shower', 'twilight'] },
   { id: 'dailyBriefing', priority: 67, phrases: ['morning briefing', 'daily briefing', 'brief me', 'my briefing', "today's briefing", 'week ahead', 'day ahead'] },
@@ -319,6 +320,20 @@ const RERUNNABLE = new Set([
 // Each entry is a real, already-implemented app capability. `silent` actions
 // skip the confirmation toast (used when the answer already says what happened).
 export const ACTIONS = {
+  routeStudio: {
+    label: 'Route Studio',
+    icon: '🛣️',
+    run: (app) => {
+      if (typeof document !== 'undefined') {
+        const btn = document.getElementById('routePlannerBtn');
+        if (btn) {
+          btn.click();
+          return;
+        }
+      }
+      app?.toggleRoutePlanner?.();
+    },
+  },
   radar: { label: 'Show rain radar', icon: '🌧️', run: (app) => app.toggleRadar?.() },
   isobars: { label: 'Pressure map', icon: '📈', run: (app) => app.toggleIsobars?.() },
   terminator: { label: 'Day/night line', icon: '🌗', run: (app) => app.toggleDayNightTerminator?.() },
@@ -1435,6 +1450,7 @@ export class AuraAssistant {
       case 'hazard': return this._answerHazard(ctx);
       case 'dining': return this._answerDining(ctx);
       case 'plan': return this._answerPlan(ctx);
+      case 'departure': return this._answerDeparture(ctx);
       case 'commute': return this._answerCommute(ctx);
       case 'outdoor': return this._answerOutdoor(ctx);
       case 'forecast': return this._answerForecast(ctx);
@@ -1617,6 +1633,102 @@ export class AuraAssistant {
       note: verdict,
       actions,
       followups: ['Driving conditions right now', 'Best outdoor window today?', 'Plan my day'],
+    };
+  }
+
+  _answerDeparture(ctx) {
+    const f = this._fmt();
+    const { curr, app } = ctx;
+    const hourly = app?.weatherData?.hourly;
+    const idx = ctx.idx || 0;
+    const S = ws();
+
+    // 1. Minute-by-minute nowcast insight if available
+    const nowcast = S?.getPrecipitationNowcast ? S.getPrecipitationNowcast(app?.weatherData, idx) : null;
+
+    // 2. Scan next 6 hours for weather windows
+    const hours = [];
+    const maxLookahead = Math.min(6, (hourly?.time?.length || 0) - idx);
+    let bestHourOffset = 0;
+    let minHazardScore = Infinity;
+
+    for (let offset = 0; offset < maxLookahead; offset++) {
+      const hIdx = idx + offset;
+      const t = hourly?.temperature_2m?.[hIdx] ?? curr.temperature ?? 20;
+      const p = hourly?.precipitation?.[hIdx] ?? 0;
+      const prob = hourly?.precipitation_probability?.[hIdx] ?? (p > 0.05 ? 80 : 0);
+      const wind = hourly?.wind_speed_10m?.[hIdx] ?? curr.windSpeed ?? 0;
+      const gusts = hourly?.wind_gusts_10m?.[hIdx] ?? wind;
+      const vis = hourly?.visibility?.[hIdx] ?? 10000;
+
+      // Hazard score: lower is safer
+      let score = prob * 0.5 + p * 15 + Math.max(0, wind - 30) * 1.5 + Math.max(0, gusts - 40) * 2;
+      if (t <= 1.5 && (p > 0.05 || prob >= 30)) score += 50; // ice risk
+      if (vis < 2000) score += 30; // fog
+
+      hours.push({ offset, time: hourly?.time?.[hIdx], t, p, prob, wind, gusts, vis, score });
+      if (score < minHazardScore) {
+        minHazardScore = score;
+        bestHourOffset = offset;
+      }
+    }
+
+    const bullets = [];
+    let recommendation = "";
+    let tone = "good";
+
+    if (nowcast && nowcast.hasPrecipitation) {
+      bullets.push({ k: 'Live Nowcast', v: `${nowcast.icon} ${nowcast.summary}`, tone: nowcast.isRainingNow ? 'warn' : 'info' });
+      if (nowcast.isRainingNow && nowcast.rainStopMin != null) {
+        recommendation = `Wait ~${nowcast.rainStopMin} min: Rain easing soon for clearer roads.`;
+        tone = "warn";
+      } else if (!nowcast.isRainingNow && nowcast.rainStartMin != null) {
+        recommendation = `Leave now: ~${nowcast.rainStartMin} min of dry weather before rain starts.`;
+        tone = "warn";
+      } else {
+        recommendation = `Active precipitation across next 2 hours. Use wipers, headlights, and maintain safe spacing.`;
+        tone = "warn";
+      }
+    } else if (bestHourOffset === 0) {
+      recommendation = `Leave now: Optimal driving conditions right now (${curr.icon} ${f.temp(curr.temperature)}, ${curr.description}).`;
+      tone = "good";
+    } else {
+      const targetTime = hours[bestHourOffset]?.time;
+      const formattedTime = targetTime ? this._fmtHour(targetTime) : `in ${bestHourOffset}h`;
+      recommendation = `Best window is around ${formattedTime} when rain risk is lowest (${hours[bestHourOffset]?.prob ?? 0}%).`;
+      tone = "info";
+    }
+
+    bullets.push({ k: 'Departure advice', v: recommendation, tone });
+
+    if (hours.length > 1) {
+      const summaryList = hours.slice(0, 4).map((h) => {
+        const timeLabel = h.offset === 0 ? 'Now' : `+${h.offset}h`;
+        return `${timeLabel}: ${h.prob}% rain, ${f.wind(h.wind)}`;
+      }).join(' · ');
+      bullets.push({ k: 'Next 4 hours', v: summaryList });
+    }
+
+    const currIcy = (curr.temperature ?? 10) <= 1.5 && (curr.precipitation ?? 0) > 0.05;
+    const currFog = (curr.visibility ?? 10000) < 2000;
+    if (currIcy) {
+      bullets.push({ k: 'Hazard', v: 'Freezing road surface — watch for black ice on bridges.', tone: 'warn' });
+    } else if (currFog) {
+      bullets.push({ k: 'Hazard', v: 'Low visibility mist/fog — keep low beams on.', tone: 'warn' });
+    }
+
+    return {
+      icon: '🚗',
+      tone,
+      title: `Best time to leave · ${ctx.loc}`,
+      bullets,
+      note: recommendation,
+      actions: [
+        { id: 'routeStudio', label: 'Route Studio', icon: '🛣️' },
+        { id: 'radar', label: 'View Radar', icon: '🌧️' },
+        { id: 'nextRain', label: 'Jump to Next Rain', icon: '⏭️' },
+      ],
+      followups: ['Commute & road weather', 'Will it rain today?', 'Is visibility okay?'],
     };
   }
 

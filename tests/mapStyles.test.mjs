@@ -120,5 +120,19 @@ describe("Map Modes & Terrain Styles", () => {
     expect(appJs).toMatch(/oceanBasemap\s*=\s*new LayerGroup\(\{[\s\S]*?maxZoom:\s*10/);
     expect(appJs).toMatch(/natGeoBasemap\s*=\s*new LayerGroup\(\{[\s\S]*?maxZoom:\s*12/);
   });
+
+  test("app.js synchronizes dark mode so only 'dark' map mode activates dark mode and others switch to light", () => {
+    const fs = require("fs");
+    const appJs = fs.readFileSync("app.js", "utf-8");
+
+    // setMapStyle synchronization
+    expect(appJs).toContain('if (style === "dark") {');
+    expect(appJs).toContain('document.documentElement.classList.add("dark");');
+    expect(appJs).toContain('document.documentElement.classList.remove("dark");');
+    expect(appJs).toContain('document.documentElement.removeAttribute("data-theme");');
+
+    // Startup check verifies aurafisky_map_style
+    expect(appJs).toContain('savedMapStyle === "dark"');
+  });
 });
 

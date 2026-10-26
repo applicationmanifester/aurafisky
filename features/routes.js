@@ -1092,6 +1092,76 @@ function onKeyDown(e) {
 //  MAP VECTOR LAYERS & WAYPOINT MARKERS
 // ============================================================================
 
+export function getRouteFeatureStyle(feature) {
+  const hazard = feature?.get ? (feature.get("hazardLevel") || "default") : "default";
+  let color = "#6366f1"; // Indigo default
+  if (hazard === "danger") {
+    color = "#ef4444"; // Rose for severe hazards (freezing, storm, gale)
+  } else if (hazard === "warning") {
+    color = "#f59e0b"; // Amber for caution (heavy rain, high wind)
+  } else if (hazard === "clear") {
+    color = "#10b981"; // Emerald for clear, safe travel conditions
+  }
+  return new Style({
+    stroke: new Stroke({
+      color,
+      width: 4.5,
+      lineCap: "round",
+      lineJoin: "round",
+    }),
+  });
+}
+
+export function getRouteGlowFeatureStyle(feature) {
+  const hazard = feature?.get ? (feature.get("hazardLevel") || "default") : "default";
+  let color = "rgba(99, 102, 241, 0.35)";
+  if (hazard === "danger") {
+    color = "rgba(239, 68, 68, 0.4)";
+  } else if (hazard === "warning") {
+    color = "rgba(245, 158, 11, 0.4)";
+  } else if (hazard === "clear") {
+    color = "rgba(16, 185, 129, 0.35)";
+  }
+  return new Style({
+    stroke: new Stroke({
+      color,
+      width: 9,
+      lineCap: "round",
+      lineJoin: "round",
+    }),
+  });
+}
+
+export function updateRouteSegmentColors(stops) {
+  if (!routeSource) return;
+  const features = routeSource.getFeatures();
+  if (!features.length) return;
+
+  const hasDanger = stops?.some((s) => s.hazards?.some((h) => h.severity === "danger"));
+  const hasWarning = stops?.some((s) => s.hazards?.some((h) => h.severity === "warning"));
+  const overallLevel = hasDanger ? "danger" : hasWarning ? "warning" : "clear";
+
+  features.forEach((feat) => {
+    feat.set("hazardLevel", overallLevel);
+  });
+  routeSource.changed();
+
+  const badgeEl = hudEl ? hudEl.querySelector("#routeHudWeatherBadge") : document.getElementById("routeHudWeatherBadge");
+  if (badgeEl) {
+    badgeEl.classList.remove("hidden");
+    if (overallLevel === "danger") {
+      badgeEl.className = "px-2 py-0.5 rounded-full text-[10px] font-bold bg-rose-500/15 text-rose-600 dark:text-rose-400 border border-rose-500/30 animate-pulse select-none";
+      badgeEl.textContent = "🔴 Severe Weather";
+    } else if (overallLevel === "warning") {
+      badgeEl.className = "px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-500/15 text-amber-600 dark:text-amber-400 border border-amber-500/30 select-none";
+      badgeEl.textContent = "🟡 Weather Caution";
+    } else {
+      badgeEl.className = "px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30 select-none";
+      badgeEl.textContent = "🟢 Clear Route";
+    }
+  }
+}
+
 function ensureRouteLayers() {
   if (routeLayer) return;
 
@@ -1099,27 +1169,13 @@ function ensureRouteLayers() {
 
   routeGlowLayer = new VectorLayer({
     source: routeSource,
-    style: new Style({
-      stroke: new Stroke({
-        color: "rgba(99, 102, 241, 0.35)",
-        width: 8,
-        lineCap: "round",
-        lineJoin: "round",
-      }),
-    }),
+    style: (feature) => getRouteGlowFeatureStyle(feature),
     zIndex: 399,
   });
 
   routeLayer = new VectorLayer({
     source: routeSource,
-    style: new Style({
-      stroke: new Stroke({
-        color: "#6366f1",
-        width: 4,
-        lineCap: "round",
-        lineJoin: "round",
-      }),
-    }),
+    style: (feature) => getRouteFeatureStyle(feature),
     zIndex: 400,
   });
 
@@ -1228,7 +1284,7 @@ function renderWaypointMarkers() {
 async function resolvePointName(pt) {
   try {
     const url = `https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${pt.lat}&lon=${pt.lng}&zoom=14`;
-    const res = await fetch(url, { headers: { "User-Agent": "Aurafisky/16.0.0", Accept: "application/json" } });
+    const res = await fetch(url, { headers: { "User-Agent": "Aurafisky/17.0.0", Accept: "application/json" } });
     if (!res.ok) return;
     const data = await res.json();
     const city =
@@ -1285,7 +1341,7 @@ async function searchPlacesForRoute(query) {
 
   try {
     const url = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(q)}&format=json&limit=5&addressdetails=1`;
-    const res = await fetch(url, { headers: { "User-Agent": "Aurafisky/16.0.0", Accept: "application/json" } });
+    const res = await fetch(url, { headers: { "User-Agent": "Aurafisky/17.0.0", Accept: "application/json" } });
     if (res.ok) {
       const list = await res.json();
       return list.map((item) => ({
@@ -1762,6 +1818,8 @@ export function clearRoute() {
   if (bodyEl) renderEmptyRoutePanel();
   const panelStopsCountEl = document.getElementById("routePanelStopsCount") || panelEl?.querySelector("#routePanelStopsCount");
   if (panelStopsCountEl) panelStopsCountEl.textContent = "0";
+  const badgeEl = hudEl ? hudEl.querySelector("#routeHudWeatherBadge") : document.getElementById("routeHudWeatherBadge");
+  if (badgeEl) badgeEl.classList.add("hidden");
   if (appRef) appRef.showToast("Route cleared", "info");
 }
 
@@ -1795,6 +1853,7 @@ function buildHUD() {
       <div id="routeHudStatus" class="text-xs font-semibold text-slate-800 dark:text-slate-100 truncate max-w-[110px] sm:max-w-[200px]">
         Tap map to add start
       </div>
+      <span id="routeHudWeatherBadge" class="hidden select-none"></span>
     </div>
 
     <!-- Divider -->
@@ -2724,6 +2783,7 @@ function renderRoutePanelContent(stops, units) {
   if (!bodyEl) return;
 
   lastLoadedStops = stops;
+  updateRouteSegmentColors(stops);
 
   const totalDistanceM = activeRouteData?.distanceM || 0;
   const totalDurationS = activeRouteData?.durationS || 0;

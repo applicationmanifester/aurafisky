@@ -264,6 +264,15 @@ const WeatherService = (() => {
                 ]
               : []),
           ].join(","),
+          ...(extended
+            ? {
+                minutely_15: [
+                  "precipitation",
+                  "precipitation_probability",
+                  "weather_code",
+                ].join(","),
+              }
+            : {}),
           timezone: "auto",
           past_days: PAST_DAYS,
           forecast_days: FORECAST_DAYS,
@@ -2536,9 +2545,274 @@ const WeatherService = (() => {
     return { regime: "transitional", label: "Transitional", icon: "🌥️" };
   }
 
+  /**
+   * Generates a high-precision minute-by-minute precipitation nowcast for the next 1–2 hours.
+   * Utilizes minutely_15 Open-Meteo intervals when available with fallback to hourly resolution.
+   *
+   * @param {Object} data - Full Open-Meteo API response
+   * @param {number} [currentHourIndex=0]
+   * @returns {Object|null}
+   */
+  function getPrecipitationNowcast(data, currentHourIndex = 0) {
+    if (!data) return null;
+
+    const hourly = data.hourly;
+    const offset = data.utc_offset_seconds || 0;
+    const targetHourStr = hourly?.time?.[currentHourIndex];
+    const h0 = Math.max(0, hourly?.precipitation?.[currentHourIndex] || 0);
+    const h1 = Math.max(0, hourly?.precipitation?.[currentHourIndex + 1] || 0);
+    const h2 = Math.max(0, hourly?.precipitation?.[currentHourIndex + 2] || 0);
+    const hCode = hourly?.weather_code?.[currentHourIndex] ?? 0;
+    const isRainCode = (hCode >= 51 && hCode <= 67) || (hCode >= 80 && hCode <= 82) || (hCode >= 95 && hCode <= 99);
+
+    // 1. Minutely 15-minute intervals if provided by API
+    if (data.minutely_15?.time?.length && data.minutely_15?.precipitation?.length) {
+      const times = data.minutely_15.time;
+      const precip = data.minutely_15.precipitation;
+      const probs = data.minutely_15.precipitation_probability || [];
+
+      // Find start index aligned with target hour and timezone
+      let startIdx = -1;
+
+      // Primary: Match by target hour prefix (e.g. "2026-10-26T14")
+      if (targetHourStr) {
+        const prefix = targetHourStr.slice(0, 13);
+        const prefixMatches = [];
+        for (let i = 0; i < times.length; i++) {
+          if (times[i].startsWith(prefix)) {
+            prefixMatches.push(i);
+          }
+        }
+        if (prefixMatches.length > 0) {
+          // If viewing current hour, choose the closest 15-min slot to current location time
+          const nowUtc = Date.now();
+          let closestMatch = prefixMatches[0];
+          let minDiff = Infinity;
+          for (const idx of prefixMatches) {
+            const t = times[idx];
+            const tUtc = t.endsWith("Z") ? new Date(t).getTime() : new Date(t + "Z").getTime() - (offset * 1000);
+            const diff = Math.abs(tUtc - nowUtc);
+            if (diff < minDiff) {
+              minDiff = diff;
+              closestMatch = idx;
+            }
+          }
+          startIdx = closestMatch;
+        }
+      }
+
+      // Fallback: compare UTC timestamps properly (without browser timezone distortion)
+      if (startIdx === -1) {
+        const nowUtc = Date.now();
+        let minDiff = Infinity;
+        for (let i = 0; i < times.length; i++) {
+          const t = times[i];
+          const tUtc = t.endsWith("Z") ? new Date(t).getTime() : new Date(t + "Z").getTime() - (offset * 1000);
+          const diff = Math.abs(tUtc - nowUtc);
+          if (diff < minDiff) {
+            minDiff = diff;
+            startIdx = i;
+          }
+        }
+        if (startIdx === -1) startIdx = 0;
+      }
+
+      // Check if minutely_15 has radar data or is flat 0 while hourly models/weather codes indicate rain
+      let minSum = 0;
+      for (let i = 0; i < 8; i++) {
+        minSum += Math.max(0, precip[startIdx + i] || 0);
+      }
+
+      // If minutely radar data is zero but hourly forecast or rain codes confirm rain/drizzle:
+      const needsHourlyFill = minSum <= 0.05 && (Math.max(h0, h1) > 0.05 || isRainCode);
+
+      const intervals = [];
+      let isRainingNow = false;
+      let rainStartMin = null;
+      let rainStopMin = null;
+      let maxMm = 0;
+
+      for (let i = 0; i < 8; i++) {
+        const idx = startIdx + i;
+        if (idx >= times.length) break;
+
+        let mm = Math.max(0, precip[idx] || 0);
+        let prob = probs[idx] ?? 0;
+
+        if (needsHourlyFill) {
+          // In regions without ground radar, interpolate from verified numerical models
+          const hourlyVal = i < 4 ? h0 : h1;
+          mm = hourlyVal > 0 ? hourlyVal : (isRainCode && i < 4 ? 0.2 : 0);
+          prob = probs[idx] || (i < 4 ? (hourly?.precipitation_probability?.[currentHourIndex] || 80) : (hourly?.precipitation_probability?.[currentHourIndex + 1] || 70));
+        } else if (prob === 0 && mm > 0.05) {
+          prob = 85;
+        }
+
+        const minOffset = i * 15;
+        if (mm > maxMm) maxMm = mm;
+
+        if (i === 0) {
+          isRainingNow = mm > 0.05 || (needsHourlyFill && isRainCode);
+        }
+
+        intervals.push({
+          minute: minOffset,
+          label: minOffset === 0 ? "Now" : `+${minOffset}m`,
+          mm,
+          prob,
+          intensity: mm >= 4 ? "heavy" : mm >= 1.5 ? "moderate" : (mm > 0.05 || (needsHourlyFill && isRainCode)) ? "light" : "none",
+        });
+
+        if (!isRainingNow && rainStartMin === null && mm > 0.05) {
+          rainStartMin = minOffset;
+        }
+        if (isRainingNow && rainStopMin === null && mm <= 0.05 && !needsHourlyFill) {
+          rainStopMin = minOffset;
+        }
+      }
+
+      let summary = "Dry conditions for the next 2 hours";
+      let icon = "☀️";
+      if (isRainingNow) {
+        icon = maxMm >= 3 ? "⛈️" : "🌧️";
+        if (rainStopMin) {
+          summary = `Rain stopping in ~${rainStopMin} min`;
+        } else if (maxMm < 1) {
+          summary = "Light drizzle / rain continuing over the next 2 hours";
+        } else {
+          summary = "Rain continuing over the next 2 hours";
+        }
+      } else if (rainStartMin !== null) {
+        icon = "🌦️";
+        summary = `Precipitation starting in ~${rainStartMin} min`;
+      } else if (needsHourlyFill && isRainCode) {
+        icon = "🌧️";
+        summary = "Light drizzle / rain expected over the next 2 hours";
+      }
+
+      return {
+        hasPrecipitation: isRainingNow || rainStartMin !== null || maxMm > 0.05 || (needsHourlyFill && isRainCode),
+        isRainingNow,
+        rainStartMin,
+        rainStopMin,
+        maxMm,
+        summary,
+        icon,
+        intervals,
+      };
+    }
+
+    // 2. Graceful fallback from hourly data
+    if (!hourly?.time?.length || !hourly.precipitation?.length) return null;
+
+    const hIdx = Math.max(0, Math.min(hourly.time.length - 1, currentHourIndex));
+    const nowP = Math.max(0, hourly.precipitation[hIdx] || (isRainCode ? 0.2 : 0));
+    const next1P = Math.max(0, hourly.precipitation[hIdx + 1] || 0);
+    const next2P = Math.max(0, hourly.precipitation[hIdx + 2] || 0);
+    const maxMm = Math.max(nowP, next1P, next2P);
+
+    const hasPrecip = maxMm > 0.05 || isRainCode;
+    let summary = "Dry conditions for the next 2 hours";
+    let icon = "☀️";
+
+    if (nowP > 0.05 || isRainCode) {
+      icon = nowP >= 3 ? "⛈️" : "🌧️";
+      summary = next1P <= 0.05 && !isRainCode ? "Rain easing within the next hour" : "Rain expected over next 2 hours";
+    } else if (next1P > 0.05) {
+      icon = "🌦️";
+      summary = "Rain expected starting in ~1 hour";
+    } else if (next2P > 0.05) {
+      icon = "🌦️";
+      summary = "Rain possible in ~2 hours";
+    }
+
+    const intervals = [
+      { minute: 0, label: "Now", mm: nowP, prob: hourly.precipitation_probability?.[hIdx] || (nowP > 0 ? 80 : 0), intensity: nowP >= 4 ? "heavy" : nowP >= 1.5 ? "moderate" : nowP > 0.05 ? "light" : "none" },
+      { minute: 30, label: "+30m", mm: (nowP + next1P) / 2, prob: Math.round(((hourly.precipitation_probability?.[hIdx] || 0) + (hourly.precipitation_probability?.[hIdx + 1] || 0)) / 2), intensity: ((nowP + next1P) / 2) > 0.05 ? "light" : "none" },
+      { minute: 60, label: "+60m", mm: next1P, prob: hourly.precipitation_probability?.[hIdx + 1] || (next1P > 0 ? 80 : 0), intensity: next1P >= 4 ? "heavy" : next1P >= 1.5 ? "moderate" : next1P > 0.05 ? "light" : "none" },
+      { minute: 90, label: "+90m", mm: (next1P + next2P) / 2, prob: Math.round(((hourly.precipitation_probability?.[hIdx + 1] || 0) + (hourly.precipitation_probability?.[hIdx + 2] || 0)) / 2), intensity: ((next1P + next2P) / 2) > 0.05 ? "light" : "none" },
+      { minute: 120, label: "+120m", mm: next2P, prob: hourly.precipitation_probability?.[hIdx + 2] || (next2P > 0 ? 80 : 0), intensity: next2P >= 4 ? "heavy" : next2P >= 1.5 ? "moderate" : next2P > 0.05 ? "light" : "none" },
+    ];
+
+    return {
+      hasPrecipitation: hasPrecip,
+      isRainingNow: nowP > 0.05 || isRainCode,
+      rainStartMin: (nowP <= 0.05 && !isRainCode) && next1P > 0.05 ? 60 : null,
+      rainStopMin: (nowP > 0.05 || isRainCode) && next1P <= 0.05 ? 60 : null,
+      maxMm,
+      summary,
+      icon,
+      intervals,
+    };
+  }
+
+  /**
+   * Actionable UV guidance based on WHO global solar UV index.
+   * Provides protection recommendation, skin burn estimates, and badge styling.
+   *
+   * @param {number|null} uv
+   * @returns {{ level: string, advice: string, burnTime: string, color: string, badgeBg: string }}
+   */
+  function getUVGuidance(uv) {
+    if (uv == null || isNaN(uv) || uv < 0) {
+      return {
+        level: "Unknown",
+        advice: "No UV data available",
+        burnTime: "N/A",
+        color: "text-slate-400",
+        badgeBg: "bg-slate-100 dark:bg-slate-800 text-slate-500",
+      };
+    }
+    if (uv < 3) {
+      return {
+        level: "Low",
+        advice: "Minimal sun protection required for normal exposure.",
+        burnTime: "60+ min",
+        color: "text-emerald-500 dark:text-emerald-400",
+        badgeBg: "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20",
+      };
+    }
+    if (uv < 6) {
+      return {
+        level: "Moderate",
+        advice: "Wear sunglasses, hat, and apply SPF 30+ if staying outdoors.",
+        burnTime: "~45 min",
+        color: "text-amber-500 dark:text-amber-400",
+        badgeBg: "bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20",
+      };
+    }
+    if (uv < 8) {
+      return {
+        level: "High",
+        advice: "Protection essential. Seek midday shade, wear UV protection and SPF 30+.",
+        burnTime: "~25-30 min",
+        color: "text-orange-500 dark:text-orange-400",
+        badgeBg: "bg-orange-500/10 text-orange-600 dark:text-orange-400 border border-orange-500/20",
+      };
+    }
+    if (uv < 11) {
+      return {
+        level: "Very High",
+        advice: "Extra protection needed. Avoid midday sun, generously apply SPF 50+.",
+        burnTime: "~15 min",
+        color: "text-rose-500 dark:text-rose-400",
+        badgeBg: "bg-rose-500/10 text-rose-600 dark:text-rose-400 border border-rose-500/20",
+      };
+    }
+    return {
+      level: "Extreme",
+      advice: "Dangerous UV radiation. Stay indoors or in deep shade during daylight hours.",
+      burnTime: "<10 min",
+      color: "text-purple-500 dark:text-purple-400",
+      badgeBg: "bg-purple-500/10 text-purple-600 dark:text-purple-400 border border-purple-500/20",
+    };
+  }
+
   // ── Public API ─────────────────────────────────────────────
   return {
     fetchForecast,
+    getPrecipitationNowcast,
+    getUVGuidance,
     getHourlyAtIndex,
     getCurrentHourIndex,
     getDailyForecast,

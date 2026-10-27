@@ -248,7 +248,7 @@
               <path stroke-linecap="round" stroke-linejoin="round" d="M9 4v4m0 0H5m4 0L4 3m11 1v4m0 0h4m-4 0l5-5M9 20v-4m0 0H5m4 0l-5 5m11-5l5 5m-5-5v4m0-4h4" />
             </svg>
           </button>
-          <button id="panelMinimizeBtn" class="p-1.5 rounded-lg hover:bg-slate-200/70 dark:hover:bg-slate-700/60 transition-colors text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 cursor-pointer" title="Minimize panel" aria-label="Minimize panel">
+          <button id="panelMinimizeBtn" class="sm:hidden p-1.5 rounded-lg hover:bg-slate-200/70 dark:hover:bg-slate-700/60 transition-colors text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 cursor-pointer" title="Minimize panel" aria-label="Minimize panel">
             <svg class="w-4 h-4 transition-transform duration-200" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" aria-hidden="true">
               <path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7" />
             </svg>
@@ -351,6 +351,7 @@
         <button type="button" class="weather-tab-btn px-3 py-1.5 rounded-full text-xs font-semibold whitespace-nowrap transition-all select-none cursor-pointer" data-tab="daily" role="tab" aria-selected="false" aria-controls="weatherTabDaily">7-Day</button>
         <button type="button" class="weather-tab-btn px-3 py-1.5 rounded-full text-xs font-semibold whitespace-nowrap transition-all select-none cursor-pointer" data-tab="metrics" role="tab" aria-selected="false" aria-controls="weatherTabMetrics">Details & AQI</button>
         <button type="button" class="weather-tab-btn px-3 py-1.5 rounded-full text-xs font-semibold whitespace-nowrap transition-all select-none cursor-pointer" data-tab="astronomy" role="tab" aria-selected="false" aria-controls="weatherTabAstronomy">Astronomy</button>
+        <button type="button" class="weather-tab-btn px-3 py-1.5 rounded-full text-xs font-semibold whitespace-nowrap transition-all select-none cursor-pointer" data-tab="farm" role="tab" aria-selected="false" aria-controls="weatherTabFarm">🌾 Farm</button>
       </div>
     </div>
 
@@ -668,6 +669,14 @@
       </div>
 
       <!-- ── TAB 5: ASTRONOMY & CYCLES ───────────────────────── -->
+      <!-- ── TAB 6: FARM MODE ───────────────────────────────── -->
+      <div id="weatherTabFarm" class="weather-tab-panel space-y-4" role="tabpanel" aria-labelledby="tab-farm">
+        <div class="flex flex-col items-center justify-center text-center py-10 gap-2">
+          <div class="text-3xl">🌾</div>
+          <p class="text-xs text-slate-500 dark:text-slate-400 max-w-[260px] leading-relaxed">Loading farm insights for this location…</p>
+        </div>
+      </div>
+
       <div id="weatherTabAstronomy" class="weather-tab-panel space-y-4" role="tabpanel" aria-labelledby="tab-astronomy">
         <!-- Astronomy & Sun/Moon Widget -->
         <div id="astronomySection">

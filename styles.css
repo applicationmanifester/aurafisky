@@ -3486,6 +3486,13 @@ button, a, input, select, textarea, [role="button"] {
   }
 }
 
+/* On desktop/tablets (>= 640px), hide panelMinimizeBtn so both icons are never present at a time */
+@media (min-width: 640px) {
+  #panelMinimizeBtn {
+    display: none !important;
+  }
+}
+
 /* Wide Mode on Desktop & Tablets (min-width: 640px) */
 @media (min-width: 640px) {
   #weatherPanel.wide-mode {

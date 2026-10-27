@@ -18,12 +18,16 @@ describe('Dedicated Full-Screen / Wide Mode Feature', () => {
     expect(wideBtn.getAttribute('aria-pressed')).toBe('false');
     expect(wideBtn.getAttribute('title')).toContain('Wide / Full-Screen mode');
 
-    // Both expand and compress icons exist
+    // Both expand and compress icons exist with correct arrow directions
     const expandIcon = doc.getElementById('panelExpandWideIcon');
     const compressIcon = doc.getElementById('panelCompressWideIcon');
     expect(expandIcon).not.toBeNull();
     expect(compressIcon).not.toBeNull();
     expect(compressIcon.classList.contains('hidden')).toBe(true);
+    // Expand icon (visible initially when panel is compact/minimized) has outward arrows (M4 8V4...)
+    expect(expandIcon.querySelector('path').getAttribute('d')).toContain('M4 8V4m0 0h4M4 4l5 5');
+    // Compress icon (shown when panel is maximized/wide) has inward arrows (M9 4v4...)
+    expect(compressIcon.querySelector('path').getAttribute('d')).toContain('M9 4v4m0 0H5m4 0L4 3');
 
     // Positioned alongside minimize and close buttons
     const minBtn = doc.getElementById('panelMinimizeBtn');

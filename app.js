@@ -8416,6 +8416,8 @@ class AurafiskyApp {
         "chevron-flipped",
         isMin,
       );
+      this.$.panelMinimizeBtn.setAttribute("title", isMin ? "Expand panel" : "Minimize panel");
+      this.$.panelMinimizeBtn.setAttribute("aria-label", isMin ? "Expand panel" : "Minimize panel");
     }
     if (this.$.mobileNavWeatherBtn && this.$.mobileNavMapBtn) {
       this.$.mobileNavWeatherBtn.classList.toggle("active", !isMin);
@@ -8450,6 +8452,8 @@ class AurafiskyApp {
       this.$.weatherPanel.classList.remove("minimized");
       if (this.$.panelMinimizeBtn) {
         this.$.panelMinimizeBtn.classList.remove("chevron-flipped");
+        this.$.panelMinimizeBtn.setAttribute("title", "Minimize panel");
+        this.$.panelMinimizeBtn.setAttribute("aria-label", "Minimize panel");
       }
       document.body.classList.add("weather-panel-expanded");
 

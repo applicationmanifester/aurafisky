@@ -37,12 +37,14 @@ describe('Dedicated Full-Screen / Wide Mode Feature', () => {
     expect(css).toContain('min-width: 44px;');
   });
 
-  it('defines desktop wide mode rules in styles.css with 2-column layout', () => {
+  it('defines desktop wide mode rules in styles.css with 2-column layout and 7-day panoramic grid', () => {
     expect(css).toContain('#weatherPanel.wide-mode');
     expect(css).toContain('width: 780px !important;');
     expect(css).toContain('#weatherPanel.wide-mode #weatherTabOverview');
     expect(css).toContain('grid-template-columns: minmax(320px, 1fr) minmax(320px, 1fr);');
     expect(css).toContain('#weatherPanel.wide-mode #metricsGrid');
+    expect(css).toContain('#weatherPanel.wide-mode #dailyForecast .daily-forecast-horizontal');
+    expect(css).toContain('grid-template-columns: repeat(7, minmax(0, 1fr)) !important;');
   });
 
   it('handles wide mode toggle, UI state sync, and localStorage in app.js', () => {
@@ -55,10 +57,11 @@ describe('Dedicated Full-Screen / Wide Mode Feature', () => {
     expect(appJs).toContain('localStorage.getItem("aurafisky_weather_wide")');
   });
 
-  it('binds "f" and "Shift+W" shortcuts to toggleWideWeatherPanel in keyboardShortcuts.js', () => {
+  it('binds "f" and "Shift+W" shortcuts, and restores compact mode on Escape in keyboardShortcuts.js', () => {
     expect(shortcutsJs).toContain('case "f":');
     expect(shortcutsJs).toContain('this.toggleWideWeatherPanel?.()');
     expect(shortcutsJs).toContain('case "w":');
+    expect(shortcutsJs).toContain('this.$.weatherPanel.classList.contains("wide-mode")');
   });
 
   it('wires up expandWideBtn and syncs state with mobile bottom sheet in auraMapsMobile.js', () => {

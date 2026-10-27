@@ -27,6 +27,17 @@ function initKeyboardShortcuts() {
         this.toggleMapLayersFlyout(false);
         return;
       }
+      // If weather card is currently expanded in Wide Mode, Escape restores compact width first
+      if (
+        e.key === "Escape" &&
+        this.$.weatherPanel &&
+        this.$.weatherPanel.classList.contains("wide-mode")
+      ) {
+        e.preventDefault();
+        this.toggleWideWeatherPanel?.(false);
+        this._haptic?.('selection');
+        return;
+      }
       switch (e.key.toLowerCase()) {
         case "?":
           e.preventDefault();

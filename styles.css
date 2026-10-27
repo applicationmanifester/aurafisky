@@ -3537,12 +3537,17 @@ button, a, input, select, textarea, [role="button"] {
 
   #weatherPanel.wide-mode #dailyBriefingCard {
     grid-column: 2 !important;
-    grid-row: 1 !important;
+    grid-row: 1 / span 2 !important;
     margin: 0 !important;
   }
 
-  /* Left column components */
-  #weatherPanel.wide-mode #overviewQuickStats,
+  /* Left column components: Quick stats hugs directly under main temp card */
+  #weatherPanel.wide-mode #overviewQuickStats {
+    grid-column: 1 !important;
+    grid-row: 2 !important;
+    margin: 0 !important;
+  }
+
   #weatherPanel.wide-mode #nowcastSection,
   #weatherPanel.wide-mode #advisoryBanner,
   #weatherPanel.wide-mode #paramImportance,
@@ -3551,7 +3556,11 @@ button, a, input, select, textarea, [role="button"] {
   }
 
   /* Right column components */
-  #weatherPanel.wide-mode #todaySummarySection,
+  #weatherPanel.wide-mode #todaySummarySection {
+    grid-column: 2 !important;
+    grid-row: 3 !important;
+  }
+
   #weatherPanel.wide-mode #weatherTabOverview > div:has(#briefingBtn),
   #weatherPanel.wide-mode #predictiveArrival {
     grid-column: 2 !important;

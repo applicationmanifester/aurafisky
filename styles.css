@@ -2345,6 +2345,7 @@ button, a, input, select, textarea, [role="button"] {
   #shareWeatherBtn,
   #setWallpaperBtn,
   #navigateHereBtn,
+  #panelExpandWideBtn,
   #panelMinimizeBtn,
   #panelCloseBtn {
     min-width: 44px;
@@ -2767,6 +2768,7 @@ button, a, input, select, textarea, [role="button"] {
   #navCancelPreviewBtn,
   #navMuteBtn,
   #navStopBtn,
+  #panelExpandWideBtn,
   #panelMinimizeBtn,
   #panelCloseBtn {
     min-width: 44px;
@@ -3415,3 +3417,102 @@ button, a, input, select, textarea, [role="button"] {
     border-radius: 0.75rem !important;
   }
 }
+
+/* ============================================================ */
+/* WEATHER PANEL — DEDICATED FULL-SCREEN / WIDE MODE           */
+/* ============================================================ */
+
+/* Smooth width and layout transitions for weather card */
+#weatherPanel {
+  transition: width 0.3s cubic-bezier(0.16, 1, 0.3, 1),
+              max-height 0.3s cubic-bezier(0.16, 1, 0.3, 1),
+              box-shadow 0.25s ease,
+              border-color 0.25s ease;
+}
+
+#panelExpandWideBtn {
+  cursor: pointer;
+  transition: color 0.15s ease, background-color 0.15s ease, transform 0.15s ease;
+}
+
+#panelExpandWideBtn:hover {
+  transform: scale(1.05);
+}
+
+#panelExpandWideBtn:active {
+  transform: scale(0.95);
+}
+
+#panelExpandWideBtn.active {
+  color: rgb(13, 148, 136) !important;
+  background-color: rgba(13, 148, 136, 0.15) !important;
+}
+
+.dark #panelExpandWideBtn.active {
+  color: rgb(45, 212, 191) !important;
+  background-color: rgba(45, 212, 191, 0.2) !important;
+}
+
+/* Wide Mode on Desktop & Tablets (min-width: 640px) */
+@media (min-width: 640px) {
+  #weatherPanel.wide-mode {
+    width: 780px !important;
+    max-width: calc(100vw - 32px) !important;
+    max-height: calc(100vh - 96px) !important;
+    box-shadow: 0 25px 60px -15px rgba(0, 0, 0, 0.35), 0 0 0 1px rgba(255, 255, 255, 0.18) !important;
+    z-index: 1001 !important;
+  }
+
+  .dark #weatherPanel.wide-mode {
+    box-shadow: 0 25px 60px -15px rgba(0, 0, 0, 0.7), 0 0 0 1px rgba(255, 255, 255, 0.08) !important;
+  }
+
+  /* Two-column responsive grid for Overview Tab */
+  #weatherPanel.wide-mode #weatherTabOverview {
+    display: grid !important;
+    grid-template-columns: minmax(320px, 1fr) minmax(320px, 1fr);
+    column-gap: 1.25rem;
+    row-gap: 1rem;
+    align-items: start;
+  }
+
+  /* Left column components */
+  #weatherPanel.wide-mode #mainTempCard,
+  #weatherPanel.wide-mode #overviewQuickStats,
+  #weatherPanel.wide-mode #nowcastSection,
+  #weatherPanel.wide-mode #advisoryBanner,
+  #weatherPanel.wide-mode #paramImportance,
+  #weatherPanel.wide-mode #spatialGradLabel {
+    grid-column: 1 !important;
+  }
+
+  /* Right column components */
+  #weatherPanel.wide-mode #dailyBriefingCard,
+  #weatherPanel.wide-mode #todaySummarySection,
+  #weatherPanel.wide-mode #weatherTabOverview > div:has(#briefingBtn),
+  #weatherPanel.wide-mode #predictiveArrival {
+    grid-column: 2 !important;
+  }
+
+  /* Full-width spanning components (discoveries carousel) */
+  #weatherPanel.wide-mode #weatherTabOverview > #discoveriesSection {
+    grid-column: 1 / -1;
+  }
+
+  /* Expanded 3-column layout for Details & AQI */
+  #weatherPanel.wide-mode #metricsGrid {
+    grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+  }
+
+  #weatherPanel.wide-mode #aqiCard {
+    grid-column: span 3 / span 3 !important;
+  }
+
+  /* Roomier Astronomy tab in Wide Mode */
+  #weatherPanel.wide-mode #weatherTabAstronomy > div.space-y-4 {
+    display: grid !important;
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+    gap: 1rem !important;
+  }
+}
+

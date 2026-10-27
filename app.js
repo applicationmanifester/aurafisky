@@ -572,6 +572,9 @@ class AurafiskyApp {
       shareTargetTelegram: document.getElementById("shareTargetTelegram"),
       shareTargetX: document.getElementById("shareTargetX"),
       shareTargetCopy: document.getElementById("shareTargetCopy"),
+      panelExpandWideBtn: document.getElementById("panelExpandWideBtn"),
+      panelExpandWideIcon: document.getElementById("panelExpandWideIcon"),
+      panelCompressWideIcon: document.getElementById("panelCompressWideIcon"),
       panelMinimizeBtn: document.getElementById("panelMinimizeBtn"),
       setWallpaperBtn: document.getElementById("setWallpaperBtn"),
       wallpaperOutlineIcon: document.getElementById("wallpaperOutlineIcon"),
@@ -2032,6 +2035,10 @@ class AurafiskyApp {
       this.hideWeatherPanel();
       this._haptic('selection');
     });
+    this.$.panelExpandWideBtn?.addEventListener("click", () => {
+      this.toggleWideWeatherPanel();
+      this._haptic('selection');
+    });
     this.$.panelMinimizeBtn?.addEventListener("click", () => {
       this.toggleMinimizeWeatherPanel();
       this._haptic('selection');
@@ -3132,6 +3139,14 @@ class AurafiskyApp {
 
     // Initialize desktop panel dragging & position persistence
     this.initDesktopPanelDragging();
+
+    // Restore saved wide mode preference on desktop
+    try {
+      const savedWide = localStorage.getItem("aurafisky_weather_wide");
+      if (savedWide === "true" && !isMobileLayout()) {
+        this.toggleWideWeatherPanel(true);
+      }
+    } catch (_) {}
 
     // ── Haptic feedback helper ─────────────────────────────────────
     this._haptic = (type = 'light') => {
@@ -8257,9 +8272,11 @@ class AurafiskyApp {
       this.$.weatherPanel.style.maxHeight = '';
       this.$.weatherPanel.style.transform = '';
       this.$.weatherPanel.style.opacity = '';
-      this.$.weatherPanel.style.pointerEvents = '';
       this.$.weatherPanel.classList.remove("sheet-peek", "sheet-half", "sheet-full", "google-maps-sheet");
       this._restoreDesktopPanelPosition();
+      const isWidePref = localStorage.getItem("aurafisky_weather_wide") === "true";
+      this.$.weatherPanel.classList.toggle("wide-mode", isWidePref);
+      this.updateWideButtonState(isWidePref);
     } else {
       this.$.weatherPanel.classList.add("open", "sheet-full", "aura-sheet", "google-maps-sheet");
       this.$.weatherPanel.style.height = '100dvh';
@@ -8397,6 +8414,67 @@ class AurafiskyApp {
       this.$.mobileNavMapBtn.classList.toggle("active", isMin);
     }
     this.syncMobileBottomNavState();
+  }
+
+  /**
+   * Toggles dedicated Full-Screen / Wide Mode for the weather panel.
+   * On desktop: expands card to wide 2-column layout (780px) and persists preference.
+   * On mobile: snaps between full-screen sheet and peek mode.
+   */
+  toggleWideWeatherPanel(force) {
+    if (isMobileLayout()) {
+      if (this.googleMapsMobile) {
+        const isFull = this.googleMapsMobile.sheetState === 'full' || this.$.weatherPanel.classList.contains('sheet-full');
+        const targetState = typeof force === 'boolean' ? (force ? 'full' : 'peek') : (isFull ? 'peek' : 'full');
+        this.googleMapsMobile.snapSheet(targetState);
+        this.updateWideButtonState(targetState === 'full');
+      }
+      return;
+    }
+
+    const isCurrentlyWide = this.$.weatherPanel.classList.contains("wide-mode");
+    const becomeWide = typeof force === "boolean" ? force : !isCurrentlyWide;
+
+    this.$.weatherPanel.classList.toggle("wide-mode", becomeWide);
+
+    if (becomeWide) {
+      // Un-minimize if it was minimized
+      this.$.weatherPanel.classList.remove("minimized");
+      if (this.$.panelMinimizeBtn) {
+        this.$.panelMinimizeBtn.classList.remove("chevron-flipped");
+      }
+      document.body.classList.add("weather-panel-expanded");
+
+      // Boundary check: ensure panel stays within visible viewport
+      const rect = this.$.weatherPanel.getBoundingClientRect();
+      if (rect.right > window.innerWidth - 16) {
+        const newLeft = Math.max(16, window.innerWidth - 800);
+        this.$.weatherPanel.style.left = `${newLeft}px`;
+      }
+    }
+
+    this.updateWideButtonState(becomeWide);
+
+    try {
+      localStorage.setItem("aurafisky_weather_wide", becomeWide ? "true" : "false");
+    } catch (_) {}
+  }
+
+  /**
+   * Updates icon, title, aria and active styling of the Dedicated Wide Mode toggle button.
+   */
+  updateWideButtonState(isWide) {
+    if (!this.$.panelExpandWideBtn) return;
+    this.$.panelExpandWideBtn.classList.toggle("active", isWide);
+    this.$.panelExpandWideBtn.setAttribute("aria-pressed", isWide ? "true" : "false");
+    this.$.panelExpandWideBtn.setAttribute("title", isWide ? "Exit wide mode (F or Shift+W)" : "Wide / Full-Screen mode (F or Shift+W)");
+    this.$.panelExpandWideBtn.setAttribute("aria-label", isWide ? "Exit wide mode" : "Wide / Full-Screen mode");
+    if (this.$.panelExpandWideIcon) {
+      this.$.panelExpandWideIcon.classList.toggle("hidden", isWide);
+    }
+    if (this.$.panelCompressWideIcon) {
+      this.$.panelCompressWideIcon.classList.toggle("hidden", !isWide);
+    }
   }
 
   // ================================================================

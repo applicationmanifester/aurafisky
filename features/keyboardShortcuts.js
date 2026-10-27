@@ -70,7 +70,19 @@ function initKeyboardShortcuts() {
           break;
         case "w":
           e.preventDefault();
-          this.toggleWallpaper?.();
+          if (e.shiftKey) {
+            this.toggleWideWeatherPanel?.();
+          } else {
+            this.toggleWallpaper?.();
+          }
+          break;
+        case "f":
+          e.preventDefault();
+          this.toggleWideWeatherPanel?.();
+          break;
+        case "b":
+          e.preventDefault();
+          this.toggleFavorite?.();
           break;
       }
     });

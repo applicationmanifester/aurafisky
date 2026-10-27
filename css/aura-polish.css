@@ -504,6 +504,7 @@ input[type='range'].timeline-slider:focus-visible {
   #shareWeatherBtn,
   #setWallpaperBtn,
   #navigateHereBtn,
+  #panelExpandWideBtn,
   #panelMinimizeBtn,
   #panelCloseBtn {
     min-width: var(--aura-tap);

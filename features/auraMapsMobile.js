@@ -344,6 +344,7 @@ export class AuraMobileController {
     const dragHandle = document.getElementById('panelDragHandle');
     const closeBtn = document.getElementById('panelCloseBtn');
     const minBtn = document.getElementById('panelMinimizeBtn');
+    const expandWideBtn = document.getElementById('panelExpandWideBtn');
     if (!panel || !dragHandle) return;
 
     // ── CANCEL / CLOSE BUTTON FIX ─────────────────────────────────
@@ -356,6 +357,22 @@ export class AuraMobileController {
       } else {
         this.sheetState = 'dismissed';
         this.app?.hideWeatherPanel?.();
+      }
+    });
+
+    // Dedicated Full-Screen / Wide Mode button: toggle peek <-> full on mobile
+    expandWideBtn?.addEventListener('click', (e) => {
+      if (!isMobileLayout()) {
+        // On desktop, allow normal app.toggleWideWeatherPanel to run
+        return;
+      }
+      e.stopPropagation();
+      e.stopImmediatePropagation();
+      this._haptic('selection');
+      if (this.sheetState === 'full' || panel.classList.contains('sheet-full')) {
+        this.snapSheet('peek');
+      } else {
+        this.snapSheet('full');
       }
     });
 
@@ -384,7 +401,7 @@ export class AuraMobileController {
     expandTargets.forEach(el => {
       el?.addEventListener('click', (e) => {
         if (!isMobileLayout()) return;
-        if (e.target.closest('#panelCloseBtn, #panelMinimizeBtn')) return;
+        if (e.target.closest('#panelCloseBtn, #panelMinimizeBtn, #panelExpandWideBtn')) return;
         if (this.sheetState === 'peek' || panel.classList.contains('sheet-peek') || panel.classList.contains('minimized')) {
           e.stopPropagation();
           this._haptic('selection');
@@ -397,7 +414,7 @@ export class AuraMobileController {
     const panelHeader = document.getElementById('weatherPanelHeader');
     panelHeader?.addEventListener('click', (e) => {
       if (!isMobileLayout()) return;
-      if (e.target.closest('#panelCloseBtn, #panelMinimizeBtn, button, a')) return;
+      if (e.target.closest('#panelCloseBtn, #panelMinimizeBtn, #panelExpandWideBtn, button, a')) return;
       if (this.sheetState === 'peek' || panel.classList.contains('sheet-peek') || panel.classList.contains('minimized')) {
         this._haptic('selection');
         this.snapSheet('full');
@@ -595,6 +612,7 @@ export class AuraMobileController {
       minBtn?.classList.add('chevron-flipped');
       minBtn?.setAttribute('title', 'Expand weather details');
       minBtn?.setAttribute('aria-label', 'Expand weather details');
+      this.app?.updateWideButtonState?.(false);
     } else {
       // 'full' or any expanded state: completely overlap screen on mobile
       panel.style.height = '100dvh';
@@ -609,6 +627,7 @@ export class AuraMobileController {
       minBtn?.classList.remove('chevron-flipped');
       minBtn?.setAttribute('title', 'Minimize weather panel');
       minBtn?.setAttribute('aria-label', 'Minimize weather panel');
+      this.app?.updateWideButtonState?.(true);
     }
 
     this._haptic('selection');

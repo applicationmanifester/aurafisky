@@ -1722,6 +1722,20 @@ input[type='range'].timeline-slider::-moz-range-thumb {
   scroll-snap-align: start;
 }
 
+#dailyOutlookHighlights {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.6rem;
+  margin-top: 1rem;
+  padding-top: 0.85rem;
+  border-top: 1px solid rgba(226, 232, 240, 0.6);
+  width: 100%;
+}
+
+.dark #dailyOutlookHighlights {
+  border-top-color: rgba(51, 65, 85, 0.6);
+}
+
 /* ── Temporal Compression Grid ─────────────────────────────── */
 .temporal-grid {
   display: grid;
@@ -3554,12 +3568,14 @@ button, a, input, select, textarea, [role="button"] {
   }
 
   /* 7-Day Forecast: Panoramic 7-column grid in Wide Mode without horizontal scrolling */
+  #weatherPanel.wide-mode #dailyForecast,
   #weatherPanel.wide-mode #dailyForecast .daily-forecast-horizontal {
     display: grid !important;
     grid-template-columns: repeat(7, minmax(0, 1fr)) !important;
     gap: 0.45rem !important;
     overflow-x: hidden !important;
     padding-bottom: 0.5rem !important;
+    width: 100% !important;
   }
 
   #weatherPanel.wide-mode #dailyForecast .daily-card-horizontal {
@@ -3568,6 +3584,15 @@ button, a, input, select, textarea, [role="button"] {
     width: 100% !important;
     padding: 0.85rem 0.35rem !important;
     border-radius: 0.85rem !important;
+  }
+
+  #weatherPanel.wide-mode #dailyOutlookHighlights {
+    display: grid !important;
+    grid-template-columns: repeat(4, minmax(0, 1fr)) !important;
+    gap: 0.75rem !important;
+    margin-top: 1.25rem !important;
+    padding-top: 1rem !important;
+    width: 100% !important;
   }
 
   #weatherPanel.wide-mode #dailySection span:has(span) {

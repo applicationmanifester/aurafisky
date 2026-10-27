@@ -35,6 +35,7 @@ export function init(app) {
 function ensureSection() {
   if (document.getElementById("ensembleSection")) return;
   const content = document.getElementById("weatherPanelContent");
+  const dailyTab = document.getElementById("weatherTabDaily");
   const anchor = document.getElementById("dailyForecast");
   const sec = document.createElement("div");
   sec.id = "ensembleSection";
@@ -42,7 +43,9 @@ function ensureSection() {
   sec.innerHTML =
     '<h4 class="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-2">Model Ensemble</h4>' +
     '<div id="ensembleBody" class="text-xs text-slate-500 dark:text-slate-400">Select a location to compare forecast models.</div>';
-  if (anchor && anchor.parentNode)
+  if (dailyTab)
+    dailyTab.appendChild(sec);
+  else if (anchor && anchor.parentNode)
     anchor.parentNode.appendChild(sec);
   else if (content) content.appendChild(sec);
 }

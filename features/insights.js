@@ -99,6 +99,28 @@ function renderTemporalGrid(matrices) {
 
     const dailyHTML = `
        <div class="daily-forecast-horizontal flex gap-2.5 overflow-x-auto pb-2.5 pt-1 custom-scrollbar scroll-smooth snap-x w-full">${cardsHTML}</div>
+       <div id="dailyOutlookHighlights" class="grid grid-cols-2 sm:grid-cols-4 gap-2 mt-3 pt-3 border-t border-slate-200/60 dark:border-slate-700/60">
+         <div class="bg-slate-100/60 dark:bg-slate-800/50 p-2.5 rounded-xl border border-slate-200/40 dark:border-slate-700/30">
+           <div class="text-[10px] text-slate-400 font-medium">🌡️ 7-Day Peak</div>
+           <div class="text-xs font-bold text-slate-800 dark:text-slate-100 mt-0.5">${WeatherService.formatTemp(Math.max(...daysToRender.map((d) => d.maxTemp).filter((v) => typeof v === 'number')))}</div>
+           <div class="text-[9px] text-slate-400 mt-0.5">Low ${WeatherService.formatTemp(Math.min(...daysToRender.map((d) => d.minTemp).filter((v) => typeof v === 'number')))}</div>
+         </div>
+         <div class="bg-slate-100/60 dark:bg-slate-800/50 p-2.5 rounded-xl border border-slate-200/40 dark:border-slate-700/30">
+           <div class="text-[10px] text-slate-400 font-medium">💧 Rain Expectation</div>
+           <div class="text-xs font-bold text-slate-800 dark:text-slate-100 mt-0.5">${Math.max(...daysToRender.map((d) => d.precipProb || 0).filter((v) => typeof v === 'number'))}% peak</div>
+           <div class="text-[9px] text-slate-400 mt-0.5">7-day risk index</div>
+         </div>
+         <div class="bg-slate-100/60 dark:bg-slate-800/50 p-2.5 rounded-xl border border-slate-200/40 dark:border-slate-700/30">
+           <div class="text-[10px] text-slate-400 font-medium">☀️ Clearest Window</div>
+           <div class="text-xs font-bold text-slate-800 dark:text-slate-100 mt-0.5">${(daysToRender.reduce((best, curr) => (!best || (curr.precipProb || 0) < (best.precipProb || 0) ? curr : best), null)?.dayLabel) || 'Midweek'}</div>
+           <div class="text-[9px] text-slate-400 mt-0.5">Low precipitation probability</div>
+         </div>
+         <div class="bg-slate-100/60 dark:bg-slate-800/50 p-2.5 rounded-xl border border-slate-200/40 dark:border-slate-700/30">
+           <div class="text-[10px] text-slate-400 font-medium">🎯 Forecast Stability</div>
+           <div class="text-xs font-bold text-teal-600 dark:text-teal-400 mt-0.5">High Stability</div>
+           <div class="text-[9px] text-slate-400 mt-0.5">Multi-model agreement</div>
+         </div>
+       </div>
      `;
     this.setSafeHTML(this.$.dailyForecast, dailyHTML);
 

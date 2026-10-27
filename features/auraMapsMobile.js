@@ -20,6 +20,7 @@ export class AuraMobileController {
     this.currentLocationName = '';
     this.placesData = this._getInitialWeatherUseCases('Devanahalli', 23, 'rain');
     this.activeCategory = null;
+    this.discoveriesExpanded = false;
 
     if (typeof document !== 'undefined') {
       if (document.readyState === 'loading') {
@@ -693,11 +694,22 @@ export class AuraMobileController {
   initDiscoveriesCarousel() {
     this.renderPlaces();
     const exploreBtn = document.getElementById('discoveriesExploreAllBtn');
-    exploreBtn?.addEventListener('click', () => {
+    exploreBtn?.addEventListener('click', (e) => {
+      e?.stopPropagation?.();
       this._haptic('light');
-      this.filterPlaces('all');
-      const allChips = document.querySelectorAll('.mobile-quick-chip');
-      allChips.forEach(c => c.classList.remove('active'));
+      if (this.activeCategory && this.activeCategory !== 'all') {
+        this.activeCategory = null;
+        const allChips = document.querySelectorAll('.mobile-quick-chip');
+        allChips.forEach(c => c.classList.remove('active'));
+        this.filterPlaces('all');
+        this.discoveriesExpanded = true;
+      } else {
+        this.discoveriesExpanded = !this.discoveriesExpanded;
+      }
+      this.renderPlaces();
+      if (!this.discoveriesExpanded) {
+        document.getElementById('discoveriesSection')?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+      }
     });
   }
 
@@ -992,8 +1004,27 @@ export class AuraMobileController {
     const container = document.getElementById('discoveriesCarousel');
     if (!container) return;
 
-    container.innerHTML = this.placesData.map(place => `
-      <div class="weather-usecase-card flex-shrink-0 w-[290px] sm:w-[320px] bg-white dark:bg-[#1e1f23] rounded-3xl overflow-hidden border border-slate-200/80 dark:border-slate-800/80 shadow-md flex flex-col snap-start select-none transition-all hover:shadow-lg">
+    const total = this.placesData?.length || 0;
+    const btn = document.getElementById('discoveriesExploreAllBtn');
+    const isExpanded = !!this.discoveriesExpanded;
+
+    if (btn) {
+      if (total <= 1) {
+        btn.classList.add('hidden');
+      } else {
+        btn.classList.remove('hidden');
+        btn.innerHTML = isExpanded
+          ? `<span>Show Less</span> <span aria-hidden="true">↑</span>`
+          : `<span>Show All (${total})</span> <span aria-hidden="true">↓</span>`;
+        btn.setAttribute('aria-expanded', isExpanded ? 'true' : 'false');
+        btn.setAttribute('title', isExpanded ? 'Collapse weather intelligence cards' : `Show all ${total} weather intelligence cards`);
+      }
+    }
+
+    const cardsHTML = this.placesData.map((place, idx) => {
+      const isHidden = !isExpanded && idx >= 1;
+      return `
+      <div class="weather-usecase-card flex-shrink-0 w-[290px] sm:w-[320px] bg-white dark:bg-[#1e1f23] rounded-3xl overflow-hidden border border-slate-200/80 dark:border-slate-800/80 shadow-md flex flex-col snap-start select-none transition-all hover:shadow-lg ${isHidden ? 'hidden' : ''}" data-index="${idx}">
         <div class="relative h-40 w-full overflow-hidden bg-slate-900">
           ${place.imageSvg}
           <div class="absolute top-3 left-3 px-2.5 py-1 rounded-full bg-black/75 backdrop-blur-md border border-white/20 text-white text-[10px] font-bold flex items-center gap-1.5 shadow-sm">
@@ -1037,7 +1068,28 @@ export class AuraMobileController {
           </div>
         </div>
       </div>
-    `).join('');
+    `;
+    }).join('');
+
+    container.innerHTML = cardsHTML;
+
+    if (isExpanded && total > 1) {
+      const bottomCollapse = document.createElement('div');
+      bottomCollapse.className = 'w-full flex justify-center pt-2 pb-1';
+      bottomCollapse.innerHTML = `
+        <button type="button" class="px-4 py-1.5 rounded-full bg-slate-100/90 dark:bg-slate-800/90 hover:bg-slate-200 dark:hover:bg-slate-700 border border-slate-200/60 dark:border-slate-700/60 text-[11px] font-semibold text-teal-600 dark:text-teal-400 transition-all flex items-center gap-1.5 cursor-pointer shadow-xs active:scale-95">
+          <span>Show Less</span> <span aria-hidden="true">↑</span>
+        </button>
+      `;
+      bottomCollapse.querySelector('button')?.addEventListener('click', (e) => {
+        e.stopPropagation();
+        this._haptic('light');
+        this.discoveriesExpanded = false;
+        this.renderPlaces();
+        document.getElementById('discoveriesSection')?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+      });
+      container.appendChild(bottomCollapse);
+    }
 
     container.querySelectorAll('.usecase-action-btn').forEach(btn => {
       btn.addEventListener('click', (e) => {

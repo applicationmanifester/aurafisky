@@ -3335,6 +3335,9 @@ button, a, input, select, textarea, [role="button"] {
   max-width: 100% !important;
   flex-shrink: 0 !important;
 }
+#discoveriesCarousel .weather-usecase-card.hidden {
+  display: none !important;
+}
 .aura-place-card,
 .google-place-card {
   scroll-snap-align: start;
@@ -3565,6 +3568,9 @@ button, a, input, select, textarea, [role="button"] {
     min-width: 0 !important;
     max-width: 100% !important;
     flex-shrink: 0 !important;
+  }
+  #discoveriesCarousel .weather-usecase-card.hidden {
+    display: none !important;
   }
 
   /* 7-Day Forecast: Panoramic 7-column grid in Wide Mode without horizontal scrolling */

@@ -3306,13 +3306,20 @@ button, a, input, select, textarea, [role="button"] {
   }
 }
 
-/* Discoveries & Dinner picks carousel */
+/* Discoveries & Live Weather Intelligence: Stacked vertically one below other */
 #discoveriesCarousel {
-  scroll-snap-type: x mandatory;
+  display: flex !important;
+  flex-direction: column !important;
+  gap: 1rem !important;
+  overflow-x: visible !important;
+  width: 100% !important;
   scrollbar-width: none;
 }
-#discoveriesCarousel::-webkit-scrollbar {
-  display: none;
+#discoveriesCarousel .weather-usecase-card {
+  width: 100% !important;
+  min-width: 0 !important;
+  max-width: 100% !important;
+  flex-shrink: 0 !important;
 }
 .aura-place-card,
 .google-place-card {
@@ -3528,6 +3535,22 @@ button, a, input, select, textarea, [role="button"] {
   /* Full-width spanning components (discoveries carousel) */
   #weatherPanel.wide-mode #weatherTabOverview > #discoveriesSection {
     grid-column: 1 / -1;
+  }
+
+  /* Live Weather Intelligence Cards: Stacked one below the other */
+  #discoveriesCarousel {
+    display: flex !important;
+    flex-direction: column !important;
+    gap: 1rem !important;
+    overflow-x: visible !important;
+    width: 100% !important;
+  }
+
+  #discoveriesCarousel .weather-usecase-card {
+    width: 100% !important;
+    min-width: 0 !important;
+    max-width: 100% !important;
+    flex-shrink: 0 !important;
   }
 
   /* 7-Day Forecast: Panoramic 7-column grid in Wide Mode without horizontal scrolling */

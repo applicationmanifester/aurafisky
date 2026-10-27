@@ -3499,24 +3499,22 @@ button, a, input, select, textarea, [role="button"] {
     grid-column: 1 / -1;
   }
 
-  /* 7-Day Forecast: Panoramic 7-column grid in Wide Mode without horizontal scrolling */
-  #weatherPanel.wide-mode #dailyForecast .daily-forecast-horizontal {
-    display: grid !important;
-    grid-template-columns: repeat(7, minmax(0, 1fr)) !important;
-    gap: 0.4rem !important;
-    overflow-x: hidden !important;
+  /* 7-Day Forecast: Panoramic 7-day strip evenly distributed across Wide Mode */
+  #weatherPanel.wide-mode #dailyForecast,
+  #weatherPanel.wide-mode #dailyForecast .daily-forecast-horizontal,
+  #weatherPanel.wide-mode .daily-forecast-horizontal {
+    display: flex !important;
+    gap: 0.5rem !important;
+    overflow-x: auto !important;
     padding-bottom: 0.5rem !important;
-  }
-
-  #weatherPanel.wide-mode #dailyForecast .daily-card-horizontal {
-    min-width: 0 !important;
-    max-width: none !important;
     width: 100% !important;
-    padding: 0.65rem 0.25rem !important;
   }
 
-  #weatherPanel.wide-mode #dailySection span:has(span) {
-    display: none !important; /* Hide 'Swipe horizontal' prompt when all 7 days fit */
+  #weatherPanel.wide-mode .daily-card-horizontal {
+    flex: 1 1 0px !important;
+    min-width: 90px !important;
+    max-width: none !important;
+    padding: 0.75rem 0.35rem !important;
   }
 
   /* Hourly Forecast: Expanded table spacing in Wide Mode */

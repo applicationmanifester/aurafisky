@@ -43,8 +43,8 @@ describe('Dedicated Full-Screen / Wide Mode Feature', () => {
     expect(css).toContain('#weatherPanel.wide-mode #weatherTabOverview');
     expect(css).toContain('grid-template-columns: minmax(320px, 1fr) minmax(320px, 1fr);');
     expect(css).toContain('#weatherPanel.wide-mode #metricsGrid');
-    expect(css).toContain('#weatherPanel.wide-mode #dailyForecast .daily-forecast-horizontal');
-    expect(css).toContain('grid-template-columns: repeat(7, minmax(0, 1fr)) !important;');
+    expect(css).toContain('#weatherPanel.wide-mode .daily-card-horizontal');
+    expect(css).toContain('flex: 1 1 0px !important;');
   });
 
   it('handles wide mode toggle, UI state sync, and localStorage in app.js', () => {

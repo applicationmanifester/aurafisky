@@ -3479,6 +3479,13 @@ button, a, input, select, textarea, [role="button"] {
   background-color: rgba(45, 212, 191, 0.2) !important;
 }
 
+/* Hide Wide / Full-Screen mode button on mobile phones & compact screens (< 640px) */
+@media (max-width: 639px) {
+  #panelExpandWideBtn {
+    display: none !important;
+  }
+}
+
 /* Wide Mode on Desktop & Tablets (min-width: 640px) */
 @media (min-width: 640px) {
   #weatherPanel.wide-mode {

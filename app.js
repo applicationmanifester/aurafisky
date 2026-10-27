@@ -3176,6 +3176,14 @@ class AurafiskyApp {
         if (this.map) {
           this.map.updateSize();
         }
+        // If weather panel is in desktop wide mode, ensure it stays clamped within visible bounds
+        if (this.$.weatherPanel?.classList.contains("wide-mode") && window.innerWidth >= 640) {
+          const rect = this.$.weatherPanel.getBoundingClientRect();
+          if (rect.right > window.innerWidth - 16) {
+            const newLeft = Math.max(16, window.innerWidth - 800);
+            this.$.weatherPanel.style.left = `${newLeft}px`;
+          }
+        }
       });
     };
     window.addEventListener("resize", this._boundResize);
@@ -8451,9 +8459,26 @@ class AurafiskyApp {
         const newLeft = Math.max(16, window.innerWidth - 800);
         this.$.weatherPanel.style.left = `${newLeft}px`;
       }
+    } else {
+      document.body.classList.remove("weather-panel-expanded");
+      // Restore user-saved desktop position if set, or clear inline left so CSS layout applies
+      try {
+        const savedPos = localStorage.getItem("aurafisky_desktop_panel_pos");
+        if (savedPos) {
+          const parsed = JSON.parse(savedPos);
+          if (parsed && typeof parsed.left === "number") {
+            this.$.weatherPanel.style.left = `${parsed.left}px`;
+          }
+        } else {
+          this.$.weatherPanel.style.left = "";
+        }
+      } catch (_) {}
     }
 
     this.updateWideButtonState(becomeWide);
+    if (this.map) {
+      setTimeout(() => this.map?.updateSize(), 320);
+    }
 
     try {
       localStorage.setItem("aurafisky_weather_wide", becomeWide ? "true" : "false");

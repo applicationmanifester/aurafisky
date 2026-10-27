@@ -3548,11 +3548,34 @@ button, a, input, select, textarea, [role="button"] {
     margin: 0 !important;
   }
 
+  /* Left column components */
   #weatherPanel.wide-mode #nowcastSection,
-  #weatherPanel.wide-mode #advisoryBanner,
-  #weatherPanel.wide-mode #paramImportance,
   #weatherPanel.wide-mode #spatialGradLabel {
     grid-column: 1 !important;
+  }
+
+  /* Full-width advisory alert banner */
+  #weatherPanel.wide-mode #advisoryBanner {
+    grid-column: 1 / -1 !important;
+  }
+
+  /* Left column: Incoming forecast and atmospheric comfort ranking */
+  #weatherPanel.wide-mode #predictiveArrival {
+    grid-column: 1 !important;
+  }
+
+  #weatherPanel.wide-mode #paramImportance:not(:empty) {
+    grid-column: 1 !important;
+    padding: 0.65rem 0.85rem;
+    border-radius: 0.75rem;
+    background: rgba(241, 245, 249, 0.6);
+    border: 1px solid rgba(226, 232, 240, 0.6);
+    line-height: 1.4;
+  }
+
+  .dark #weatherPanel.wide-mode #paramImportance:not(:empty) {
+    background: rgba(30, 41, 59, 0.5);
+    border-color: rgba(51, 65, 85, 0.5);
   }
 
   /* Right column components */
@@ -3561,8 +3584,7 @@ button, a, input, select, textarea, [role="button"] {
     grid-row: 3 !important;
   }
 
-  #weatherPanel.wide-mode #weatherTabOverview > div:has(#briefingBtn),
-  #weatherPanel.wide-mode #predictiveArrival {
+  #weatherPanel.wide-mode #weatherTabOverview > div:has(#briefingBtn) {
     grid-column: 2 !important;
   }
 
@@ -3576,6 +3598,11 @@ button, a, input, select, textarea, [role="button"] {
     display: grid !important;
     grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
     gap: 0.5rem !important;
+  }
+
+  /* If there is an odd number of items, the last item spans both columns naturally */
+  #weatherPanel.wide-mode #smartTodosList > :nth-child(odd):last-child {
+    grid-column: 1 / -1 !important;
   }
 
   /* Full-width spanning components (discoveries carousel) */

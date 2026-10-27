@@ -69,4 +69,11 @@ describe('Dedicated Full-Screen / Wide Mode Feature', () => {
     expect(mobileJs).toContain('this.app?.updateWideButtonState?.(false)');
     expect(mobileJs).toContain('this.app?.updateWideButtonState?.(true)');
   });
+
+  it('strictly hides inactive tabs including overview in wide mode', () => {
+    expect(css).toContain('#weatherPanel.wide-mode #weatherTabOverview.active');
+    expect(css).toContain('#weatherPanel.wide-mode .weather-tab-panel:not(.active)');
+    expect(css).toContain('display: none !important;');
+  });
 });
+

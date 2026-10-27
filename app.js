@@ -8679,9 +8679,7 @@ class AurafiskyApp {
     panels.forEach((p) => {
       const isTarget = p.id === targetPanelId;
       p.classList.toggle("active", isTarget);
-      if (isTarget) {
-        p.classList.remove("hidden");
-      }
+      p.classList.toggle("hidden", !isTarget);
     });
 
     const activeBtn = document.querySelector(`.weather-tab-btn[data-tab="${tabName}"]`);

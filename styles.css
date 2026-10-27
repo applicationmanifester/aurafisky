@@ -3469,13 +3469,18 @@ button, a, input, select, textarea, [role="button"] {
     box-shadow: 0 25px 60px -15px rgba(0, 0, 0, 0.7), 0 0 0 1px rgba(255, 255, 255, 0.08) !important;
   }
 
-  /* Two-column responsive grid for Overview Tab */
-  #weatherPanel.wide-mode #weatherTabOverview {
+  /* Two-column responsive grid for Overview Tab (only when active) */
+  #weatherPanel.wide-mode #weatherTabOverview.active {
     display: grid !important;
     grid-template-columns: minmax(320px, 1fr) minmax(320px, 1fr);
     column-gap: 1.25rem;
     row-gap: 1rem;
     align-items: start;
+  }
+
+  /* Inactive tabs are strictly hidden in wide mode */
+  #weatherPanel.wide-mode .weather-tab-panel:not(.active) {
+    display: none !important;
   }
 
   /* Left column components */

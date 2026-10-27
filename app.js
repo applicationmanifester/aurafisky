@@ -8500,9 +8500,11 @@ class AurafiskyApp {
     this.$.panelExpandWideBtn.setAttribute("aria-label", isWide ? "Exit wide mode" : "Wide / Full-Screen mode");
     if (this.$.panelExpandWideIcon) {
       this.$.panelExpandWideIcon.classList.toggle("hidden", isWide);
+      this.$.panelExpandWideIcon.style.setProperty("display", isWide ? "none" : "block", "important");
     }
     if (this.$.panelCompressWideIcon) {
       this.$.panelCompressWideIcon.classList.toggle("hidden", !isWide);
+      this.$.panelCompressWideIcon.style.setProperty("display", isWide ? "block" : "none", "important");
     }
   }
 
@@ -8552,7 +8554,7 @@ class AurafiskyApp {
    */
   initMobileWeatherGestures() {
     const content = this.$.weatherPanelContent;
-    const tabNames = ["overview", "hourly", "daily", "metrics", "astronomy"];
+    const tabNames = ["overview", "hourly", "daily", "metrics", "astronomy", "farm"];
 
     if (content) {
       let touchStartX = 0;
@@ -8677,6 +8679,7 @@ class AurafiskyApp {
       daily: "weatherTabDaily",
       metrics: "weatherTabMetrics",
       astronomy: "weatherTabAstronomy",
+      farm: "weatherTabFarm",
     };
 
     const targetPanelId = targetPanelIdMap[tabName] || "weatherTabOverview";

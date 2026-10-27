@@ -37,6 +37,7 @@ import * as extremes from './extremes.js';
 import * as navigation from './navigation.js';
 import * as alerts from './alerts.js';
 import * as rainPush from './rainPush.js';
+import * as farm from './farm.js';
 import * as dailyBriefing from './dailyBriefing.js';
 import * as smartTodos from './smartTodos.js';
 import * as myPlaces from './myPlaces.js';
@@ -79,6 +80,7 @@ const featureModules = {
   navigation,
   alerts,
   rainPush,
+  farm,
   dailyBriefing,
   smartTodos,
   myPlaces,

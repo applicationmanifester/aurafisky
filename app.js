@@ -461,6 +461,9 @@ class AurafiskyApp {
 
       // SVG Sparkline
       trendSvg: document.getElementById("trendSvg"),
+      trendHeader: document.getElementById("trendHeader"),
+      trendBody: document.getElementById("trendBody"),
+      trendCollapseIcon: document.getElementById("trendCollapseIcon"),
       chartHours: document.getElementById("chartHours"),
       chartLine: document.getElementById("chartLine"),
       chartArea: document.getElementById("chartArea"),
@@ -2873,6 +2876,59 @@ class AurafiskyApp {
       this._haptic('selection');
     });
 
+    // ── 24h Temperature Trend Expand/Collapse Toggle ─────────
+    if (this.$.trendHeader && this.$.trendBody) {
+      const toggleTrendSection = (forceExpand) => {
+        const isHidden = this.$.trendBody.classList.contains("hidden");
+        const willExpand = forceExpand !== undefined ? forceExpand : isHidden;
+        this.$.trendBody.classList.toggle("hidden", !willExpand);
+        this.$.trendHeader.setAttribute("aria-expanded", willExpand ? "true" : "false");
+        if (this.$.trendCollapseIcon) {
+          this.$.trendCollapseIcon.classList.toggle("-rotate-90", !willExpand);
+        }
+        if (willExpand && this.weatherData) {
+          requestAnimationFrame(() => {
+            this._sparklineDrawnWidth = 0;
+            this.drawHourlySparkline(parseInt(this.$.timelineSlider?.value || 0, 10));
+          });
+        }
+      };
+
+      this.$.trendHeader.addEventListener("click", (e) => {
+        if (e.target.closest("#signalNoiseBtn") || e.target.closest("#confidenceToggle")) return;
+        toggleTrendSection();
+        this._haptic?.("selection");
+      });
+
+      this.$.trendHeader.addEventListener("keydown", (e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          toggleTrendSection();
+          this._haptic?.("selection");
+        }
+      });
+    }
+
+    // ── Responsive ResizeObserver for 24h Temperature Trend ─
+    if (window.ResizeObserver && this.$.trendSvg?.parentElement) {
+      let trendResizeRaf = null;
+      const trendObserver = new ResizeObserver((entries) => {
+        for (const entry of entries) {
+          const w = Math.round(entry.contentRect.width);
+          if (w > 0 && Math.abs(w - (this._sparklineDrawnWidth || 0)) > 4) {
+            cancelAnimationFrame(trendResizeRaf);
+            trendResizeRaf = requestAnimationFrame(() => {
+              this._sparklineDrawnWidth = 0;
+              if (this.weatherData && !this.$.trendBody?.classList.contains("hidden")) {
+                this.drawHourlySparkline(parseInt(this.$.timelineSlider?.value || 0, 10));
+              }
+            });
+          }
+        }
+      });
+      trendObserver.observe(this.$.trendSvg.parentElement);
+    }
+
     // ── Keyboard Shortcuts ───────────────────────────────────
     this.$.searchInput.addEventListener("keydown", (e) =>
       this.handleSearchKeyboard(e),
@@ -5081,11 +5137,16 @@ class AurafiskyApp {
     if (
       startIdx === this._sparklineStart &&
       endIdx === this._sparklineEnd &&
+      this._sparklineDrawnWidth === (Math.max(280, Math.round(this.$.trendSvg?.parentElement?.getBoundingClientRect().width || 300))) &&
       this.$.chartPoints.childNodes.length > 0
     )
       return;
     this._sparklineStart = startIdx;
     this._sparklineEnd = endIdx;
+    this._sparklineDrawnWidth = Math.max(280, Math.round(this.$.trendSvg?.parentElement?.getBoundingClientRect().width || 300));
+    if (this.$.trendSvg) {
+      this.$.trendSvg.setAttribute("viewBox", `0 0 ${this._sparklineDrawnWidth} 80`);
+    }
 
     const hourlyTemps = [];
     const hourlyPrecipProb = [];
@@ -5105,7 +5166,7 @@ class AurafiskyApp {
     const maxTemp = Math.max(...hourlyTemps);
     const tempRange = Math.max(1, maxTemp - minTemp);
 
-    const width = 300;
+    const width = this._sparklineDrawnWidth || 300;
     const height = 65;
     const paddingLeft = 12;
     const paddingRight = 12;
@@ -8483,6 +8544,12 @@ class AurafiskyApp {
     if (this.map) {
       setTimeout(() => this.map?.updateSize(), 320);
     }
+    setTimeout(() => {
+      this._sparklineDrawnWidth = 0;
+      if (this.weatherData && this.activeWeatherTab === "hourly") {
+        this.drawHourlySparkline(parseInt(this.$.timelineSlider?.value || 0, 10));
+      }
+    }, 320);
 
     try {
       localStorage.setItem("aurafisky_weather_wide", becomeWide ? "true" : "false");
@@ -8762,6 +8829,15 @@ class AurafiskyApp {
     const activeBtn = document.querySelector(`.weather-tab-btn[data-tab="${tabName}"]`);
     if (activeBtn) {
       activeBtn.scrollIntoView({ behavior: "smooth", block: "nearest", inline: "center" });
+    }
+
+    if (tabName === "hourly") {
+      requestAnimationFrame(() => {
+        this._sparklineDrawnWidth = 0;
+        if (this.weatherData) {
+          this.drawHourlySparkline(parseInt(this.$.timelineSlider?.value || 0, 10));
+        }
+      });
     }
   }
 

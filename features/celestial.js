@@ -33,6 +33,104 @@ const PLANETS = [
   { body: Astronomy.Body.Mercury, name: "Mercury", icon: "☿️", color: "#cbd5e1" }
 ];
 
+// Prominent naked-eye & mythological constellations with central coordinates (J2000 RA hours, Dec degrees)
+export const CONSTELLATIONS = [
+  { name: "Orion", english: "The Hunter", ra: 5.5, dec: 0.0, stars: "Rigel, Betelgeuse", icon: "🏹", season: "Winter" },
+  { name: "Canis Major", english: "Greater Dog", ra: 6.8, dec: -22.0, stars: "Sirius (Brightest)", icon: "🐕", season: "Winter" },
+  { name: "Ursa Major", english: "Big Dipper", ra: 11.0, dec: 55.0, stars: "Dubhe, Merak", icon: "🐻", season: "Circumpolar (North)" },
+  { name: "Ursa Minor", english: "Little Dipper", ra: 15.0, dec: 75.0, stars: "Polaris (North Star)", icon: "⭐", season: "Circumpolar (North)" },
+  { name: "Cassiopeia", english: "The Queen (W)", ra: 1.0, dec: 60.0, stars: "Schedar, Caph", icon: "👑", season: "Circumpolar (North)" },
+  { name: "Lyra", english: "The Harp", ra: 18.8, dec: 36.0, stars: "Vega (Summer Triangle)", icon: "🎵", season: "Summer / Autumn" },
+  { name: "Aquila", english: "The Eagle", ra: 19.8, dec: 8.5, stars: "Altair", icon: "🦅", season: "Summer / Autumn" },
+  { name: "Cygnus", english: "Northern Cross", ra: 20.6, dec: 42.0, stars: "Deneb", icon: "🦢", season: "Summer / Autumn" },
+  { name: "Taurus", english: "The Bull", ra: 4.5, dec: 18.0, stars: "Aldebaran, Pleiades", icon: "🐂", season: "Winter" },
+  { name: "Boötes", english: "The Herdsman", ra: 14.5, dec: 30.0, stars: "Arcturus", icon: "🌾", season: "Spring / Summer" },
+  { name: "Scorpius", english: "The Scorpion", ra: 16.9, dec: -30.0, stars: "Antares", icon: "🦂", season: "Summer" },
+  { name: "Leo", english: "The Lion", ra: 10.7, dec: 15.0, stars: "Regulus", icon: "🦁", season: "Spring" },
+  { name: "Pegasus", english: "Winged Horse", ra: 22.5, dec: 20.0, stars: "Great Square", icon: "🐎", season: "Autumn" },
+  { name: "Gemini", english: "The Twins", ra: 7.2, dec: 22.0, stars: "Castor, Pollux", icon: "👥", season: "Winter / Spring" }
+];
+
+// Major tracked satellites & human spaceflight stations
+export const SATELLITE_CATALOG = [
+  { id: "iss", name: "ISS (Space Station)", icon: "🛰️", altKm: 420, incDeg: 51.64, periodMin: 92.9, mag: -2.8, color: "#38bdf8", type: "Space Station" },
+  { id: "tiangong", name: "Tiangong (CSS)", icon: "🛰️", altKm: 385, incDeg: 41.50, periodMin: 92.2, mag: -1.5, color: "#f59e0b", type: "Space Station" },
+  { id: "hst", name: "Hubble Space Telescope", icon: "🔭", altKm: 535, incDeg: 28.47, periodMin: 95.3, mag: 1.2, color: "#c084fc", type: "Observatory" }
+];
+
+/**
+ * Calculates topocentric horizontal coordinates and visible pass parameters for a satellite.
+ */
+export function calculateSatellitePosition(sat, lat, lng, date = new Date(), sunAlt = -10) {
+  const R_EARTH = 6371; // Earth mean radius in km
+  const epoch = new Date("2026-01-01T00:00:00Z").getTime();
+  const tMin = (date.getTime() - epoch) / 60000;
+
+  // Mean motion & orbit progress
+  const revs = tMin / sat.periodMin;
+  const phase = (revs % 1) * 2 * Math.PI;
+  const incRad = (sat.incDeg * Math.PI) / 180;
+
+  // Earth rotation in degrees since epoch
+  const earthRotDeg = ((tMin / 1440) * 360) % 360;
+  const satLat = Math.asin(Math.sin(incRad) * Math.sin(phase)) * (180 / Math.PI);
+
+  // Sub-satellite longitude
+  const satLng = ((((Math.atan2(Math.cos(incRad) * Math.sin(phase), Math.cos(phase)) * (180 / Math.PI)) - earthRotDeg) % 360) + 540) % 360 - 180;
+
+  // Angular distance between observer and sub-satellite point (spherical law of cosines)
+  const phi1 = (lat * Math.PI) / 180;
+  const phi2 = (satLat * Math.PI) / 180;
+  const dLambda = ((satLng - lng) * Math.PI) / 180;
+
+  const cosSigma = Math.sin(phi1) * Math.sin(phi2) + Math.cos(phi1) * Math.cos(phi2) * Math.cos(dLambda);
+  const sigma = Math.acos(Math.max(-1, Math.min(1, cosSigma))); // radians
+
+  // Slant distance from observer to satellite (law of cosines in triangle EarthCenter-Observer-Sat)
+  const rSat = R_EARTH + sat.altKm;
+  const slantDist = Math.sqrt(R_EARTH * R_EARTH + rSat * rSat - 2 * R_EARTH * rSat * cosSigma);
+
+  // Topocentric elevation angle (altitude above horizon)
+  const sinAlt = (rSat * cosSigma - R_EARTH) / Math.max(1, slantDist);
+  const elevationDeg = Math.asin(Math.max(-1, Math.min(1, sinAlt))) * (180 / Math.PI);
+
+  // Azimuth from observer to sub-satellite point
+  const y = Math.sin(dLambda) * Math.cos(phi2);
+  const x = Math.cos(phi1) * Math.sin(phi2) - Math.sin(phi1) * Math.cos(phi2) * Math.cos(dLambda);
+  const azDeg = (((Math.atan2(y, x) * 180) / Math.PI) + 360) % 360;
+
+  const isAboveHorizon = elevationDeg > 0;
+  // Naked-eye visibility: above horizon (>8 deg), twilight/dark observer (sun < -6), illuminated station
+  const isCurrentlyVisible = isAboveHorizon && elevationDeg > 8 && sunAlt < -6;
+
+  // Estimate next pass window
+  const isReachable = Math.abs(lat) <= sat.incDeg + 15;
+  const cycleMins = sat.periodMin * 3.5;
+  const minsToNext = isReachable ? (cycleMins - (tMin % cycleMins)) : null;
+  const hoursToNext = minsToNext != null ? minsToNext / 60 : null;
+
+  return {
+    ...sat,
+    altitude: elevationDeg,
+    azimuth: azDeg,
+    direction: getCompassDirection(azDeg),
+    distanceKm: Math.round(slantDist),
+    subSatLat: satLat,
+    subSatLng: satLng,
+    isAboveHorizon,
+    isCurrentlyVisible,
+    hoursToNextPass: hoursToNext,
+    statusText: isCurrentlyVisible
+      ? `Passing overhead now! Visible in ${getCompassDirection(azDeg)} (Alt: ${Math.round(elevationDeg)}°)`
+      : isAboveHorizon
+        ? `Above horizon (${Math.round(elevationDeg)}° in ${getCompassDirection(azDeg)}), ${sunAlt >= -6 ? 'Daylight' : 'In Earth Shadow'}`
+        : hoursToNext != null
+          ? `Next pass approx ${Math.round(hoursToNext)}h away`
+          : `Orbit inclination (${sat.incDeg}°) does not reach this latitude`
+  };
+}
+
+
 /**
  * Converts azimuth degrees into 8-point compass bearing.
  */
@@ -40,6 +138,30 @@ export function getCompassDirection(azDeg) {
   const directions = ["N", "NE", "E", "SE", "S", "SW", "W", "NW"];
   const index = Math.round(azDeg / 45) % 8;
   return directions[index];
+}
+
+/**
+ * Returns lunar phase name and matching emoji for a given phase angle (0-360°).
+ */
+export function getMoonPhaseDetails(phaseAngleDeg) {
+  const normDeg = ((phaseAngleDeg % 360) + 360) % 360;
+  if (normDeg < 22.5 || normDeg >= 337.5) {
+    return { name: "New Moon", icon: "🌑" };
+  } else if (normDeg < 67.5) {
+    return { name: "Waxing Crescent", icon: "🌒" };
+  } else if (normDeg < 112.5) {
+    return { name: "First Quarter", icon: "🌓" };
+  } else if (normDeg < 157.5) {
+    return { name: "Waxing Gibbous", icon: "🌔" };
+  } else if (normDeg < 202.5) {
+    return { name: "Full Moon", icon: "🌕" };
+  } else if (normDeg < 247.5) {
+    return { name: "Waning Gibbous", icon: "🌖" };
+  } else if (normDeg < 292.5) {
+    return { name: "Third Quarter", icon: "🌗" };
+  } else {
+    return { name: "Waning Crescent", icon: "🌘" };
+  }
 }
 
 /**
@@ -61,22 +183,50 @@ export function calculateCelestialSky(lat, lng, date = new Date(), elevationMete
   const sunHorizon = Astronomy.Horizon(date, observer, sunEquator.ra, sunEquator.dec, "normal");
   const isNight = sunHorizon.altitude < -6; // Sun at least 6 deg below horizon (Civil Twilight ends)
   const isDarkNight = sunHorizon.altitude < -18; // Astronomical night (dark sky)
+  const isSunUp = sunHorizon.altitude > 0;
+  const isTwilight = !isSunUp && sunHorizon.altitude > -6;
+
+  const sunData = {
+    name: "Sun",
+    icon: "☀️",
+    color: "#f59e0b",
+    altitude: sunHorizon.altitude,
+    azimuth: sunHorizon.azimuth,
+    direction: getCompassDirection(sunHorizon.azimuth),
+    magnitude: -26.74,
+    isAboveHorizon: isSunUp,
+    isCurrentlyVisible: isSunUp,
+    statusText: isSunUp
+      ? `Daylight in ${getCompassDirection(sunHorizon.azimuth)} (Alt: ${Math.round(sunHorizon.altitude)}°)`
+      : isTwilight
+        ? `Civil Twilight in ${getCompassDirection(sunHorizon.azimuth)} (${Math.round(sunHorizon.altitude)}°)`
+        : `Below horizon (${Math.round(Math.abs(sunHorizon.altitude))}° down)`
+  };
 
   // 2. Moon Status & Illumination
   const moonIllum = Astronomy.Illumination(Astronomy.Body.Moon, date);
   const moonPhaseDeg = Astronomy.MoonPhase(date);
   const moonEquator = Astronomy.Equator(Astronomy.Body.Moon, date, observer, true, true);
   const moonHorizon = Astronomy.Horizon(date, observer, moonEquator.ra, moonEquator.dec, "normal");
+  const moonPhase = getMoonPhaseDetails(moonPhaseDeg);
 
   const moonData = {
+    name: "Moon",
+    icon: moonPhase.icon,
+    color: "#fef08a",
     altitude: moonHorizon.altitude,
     azimuth: moonHorizon.azimuth,
     direction: getCompassDirection(moonHorizon.azimuth),
     isAboveHorizon: moonHorizon.altitude > 0,
+    isCurrentlyVisible: moonHorizon.altitude > 0 && (isNight || moonHorizon.altitude > 15),
     phaseFraction: moonIllum.phase_fraction,
     phasePercent: Math.round(moonIllum.phase_fraction * 100),
     phaseAngleDeg: moonPhaseDeg,
-    magnitude: moonIllum.mag
+    phaseName: moonPhase.name,
+    magnitude: moonIllum.mag,
+    statusText: moonHorizon.altitude > 0
+      ? `${moonPhase.name} (${Math.round(moonIllum.phase_fraction * 100)}% lit) in ${getCompassDirection(moonHorizon.azimuth)} (Alt: ${Math.round(moonHorizon.altitude)}°)`
+      : `Below horizon (${Math.round(Math.abs(moonHorizon.altitude))}° down)`
   };
 
   // 3. Planets
@@ -144,28 +294,71 @@ export function calculateCelestialSky(lat, lng, date = new Date(), elevationMete
     }
   }).filter(Boolean);
 
+  // 5. Constellations Horizontal Coordinates & Visibility
+  const constellationResults = CONSTELLATIONS.map((c) => {
+    try {
+      const hor = Astronomy.Horizon(date, observer, c.ra, c.dec, "normal");
+      const alt = hor.altitude;
+      const az = hor.azimuth;
+      const isAboveHorizon = alt > 0;
+      const isCurrentlyVisible = isNight && alt > 8;
+
+      return {
+        ...c,
+        altitude: alt,
+        azimuth: az,
+        direction: getCompassDirection(az),
+        isAboveHorizon,
+        isCurrentlyVisible,
+        statusText: isCurrentlyVisible
+          ? (alt > 45 ? `High overhead in ${getCompassDirection(az)} (Alt: ${Math.round(alt)}°)` : `Visible in ${getCompassDirection(az)} (Alt: ${Math.round(alt)}°)`)
+          : isAboveHorizon
+            ? `Daylight sky in ${getCompassDirection(az)} (Alt: ${Math.round(alt)}°)`
+            : "Below horizon"
+      };
+    } catch (e) {
+      return null;
+    }
+  }).filter(Boolean);
+
+  // 6. Tracked Satellites & Space Stations (ISS, Tiangong, Hubble)
+  const satelliteResults = SATELLITE_CATALOG.map((sat) => {
+    try {
+      return calculateSatellitePosition(sat, lat, lng, date, sunHorizon.altitude);
+    } catch (e) {
+      return null;
+    }
+  }).filter(Boolean);
+
   // Count visible bodies
   const visiblePlanetsCount = planetResults.filter((p) => p.isCurrentlyVisible).length;
   const visibleStarsCount = starResults.filter((s) => s.isCurrentlyVisible).length;
+  const visibleConstellationsCount = constellationResults.filter((c) => c.isCurrentlyVisible).length;
+  const visibleSatellitesCount = satelliteResults.filter((s) => s.isCurrentlyVisible).length;
 
-  // 5. Active & Upcoming Meteor Showers
+  // 7. Active & Upcoming Meteor Showers
   const meteorShowers = getActiveAndUpcomingMeteorShowers(date);
 
-  // 6. Next Eclipses (Lunar & Solar)
+  // 8. Next Eclipses (Lunar & Solar)
   const eclipses = getUpcomingEclipses(date);
 
-  // 7. Local Light Pollution / Estimated Bortle Scale
+  // 9. Local Light Pollution / Estimated Bortle Scale
   const lightPollution = estimateBortleScale(lat, lng);
 
   return {
     isNight,
     isDarkNight,
     sunAltitude: sunHorizon.altitude,
+    sun: sunData,
     moon: moonData,
     planets: planetResults,
     stars: starResults,
+    satellites: satelliteResults,
+    constellations: constellationResults,
     visiblePlanetsCount,
     visibleStarsCount,
+    visibleConstellationsCount,
+    visibleSatellitesCount,
     meteorShowers,
     eclipses,
     lightPollution

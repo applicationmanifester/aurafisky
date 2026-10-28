@@ -653,6 +653,20 @@ const WeatherService = (() => {
     HBR: "Harbor",
     RSTN: "Station",
     LK: "Lake",
+    LKS: "Lakes",
+    STM: "River",
+    RIV: "River",
+    RSV: "Reservoir",
+    PND: "Pond",
+    BAY: "Bay",
+    OCN: "Ocean",
+    SEA: "Sea",
+    GULF: "Gulf",
+    CHN: "Channel",
+    CNL: "Canal",
+    WTR: "Water Body",
+    FLL: "Waterfall",
+    LGN: "Lagoon",
     Reserve: "Reserve",
     PARK: "Park",
   };
@@ -840,7 +854,7 @@ const WeatherService = (() => {
           if (Array.isArray(nomData)) {
             results = nomData.map((item) => {
               const addr = item.address || {};
-              const placeName = addr.city || addr.town || addr.village || addr.hamlet || addr.suburb || item.name || rawQuery;
+              const placeName = addr.water || addr.waterway || addr.lake || addr.river || addr.bay || addr.sea || addr.ocean || addr.reservoir || addr.canal || addr.pond || addr.city || addr.town || addr.village || addr.hamlet || addr.suburb || item.name || rawQuery;
               const region = addr.state || addr.county || addr.province || "";
               const country = addr.country || "";
               const isPrecise = !!(addr.road || addr.house_number || addr.postcode);

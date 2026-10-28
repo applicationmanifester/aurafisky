@@ -47,6 +47,18 @@ const PRIMARY_LADDER = [
   'town',
   'municipality',
   'city',
+  'water',
+  'waterway',
+  'lake',
+  'river',
+  'ocean',
+  'sea',
+  'bay',
+  'reservoir',
+  'canal',
+  'pond',
+  'body_of_water',
+  'natural',
   'city_district',
   'county',
 ];
@@ -341,13 +353,48 @@ export function describeProximity(lat, lng, parentLat, parentLng, parentName) {
 // ── Locality classification ────────────────────────────────────────
 
 /**
- * A coarse descriptor for coordinates with no reverse-geocode result —
- * open ocean, ice sheet, empty desert.
- *
- * Deliberately coarse: without a coastline dataset we cannot tell an ice
- * shelf from open sea at 85°S, so polar cases say "Region" rather than
- * inventing a landmass, and ocean basins use rough IHO longitude boundaries.
- * The goal is a readable label, not a survey-grade one.
+ * Regional marginal seas, gulfs, bays, and large inland water bodies.
+ * Evaluated before falling back to coarse ocean basins.
+ */
+export const REGIONAL_WATER_BODIES = [
+  // Semi-enclosed & Inland Seas, Gulfs, and Large Bays
+  { name: 'Red Sea', minLat: 12.5, maxLat: 28.5, minLng: 32.2, maxLng: 43.8 },
+  { name: 'Persian Gulf', minLat: 23.8, maxLat: 30.5, minLng: 48.0, maxLng: 56.5 },
+  { name: 'Black Sea', minLat: 40.8, maxLat: 47.0, minLng: 27.4, maxLng: 41.8 },
+  { name: 'Caspian Sea', minLat: 36.5, maxLat: 47.3, minLng: 46.5, maxLng: 54.8 },
+  { name: 'Baltic Sea', minLat: 53.8, maxLat: 66.0, minLng: 9.5, maxLng: 30.3 },
+  { name: 'Mediterranean Sea', minLat: 30.0, maxLat: 45.8, minLng: -5.8, maxLng: 36.2 },
+  { name: 'North Sea', minLat: 51.0, maxLat: 62.0, minLng: -4.0, maxLng: 9.5 },
+  { name: 'Norwegian Sea', minLat: 62.0, maxLat: 71.0, minLng: -5.0, maxLng: 15.0 },
+  { name: 'Gulf of Mexico', minLat: 18.0, maxLat: 30.8, minLng: -98.0, maxLng: -80.5 },
+  { name: 'Caribbean Sea', minLat: 9.0, maxLat: 22.0, minLng: -89.0, maxLng: -60.0 },
+  { name: 'Hudson Bay', minLat: 51.0, maxLat: 64.0, minLng: -95.0, maxLng: -77.0 },
+  { name: 'Arabian Sea', minLat: 8.0, maxLat: 25.5, minLng: 55.0, maxLng: 77.0 },
+  { name: 'Bay of Bengal', minLat: 5.0, maxLat: 22.5, minLng: 80.0, maxLng: 95.0 },
+  { name: 'Andaman Sea', minLat: 6.0, maxLat: 15.0, minLng: 92.5, maxLng: 98.5 },
+  { name: 'Sea of Japan', minLat: 35.0, maxLat: 52.0, minLng: 127.0, maxLng: 142.0 },
+  { name: 'East China Sea', minLat: 24.0, maxLat: 33.0, minLng: 119.0, maxLng: 130.0 },
+  { name: 'South China Sea', minLat: 3.0, maxLat: 23.5, minLng: 104.0, maxLng: 121.0 },
+  { name: 'Bering Sea', minLat: 52.0, maxLat: 66.0, minLng: 162.0, maxLng: 180.0 },
+  { name: 'Bering Sea', minLat: 52.0, maxLat: 66.0, minLng: -180.0, maxLng: -157.0 },
+  { name: 'Coral Sea', minLat: -26.0, maxLat: -10.0, minLng: 142.0, maxLng: 158.0 },
+  { name: 'Tasman Sea', minLat: -46.0, maxLat: -28.0, minLng: 150.0, maxLng: 175.0 },
+  { name: 'Gulf of Guinea', minLat: -1.0, maxLat: 5.5, minLng: -8.0, maxLng: 10.0 },
+
+  // Giant Inland Lakes
+  { name: 'Lake Superior', minLat: 46.4, maxLat: 49.0, minLng: -92.2, maxLng: -84.3 },
+  { name: 'Lake Michigan', minLat: 41.6, maxLat: 46.1, minLng: -88.0, maxLng: -84.8 },
+  { name: 'Lake Huron', minLat: 43.0, maxLat: 46.3, minLng: -84.7, maxLng: -79.7 },
+  { name: 'Lake Erie', minLat: 41.3, maxLat: 42.9, minLng: -83.6, maxLng: -78.8 },
+  { name: 'Lake Ontario', minLat: 43.1, maxLat: 44.3, minLng: -79.9, maxLng: -76.0 },
+  { name: 'Lake Victoria', minLat: -3.0, maxLat: 0.5, minLng: 31.5, maxLng: 34.9 },
+  { name: 'Lake Baikal', minLat: 51.4, maxLat: 55.8, minLng: 103.5, maxLng: 110.0 },
+  { name: 'Lake Tanganyika', minLat: -8.8, maxLat: -3.3, minLng: 29.1, maxLng: 31.3 },
+];
+
+/**
+ * A descriptor for coordinates with no reverse-geocode result —
+ * specific seas, bays, gulfs, large lakes, open oceans, or polar regions.
  */
 export function describeCoordinates(lat, lng) {
   if (lat <= -60) return 'Antarctic Region';
@@ -356,6 +403,13 @@ export function describeCoordinates(lat, lng) {
   // Normalise to -180..180 — the map view is multiWorld, so a click three
   // worlds to the right arrives with lng 900.
   const lon = ((((lng + 180) % 360) + 360) % 360) - 180;
+
+  // Check specific marginal seas, gulfs, bays, and large lakes first
+  for (const b of REGIONAL_WATER_BODIES) {
+    if (lat >= b.minLat && lat <= b.maxLat && lon >= b.minLng && lon <= b.maxLng) {
+      return b.name;
+    }
+  }
 
   let basin;
   if (lon >= -70 && lon < 20) basin = 'Atlantic Ocean';
@@ -380,14 +434,17 @@ export function describeCoordinates(lat, lng) {
 export function breakdownAddress(address = {}, displayName = '', lat = null, lng = null) {
   const a = (address && typeof address === 'object') ? address : {};
 
-  // 1. Area / Locality: road, suburb, neighbourhood, quarter, village, hamlet
+  // 1. Area / Locality: road, suburb, neighbourhood, quarter, village, hamlet, or water feature
   const subArea = clean(a.suburb || a.quarter || a.neighbourhood || a.residential);
   const road = clean(a.road || a.pedestrian || a.street);
+  const water = clean(a.water || a.waterway || a.lake || a.river || a.bay || a.sea || a.ocean || a.reservoir || a.canal || a.pond || a.body_of_water || (a.natural && a.natural !== 'water' ? a.natural : ''));
   let area = '';
-  if (subArea && road && !looseEquals(subArea, road)) {
+  if (water && !subArea && !road) {
+    area = water;
+  } else if (subArea && road && !looseEquals(subArea, road)) {
     area = `${road}, ${subArea}`;
   } else {
-    area = subArea || road || clean(a.village || a.hamlet || a.isolated_dwelling || '');
+    area = subArea || road || water || clean(a.village || a.hamlet || a.isolated_dwelling || '');
   }
 
   // 2. City / Town

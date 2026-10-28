@@ -74,6 +74,60 @@ describe('Celestial Astronomy Engine', () => {
     expect(sky.eclipses).toBeDefined();
   });
 
+  it('calculates tracked satellites (ISS, Tiangong, Hubble) and prominent constellations', () => {
+    const sky = calculateCelestialSky(12.9716, 77.5946, new Date('2026-10-21T18:30:00Z'));
+    expect(sky.satellites).toBeDefined();
+    expect(sky.satellites.length).toBeGreaterThanOrEqual(3);
+    const iss = sky.satellites.find(s => s.id === 'iss');
+    expect(iss).toBeDefined();
+    expect(typeof iss.altitude).toBe('number');
+    expect(typeof iss.distanceKm).toBe('number');
+    expect(typeof iss.statusText).toBe('string');
+
+    expect(sky.constellations).toBeDefined();
+    expect(sky.constellations.length).toBeGreaterThan(0);
+    const orion = sky.constellations.find(c => c.name === 'Orion');
+    expect(orion).toBeDefined();
+    expect(typeof orion.altitude).toBe('number');
+    expect(typeof orion.season).toBe('string');
+  });
+
+  it('calculates real-time Sun and Moon positions and phase data', () => {
+    // Noon UTC: Sun high above London / Greenwich
+    const noonDate = new Date('2026-06-21T12:00:00Z');
+    const noonSky = calculateCelestialSky(51.5, 0.0, noonDate);
+
+    expect(noonSky.sun).toBeDefined();
+    expect(noonSky.sun.name).toBe('Sun');
+    expect(noonSky.sun.icon).toBe('☀️');
+    expect(noonSky.sun.altitude).toBeGreaterThan(50);
+    expect(noonSky.sun.isAboveHorizon).toBe(true);
+    expect(noonSky.sun.isCurrentlyVisible).toBe(true);
+    expect(noonSky.sun.magnitude).toBeLessThan(-20);
+
+    // Midnight UTC: Sun well below horizon
+    const nightDate = new Date('2026-06-21T00:00:00Z');
+    const nightSky = calculateCelestialSky(51.5, 0.0, nightDate);
+    expect(nightSky.sun.isAboveHorizon).toBe(false);
+    expect(nightSky.sun.altitude).toBeLessThan(0);
+
+    // Moon properties
+    expect(noonSky.moon).toBeDefined();
+    expect(noonSky.moon.name).toBe('Moon');
+    expect(typeof noonSky.moon.phaseName).toBe('string');
+    expect(typeof noonSky.moon.phasePercent).toBe('number');
+    expect(typeof noonSky.moon.altitude).toBe('number');
+    expect(noonSky.moon.direction).toMatch(/^[NSEW]+$/);
+  });
+
+  it('correctly maps moon phase angle degrees to lunar phases', async () => {
+    const { getMoonPhaseDetails } = await import('../features/celestial.js');
+    expect(getMoonPhaseDetails(0).name).toBe('New Moon');
+    expect(getMoonPhaseDetails(90).name).toBe('First Quarter');
+    expect(getMoonPhaseDetails(180).name).toBe('Full Moon');
+    expect(getMoonPhaseDetails(270).name).toBe('Third Quarter');
+  });
+
   it('returns null gracefully for invalid coordinates', () => {
     expect(calculateCelestialSky(null, 78.13)).toBeNull();
     expect(calculateCelestialSky(NaN, 78.13)).toBeNull();
@@ -104,5 +158,76 @@ describe('Celestial Astronomy Engine', () => {
     const waningCrescent = getMoonSvgPath(0.85);
     expect(waningCrescent).not.toBe('');
     expect(waningCrescent).toMatch(/A \d+\.\d+ 18 0 0 1 20 2$/);
+  });
+
+  it('supports full-screen sky radar overlay by teleporting to body and restoring to astronomy tab', async () => {
+    // Setup mock DOM structure replicating weatherPanel & astronomy tab
+    const weatherPanel = document.createElement('div');
+    weatherPanel.id = 'weatherPanel';
+    weatherPanel.className = 'weather-panel open';
+
+    const astronomyTab = document.createElement('div');
+    astronomyTab.id = 'weatherTabAstronomy';
+
+    const celestialSection = document.createElement('div');
+    celestialSection.id = 'celestialRadarSection';
+
+    const btn = document.createElement('button');
+    btn.id = 'expandSkyRadarBtn';
+    celestialSection.appendChild(btn);
+
+    const expandIcon = document.createElement('span');
+    expandIcon.id = 'skyRadarExpandIcon';
+    celestialSection.appendChild(expandIcon);
+
+    const compressIcon = document.createElement('span');
+    compressIcon.id = 'skyRadarCompressIcon';
+    compressIcon.className = 'hidden';
+    celestialSection.appendChild(compressIcon);
+
+    const expandText = document.createElement('span');
+    expandText.id = 'skyRadarExpandText';
+    celestialSection.appendChild(expandText);
+
+    const footer = document.createElement('div');
+    footer.id = 'skyRadarFullscreenFooter';
+    footer.className = 'hidden';
+    celestialSection.appendChild(footer);
+
+    const afterSection = document.createElement('div');
+    afterSection.id = 'timeMachineSection';
+
+    astronomyTab.appendChild(celestialSection);
+    astronomyTab.appendChild(afterSection);
+    weatherPanel.appendChild(astronomyTab);
+    document.body.appendChild(weatherPanel);
+
+    const { init } = await import('../features/astronomy.js');
+    const mockApp = { updateCelestialBodies: () => {} };
+    init(mockApp);
+
+    // Initial state: child of astronomy tab
+    expect(celestialSection.parentNode).toBe(astronomyTab);
+    expect(document.body.classList.contains('sky-radar-fullscreen-active')).toBe(false);
+
+    // Click expand -> teleports to document.body
+    btn.click();
+    expect(celestialSection.parentNode).toBe(document.body);
+    expect(celestialSection.classList.contains('sky-radar-fullscreen')).toBe(true);
+    expect(document.body.classList.contains('sky-radar-fullscreen-active')).toBe(true);
+    expect(expandText.textContent).toBe('Close');
+    expect(footer.classList.contains('hidden')).toBe(false);
+
+    // Press Escape -> restores back to astronomyTab right before timeMachineSection
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
+    expect(celestialSection.parentNode).toBe(astronomyTab);
+    expect(celestialSection.nextSibling).toBe(afterSection);
+    expect(celestialSection.classList.contains('sky-radar-fullscreen')).toBe(false);
+    expect(document.body.classList.contains('sky-radar-fullscreen-active')).toBe(false);
+    expect(expandText.textContent).toBe('Expand');
+
+    // Clean up mock DOM
+    weatherPanel.remove();
+    celestialSection.remove();
   });
 });

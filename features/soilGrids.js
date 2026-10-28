@@ -92,10 +92,10 @@ export async function fetchSoilGrids(lat, lng, opts = {}) {
   const params = new URLSearchParams({
     lon: Number(lng).toFixed(4),
     lat: Number(lat).toFixed(4),
-    property: ["sndppt", "clayppt", "phihoc", "orcdrc"].join(","),
     depth: "0-5cm",
     value: "mean",
   });
+  ["sand", "clay", "phh2o", "soc"].forEach((p) => params.append("property", p));
 
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), 10000);
@@ -108,13 +108,16 @@ export async function fetchSoilGrids(lat, lng, opts = {}) {
       return acc;
     }, {});
 
-    const sand = layerValue(layers.sndppt);
-    const clay = layerValue(layers.clayppt);
-    const phRaw = layerValue(layers.phihoc);
-    const ocRaw = layerValue(layers.orcdrc);
+    const sandRaw = layerValue(layers.sand ?? layers.sndppt);
+    const clayRaw = layerValue(layers.clay ?? layers.clayppt);
+    const phRaw = layerValue(layers.phh2o ?? layers.phihoc);
+    const ocRaw = layerValue(layers.soc ?? layers.orcdrc);
 
-    const pH = phRaw != null ? phRaw / 10 : null; // pH in tenths
-    const organicCarbon = ocRaw != null ? ocRaw / 10 : null; // cg/kg → %
+    // SoilGrids v2: sand and clay are in g/kg (divide by 10 for %), pH is in pH*10 (divide by 10), soc is in dg/kg (divide by 100 for %)
+    const sand = sandRaw != null ? (sandRaw > 100 ? sandRaw / 10 : sandRaw) : null;
+    const clay = clayRaw != null ? (clayRaw > 100 ? clayRaw / 10 : clayRaw) : null;
+    const pH = phRaw != null ? (phRaw > 14 ? phRaw / 10 : phRaw) : null;
+    const organicCarbon = ocRaw != null ? ocRaw / 100 : null;
 
     let soilId = "loam";
     if (sand != null && clay != null) {

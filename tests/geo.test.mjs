@@ -118,6 +118,37 @@ describe("formatPlaceName", () => {
     const name = formatPlaceName(ASHOKANAGAR, { includePostcode: true });
     expect(name.startsWith("Ashokanagar, 560001")).toBe(true);
   });
+
+  test("identifies water bodies (lakes, rivers, bays, oceans) as primary place names", () => {
+    const lake = formatPlaceName({
+      water: "Lake Geneva",
+      county: "District de Nyon",
+      state: "Vaud",
+      country: "Switzerland"
+    });
+    expect(lake.startsWith("Lake Geneva")).toBe(true);
+    expect(lake).toContain("Vaud");
+
+    const river = formatPlaceName({
+      waterway: "River Thames",
+      county: "Greater London",
+      country: "United Kingdom"
+    });
+    expect(river.startsWith("River Thames")).toBe(true);
+
+    const bay = formatPlaceName({
+      bay: "San Francisco Bay",
+      state: "California",
+      country: "United States"
+    });
+    expect(bay.startsWith("San Francisco Bay")).toBe(true);
+
+    const sea = formatPlaceName({
+      sea: "Arabian Sea",
+      country: "India"
+    });
+    expect(sea.startsWith("Arabian Sea")).toBe(true);
+  });
 });
 
 describe("shortPlaceName / mediumPlaceName", () => {
@@ -307,6 +338,20 @@ describe("describeCoordinates", () => {
     expect(describeCoordinates(0, -30)).toBe("North Atlantic Ocean");
     expect(describeCoordinates(-20, 100)).toBe("Indian Ocean");
     expect(describeCoordinates(0, -140)).toBe("North Pacific Ocean");
+  });
+
+  test("identifies specific regional seas, gulfs, bays, and large lakes", () => {
+    expect(describeCoordinates(20.0, 38.5)).toBe("Red Sea");
+    expect(describeCoordinates(18.0, 66.0)).toBe("Arabian Sea");
+    expect(describeCoordinates(35.0, 18.0)).toBe("Mediterranean Sea");
+    expect(describeCoordinates(15.0, 88.0)).toBe("Bay of Bengal");
+    expect(describeCoordinates(27.0, 51.0)).toBe("Persian Gulf");
+    expect(describeCoordinates(43.0, 35.0)).toBe("Black Sea");
+    expect(describeCoordinates(42.0, 50.0)).toBe("Caspian Sea");
+    expect(describeCoordinates(15.0, -72.0)).toBe("Caribbean Sea");
+    expect(describeCoordinates(25.0, -90.0)).toBe("Gulf of Mexico");
+    expect(describeCoordinates(58.0, 20.0)).toBe("Baltic Sea");
+    expect(describeCoordinates(47.5, -88.0)).toBe("Lake Superior");
   });
 
   test("normalises multi-world longitudes", () => {

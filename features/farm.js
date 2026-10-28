@@ -1487,9 +1487,15 @@ function renderFieldEditor(field) {
             <label class="text-[10px] text-slate-500 dark:text-slate-400 block mb-1">Notes</label>
             <textarea id="fieldNotes" rows="2" placeholder="Variety, fertilizer plan, etc." class="w-full text-[11px] px-2 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-1 focus:ring-teal-500">${esc(field?.notes || "")}</textarea>
           </div>
-          <div class="flex items-center justify-between pt-3">
-            <button type="button" id="farmFieldEditorCancel" class="flex-1 text-[11px] font-medium text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 px-3 py-1.5 rounded-lg transition-colors">Cancel</button>
-            <button type="submit" class="flex-1 text-[11px] font-medium text-white bg-teal-600 hover:bg-teal-700 px-3 py-1.5 rounded-lg transition-colors shadow-sm">${field ? "Save changes" : "Save field"}</button>
+          <div class="flex items-center justify-between pt-3 gap-2">
+            ${field ? `
+              <button type="button" id="farmFieldEditorDelete" class="text-[11px] font-semibold text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/40 px-3 py-1.5 rounded-lg transition-colors border border-rose-200 dark:border-rose-800/50 flex items-center gap-1 cursor-pointer" title="Delete this field">
+                <span>🗑️</span>
+                <span>Delete</span>
+              </button>
+            ` : ""}
+            <button type="button" id="farmFieldEditorCancel" class="flex-1 text-[11px] font-medium text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 px-3 py-1.5 rounded-lg transition-colors cursor-pointer">Cancel</button>
+            <button type="submit" class="flex-1 text-[11px] font-medium text-white bg-teal-600 hover:bg-teal-700 px-3 py-1.5 rounded-lg transition-colors shadow-sm cursor-pointer">${field ? "Save changes" : "Save field"}</button>
           </div>
         </form>
       </div>
@@ -1763,14 +1769,19 @@ function renderSpraySection(ctx) {
   );
   if (!timeline.length) return "";
   const { best } = summarizeSprayWindows(timeline);
-  const bars = timeline.map((t, i) => {
+  const bars = timeline.map((t) => {
+    const barHeight = Math.max(4, Math.round((t.spray.score / 100) * 48));
+    return `
+      <div class="flex-1 flex items-end h-full min-w-0" title="${esc(t.day)} ${esc(t.hourLabel)} — ${esc(t.spray.label)} (${t.spray.score})${t.spray.reasons.length ? ` — ${esc(t.spray.reasons[0])}` : ""}">
+        <div class="w-full rounded-t-sm transition-all hover:brightness-110" style="height:${barHeight}px;background:${t.spray.color}" title=""></div>
+      </div>`;
+  }).join("");
+
+  const labels = timeline.map((t, i) => {
     const showLabel = i % 3 === 0;
     return `
-      <div class="flex-1 flex flex-col items-center gap-1 min-w-0" title="${esc(t.day)} ${esc(t.hourLabel)} — ${esc(t.spray.label)} (${t.spray.score})${t.spray.reasons.length ? ` — ${esc(t.spray.reasons[0])}` : ""}">
-        <div class="w-full flex items-end" style="height:48px">
-          <div class="w-full rounded-t-sm" style="height:${Math.max(6, (t.spray.score / 100) * 48)}px;background:${t.spray.color}" title=""></div>
-        </div>
-        <div class="text-[7px] font-mono text-slate-400 truncate">${showLabel ? esc(t.hourLabel) : ""}</div>
+      <div class="flex-1 text-center text-[7.5px] font-mono text-slate-400 truncate">
+        ${showLabel ? esc(t.hourLabel) : ""}
       </div>`;
   }).join("");
 
@@ -1786,7 +1797,10 @@ function renderSpraySection(ctx) {
       </div>
       <div class="rounded-xl bg-slate-100/40 dark:bg-slate-800/40 border border-slate-200/40 dark:border-slate-700/30 p-3">
         <p class="text-[11px] text-slate-700 dark:text-slate-200 leading-relaxed mb-3">${bestTxt}</p>
-        <div class="flex items-end gap-1">${bars}</div>
+        <!-- Uniform baseline for all 24 bars -->
+        <div class="flex items-end gap-1 h-12 w-full">${bars}</div>
+        <!-- Hour labels row aligned beneath corresponding bars -->
+        <div class="flex items-center gap-1 mt-1 w-full">${labels}</div>
         <div class="flex justify-between text-[9px] text-slate-400 font-medium mt-1.5">
           <span>now</span><span>+6h</span><span>+12h</span><span>+18h</span><span>+24h</span>
         </div>
@@ -2009,7 +2023,7 @@ export function renderFarmTab(app) {
     const activeClass = isActive
       ? "bg-teal-600 text-white font-bold shadow-xs"
       : "bg-slate-200/70 hover:bg-slate-300/70 dark:bg-slate-700/60 dark:hover:bg-slate-600/70 text-slate-700 dark:text-slate-200";
-    return `<button type="button" class="farm-cat-chip flex-shrink-0 px-2.5 py-1 rounded-full text-[10px] whitespace-nowrap transition-all select-none cursor-pointer ${activeClass}" data-cat="${esc(c.id)}">${c.emoji} ${esc(c.label)}</button>`;
+    return `<button type="button" role="tab" aria-selected="${isActive ? "true" : "false"}" class="farm-cat-chip flex-shrink-0 px-2.5 py-1 rounded-full text-[10px] whitespace-nowrap transition-all select-none cursor-pointer ${activeClass}" data-cat="${esc(c.id)}">${c.emoji} ${esc(c.label)}</button>`;
   }).join("");
 
   let filteredRecs = allRecs;
@@ -2036,6 +2050,10 @@ export function renderFarmTab(app) {
     10,
   );
 
+  // Preserve horizontal scroll positions before re-rendering
+  const prevCropTabsScroll = document.getElementById("farmCropCategoryTabs")?.scrollLeft;
+  const prevLocalTabsScroll = document.getElementById("farmLocalCategoryTabs")?.scrollLeft;
+
   panel.innerHTML = `
     <div class="space-y-4">
       <div class="flex items-center justify-between">
@@ -2054,7 +2072,7 @@ export function renderFarmTab(app) {
           <h4 class="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">What to grow here — ranked for this week</h4>
           <span class="text-[10px] text-slate-400 font-medium">${filteredRecs.length} suitable</span>
         </div>
-        <div id="farmCropCategoryTabs" class="farm-scroll-tabs flex items-center gap-1.5 overflow-x-auto pb-1.5 mb-2">
+        <div id="farmCropCategoryTabs" role="tablist" aria-label="Crop categories" class="farm-scroll-tabs flex items-center gap-1.5 overflow-x-auto pb-1.5 mb-2">
           ${catPills}
         </div>
         <div class="space-y-1.5">
@@ -2095,6 +2113,16 @@ export function renderFarmTab(app) {
         (Open-Meteo, ~1 km resolution). Verify against your local agriculture department before committing inputs. ~7-day planning horizon.
       </p>
     </div>`;
+
+  // Restore horizontal scroll position so clicking tabs doesn't reset scroll
+  const newCropTabs = document.getElementById("farmCropCategoryTabs");
+  if (newCropTabs && prevCropTabsScroll != null) {
+    newCropTabs.scrollLeft = prevCropTabsScroll;
+  }
+  const newLocalTabs = document.getElementById("farmLocalCategoryTabs");
+  if (newLocalTabs && prevLocalTabsScroll != null) {
+    newLocalTabs.scrollLeft = prevLocalTabsScroll;
+  }
 
   wireFarmControls(a);
 }
@@ -2193,6 +2221,8 @@ function wireFarmControls(app) {
       if (cat && a) {
         a.farmCropCategory = cat;
         renderFarmTab(a);
+        const activeChip = document.querySelector(`.farm-cat-chip[data-cat="${cat}"]`);
+        activeChip?.scrollIntoView({ behavior: "smooth", block: "nearest", inline: "nearest" });
       }
     });
   });
@@ -2205,6 +2235,8 @@ function wireFarmControls(app) {
       if (localCat && a) {
         a.farmLocalPlantCategory = localCat;
         renderFarmTab(a);
+        const activeLocalChip = document.querySelector(`.farm-local-cat-chip[data-local-cat="${localCat}"]`);
+        activeLocalChip?.scrollIntoView({ behavior: "smooth", block: "nearest", inline: "nearest" });
       }
     });
   });
@@ -2249,6 +2281,13 @@ function wireFarmControls(app) {
         refreshFarmContext(a, { force: false });
       } else {
         setActiveFieldId(val);
+        const f = getField(val);
+        if (f && typeof f.lat === "number" && typeof f.lng === "number") {
+          if (typeof a.selectLocation === "function" && (f.lat !== a.selectedLat || f.lng !== a.selectedLng)) {
+            a.selectLocation(f.lat, f.lng, f.name);
+            return;
+          }
+        }
         refreshFarmContext(a, { force: false });
       }
     });
@@ -2280,9 +2319,22 @@ function openFieldEditor(app, field) {
   };
 
   document.getElementById("farmFieldEditorClose")?.addEventListener("click", close);
+  document.getElementById("farmFieldEditorCancel")?.addEventListener("click", close);
   wrapper.addEventListener("click", (e) => {
     if (e.target.id === "farmFieldEditor") close();
   });
+
+  const deleteBtn = document.getElementById("farmFieldEditorDelete");
+  if (deleteBtn && field) {
+    deleteBtn.addEventListener("click", () => {
+      if (confirm(`Are you sure you want to delete field "${field.name}"?`)) {
+        removeField(field.id);
+        setActiveFieldId(null);
+        close();
+        refreshFarmContext(a, { force: false });
+      }
+    });
+  }
 
   const form = document.getElementById("farmFieldEditorForm");
   form?.addEventListener("submit", (e) => {

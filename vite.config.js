@@ -9,6 +9,16 @@ export default defineConfig(({ mode }) => {
       '__FIREBASE_API_KEY__': JSON.stringify(env.VITE_FIREBASE_API_KEY || process.env.VITE_FIREBASE_API_KEY || ''),
       '__FCM_VAPID_KEY__': JSON.stringify(env.VITE_FCM_VAPID_KEY || process.env.VITE_FCM_VAPID_KEY || ''),
     },
+    server: {
+      headers: {
+        'Cross-Origin-Opener-Policy': 'same-origin-allow-popups',
+      },
+    },
+    preview: {
+      headers: {
+        'Cross-Origin-Opener-Policy': 'same-origin-allow-popups',
+      },
+    },
   build: {
     target: 'es2022',
     minify: 'terser',

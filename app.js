@@ -8513,18 +8513,88 @@ class AurafiskyApp {
   // ================================================================
 
   /**
-   * Initializes tab switching on the left-side weather card.
+   * Initializes tab switching on the left-side weather card with horizontal scroll & gestures.
    */
   initWeatherPanelTabs() {
     this.activeWeatherTab = "overview";
     const tabBtns = document.querySelectorAll(".weather-tab-btn");
+    const tabsContainer = this.$.weatherPanelTabs || document.getElementById("weatherPanelTabs");
+    let hasDragged = false;
 
-    tabBtns.forEach((btn) => {
-      btn.addEventListener("click", () => {
+    if (tabsContainer) {
+      // Horizontal mouse wheel scrolling: translate vertical wheel (deltaY) to horizontal scroll
+      tabsContainer.addEventListener(
+        "wheel",
+        (e) => {
+          if (e.deltaY !== 0 && Math.abs(e.deltaY) >= Math.abs(e.deltaX)) {
+            e.preventDefault();
+            tabsContainer.scrollLeft += e.deltaY;
+          }
+        },
+        { passive: false }
+      );
+
+      // Desktop drag-to-scroll interaction
+      let isDown = false;
+      let startX = 0;
+      let startScrollLeft = 0;
+
+      tabsContainer.addEventListener("mousedown", (e) => {
+        if (e.button !== 0) return;
+        isDown = true;
+        hasDragged = false;
+        startX = e.pageX - tabsContainer.offsetLeft;
+        startScrollLeft = tabsContainer.scrollLeft;
+      });
+
+      window.addEventListener("mouseup", () => {
+        if (isDown) {
+          isDown = false;
+          tabsContainer.classList.remove("dragging");
+          setTimeout(() => {
+            hasDragged = false;
+          }, 80);
+        }
+      });
+
+      tabsContainer.addEventListener("mousemove", (e) => {
+        if (!isDown) return;
+        const x = e.pageX - tabsContainer.offsetLeft;
+        const walk = x - startX;
+        if (Math.abs(walk) > 4) {
+          hasDragged = true;
+          tabsContainer.classList.add("dragging");
+          tabsContainer.scrollLeft = startScrollLeft - walk;
+        }
+      });
+    }
+
+    tabBtns.forEach((btn, index) => {
+      btn.addEventListener("click", (e) => {
+        if (hasDragged) {
+          e.preventDefault();
+          e.stopPropagation();
+          return;
+        }
         const tabName = btn.dataset.tab;
         if (tabName) {
           this.switchWeatherTab(tabName);
-          this._haptic('selection');
+          this._haptic("selection");
+        }
+      });
+
+      btn.addEventListener("keydown", (e) => {
+        let targetIndex = -1;
+        if (e.key === "ArrowRight") {
+          targetIndex = (index + 1) % tabBtns.length;
+        } else if (e.key === "ArrowLeft") {
+          targetIndex = (index - 1 + tabBtns.length) % tabBtns.length;
+        }
+        if (targetIndex !== -1) {
+          e.preventDefault();
+          const targetBtn = tabBtns[targetIndex];
+          targetBtn.focus();
+          targetBtn.click();
         }
       });
     });
@@ -8536,7 +8606,7 @@ class AurafiskyApp {
         const targetTab = chip.dataset.targetTab;
         if (targetTab) {
           this.switchWeatherTab(targetTab);
-          this._haptic('selection');
+          this._haptic("selection");
         }
       });
     });

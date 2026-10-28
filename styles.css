@@ -1087,6 +1087,99 @@ input[type='range'].timeline-slider::-moz-range-thumb {
   background: rgba(94, 234, 212, 0.85);
 }
 
+/* ── Weather Panel Navigation Tabs Horizontal Scroll ──────── */
+#weatherPanelTabs {
+  -webkit-overflow-scrolling: touch;
+  scroll-behavior: smooth;
+  overscroll-behavior-x: contain;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(20, 184, 166, 0.45) transparent;
+  cursor: grab;
+}
+#weatherPanelTabs.dragging {
+  cursor: grabbing;
+  user-select: none;
+  scroll-behavior: auto !important;
+}
+#weatherPanelTabs::-webkit-scrollbar {
+  height: 4px;
+}
+#weatherPanelTabs::-webkit-scrollbar-track {
+  background: rgba(0, 0, 0, 0.03);
+  border-radius: 9999px;
+  margin: 0 0.5rem;
+}
+#weatherPanelTabs::-webkit-scrollbar-thumb {
+  background: rgba(148, 163, 184, 0.55);
+  border-radius: 9999px;
+  transition: background-color 0.2s ease;
+}
+#weatherPanelTabs::-webkit-scrollbar-thumb:hover {
+  background: rgba(20, 184, 166, 0.85);
+}
+:is(.dark, [data-theme="dark"]) #weatherPanelTabs {
+  scrollbar-color: rgba(45, 212, 191, 0.45) transparent;
+}
+:is(.dark, [data-theme="dark"]) #weatherPanelTabs::-webkit-scrollbar-track {
+  background: rgba(255, 255, 255, 0.03);
+}
+:is(.dark, [data-theme="dark"]) #weatherPanelTabs::-webkit-scrollbar-thumb {
+  background: rgba(100, 116, 139, 0.6);
+}
+:is(.dark, [data-theme="dark"]) #weatherPanelTabs::-webkit-scrollbar-thumb:hover {
+  background: rgba(45, 212, 191, 0.85);
+}
+.weather-tab-btn {
+  flex-shrink: 0;
+}
+
+/* ── Farm Mode Horizontal Category Scroll ──────────────────── */
+.farm-scroll-tabs {
+  -webkit-overflow-scrolling: touch;
+  scroll-behavior: smooth;
+  overscroll-behavior-x: contain;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(20, 184, 166, 0.45) transparent;
+  cursor: grab;
+}
+.farm-scroll-tabs.dragging {
+  cursor: grabbing;
+  user-select: none;
+  scroll-behavior: auto !important;
+}
+.farm-scroll-tabs::-webkit-scrollbar {
+  height: 4px;
+}
+.farm-scroll-tabs::-webkit-scrollbar-track {
+  background: rgba(0, 0, 0, 0.04);
+  border-radius: 9999px;
+  margin: 0 0.25rem;
+}
+.farm-scroll-tabs::-webkit-scrollbar-thumb {
+  background: rgba(148, 163, 184, 0.55);
+  border-radius: 9999px;
+  transition: background-color 0.2s ease;
+}
+.farm-scroll-tabs::-webkit-scrollbar-thumb:hover {
+  background: rgba(20, 184, 166, 0.85);
+}
+:is(.dark, [data-theme="dark"]) .farm-scroll-tabs {
+  scrollbar-color: rgba(45, 212, 191, 0.45) transparent;
+}
+:is(.dark, [data-theme="dark"]) .farm-scroll-tabs::-webkit-scrollbar-track {
+  background: rgba(255, 255, 255, 0.04);
+}
+:is(.dark, [data-theme="dark"]) .farm-scroll-tabs::-webkit-scrollbar-thumb {
+  background: rgba(100, 116, 139, 0.6);
+}
+:is(.dark, [data-theme="dark"]) .farm-scroll-tabs::-webkit-scrollbar-thumb:hover {
+  background: rgba(45, 212, 191, 0.85);
+}
+.farm-cat-chip,
+.farm-local-cat-chip {
+  flex-shrink: 0;
+}
+
 /* ── Daily Forecast Strip ───────────────────────────────────── */
 .daily-item {
   transition: background-color 0.15s ease;

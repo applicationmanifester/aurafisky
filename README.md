@@ -17,6 +17,7 @@ A premium single-page web application that combines **Leaflet.js** and **OpenStr
 | 📊 **7-Day Forecast**    | Daily weather summary showing min/max temps, conditions, and icons           |
 | 🌙 **Dark Mode**         | Responsive dark theme matching dark map tiles, with persistent preference    |
 | 📍 **My Location**       | Jump directly to your coordinates using the browser's Geolocation API        |
+| 🌾 **Farm Mode**         | Crop recommendations, spray windows, water balance & frost watch (see below) |
 | 📱 **Responsive**        | Optimized for desktop, tablet, and mobile screens                            |
 
 ---
@@ -42,11 +43,17 @@ No configuration, API credentials, or setup is required. The map and weather dat
 
 ```
 Maps/
-├── index.html      # Main HTML page (Leaflet, Tailwind structure)
-├── styles.css      # Custom CSS (glassmorphism, slider track, animations)
-├── app.js          # Map controller (Leaflet events, search, timeline updates)
-├── weather.js      # Weather data module (Open-Meteo fetching, WMO code mapping)
-└── README.md       # Setup and documentation (this file)
+├── index.html              # Main HTML page (Leaflet, Tailwind structure)
+├── styles.css              # Custom CSS (glassmorphism, slider track, animations)
+├── app.js                  # Map controller (Leaflet events, search, timeline updates)
+├── weather.js              # Weather data module (Open-Meteo fetching, WMO code mapping)
+├── features/
+│   ├── farm.js             # Farm Mode: scoring engine, agro fetch, panel rendering
+│   └── cropData.js         # Curated crop envelopes (climate/soil/agronomy) + helpers
+├── tests/
+│   ├── farm.test.ts        # Farm Mode engine unit tests
+│   └── cropData.test.ts    # Crop database integrity + window/climate tests
+└── README.md               # Setup and documentation (this file)
 ```
 
 ---
@@ -62,10 +69,51 @@ Maps/
 
 ---
 
+## 🌾 Farm Mode
+
+The weather card's **🌾 Farm** tab turns any selected point into a cropping plan for
+farmers and growers. Tap your field on the map (or search your village), pick your soil
+type, and the tab answers four questions:
+
+| Question | How it's answered |
+| --- | --- |
+| **What to grow here?** | Every crop in the built-in database is scored against this exact point's live conditions — temperature, rainfall, humidity, elevation, soil moisture and your soil texture — then ranked with a match percentage, verdict, and the binding constraints called out. |
+| **When to grow it?** | Each card shows its sowing window (adjusted for your hemisphere) and whether that window is open now, closing, or opens in *N* months. |
+| **How to grow it?** | Expand a crop card for practical agronomy: sowing method, spacing, irrigation schedule, fertiliser schedule, pest/disease watch lists, and harvest indicators. |
+| **Where to grow it?** | Climate band, elevation ceiling, and the soil textures each crop suits. |
+
+Three more farmer tools sit below the crop list:
+
+- **Spray windows** — an hour-by-hour score for the next 24h combining wind, gusts,
+  rain probability, VPD, temperature and humidity, with the best contiguous window
+  highlighted. Gales (>38 km/h), active rain, or a 75%+ rain chance hard-block the
+  hour, mirroring real nozzle-drift rules.
+- **Water balance** — the last 3 days of rainfall vs evapotranspiration (ET₀) plus a
+  7-day forecast, with a texture-aware soil-moisture reading that produces a concrete
+  irrigation instruction.
+- **Frost watch** — the next 3 nights' forecast lows against the 2°C damage threshold,
+  with protective actions. Severe nights raise a push notification (opt-in, per-location
+  cooldown), matching the existing rain heads-up pattern.
+
+Also shown: growing degree-days (base 10°C) for seasonal heat tracking, root-zone and
+deep-soil moisture, and soil temperature at seed depth (which gates sowing of
+warm-season crops).
+
+All agricultural data comes free and key-less from the same Open-Meteo service the app
+already uses (soil moisture/temperature, dew point, VPD, ET₀), so no CSP or API-key
+changes were needed. Farm Mode degrades gracefully when the soil feed is unavailable —
+the plan falls back to rainfall-based advice.
+
+**Verify against your local agriculture department before committing inputs.**
+
+---
+
 ## ⚙️ Tech Stack & Credits
 
 - **Maps**: [Leaflet.js](https://leafletjs.com/) with tile layers by [CartoDB](https://carto.com/) and [OpenStreetMap](https://www.openstreetmap.org/)
-- **Weather Data**: [Open-Meteo API](https://open-meteo.com/)
+- **Weather & Agro Data**: [Open-Meteo API](https://open-meteo.com/) (agrometeorology, soil moisture, solar, air quality)
+- **Soil Characterization**: [ISRIC SoilGrids 2.0](https://rest.isric.org/) (250m global topsoil texture)
+- **Local Flora & Biodiversity**: [GBIF API](https://www.gbif.org/) (Global Biodiversity Information Facility)
 - **Geocoding & Reverse Geocoding**: Open-Meteo Geocoding API + OpenStreetMap [Nominatim API](https://nominatim.org/)
 - **Styling**: [Tailwind CSS](https://tailwindcss.com/) + Custom CSS
 - **Typography**: [Inter Font](https://fonts.google.com/specimen/Inter)

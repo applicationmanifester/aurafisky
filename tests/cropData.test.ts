@@ -1,3 +1,4 @@
+// @ts-nocheck
 import { describe, it, expect } from 'vitest';
 import {
   CROPS,
@@ -66,12 +67,16 @@ describe('crop database integrity', () => {
     expect(new Set(ids).size).toBe(ids.length);
   });
 
-  it('covers both grain and vegetable/fruit families', () => {
+  it('covers grain, vegetable, fruit, herb, tree, and flower families', () => {
     const cats = new Set(CROPS.map((c) => c.category));
     expect(cats.has('Cereal')).toBe(true);
     expect(cats.has('Pulse')).toBe(true);
     expect(cats.has('Vegetable')).toBe(true);
     expect(cats.has('Fruit')).toBe(true);
+    expect(cats.has('Herb & Medicinal')).toBe(true);
+    expect(cats.has('Tree & Agroforestry')).toBe(true);
+    expect(cats.has('Flower & Ornamental')).toBe(true);
+    expect(cats.has('Cover & Forage')).toBe(true);
   });
 });
 

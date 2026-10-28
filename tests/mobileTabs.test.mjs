@@ -7,18 +7,18 @@ describe('Mobile Tabs & Navigation Layout', () => {
   const dom = new JSDOM(html);
   const doc = dom.window.document;
 
-  it('contains #weatherPanelTabs with 5 tab buttons', () => {
+  it('contains #weatherPanelTabs with 6 tab buttons', () => {
     const tabsContainer = doc.getElementById('weatherPanelTabs');
     expect(tabsContainer).not.toBeNull();
 
     const tabs = tabsContainer.querySelectorAll('.weather-tab-btn');
-    expect(tabs.length).toBe(5);
+    expect(tabs.length).toBe(6);
 
     const tabNames = Array.from(tabs).map((t) => t.dataset.tab);
-    expect(tabNames).toEqual(['overview', 'hourly', 'daily', 'metrics', 'astronomy']);
+    expect(tabNames).toEqual(['overview', 'hourly', 'daily', 'metrics', 'astronomy', 'farm']);
   });
 
-  it('contains 5 matching tabpanels in #weatherPanelContent', () => {
+  it('contains 6 matching tabpanels in #weatherPanelContent', () => {
     const content = doc.getElementById('weatherPanelContent');
     expect(content).not.toBeNull();
 
@@ -28,6 +28,7 @@ describe('Mobile Tabs & Navigation Layout', () => {
       'weatherTabDaily',
       'weatherTabMetrics',
       'weatherTabAstronomy',
+      'weatherTabFarm',
     ];
 
     expectedPanels.forEach((id) => {

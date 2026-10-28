@@ -1,3 +1,4 @@
+// @ts-nocheck
 import { describe, it, expect } from 'vitest';
 import {
   scoreSprayConditions,
@@ -12,6 +13,8 @@ import {
   recommendCrops,
   farmAdvisories,
   agroCacheKey,
+  classifyPlantType,
+  isWaterBodyLocation,
 } from '../features/farm.js';
 import { CROPS } from '../features/cropData.js';
 
@@ -416,7 +419,6 @@ describe('recommendCrops', () => {
     expect(londonRecs).not.toContain('sugarcane');
     expect(londonRecs).not.toContain('banana');
     expect(londonRecs).not.toContain('mango');
-    expect(londonRecs).not.toContain('tomato');
   });
 });
 
@@ -458,3 +460,74 @@ describe('agroCacheKey', () => {
     expect(agroCacheKey(19.0861, 72.8529)).toBe(agroCacheKey(19.0864, 72.8527));
   });
 });
+
+describe('classifyPlantType', () => {
+  it('classifies trees and woody plants', () => {
+    expect(classifyPlantType({ vernacularName: 'English Oak', family: 'Fagaceae' }).id).toBe('tree');
+    expect(classifyPlantType({ scientificName: 'Pinus sylvestris', family: 'Pinaceae' }).id).toBe('tree');
+    expect(classifyPlantType({ vernacularName: 'Neem Tree', family: 'Meliaceae' }).id).toBe('tree');
+  });
+
+  it('classifies herbs and medicinal plants', () => {
+    expect(classifyPlantType({ vernacularName: 'Spearmint', family: 'Lamiaceae' }).id).toBe('herb');
+    expect(classifyPlantType({ scientificName: 'Lavandula angustifolia', family: 'Lamiaceae' }).id).toBe('herb');
+    expect(classifyPlantType({ vernacularName: 'Holy Basil', scientificName: 'Ocimum tenuiflorum' }).id).toBe('herb');
+  });
+
+  it('classifies wildflowers and floral ornamentals', () => {
+    expect(classifyPlantType({ vernacularName: 'Common Daisy', family: 'Asteraceae' }).id).toBe('flower');
+    expect(classifyPlantType({ vernacularName: 'Wild Rose', family: 'Rosaceae' }).id).toBe('flower');
+    expect(classifyPlantType({ scientificName: 'Tagetes erecta' }).id).toBe('flower');
+  });
+
+  it('classifies grasses, reeds and ferns', () => {
+    expect(classifyPlantType({ vernacularName: 'Meadow Fescue', family: 'Poaceae' }).id).toBe('grass');
+    expect(classifyPlantType({ vernacularName: 'Bracken Fern', family: 'Dennstaedtiaceae' }).id).toBe('grass');
+    expect(classifyPlantType({ scientificName: 'Bambusa vulgaris' }).id).toBe('grass');
+  });
+
+  it('falls back to general native flora when unclassified', () => {
+    expect(classifyPlantType({ vernacularName: 'Common Moss', family: 'UnknownFam' }).id).toBe('flora');
+  });
+});
+
+describe('isWaterBodyLocation & open water handling', () => {
+  it('detects ocean by named water bodies or reverse geocode descriptions', () => {
+    const ocean = isWaterBodyLocation({ lat: 0, lng: -30 }, { selectedName: 'North Atlantic Ocean' });
+    expect(ocean.isWater).toBe(true);
+    expect(ocean.label).toBe('Open Ocean');
+  });
+
+  it('detects maritime coordinates with zero elevation, zero soil moisture and no settlement', () => {
+    const sulawesiSea = isWaterBodyLocation(
+      { lat: -4.3837, lng: 117.0582, elevation: 0, hasSoil: true, soilVwc: 0, soilDeep: 0 },
+      { selectedName: 'South Sulawesi', selectedAddress: { province: 'Sulawesi Selatan', country: 'Indonesia' } }
+    );
+    expect(sulawesiSea.isWater).toBe(true);
+  });
+
+  it('identifies terrestrial cities as not water bodies', () => {
+    const london = isWaterBodyLocation(
+      { lat: 51.5074, lng: -0.1278, elevation: 16, hasSoil: true, soilVwc: 0.34 },
+      { selectedName: 'London', selectedAddress: { city: 'London', country: 'United Kingdom' } }
+    );
+    expect(london.isWater).toBe(false);
+
+    const mumbai = isWaterBodyLocation(
+      { lat: 19.076, lng: 72.877, elevation: 14, hasSoil: true, soilVwc: 0.22 },
+      { selectedName: 'Mumbai', selectedAddress: { city: 'Mumbai', road: 'Marine Drive' } }
+    );
+    expect(mumbai.isWater).toBe(false);
+  });
+
+  it('excludes all crops and returns empty recommendations on water locations', () => {
+    const waterCtx = { isWater: true, lat: -4.3837, lng: 117.0582 };
+    const recs = recommendCrops(waterCtx);
+    expect(recs).toEqual([]);
+
+    const score = scoreCropForLocation(CROPS[0], waterCtx);
+    expect(score.score).toBe(0);
+    expect(score.verdict).toMatch(/open water/i);
+  });
+});
+

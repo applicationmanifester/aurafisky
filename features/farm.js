@@ -38,6 +38,18 @@ import {
   classifyClimate,
   MONTH_SHORT,
 } from "./cropData.js";
+import { fetchSoilGrids, soilPHBand } from "./soilGrids.js";
+import {
+  loadFields,
+  addField,
+  removeField,
+  updateField,
+  getField,
+  daysSinceSowing,
+  setActiveFieldId,
+  getActiveFieldId,
+  FARM_ACTIVE_FIELD_KEY,
+} from "./farmFields.js";
 
 // ────────────────── constants ──────────────────
 
@@ -46,8 +58,93 @@ export const FARM_FROST_LAST_KEY = "aurafisky_farm_frost_last";
 export const FARM_COOLDOWN_MS = 12 * 60 * 60 * 1000; // one frost push per place / 12h
 export const AGRO_TTL_MS = 10 * 60 * 1000; // in-memory agro cache TTL
 export const AGRO_URL = "https://api.open-meteo.com/v1/forecast";
+export const FARM_ALERT_COOLDOWN_MS = 6 * 60 * 60 * 1000; // one proactive alert per field / 6h
+export const SOILGRIDS_FALLBACK_KEY = "aurafisky_farm_soilgrids_failed";
 
 const DEFAULT_FROST_THRESHOLD = 2; // °C — most vegetation damaged below this
+
+/** Crop growth stages keyed by base-10 GDD thresholds (cumulative from sowing).
+ *  Each stage: { gdd: degrees, name, label, action }. GDD thresholds are
+ *  approximate and crop-specific — standard FAO/extension figures. */
+export const GROWTH_STAGES = {
+  rice: [
+    { gdd: 0, name: "sowing", label: "Sown / germination", action: "Keep soil moist, avoid waterlogging" },
+    { gdd: 450, name: "tillering", label: "Tillering", action: "Maintain 3–5 cm standing water, top-dress nitrogen" },
+    { gdd: 900, name: "panicle", label: "Panicle initiation", action: "Critical water window — do not let field dry" },
+    { gdd: 1300, name: "flowering", label: "Flowering", action: "Keep flooded; avoid midday spray" },
+    { gdd: 1600, name: "grain-fill", label: "Grain filling", action: "Intermittent irrigation, drain 10 days before harvest" },
+  ],
+  wheat: [
+    { gdd: 0, name: "sowing", label: "Sown / emergence", action: "Firm seedbed, pre-sowing irrigation" },
+    { gdd: 300, name: "tillering", label: "Tillering", action: "First nitrogen top-dress" },
+    { gdd: 600, name: "stem-elongation", label: "Stem elongation", action: "Second irrigation at jointing" },
+    { gdd: 1000, name: "flowering", label: "Flowering", action: "Critical water window — avoid drought" },
+    { gdd: 1300, name: "grain-fill", label: "Grain filling", action: "Stop irrigation at hard dough stage" },
+  ],
+  maize: [
+    { gdd: 0, name: "sowing", label: "Sown / emergence", action: "Seedbed moisture essential" },
+    { gdd: 350, name: "vegetative", label: "Vegetative (V6–V8)", action: "Side-dress nitrogen at knee-high" },
+    { gdd: 750, name: "tasselling", label: "Tasselling", action: "Critical — water stress here cuts kernel set" },
+    { gdd: 1100, name: "silking", label: "Silking / pollination", action: "Do not let field dry" },
+    { gdd: 1400, name: "grain-fill", label: "Grain filling", action: "Maintain moisture until black layer" },
+  ],
+  cotton: [
+    { gdd: 0, name: "sowing", label: "Sown / emergence", action: "Warm soil (>18°C) at planting" },
+    { gdd: 500, name: "squaring", label: "Squaring", action: "First irrigation at flower bud formation" },
+    { gdd: 900, name: "flowering", label: "Flowering", action: "Regular irrigation, watch bollworm" },
+    { gdd: 1300, name: "boll-fill", label: "Boll filling", action: "Stop irrigation when bolls begin opening" },
+  ],
+  "groundnut": [
+    { gdd: 0, name: "sowing", label: "Sown / emergence", action: "Friable soil, no waterlogging" },
+    { gdd: 400, name: "flowering", label: "Flowering", action: "Light irrigation at pegging" },
+    { gdd: 800, name: "peg-entry", label: "Peg entering soil", action: "Keep moist — pods form underground" },
+    { gdd: 1200, name: "pod-fill", label: "Pod filling", action: "Dry soil before harvest" },
+  ],
+  tomato: [
+    { gdd: 0, name: "transplant", label: "Transplanted / establishment", action: "Water daily for first week" },
+    { gdd: 500, name: "vegetative", label: "Vegetative", action: "Stake plants, regular irrigation" },
+    { gdd: 900, name: "flowering", label: "Flowering", action: "Avoid water stress — blossom drop risk" },
+    { gdd: 1300, name: "fruiting", label: "Fruiting", action: "Calcium spray against blossom-end rot" },
+  ],
+  potato: [
+    { gdd: 0, name: "planting", label: "Planted / emergence", action: "Hill up soil around stems" },
+    { gdd: 500, name: "tuber-initiation", label: "Tuber initiation", action: "Critical water window — even moisture" },
+    { gdd: 900, name: "tuber-bulking", label: "Tuber bulking", action: "Regular irrigation, avoid dry-wet swings" },
+    { gdd: 1300, name: "maturity", label: "Maturity / skin set", action: "Stop irrigation 2 weeks before harvest" },
+  ],
+};
+
+/** Current growth stage from accumulated GDD and days since sowing. */
+export function computeGrowthStage(cropId, sowingDateISO, dailyTemps, baseTemp = 10) {
+  if (!cropId || !sowingDateISO) return null;
+  const stages = GROWTH_STAGES[cropId];
+  if (!stages) return null;
+
+  const sown = new Date(sowingDateISO + "T00:00:00").getTime();
+  if (isNaN(sown)) return null;
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const days = Math.floor((today - sown) / (1000 * 60 * 60 * 24));
+  if (days < 0) return null;
+
+  // Accumulate GDD from daily temps array (each entry {tmax, tmin})
+  let gdd = 0;
+  const daysToUse = Math.min(days + 1, dailyTemps.length);
+  for (let i = 0; i < daysToUse; i++) {
+    const d = dailyTemps[i];
+    if (d?.tmax != null && d?.tmin != null) {
+      gdd += Math.max(0, (d.tmax + d.tmin) / 2 - baseTemp);
+    }
+  }
+
+  // Find the latest stage whose GDD threshold <= accumulated GDD
+  let current = stages[0];
+  for (const st of stages) {
+    if (gdd >= st.gdd) current = st;
+    else break;
+  }
+  return { ...current, gdd: Math.round(gdd), daysSinceSowing: days };
+}
 
 /** Score bands for the spray-condition meter. */
 export const SPRAY_LABELS = [
@@ -562,7 +659,7 @@ function scoreTiming(crop, ctx, effectiveWindow) {
 /**
  * Scores one crop against this site. Weighted parts sum to 100:
  * temperature 25 · water 20 · humidity 10 · altitude 8 · soil 12 ·
- * timing 20 · locality 5 (crops with known local cultivars score higher).
+ * timing 25 (the sowing window carries the most weight).
  *
  * @param {Object} crop - entry from cropData.CROPS
  * @param {{siteTemp:number|null, meanTempNext7:number|null, rainNext7:number,
@@ -575,6 +672,17 @@ function scoreTiming(crop, ctx, effectiveWindow) {
  *            constraints:string[]}}
  */
 export function scoreCropForLocation(crop, ctx = {}) {
+  if (ctx.isWater) {
+    return {
+      cropId: crop.id,
+      cropName: crop.name,
+      score: 0,
+      verdict: "Not viable in open water / marine environment",
+      parts: [],
+      constraints: ["Open water / no arable soil"],
+    };
+  }
+
   const parts = [];
   let total = 0;
 
@@ -608,7 +716,7 @@ export function scoreCropForLocation(crop, ctx = {}) {
 
   const timingScore = scoreTiming(crop, ctx, effectiveWindow);
   push("timing", `Sowing window (${formatSowWindow(effectiveWindow) || "none / off-season"})`,
-    timingScore, 20);
+    timingScore, 25);
 
   let score = clamp(Math.round(total), 0, 100);
 
@@ -678,6 +786,7 @@ export function scoreCropForLocation(crop, ctx = {}) {
  * @returns {Array} scoreCropForLocation results, best first
  */
 export function recommendCrops(ctx = {}, crops = CROPS) {
+  if (ctx.isWater) return [];
   return crops
     .map((crop) => scoreCropForLocation(crop, ctx))
     .filter((r) => r.score >= 50)
@@ -828,7 +937,236 @@ export function __seedAgroCache(lat, lng, data, ts = Date.now()) {
   _agroCache.set(agroCacheKey(lat, lng), { ts, data });
 }
 
+// ────────────────── local plants (GBIF) ──────────────────
+
+/**
+ * Fetch wild/cultivated plant species recorded near a point from GBIF
+ * (Global Biodiversity Information Facility) — free, no API key, open data.
+ * Returns species actually observed near this location, which is a much
+ * better "what grows here" signal than any hand-curated list.
+ *
+ * @param {number} lat
+ * @param {number} lng
+ * @param {{radiusKm?:number, limit?:number, now?:number, signal?:AbortSignal}} [opts]
+ * @returns {Promise<Array<{scientificName:string, vernacularName:string|null,
+ *            rank:string, kingdom:string, family:string|null, genus:string|null,
+ *            species:string|null, recorded:number}>>}
+ */
+// ────────────────── local plants (GBIF) ──────────────────
+
+/**
+ * Classifies a GBIF plant occurrence into a user-friendly botanical category:
+ * tree, flower, herb, grass, or general native flora.
+ *
+ * @param {{vernacularName?:string|null, scientificName?:string|null, family?:string|null, genus?:string|null}} p
+ * @returns {{id:'tree'|'flower'|'herb'|'grass'|'flora', label:string, emoji:string}}
+ */
+export function classifyPlantType(p = {}) {
+  const name = `${p.vernacularName || ""} ${p.scientificName || ""} ${p.genus || ""}`.toLowerCase();
+  const fam = (p.family || "").toLowerCase();
+
+  // Trees & Woody Plants
+  if (
+    /pinaceae|fagaceae|betulaceae|salicaceae|cupressaceae|moraceae|myrtaceae|meliaceae|oleaceae|sapindaceae|bignoniaceae|ulmaceae|arecaceae|rutaceae|magnoliaceae|lauraceae|juglandaceae|anacardiaceae/.test(fam) ||
+    /\b(tree|oak|quercus|pine|pinus|cedar|cedrus|birch|betula|maple|acer|willow|salix|palm|ash|fraxinus|elm|ulmus|spruce|picea|fir|abies|cypress|cupressus|acacia|eucalyptus|neem|azadirachta|teak|tectona|poplar|populus|beech|fagus|redwood|sequoia|mahogany|swietenia|alder|alnus|walnut|juglans|chestnut|castanea|linden|tilia|sycamore|moringa|boxwood|buxus|yew|taxus|juniper|juniperus|aspen|cherry|prunus|apple|malus|plum|pear|pyrus|fig|ficus|citrus)\b/.test(name)
+  ) {
+    return { id: "tree", label: "Tree / Woody", emoji: "🌲" };
+  }
+
+  // Grasses, Reeds, Bamboos & Ferns
+  if (
+    /poaceae|cyperaceae|juncaceae|polypodiaceae|pteridaceae|dryopteridaceae|equisetaceae|aspleniaceae|gramineae|dennstaedtiaceae/.test(fam) ||
+    /\b(grass|fern|sedge|carex|rush|juncus|reed|phragmites|bamboo|bambusa|dendrocalamus|horsetail|equisetum|cane|fescue|festuca|ryegrass|lolium|bluegrass|poa|timothy|phleum|sorghum)\b/.test(name)
+  ) {
+    return { id: "grass", label: "Grass / Fern", emoji: "🌾" };
+  }
+
+  // Herbs & Medicinal Plants
+  if (
+    /lamiaceae|apiaceae|zingiberaceae|plantaginaceae|boraginaceae|amaranthaceae|urticaceae|polygonaceae|papaveraceae/.test(fam) ||
+    /\b(mint|mentha|basil|ocimum|rosemary|salvia|lavender|lavandula|thyme|thymus|sage|herb|medicinal|aloe|chamomile|matricaria|fennel|foeniculum|parsley|petroselinum|cilantro|coriander|coriandrum|nettle|urtica|sorrel|rumex|dock|balm|melissa|tulsi|marjoram|oregano|origanum|dill|anethum|chive|allium|ginseng|panax)\b/.test(name)
+  ) {
+    return { id: "herb", label: "Herb / Medicinal", emoji: "🌿" };
+  }
+
+  // Flowers & Ornamentals
+  if (
+    /asteraceae|orchidaceae|liliaceae|iridaceae|amaryllidaceae|ranunculaceae|caryophyllaceae|malvaceae|campanulaceae|primulaceae|ericaceae|violaceae|gentianaceae|geraniaceae|solanaceae|rosaceae/.test(fam) ||
+    /\b(flower|rose|rosa|orchid|lily|lilium|iris|tulip|tulipa|violet|viola|daisy|bellis|marigold|tagetes|hibiscus|jasmine|jasminum|blossom|poppy|papaver|sunflower|helianthus|dahlia|carnation|dianthus|buttercup|ranunculus|begonia|peony|paeonia|zinnia|petunia|geranium|pansy|crocus|bluebell|hyacinth)\b/.test(name)
+  ) {
+    return { id: "flower", label: "Wildflower / Floral", emoji: "🌸" };
+  }
+
+  return { id: "flora", label: "Native Flora", emoji: "🌱" };
+}
+
+/**
+ * Fetch wild/cultivated plant species recorded near a point from GBIF
+ * (Global Biodiversity Information Facility) — free, no API key, open data.
+ * Returns species actually observed near this location, which is a much
+ * better "what grows here" signal than any hand-curated list.
+ *
+ * @param {number} lat
+ * @param {number} lng
+ * @param {{radiusKm?:number, limit?:number, now?:number, signal?:AbortSignal}} [opts]
+ * @returns {Promise<Array<{scientificName:string, vernacularName:string|null,
+ *            rank:string, kingdom:string, family:string|null, genus:string|null,
+ *            species:string|null, recorded:number, type:Object}>>}
+ */
+const _gbifCache = new Map();
+const GBIF_TTL_MS = 24 * 60 * 60 * 1000; // species lists change slowly
+
+export async function fetchLocalPlants(lat, lng, opts = {}) {
+  const now = opts.now ?? Date.now();
+  const key = `${Number(lat).toFixed(3)},${Number(lng).toFixed(3)}`;
+  const hit = _gbifCache.get(key);
+  if (hit && now - hit.ts < GBIF_TTL_MS) return hit.data;
+
+  // Approximate radius in degrees: 1 deg lat ~ 111 km, longitude scaled by cos(lat)
+  const radiusKm = opts.radiusKm ?? 40;
+  const dLat = radiusKm / 111;
+  const rad = (lat * Math.PI) / 180;
+  const cosLat = Math.max(0.15, Math.abs(Math.cos(rad)));
+  const dLng = dLat / cosLat;
+
+  const minLat = Math.max(-90, lat - dLat).toFixed(4);
+  const maxLat = Math.min(90, lat + dLat).toFixed(4);
+  const minLng = Math.max(-180, lng - dLng).toFixed(4);
+  const maxLng = Math.min(180, lng + dLng).toFixed(4);
+
+  const params = new URLSearchParams({
+    decimalLatitude: `${minLat},${maxLat}`,
+    decimalLongitude: `${minLng},${maxLng}`,
+    taxonKey: "6", // Plantae kingdom
+    hasCoordinate: "true",
+    limit: String(opts.limit ?? 150),
+  });
+
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), 10000);
+  try {
+    const res = await fetch(
+      `https://api.gbif.org/v1/occurrence/search?${params}`,
+      { signal: opts.signal || ctrl.signal },
+    );
+    if (!res.ok) throw new Error(`GBIF error ${res.status}`);
+    const json = await res.json();
+    const results = json.results || [];
+    const seen = new Set();
+    const plants = [];
+    for (const r of results) {
+      const sci = r.scientificName;
+      if (!sci || seen.has(sci)) continue;
+      seen.add(sci);
+      const kingdom = (r.kingdom || "").toLowerCase();
+      // Keep Plantae (plants, incl. trees, crops, vegetables); drop fungi/animal.
+      if (kingdom !== "plantae") continue;
+      const plantObj = {
+        scientificName: sci,
+        vernacularName: r.vernacularName || null,
+        rank: r.rank || null,
+        kingdom: r.kingdom || null,
+        family: r.family || null,
+        genus: r.genus || null,
+        species: r.species || null,
+        recorded: r.year != null ? Number(r.year) : null,
+      };
+      plantObj.type = classifyPlantType(plantObj);
+      plants.push(plantObj);
+    }
+    _gbifCache.set(key, { ts: now, data: plants });
+    return plants;
+  } catch {
+    return []; // soft-fail: no local plant feed
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+/** Test seam: seed the GBIF cache without a network call. */
+export function __seedGbifCache(lat, lng, data, ts = Date.now()) {
+  const normalized = Array.isArray(data)
+    ? data.map((p) => ({ ...p, type: p.type || classifyPlantType(p) }))
+    : [];
+  _gbifCache.set(`${Number(lat).toFixed(3)},${Number(lng).toFixed(3)}`, { ts, data: normalized });
+}
+
 // ────────────────── site context assembly ──────────────────
+
+/**
+ * Reduces the loaded forecast + agro dataset into the flat context the
+ * scoring engine consumes. Pure (WeatherService is read off globalThis,
+ * as rainPush does) so tests can drive it with fixture JSON.
+/**
+ * Detects whether coordinates represent open water (ocean, sea, gulf, strait,
+ * lake, or marine grid) where terrestrial agricultural farming is impossible.
+ *
+ * @param {Object} ctx - site context from buildSiteContext
+ * @param {Object} [appOrInput] - app instance or input object
+ * @returns {{isWater: boolean, label: string, name: string, detail: string}}
+ */
+export function isWaterBodyLocation(ctx = {}, appOrInput = {}) {
+  const a = appOrInput || appRef;
+  const lat = ctx.lat ?? a?.selectedLat;
+  const lng = ctx.lng ?? a?.selectedLng;
+  const address = a?.selectedAddress || appOrInput?.address || ctx.address || {};
+  const name = `${a?.selectedName || ""} ${a?.selectedDisplayName || ""}`.trim();
+
+  // 1. Explicit water names or reverseGeocode fallback (e.g. "Pacific Ocean", "Makassar Strait")
+  const oceanKeywords = /\b(ocean|sea|gulf|strait|bay|sound|bight|lake|channel|basin|firth|fjord)\b/i;
+  const isNamedWater =
+    oceanKeywords.test(name) ||
+    oceanKeywords.test(address.natural || "") ||
+    oceanKeywords.test(address.water || "");
+
+  // 2. Settlement presence check (if there's a road, street, village, town, city, suburb, or hamlet, it's land)
+  const hasSettlement = !!(
+    address.road ||
+    address.street ||
+    address.suburb ||
+    address.neighbourhood ||
+    address.residential ||
+    address.village ||
+    address.hamlet ||
+    address.town ||
+    address.city ||
+    address.municipality ||
+    address.isolated_dwelling
+  );
+
+  // 3. Open-Meteo elevation and soil moisture telemetry
+  // Real terrestrial soils have non-zero volumetric water content. Open-Meteo sets ocean cells to elevation 0 and moisture 0.
+  const isZeroElevation = (ctx.elevation || 0) <= 0.05;
+  const isZeroMoisture =
+    ctx.hasSoil &&
+    (ctx.soilVwc === 0 || ctx.soilVwc == null) &&
+    (ctx.soilDeep === 0 || ctx.soilDeep == null);
+
+  // 4. Nominatim maritime boundary only (e.g. province border over sea without any land settlement)
+  const isMaritimeBoundaryOnly =
+    !hasSettlement &&
+    isZeroElevation &&
+    (isZeroMoisture || !ctx.hasSoil) &&
+    (address.province || address.state || address.country);
+
+  const isWater =
+    isNamedWater ||
+    (isZeroElevation && isZeroMoisture && !hasSettlement) ||
+    isMaritimeBoundaryOnly;
+
+  let label = "Open Water / Marine Area";
+  if (/ocean/i.test(name)) label = "Open Ocean";
+  else if (/sea/i.test(name)) label = "Open Sea";
+  else if (/strait/i.test(name)) label = "Marine Strait";
+  else if (/lake/i.test(name)) label = "Inland Water Body";
+
+  return {
+    isWater,
+    label,
+    name: name || label,
+    detail: `Coordinates (${Number(lat || 0).toFixed(4)}°, ${Number(lng || 0).toFixed(4)}°) are located in open water. Terrestrial crops and soil-based agriculture cannot grow in marine or aquatic environments.`,
+  };
+}
 
 /**
  * Reduces the loaded forecast + agro dataset into the flat context the
@@ -870,7 +1208,23 @@ export function buildSiteContext(input = {}) {
     });
   }
 
-  const soilId = input.soilId || "loam";
+  // ── Field context ─────────────────────────────────────────────────
+  // If a saved field id is provided, use its soil texture & sowing date.
+  let field = null;
+  let fieldSoilId = input.soilId;
+  let sowingDate = null;
+  let activeFieldId = input.fieldId;
+  if (!activeFieldId) {
+    activeFieldId = getActiveFieldId();
+  }
+  if (activeFieldId) {
+    field = getField(activeFieldId);
+    if (field) {
+      fieldSoilId = field.soilId;
+      sowingDate = field.sowingDate;
+    }
+  }
+  const soilId = fieldSoilId || "loam";
   const soilVwc = ah?.soil_moisture_9_to_27cm?.[startIdx] ?? ah?.soil_moisture_9_to_27cm?.[0];
   const soilDeep = ah?.soil_moisture_27_to_81cm?.[startIdx] ?? ah?.soil_moisture_27_to_81cm?.[0];
   const soilMoisture = Number.isFinite(soilVwc)
@@ -969,7 +1323,22 @@ export function buildSiteContext(input = {}) {
     pastDays,
     nextDays,
     hasSoil: !!ah,
+    field,
+    sowingDate,
+    soilSource: field?.soilSource ?? (input.soilGrids ? "soilgrids" : input.soilId ? "manual" : "default"),
+    growthStage: null,
   };
+
+  const waterCheck = isWaterBodyLocation(ctx, input);
+  ctx.isWater = waterCheck.isWater;
+  ctx.waterInfo = waterCheck;
+
+  // ── Growth stage ─────────────────────────────────────────────────
+  // Compute from field's sowing date + crop + accumulated GDD.
+  if (field?.cropId && sowingDate) {
+    const stage = computeGrowthStage(field.cropId, sowingDate, daily);
+    if (stage) ctx.growthStage = stage;
+  }
 
   return ctx;
 }
@@ -1047,6 +1416,214 @@ function renderRegionChip(ctx) {
     </div>`;
 }
 
+/** Field selector dropdown — switch between saved fields or save current point. */
+function renderFieldSelector(ctx, app) {
+  const a = app || appRef;
+  const fields = loadFields();
+  const activeId = getActiveFieldId();
+  const activeField = activeId ? fields.find((f) => f.id === activeId) : null;
+  const currentLabel = activeField ? esc(activeField.name) : "Current point";
+  const soilLabel = activeField ? getSoil(activeField.soilId)?.name || activeField.soilId : "";
+  const days = activeField?.sowingDate ? daysSinceSowing(activeField.sowingDate) : null;
+  const daysTxt = days != null ? ` · Day ${days}` : "";
+
+  return `
+    <div class="inline-flex items-center gap-1.5">
+      <select id="farmFieldSelect" class="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-600 rounded-lg px-1.5 py-1 text-[10px] font-semibold text-slate-700 dark:text-slate-200 cursor-pointer">
+        <option value="__current__">📍 ${currentLabel}${daysTxt}</option>
+        <option value="__new__">+ Save this field</option>
+        ${fields.map((f) => `<option value="${esc(f.id)}"${activeId === f.id ? " selected" : ""}>🏷️ ${esc(f.name)}${daysSinceSowing(f.sowingDate) != null ? ` · Day ${daysSinceSowing(f.sowingDate)}` : ""}</option>`).join("")}
+      </select>
+      <button id="farmFieldEditBtn" class="p-1.5 rounded-lg hover:bg-slate-200/70 dark:hover:bg-slate-700/60 transition-colors text-slate-500 dark:text-slate-400 hover:text-teal-600 dark:hover:text-teal-400 cursor-pointer" title="Edit field" aria-label="Edit field">
+        <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M15 23l-7-7 7-7m6 6L9 9m12 0-3 3m-3 3-3-3"/></svg>
+      </button>
+    </div>
+    ${activeField && activeField.growthStage ? `
+    <div class="inline-flex items-center gap-2 text-[10px] mb-1">
+      <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-50/70 dark:bg-emerald-950/40 border border-emerald-200/60 dark:border-emerald-800/60">
+        <span class="text-[9px]">🌱</span>
+        <span class="font-semibold text-emerald-800 dark:text-emerald-300 truncate">${esc(activeField.growthStage.name)} — ${esc(activeField.growthStage.label)}</span>
+      </span>
+      <span class="text-slate-500 dark:text-slate-500">GDD ${esc(activeField.growthStage.gdd)} · Day ${esc(activeField.growthStage.daysSinceSowing)}</span>
+    </div>` : ""}
+  `;
+}
+
+/** Edit field modal content (name, crop, sowing date, notes, soil). */
+function renderFieldEditor(field) {
+  const crops = CROPS.map((c) => `<option value="${esc(c.id)}"${field?.cropId === c.id ? " selected" : ""}>${esc(c.name)}</option>`).join("");
+  const soils = SOIL_TYPES.map((s) => `<option value="${esc(s.id)}"${field?.soilId === s.id ? " selected" : ""}>${esc(s.name)}</option>`).join("");
+  return `
+    <div id="farmFieldEditor" class="fixed inset-0 z-[5000] flex items-center justify-center bg-black/50 backdrop-blur-sm">
+      <div class="bg-white dark:bg-slate-900 rounded-2xl p-4 sm:p-6 w-full max-w-md mx-4 shadow-2xl border border-slate-200 dark:border-slate-800">
+        <div class="flex items-center justify-between mb-3">
+          <h4 class="text-sm font-bold text-slate-800 dark:text-white">${field ? "Edit field" : "Save new field"}</h4>
+          <button id="farmFieldEditorClose" class="p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-500 dark:text-slate-400">✕</button>
+        </div>
+        <form id="farmFieldEditorForm" class="space-y-3">
+          <div>
+            <label class="text-[10px] text-slate-500 dark:text-slate-400 block mb-1">Field name</label>
+            <input type="text" id="fieldName" value="${esc(field?.name || "")}" placeholder="e.g. North Paddy" class="w-full text-[11px] px-2 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-1 focus:ring-teal-500" required />
+          </div>
+          <div class="grid grid-cols-2 gap-3">
+            <div>
+              <label class="text-[10px] text-slate-500 dark:text-slate-400 block mb-1">Crop</label>
+              <select id="fieldCrop" class="w-full text-[11px] px-2 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-1 focus:ring-teal-500">
+                <option value="">None</option>${crops}
+              </select>
+            </div>
+            <div>
+              <label class="text-[10px] text-slate-500 dark:text-slate-400 block mb-1">Soil</label>
+              <select id="fieldSoil" class="w-full text-[11px] px-2 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-1 focus:ring-teal-500">
+                ${soils}
+              </select>
+            </div>
+          </div>
+          <div>
+            <label class="text-[10px] text-slate-500 dark:text-slate-400 block mb-1">Sowing date</label>
+            <input type="date" id="fieldSowingDate" value="${esc(field?.sowingDate || "")}" class="w-full text-[11px] px-2 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-1 focus:ring-teal-500" />
+          </div>
+          <div>
+            <label class="text-[10px] text-slate-500 dark:text-slate-400 block mb-1">Notes</label>
+            <textarea id="fieldNotes" rows="2" placeholder="Variety, fertilizer plan, etc." class="w-full text-[11px] px-2 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-1 focus:ring-teal-500">${esc(field?.notes || "")}</textarea>
+          </div>
+          <div class="flex items-center justify-between pt-3">
+            <button type="button" id="farmFieldEditorCancel" class="flex-1 text-[11px] font-medium text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 px-3 py-1.5 rounded-lg transition-colors">Cancel</button>
+            <button type="submit" class="flex-1 text-[11px] font-medium text-white bg-teal-600 hover:bg-teal-700 px-3 py-1.5 rounded-lg transition-colors shadow-sm">${field ? "Save changes" : "Save field"}</button>
+          </div>
+        </form>
+      </div>
+    </div>`;
+}
+
+/** Render the local plant species GBIF recorded near this point with category filters & search. */
+function renderLocalPlants(ctx, app) {
+  if (ctx?.loadingLocalPlants) {
+    return `
+      <div class="rounded-xl border border-slate-200/80 dark:border-slate-700/70 bg-slate-50/70 dark:bg-slate-800/40 p-3 space-y-1 text-center">
+        <div class="text-xs font-semibold text-slate-700 dark:text-slate-300 flex items-center justify-center gap-1.5">
+          <span class="inline-block animate-spin text-teal-600">⏳</span>
+          <span>Querying Local Flora within ~40 km (GBIF)...</span>
+        </div>
+        <p class="text-[10px] text-slate-400">Discovering recorded botanical species cataloged near this location.</p>
+      </div>`;
+  }
+
+  const plants = Array.isArray(ctx?.localPlants) ? ctx.localPlants : [];
+  if (!plants.length) {
+    return `
+      <div class="rounded-xl border border-slate-200/60 dark:border-slate-700/60 bg-slate-50/60 dark:bg-slate-800/30 p-2.5 text-center">
+        <div class="text-[11px] font-semibold text-slate-600 dark:text-slate-300">🌿 Local Flora (GBIF)</div>
+        <p class="text-[10px] text-slate-400 mt-0.5">No wild flora occurrences recorded within ~40 km in open biodiversity catalogs for this exact coordinate.</p>
+      </div>`;
+  }
+
+  const a = app || appRef;
+  const activeCat = a?.farmLocalPlantCategory || "all";
+  const searchQ = (a?.farmLocalPlantSearch || "").trim().toLowerCase();
+  const isExpanded = !!a?.farmLocalPlantExpanded;
+
+  let treeCount = 0;
+  let flowerCount = 0;
+  let herbCount = 0;
+  let grassCount = 0;
+  let floraCount = 0;
+
+  for (const p of plants) {
+    const t = p.type?.id || classifyPlantType(p).id;
+    if (t === "tree") treeCount++;
+    else if (t === "flower") flowerCount++;
+    else if (t === "herb") herbCount++;
+    else if (t === "grass") grassCount++;
+    else floraCount++;
+  }
+
+  const localCats = [
+    { id: "all", label: `All (${plants.length})`, emoji: "🌱" },
+    { id: "tree", label: `Trees (${treeCount})`, emoji: "🌲" },
+    { id: "flower", label: `Wildflowers (${flowerCount})`, emoji: "🌸" },
+    { id: "herb", label: `Herbs (${herbCount})`, emoji: "🌿" },
+    { id: "grass", label: `Grasses & Ferns (${grassCount})`, emoji: "🌾" },
+  ];
+
+  const catChips = localCats.map((c) => {
+    const isActive = activeCat === c.id;
+    const activeClass = isActive
+      ? "bg-emerald-600 text-white font-bold shadow-xs"
+      : "bg-slate-200/70 hover:bg-slate-300/70 dark:bg-slate-700/60 dark:hover:bg-slate-600/70 text-slate-700 dark:text-slate-200";
+    return `<button type="button" class="farm-local-cat-chip flex-shrink-0 px-2 py-0.5 rounded-full text-[9px] whitespace-nowrap transition-all select-none cursor-pointer ${activeClass}" data-local-cat="${esc(c.id)}">${c.emoji} ${esc(c.label)}</button>`;
+  }).join("");
+
+  const byRank = {};
+  for (const p of plants) {
+    (byRank[p.rank || "species"] = byRank[p.rank || "species"] || []).push(p);
+  }
+  const order = ["species", "genus", "family", "variety", "form", "subspecies"];
+  const ranked = order
+    .flatMap((rk) => byRank[rk] || [])
+    .concat(plants.filter((p) => !order.includes(p.rank || "species")));
+
+  const filtered = ranked.filter((p) => {
+    const t = p.type?.id || classifyPlantType(p).id;
+    if (activeCat !== "all" && t !== activeCat) return false;
+    if (searchQ) {
+      const hay = `${p.vernacularName || ""} ${p.scientificName || ""} ${p.family || ""}`.toLowerCase();
+      if (!hay.includes(searchQ)) return false;
+    }
+    return true;
+  });
+
+  const maxVisible = isExpanded ? 50 : 10;
+  const visible = filtered.slice(0, maxVisible);
+
+  const rows = visible.map((p) => {
+    const name = p.vernacularName || p.scientificName;
+    const sci = p.scientificName ? ` <span class="text-slate-400 text-[9px] italic">(${esc(p.scientificName)})</span>` : "";
+    const fam = p.family ? ` · ${esc(p.family)}` : "";
+    const recorded = p.recorded ? ` · observed ${p.recorded}` : "";
+    const pType = p.type || classifyPlantType(p);
+    return `
+      <li class="flex items-center justify-between text-[10px] text-slate-700 dark:text-slate-200 leading-relaxed py-0.5 border-b border-slate-100/60 dark:border-slate-800/40 last:border-none">
+        <span class="truncate flex-1 pr-2">
+          ${esc(name)}${sci}${fam}${recorded}
+        </span>
+        <span class="text-[9px] font-medium text-slate-500 dark:text-slate-400 flex-shrink-0">
+          ${pType.emoji} ${esc(pType.label)}
+        </span>
+      </li>`;
+  }).join("");
+
+  const emptyMsg = `<li class="text-[10px] text-slate-400 italic py-2 text-center">No matching plants found in this category${searchQ ? ` for "${esc(searchQ)}"` : ""}.</li>`;
+
+  const toggleBtn = filtered.length > 10 ? `
+    <button type="button" id="localPlantShowAllBtn" class="text-[10px] font-semibold text-teal-600 dark:text-teal-400 hover:underline cursor-pointer">
+      ${isExpanded ? "Show fewer" : `Show all ${filtered.length} local species (${filtered.length - 10} more)`}
+    </button>` : "";
+
+  return `
+    <div class="rounded-xl border border-slate-200/80 dark:border-slate-700/70 bg-slate-50/70 dark:bg-slate-800/40 p-2.5 space-y-1.5">
+      <div class="flex items-center justify-between">
+        <h4 class="text-xs font-semibold text-slate-700 dark:text-slate-300 uppercase tracking-wider flex items-center gap-1.5">
+          <span>🌿 Local Plants & Wild Flora (GBIF)</span>
+        </h4>
+        <span class="text-[9px] text-slate-400 font-medium">${plants.length} observed nearby</span>
+      </div>
+      <div id="farmLocalCategoryTabs" class="farm-scroll-tabs flex items-center gap-1.5 overflow-x-auto pb-1 mb-1.5">
+        ${catChips}
+      </div>
+      <div class="relative">
+        <input id="localPlantSearchInput" type="text" placeholder="Search local plants, trees, herbs..." value="${esc(searchQ)}" class="w-full text-[10px] px-2 py-1 rounded-lg bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-200 placeholder-slate-400 focus:outline-none focus:ring-1 focus:ring-teal-500" />
+      </div>
+      <ul class="space-y-0.5 text-[10px] text-slate-700 dark:text-slate-200 max-h-[160px] overflow-y-auto pr-1">
+        ${rows || emptyMsg}
+      </ul>
+      <div class="flex items-center justify-between text-[9px] text-slate-400 pt-0.5">
+        <span>Observed within ~25 km. Shows what naturally survives here.</span>
+        ${toggleBtn}
+      </div>
+    </div>`;
+}
+
 function renderSiteSnapshot(ctx) {
   const soil = getSoil(ctx.soilId);
   const clim = classifyClimate(ctx.lat, ctx.elevation);
@@ -1104,6 +1681,8 @@ function renderFarmAdvisories(advisories) {
 
 /** One line under a crop card naming the local cultivar, if one exists. */
 function renderCropCard(ctx, rec) {
+  const crop = CROPS.find((c) => c.id === rec.cropId);
+  if (!crop) return "";
   const window = crop.sowMonthsForSite || getSowMonthsForHemisphere(crop, ctx.hemisphere) || crop.sowMonths;
   const inWindow = isMonthInWindow(ctx.month, window, 0);
   const until = monthsUntilWindow(ctx.month, window);
@@ -1123,12 +1702,12 @@ function renderCropCard(ctx, rec) {
       <summary class="flex items-center gap-2 p-2.5 cursor-pointer list-none select-none">
         <span class="text-lg leading-none">${esc(crop.emoji)}</span>
         <div class="min-w-0 flex-1">
-          <div class="flex items-center gap-1.5">
+          <div class="flex items-center gap-1.5 flex-wrap">
             <span class="text-xs font-bold text-slate-800 dark:text-slate-100 truncate">${esc(crop.name)}</span>
+            <span class="text-[9px] px-1.5 py-0.2 rounded-full font-medium bg-slate-100 dark:bg-slate-700/80 text-slate-600 dark:text-slate-300 border border-slate-200/60 dark:border-slate-600/60">${esc(crop.category)}</span>
             ${scoreBadge(rec.score)}
           </div>
           <div class="text-[10px] text-slate-500 dark:text-slate-400 mt-0.5">${timing} · sow ${esc(formatSowWindow(window) || "outside seasonal envelope")}${gdd ? ` · ~${gdd} days` : ""}</div>
-          ${localVarietyLine(ctx, crop)}
         </div>
         <svg class="w-3.5 h-3.5 text-slate-400 transition-transform group-open:rotate-180 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path d="M19 9l-7 7-7-7"/></svg>
       </summary>
@@ -1302,6 +1881,58 @@ function renderFrostSection(ctx) {
 }
 
 /**
+ * Dedicated presentation state when coordinates are located in open water,
+ * ocean, sea, or marine water bodies with no arable soil.
+ */
+function renderMarineWaterState(ctx, waterCheck) {
+  return `
+    <div class="space-y-4">
+      <div class="flex items-center justify-between">
+        <h4 class="text-sm font-black text-slate-800 dark:text-white flex items-center gap-1.5">🌊 Marine Environment</h4>
+        <span class="text-[10px] font-semibold text-sky-600 dark:text-sky-400">Open Water</span>
+      </div>
+
+      <div class="rounded-2xl border border-sky-300/70 dark:border-sky-800/70 bg-gradient-to-b from-sky-50/90 via-sky-100/50 to-white/90 dark:from-sky-950/50 dark:via-slate-900/60 dark:to-slate-900/80 p-5 text-center space-y-3.5 shadow-sm">
+        <div class="w-14 h-14 mx-auto rounded-2xl bg-sky-500/10 dark:bg-sky-400/10 flex items-center justify-center text-3xl shadow-inner border border-sky-200/50 dark:border-sky-800/50">
+          🌊
+        </div>
+        <div class="space-y-1.5">
+          <div class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider bg-sky-100/80 dark:bg-sky-900/60 text-sky-700 dark:text-sky-300">
+            <span>⚓ Open Water / Marine Body</span>
+          </div>
+          <h3 class="text-base font-black text-slate-800 dark:text-slate-100">${esc(waterCheck.label)}</h3>
+          <p class="text-[11px] text-slate-600 dark:text-slate-300 max-w-sm mx-auto leading-relaxed">
+            ${esc(waterCheck.detail)}
+          </p>
+        </div>
+
+        <div class="grid grid-cols-2 gap-2 text-left pt-1">
+          <div class="bg-white/80 dark:bg-slate-800/70 p-2.5 rounded-xl border border-sky-200/60 dark:border-sky-900/50 shadow-xs">
+            <div class="text-[9px] uppercase tracking-wider text-slate-400 font-bold">Surface Temp</div>
+            <div class="text-xs font-bold text-slate-800 dark:text-slate-100 mt-0.5">${ctx.siteTemp != null ? Math.round(ctx.siteTemp) + "°C" : "--"} (Water Surface)</div>
+          </div>
+          <div class="bg-white/80 dark:bg-slate-800/70 p-2.5 rounded-xl border border-sky-200/60 dark:border-sky-900/50 shadow-xs">
+            <div class="text-[9px] uppercase tracking-wider text-slate-400 font-bold">Surface Winds</div>
+            <div class="text-xs font-bold text-slate-800 dark:text-slate-100 mt-0.5">${ctx.windNow != null ? Math.round(ctx.windNow) + " km/h" : "--"}</div>
+          </div>
+        </div>
+
+        <div class="rounded-xl bg-sky-50/70 dark:bg-slate-800/60 border border-sky-200/50 dark:border-sky-800/40 p-3 text-left space-y-1.5">
+          <div class="text-[10px] font-bold text-sky-800 dark:text-sky-300 flex items-center gap-1.5">
+            <span>🦪 Aquaculture & Mariculture Notice</span>
+          </div>
+          <p class="text-[10px] text-slate-600 dark:text-slate-400 leading-relaxed">
+            Terrestrial crops (vegetables, fruits, cereals, timber) require soil and cannot grow in ocean or lake waters. Coastal regions with similar marine temperatures often support seaweed farming (<em>Kappaphycus / Eucheuma</em>) or offshore cage aquaculture.
+          </p>
+          <div class="text-[10px] font-semibold text-teal-600 dark:text-teal-400 pt-1 flex items-center gap-1">
+            <span>👉 Click or tap any landmass on the map to view arable soil data and crop planting recommendations.</span>
+          </div>
+        </div>
+      </div>
+    </div>`;
+}
+
+/**
  * Renders the whole Farm tab. Called when the tab is shown, when a fresh
  * forecast lands while it is open, and after the soil picker changes.
  */
@@ -1316,6 +1947,24 @@ export function renderFarmTab(app) {
     return;
   }
 
+  // Ensure farmCtx matches the current selected location
+  const isStale =
+    !a.farmCtx?.ok ||
+    Math.abs((a.farmCtx.lat ?? 0) - a.selectedLat) > 0.01 ||
+    Math.abs((a.farmCtx.lng ?? 0) - a.selectedLng) > 0.01;
+
+  if (isStale && a.weatherData?.hourly?.time?.length) {
+    a.farmCtx = buildSiteContext({
+      weatherData: a.weatherData,
+      soilId: a.farmSoil || getSavedSoil(),
+      lat: a.selectedLat,
+      lng: a.selectedLng,
+      address: a.selectedAddress,
+      hourIndex: typeof a.currentHourIndex === "number" ? a.currentHourIndex : undefined,
+    });
+    scheduleFarmUpdate(a, false);
+  }
+
   const ctx = a.farmCtx;
   if (!ctx?.ok) {
     panel.innerHTML = `
@@ -1328,6 +1977,12 @@ export function renderFarmTab(app) {
     return;
   }
 
+  const waterCheck = ctx.waterInfo || isWaterBodyLocation(ctx, a);
+  if (waterCheck.isWater) {
+    panel.innerHTML = renderMarineWaterState(ctx, waterCheck);
+    return;
+  }
+
   const advisories = farmAdvisories({
     nightMin: ctx.nightMin,
     soilTemp6: ctx.soilTemp6,
@@ -1336,7 +1991,46 @@ export function renderFarmTab(app) {
     rainNext24h: ctx.rainNext24h,
     windNow: ctx.windNow,
   });
-  const recs = recommendCrops(ctx).slice(0, 6);
+  const allRecs = recommendCrops(ctx);
+  const activeCropCat = a.farmCropCategory || "all";
+
+  const cropCats = [
+    { id: "all", label: "All Plants", emoji: "🌱" },
+    { id: "Vegetable", label: "Vegetables", emoji: "🥕" },
+    { id: "Fruit", label: "Fruits", emoji: "🍎" },
+    { id: "grain", label: "Grains & Pulses", emoji: "🌾" },
+    { id: "Herb & Medicinal", label: "Herbs & Medicinal", emoji: "🌿" },
+    { id: "Tree & Agroforestry", label: "Trees & Timber", emoji: "🌲" },
+    { id: "flower-cover", label: "Flowers & Cover", emoji: "🌸" },
+  ];
+
+  const catPills = cropCats.map((c) => {
+    const isActive = activeCropCat === c.id;
+    const activeClass = isActive
+      ? "bg-teal-600 text-white font-bold shadow-xs"
+      : "bg-slate-200/70 hover:bg-slate-300/70 dark:bg-slate-700/60 dark:hover:bg-slate-600/70 text-slate-700 dark:text-slate-200";
+    return `<button type="button" class="farm-cat-chip flex-shrink-0 px-2.5 py-1 rounded-full text-[10px] whitespace-nowrap transition-all select-none cursor-pointer ${activeClass}" data-cat="${esc(c.id)}">${c.emoji} ${esc(c.label)}</button>`;
+  }).join("");
+
+  let filteredRecs = allRecs;
+  if (activeCropCat === "grain") {
+    filteredRecs = allRecs.filter((r) => {
+      const c = CROPS.find((cr) => cr.id === r.cropId);
+      return c && (c.category === "Cereal" || c.category === "Pulse");
+    });
+  } else if (activeCropCat === "flower-cover") {
+    filteredRecs = allRecs.filter((r) => {
+      const c = CROPS.find((cr) => cr.id === r.cropId);
+      return c && (c.category === "Flower & Ornamental" || c.category === "Cover & Forage");
+    });
+  } else if (activeCropCat !== "all") {
+    filteredRecs = allRecs.filter((r) => {
+      const c = CROPS.find((cr) => cr.id === r.cropId);
+      return c && c.category === activeCropCat;
+    });
+  }
+
+  const recs = filteredRecs.slice(0, 10);
   const gdd = sumGDD(
     { temperature_2m_max: ctx.nextDays.map((d) => d.tmax), temperature_2m_min: ctx.nextDays.map((d) => d.tmin) },
     10,
@@ -1345,33 +2039,46 @@ export function renderFarmTab(app) {
   panel.innerHTML = `
     <div class="space-y-4">
       <div class="flex items-center justify-between">
-        <h4 class="text-sm font-black text-slate-800 dark:text-white flex items-center gap-1.5">🌾 Farm Mode</h4>
+        <div class="flex items-center gap-2">
+          <h4 class="text-sm font-black text-slate-800 dark:text-white flex items-center gap-1.5">🌾 Farm Mode</h4>
+          ${renderFieldSelector(ctx, a)}
+        </div>
         <button id="farmRefreshBtn" class="text-[10px] font-semibold text-teal-600 dark:text-teal-400 hover:underline cursor-pointer">Refresh soil data</button>
       </div>
       ${renderRegionChip(ctx)}
       ${renderSiteSnapshot(ctx)}
+      ${renderLocalPlants(ctx, a)}
       ${renderFarmAdvisories(advisories)}
       <div>
-        <div class="flex items-center justify-between mb-2">
+        <div class="flex items-center justify-between mb-1.5">
           <h4 class="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">What to grow here — ranked for this week</h4>
+          <span class="text-[10px] text-slate-400 font-medium">${filteredRecs.length} suitable</span>
+        </div>
+        <div id="farmCropCategoryTabs" class="farm-scroll-tabs flex items-center gap-1.5 overflow-x-auto pb-1.5 mb-2">
+          ${catPills}
         </div>
         <div class="space-y-1.5">
           ${recs.map((r) => renderCropCard(ctx, r)).join("") || (
-            (Math.abs(ctx.lat || 0) >= 66 || (ctx.siteTemp != null && ctx.siteTemp <= -3) || (ctx.meanTempNext7 != null && ctx.meanTempNext7 <= -2))
-              ? `<div class="rounded-xl border border-sky-200/60 dark:border-sky-800/60 bg-sky-50/70 dark:bg-sky-950/40 p-4 text-center space-y-1.5">
-                  <div class="text-2xl">❄️</div>
-                  <div class="text-xs font-bold text-slate-800 dark:text-slate-100">Outdoor Cropping Inactive — Sub-Zero Climate (${ctx.siteTemp != null ? Math.round(ctx.siteTemp) : Math.round(ctx.meanTempNext7 || 0)}°C)</div>
-                  <p class="text-[11px] text-slate-500 dark:text-slate-400 max-w-sm mx-auto leading-relaxed">
-                    Freezing temperatures and frozen soil prevent outdoor seed germination and crop growth at this latitude. Outdoor farming resumes when mean temperatures consistently exceed 8-10°C.
-                  </p>
+            filteredRecs.length === 0 && allRecs.length > 0
+              ? `<div class="rounded-xl border border-slate-200/60 dark:border-slate-700/60 bg-slate-50/70 dark:bg-slate-800/40 p-3 text-center space-y-1">
+                  <div class="text-xs font-bold text-slate-700 dark:text-slate-200">No suitable plants in this category this week</div>
+                  <p class="text-[10px] text-slate-500 dark:text-slate-400">Current seasonal conditions favor other plant types at this location. Select "All Plants" to view all suitable flora.</p>
                 </div>`
-              : `<div class="rounded-xl border border-slate-200/60 dark:border-slate-700/60 bg-slate-50/70 dark:bg-slate-800/40 p-3.5 text-center space-y-1">
-                  <div class="text-lg">🍂</div>
-                  <div class="text-xs font-bold text-slate-700 dark:text-slate-200">No Suitable Sowing Window This Week</div>
-                  <p class="text-[11px] text-slate-500 dark:text-slate-400 max-w-sm mx-auto leading-relaxed">
-                    Current weather conditions and seasonal timing are outside the optimal sowing window for catalogued crops at this location. Check back as temperatures and seasonal windows shift.
-                  </p>
-                </div>`
+              : (Math.abs(ctx.lat || 0) >= 66 || (ctx.siteTemp != null && ctx.siteTemp <= -3) || (ctx.meanTempNext7 != null && ctx.meanTempNext7 <= -2))
+                ? `<div class="rounded-xl border border-sky-200/60 dark:border-sky-800/60 bg-sky-50/70 dark:bg-sky-950/40 p-4 text-center space-y-1.5">
+                    <div class="text-2xl">❄️</div>
+                    <div class="text-xs font-bold text-slate-800 dark:text-slate-100">Outdoor Cropping Inactive — Sub-Zero Climate (${ctx.siteTemp != null ? Math.round(ctx.siteTemp) : Math.round(ctx.meanTempNext7 || 0)}°C)</div>
+                    <p class="text-[11px] text-slate-500 dark:text-slate-400 max-w-sm mx-auto leading-relaxed">
+                      Freezing temperatures and frozen soil prevent outdoor seed germination and crop growth at this latitude. Outdoor farming resumes when mean temperatures consistently exceed 8-10°C.
+                    </p>
+                  </div>`
+                : `<div class="rounded-xl border border-slate-200/60 dark:border-slate-700/60 bg-slate-50/70 dark:bg-slate-800/40 p-3.5 text-center space-y-1">
+                    <div class="text-lg">🍂</div>
+                    <div class="text-xs font-bold text-slate-700 dark:text-slate-200">No Suitable Sowing Window This Week</div>
+                    <p class="text-[11px] text-slate-500 dark:text-slate-400 max-w-sm mx-auto leading-relaxed">
+                      Current weather conditions and seasonal timing are outside the optimal sowing window for catalogued crops at this location. Check back as temperatures and seasonal windows shift.
+                    </p>
+                  </div>`
           )}
         </div>
         <div class="mt-2 rounded-lg bg-slate-100/60 dark:bg-slate-800/50 border border-slate-200/50 dark:border-slate-700/50 p-2">
@@ -1392,22 +2099,211 @@ export function renderFarmTab(app) {
   wireFarmControls(a);
 }
 
-/** Binds the soil picker + refresh button after each render. */
+/** Binds the soil picker, category filter chips, search input, and refresh button after each render. */
 function wireFarmControls(app) {
+  const a = app || appRef;
   const sel = document.getElementById("farmSoilSelect");
   if (sel) {
     sel.addEventListener("change", () => {
       saveSoil(sel.value);
-      refreshFarmContext(app, { force: false });
+      refreshFarmContext(a, { force: false });
     });
   }
   const btn = document.getElementById("farmRefreshBtn");
   if (btn) {
     btn.addEventListener("click", () => {
       btn.textContent = "Refreshing…";
-      refreshFarmContext(app, { force: true });
+      refreshFarmContext(a, { force: true });
     });
   }
+
+  // Wire horizontal drag & wheel scrolling on category tab containers
+  function makeHorizontalScrollable(container) {
+    if (!container || container._hasHScrollWired) return;
+    container._hasHScrollWired = true;
+
+    // Horizontal mouse wheel scrolling: translate deltaY to horizontal scroll
+    container.addEventListener(
+      "wheel",
+      (e) => {
+        if (e.deltaY !== 0 && Math.abs(e.deltaY) >= Math.abs(e.deltaX)) {
+          e.preventDefault();
+          container.scrollLeft += e.deltaY;
+        }
+      },
+      { passive: false }
+    );
+
+    // Desktop drag-to-scroll interaction
+    let isDown = false;
+    let startX = 0;
+    let startScrollLeft = 0;
+    let hasDragged = false;
+
+    container.addEventListener("mousedown", (e) => {
+      if (e.button !== 0) return;
+      isDown = true;
+      hasDragged = false;
+      startX = e.pageX - container.offsetLeft;
+      startScrollLeft = container.scrollLeft;
+    });
+
+    window.addEventListener("mouseup", () => {
+      if (isDown) {
+        isDown = false;
+        container.classList.remove("dragging");
+        setTimeout(() => {
+          hasDragged = false;
+        }, 80);
+      }
+    });
+
+    container.addEventListener("mousemove", (e) => {
+      if (!isDown) return;
+      const x = e.pageX - container.offsetLeft;
+      const walk = x - startX;
+      if (Math.abs(walk) > 4) {
+        hasDragged = true;
+        container.classList.add("dragging");
+      }
+      container.scrollLeft = startScrollLeft - walk;
+    });
+
+    // Suppress button click if user was dragging
+    container.addEventListener(
+      "click",
+      (e) => {
+        if (hasDragged) {
+          e.preventDefault();
+          e.stopPropagation();
+        }
+      },
+      true
+    );
+  }
+
+  makeHorizontalScrollable(document.getElementById("farmCropCategoryTabs"));
+  makeHorizontalScrollable(document.getElementById("farmLocalCategoryTabs"));
+
+  // Crop category filter chips
+  const cropChips = document.querySelectorAll(".farm-cat-chip");
+  cropChips.forEach((chip) => {
+    chip.addEventListener("click", () => {
+      const cat = chip.dataset.cat;
+      if (cat && a) {
+        a.farmCropCategory = cat;
+        renderFarmTab(a);
+      }
+    });
+  });
+
+  // Local plants category filter chips
+  const localChips = document.querySelectorAll(".farm-local-cat-chip");
+  localChips.forEach((chip) => {
+    chip.addEventListener("click", () => {
+      const localCat = chip.dataset.localCat;
+      if (localCat && a) {
+        a.farmLocalPlantCategory = localCat;
+        renderFarmTab(a);
+      }
+    });
+  });
+
+  // Local plants toggle show all / fewer
+  const toggleBtn = document.getElementById("localPlantShowAllBtn");
+  if (toggleBtn) {
+    toggleBtn.addEventListener("click", () => {
+      if (a) {
+        a.farmLocalPlantExpanded = !a.farmLocalPlantExpanded;
+        renderFarmTab(a);
+      }
+    });
+  }
+
+  // Local plants search input
+  const searchInput = document.getElementById("localPlantSearchInput");
+  if (searchInput) {
+    searchInput.addEventListener("input", (e) => {
+      if (a) {
+        a.farmLocalPlantSearch = e.target.value;
+        renderFarmTab(a);
+        const refocused = document.getElementById("localPlantSearchInput");
+        if (refocused) {
+          refocused.focus();
+          const len = refocused.value.length;
+          refocused.setSelectionRange(len, len);
+        }
+      }
+    });
+  }
+
+  // Field selector
+  const fieldSelect = document.getElementById("farmFieldSelect");
+  if (fieldSelect) {
+    fieldSelect.addEventListener("change", () => {
+      const val = fieldSelect.value;
+      if (val === "__new__") {
+        openFieldEditor(a, null);
+      } else if (val === "__current__") {
+        setActiveFieldId(null);
+        refreshFarmContext(a, { force: false });
+      } else {
+        setActiveFieldId(val);
+        refreshFarmContext(a, { force: false });
+      }
+    });
+  }
+
+  // Field edit button
+  const editBtn = document.getElementById("farmFieldEditBtn");
+  if (editBtn) {
+    editBtn.addEventListener("click", () => {
+      const activeId = getActiveFieldId();
+      const field = activeId ? getField(activeId) : null;
+      openFieldEditor(a, field);
+    });
+  }
+}
+
+/** Open the field editor modal. */
+function openFieldEditor(app, field) {
+  const a = app || appRef;
+  const existing = document.getElementById("farmFieldEditor");
+  if (existing) existing.remove();
+  const wrapper = document.createElement("div");
+  wrapper.innerHTML = renderFieldEditor(field);
+  document.body.appendChild(wrapper);
+
+  const close = () => {
+    const el = document.getElementById("farmFieldEditor");
+    if (el) el.remove();
+  };
+
+  document.getElementById("farmFieldEditorClose")?.addEventListener("click", close);
+  wrapper.addEventListener("click", (e) => {
+    if (e.target.id === "farmFieldEditor") close();
+  });
+
+  const form = document.getElementById("farmFieldEditorForm");
+  form?.addEventListener("submit", (e) => {
+    e.preventDefault();
+    const name = document.getElementById("fieldName").value.trim();
+    const cropId = document.getElementById("fieldCrop").value || null;
+    const soilId = document.getElementById("fieldSoil").value || "loam";
+    const sowingDate = document.getElementById("fieldSowingDate").value || null;
+    const notes = document.getElementById("fieldNotes").value.trim();
+    if (!name) return;
+    const lat = a.selectedLat;
+    const lng = a.selectedLng;
+    if (field) {
+      updateField(field.id, { name, cropId, soilId, soilSource: "manual", sowingDate, notes });
+    } else {
+      addField({ name, lat, lng, soilId, soilSource: "manual", sowingDate, cropId, notes });
+    }
+    setActiveFieldId(field ? field.id : undefined);
+    close();
+    refreshFarmContext(a, { force: false });
+  });
 }
 
 // ────────────────── runtime ──────────────────
@@ -1432,6 +2328,25 @@ let _farmFetchTimer = null;
 function scheduleFarmUpdate(app, force = false) {
   const a = app || appRef;
   if (!a || a.selectedLat == null || a.selectedLng == null) return;
+  const locationChanged =
+    !a.farmCtx ||
+    Math.abs((a.farmCtx.lat ?? 0) - a.selectedLat) > 0.01 ||
+    Math.abs((a.farmCtx.lng ?? 0) - a.selectedLng) > 0.01;
+
+  // Immediate sync update so user sees fresh crops for the new location at once
+  if (locationChanged && a.weatherData?.hourly?.time?.length) {
+    a.farmCtx = buildSiteContext({
+      weatherData: a.weatherData,
+      soilId: a.farmSoil || getSavedSoil(),
+      lat: a.selectedLat,
+      lng: a.selectedLng,
+      address: a.selectedAddress,
+      hourIndex: typeof a.currentHourIndex === "number" ? a.currentHourIndex : undefined,
+    });
+    a.farmCtx.loadingLocalPlants = true;
+    if (a.activeWeatherTab === "farm") renderFarmTab(a);
+  }
+
   clearTimeout(_farmFetchTimer);
   _farmFetchTimer = setTimeout(async () => {
     try {
@@ -1445,27 +2360,85 @@ function scheduleFarmUpdate(app, force = false) {
           agro = null; // soft-fail: no soil telemetry, advice continues
         }
       }
-      a.farmSoil = getSavedSoil();
+
+      // ── Resolve soil texture: saved field → SoilGrids → saved default ──
+      let soilId = getSavedSoil();
+      let soilSource = "manual";
+      let fieldId = getActiveFieldId();
+      let field = null;
+      if (fieldId) {
+        field = getField(fieldId);
+        if (field) {
+          soilId = field.soilId;
+          soilSource = field.soilSource;
+        }
+      }
+
+      // If no field soil and no manual preference, try SoilGrids once.
+      let soilGridsData = null;
+      if (!field && soilId === getSavedSoil()) {
+        const failedKey = `${SOILGRIDS_FALLBACK_KEY}_${agroCacheKey(a.selectedLat, a.selectedLng)}`;
+        const alreadyFailed = localStorage.getItem(failedKey) === "true";
+        if (!alreadyFailed) {
+          try {
+            soilGridsData = await fetchSoilGrids(a.selectedLat, a.selectedLng);
+            if (soilGridsData) {
+              soilId = soilGridsData.soilId;
+              soilSource = "soilgrids";
+            } else {
+              localStorage.setItem(failedKey, "true");
+            }
+          } catch {
+            localStorage.setItem(failedKey, "true");
+          }
+        }
+      }
+
+      const existingPlants = a.farmCtx?.localPlants;
+      a.farmSoil = soilId;
       a.farmCtx = buildSiteContext({
         weatherData: a.weatherData,
         agroData: agro,
-        soilId: a.farmSoil,
+        soilId,
         lat: a.selectedLat,
         lng: a.selectedLng,
         address: a.selectedAddress,
         hourIndex: typeof a.currentHourIndex === "number" ? a.currentHourIndex : undefined,
+        fieldId,
       });
+      if (existingPlants) a.farmCtx.localPlants = existingPlants;
+      a.farmCtx.loadingLocalPlants = true;
       if (a.activeWeatherTab === "farm") renderFarmTab(a);
+
+      try {
+        const plants = await fetchLocalPlants(a.selectedLat, a.selectedLng);
+        if (a.farmCtx) {
+          a.farmCtx.loadingLocalPlants = false;
+          a.farmCtx.localPlants = plants || [];
+          if (a.activeWeatherTab === "farm") renderFarmTab(a);
+        }
+      } catch {
+        if (a.farmCtx) {
+          a.farmCtx.loadingLocalPlants = false;
+        }
+      }
       maybeNotifyFrost(a, a.farmCtx);
     } catch (e) {
       console.warn("Farm Mode update failed:", e);
     }
-  }, force ? 0 : 400);
+  }, (force || locationChanged) ? 0 : 350);
 }
 
 /** Frost push with per-location cooldown — same shape as rainPush. */
 function maybeNotifyFrost(app, ctx) {
   if (!ctx?.ok) return;
+  notifyFrostForCtx(app, ctx);
+  notifySprayWindow(app, ctx);
+  notifyIrrigation(app, ctx);
+}
+
+/** Frost alert for a single context (ctx or any saved field). */
+function notifyFrostForCtx(app, ctx) {
   const advisories = farmAdvisories({
     nightMin: ctx.nightMin,
     soilTemp6: ctx.soilTemp6,
@@ -1491,7 +2464,7 @@ function maybeNotifyFrost(app, ctx) {
   } catch {
     /* storage unavailable */
   }
-  const place = String(app.selectedName || "your field").split(/,\s*/)[0];
+  const place = String(app.selectedName || ctx.region?.locality || "your field").split(/,\s*/)[0];
   try {
     app.showToast?.(`❄️ Frost warning tonight for ${place} — cover tender crops.`, "warning", 8000);
   } catch {
@@ -1510,13 +2483,93 @@ function maybeNotifyFrost(app, ctx) {
   }
 }
 
+/** Spray window alert: good spray window opening within next 12h. */
+function notifySprayWindow(app, ctx) {
+  if (!ctx?.hourly || typeof ctx.hourIndex !== "number") return;
+  const timeline = scoreSprayTimeline(ctx.hourly, ctx.vpdByTime, ctx.hourIndex, 12);
+  const { best } = summarizeSprayWindows(timeline);
+  if (!best || best.avgScore < 60) return;
+  let last = {};
+  try {
+    last = JSON.parse(localStorage.getItem("aurafisky_spray_last") || "{}");
+  } catch {
+    last = {};
+  }
+  const key = `spray-${ctx.lat.toFixed(2)},${ctx.lng.toFixed(2)}`;
+  const now = Date.now();
+  if (typeof last[key] === "number" && now - last[key] < FARM_ALERT_COOLDOWN_MS) return;
+  last[key] = now;
+  try {
+    localStorage.setItem("aurafisky_spray_last", JSON.stringify(last));
+  } catch {
+    /* storage unavailable */
+  }
+  const place = String(app.selectedName || ctx.region?.locality || "your field").split(/,\s*/)[0];
+  try {
+    app.showToast?.(`🌤️ Good spray window at ${place} — ${best.startLabel}, ~${best.endIdx - best.startIdx + 1}h.`, "success", 8000);
+  } catch {
+    /* toast optional */
+  }
+}
+
+/** Irrigation alert: root zone dry or water balance urgent. */
+function notifyIrrigation(app, ctx) {
+  if (!ctx?.ok) return;
+  const isDry = ctx.soilMoisture?.status === "dry";
+  const wb = computeWaterBalance({ daily: ctx.daily, soilMoisture: ctx.soilMoisture || null });
+  const isUrgent = wb.level === "urgent";
+  if (!isDry && !isUrgent) return;
+  let last = {};
+  try {
+    last = JSON.parse(localStorage.getItem("aurafisky_irrig_last") || "{}");
+  } catch {
+    last = {};
+  }
+  const key = `irrig-${ctx.lat.toFixed(2)},${ctx.lng.toFixed(2)}`;
+  const now = Date.now();
+  if (typeof last[key] === "number" && now - last[key] < FARM_ALERT_COOLDOWN_MS) return;
+  last[key] = now;
+  try {
+    localStorage.setItem("aurafisky_irrig_last", JSON.stringify(last));
+  } catch {
+    /* storage unavailable */
+  }
+  const place = String(app.selectedName || ctx.region?.locality || "your field").split(/,\s*/)[0];
+  const msg = isDry
+    ? `Root zone dry at ${place} — irrigate now.`
+    : `Water balance urgent at ${place} — ${wb.headline}`;
+  try {
+    app.showToast?.(`💧 ${msg}`, "warning", 8000);
+  } catch {
+    /* toast optional */
+  }
+}
+
+/** Run proactive alerts for every saved field (multi-location monitoring). */
+export function checkAllFieldsAlerts(app) {
+  if (!app) return;
+  const fields = loadFields();
+  for (const field of fields) {
+    // Reuse the current forecast context but with field's lat/lng — the
+    // forecast is per-point so we can only alert for the currently loaded
+    // location unless we refetch. Skip if not the same point.
+    const ctx = app.farmCtx;
+    if (!ctx || !ctx.ok) continue;
+    const samePoint =
+      Math.abs(ctx.lat - field.lat) < 0.01 && Math.abs(ctx.lng - field.lng) < 0.01;
+    if (!samePoint) continue;
+    notifyFrostForCtx(app, ctx);
+    notifySprayWindow(app, ctx);
+    notifyIrrigation(app, ctx);
+  }
+}
+
 // ────────────────── feature entry ──────────────────
 
 export function init(app) {
   appRef = app;
 
   app.farmSoil = getSavedSoil();
-  app.farmRegionOverride = getSavedRegion();
   app.renderFarmTab = renderFarmTab;
   app.refreshFarmMode = refreshFarmContext;
 
@@ -1547,7 +2600,7 @@ export function init(app) {
       const result = originalSwitch.apply(this, [tabName]);
       try {
         if (tabName === "farm") {
-          if (!this.farmCtx) scheduleFarmUpdate(this);
+          scheduleFarmUpdate(this);
           renderFarmTab(this);
         }
       } catch (e) {

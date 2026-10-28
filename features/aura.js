@@ -63,11 +63,22 @@ const INTENT_DEFS = [
   { id: 'running', priority: 59, phrases: ['running', 'marathon', '5k', '10k', 'cardio run', 'jogging for exercise', 'running workout', 'long run', 'sprint training', 'tempo run', 'interval run', 'jog', 'jogging'] },
   { id: 'cycling', priority: 59, phrases: ['cycling', 'bike', 'biking', 'bicycle', 'road bike', 'mountain bike', 'commute by bike', 'cycle to work', 'spin class', 'ride a bike', 'cycle'] },
   { id: 'workfromhome', priority: 56, phrases: ['work from home', 'wfh', 'remote work', 'stay home from work', 'office closed', 'snow day', 'should i go to office', 'should i go into office', 'work remotely'] },
+  { id: 'farm', priority: 55, phrases: ['farm', 'farming', 'crop', 'crops', 'sow', 'sowing', 'plant', 'planting', 'harvest', 'irrigation', 'spray', 'spraying', 'fertilizer', 'fertiliser', 'soil moisture', 'frost', 'grow', 'growing', 'kisan', 'kheti', 'fasal', 'zameen', 'field', 'fields', 'agriculture', 'agricultural'] },
   { id: 'overview', priority: 20, phrases: ['weather now', 'right now', 'current conditions', 'conditions', 'how is the weather', "what's the weather", 'summary', 'nice out', 'is it nice', 'worth going out'] },
   { id: 'greeting', priority: 18, phrases: ['hi', 'hello', 'hey', 'good morning', 'good afternoon', 'good evening', 'yo', 'sup', 'howdy'] },
 ];
 
 import { shortPlaceName } from '../modules/geo.js';
+import {
+  scoreSprayConditions,
+  scoreSprayTimeline,
+  summarizeSprayWindows,
+  computeWaterBalance,
+  frostRiskForNight,
+  recommendCrops,
+  GROWTH_STAGES,
+} from './farm.js';
+import { loadFields, getField, daysSinceSowing } from './farmFields.js';
 
 // Pre-compile every phrase once. Single words get word boundaries so "rain"
 // doesn't fire on "drain", and accept an -s/-ing suffix ("cafe" → "cafes",
@@ -116,6 +127,16 @@ export function extractPlace(query) {
   // "what about tomorrow / tonight / the weekend" is a time follow-up,
   // not a place lookup.
   if (/^(tomorrow|today|tonight|tonite|morning|afternoon|evening|night|weekend|now|later|the\s+weekend|this\s+\w+)$/i.test(name)) return null;
+  return name || null;
+}
+
+/** Extracts a saved field name from queries like "spray window at north field". */
+export function extractFieldName(query) {
+  const m =
+    query.match(/\bat\s+(?:the\s+)?([a-zA-Z][a-zA-Z\s.'-]{1,40}?)(?:\s+field)?[?!.]?$/i) ||
+    query.match(/\b(?:north|south|east|west|home|back|front|upper|lower)\s+field\b/i);
+  if (!m) return null;
+  const name = m[1] ? m[1].trim() : m[0].trim();
   return name || null;
 }
 
@@ -312,7 +333,7 @@ export function buildCompareSummary(A, B) {
 // Place/alert/help/greeting answers don't benefit from a time shift.
 const RERUNNABLE = new Set([
   'rain', 'temperature', 'wind', 'outdoor', 'forecast', 'humidity',
-  'uv', 'overview', 'commute', 'astronomy', 'thunderstorm',
+  'uv', 'overview', 'commute', 'astronomy', 'thunderstorm', 'farm',
 ]);
 
 // ── Action registry ─────────────────────────────────────────────────
@@ -748,7 +769,7 @@ export class AuraAssistant {
       <div class="aura-col">
         <div class="aura-bubble">
           <p>Hi, I'm <strong>Aura</strong>${loc ? `, reading live data for <strong>${esc(loc)}</strong>` : ''}.</p>
-          <p class="mt-1">Ask me about rain timing, your commute, outdoor windows, air quality, UV, sunset and stargazing — or tell me to <em>"notify me when it rains"</em> and I'll set the alert.</p>
+          <p class="mt-1">Ask me about rain timing, your commute, outdoor windows, air quality, UV, sunset and stargazing — or farming: spray windows, soil moisture, frost risk, irrigation, and what to grow. Tell me to <em>"notify me when it rains"</em> and I'll set the alert.</p>
           <p class="mt-1">I remember the thread, so follow up with <em>"and tomorrow?"</em> or <em>"what about tonight?"</em> — in English or Hinglish (<em>barish, thand, hawa</em> all work).</p>
         </div>
       </div>`;
@@ -1170,6 +1191,12 @@ export class AuraAssistant {
           ? `Is rain hitting ${loc} within the hour?`
           : `Will it rain in ${loc} in ${away}h?`;
     }
+    const farmCtx = this.app?.farmCtx || null;
+    if (farmCtx?.soilMoisture?.status === 'dry') return `When to irrigate ${loc}?`;
+    if (farmCtx?.nightMin != null) {
+      const frost = frostRiskForNight(farmCtx.nightMin, 2);
+      if (frost.level !== 'low') return `Frost risk tonight in ${loc}?`;
+    }
     if ((ctx.curr?.uvIndex ?? 0) >= 8) return `How hot is it in ${loc}?`;
     if ((ctx.curr?.windGusts ?? 0) >= 45) return `Is it too windy in ${loc}?`;
     if (ctx.aqi != null && ctx.aqi > 120) return `Is the air safe in ${loc}?`;
@@ -1209,6 +1236,18 @@ export class AuraAssistant {
     if (ctx.severe) out.push('Is severe weather expected?');
     if (ctx.heatIndex >= 30) out.push('Is it too hot to be outside?');
     if (ctx.freezingRisk) out.push('Is there a risk of ice?');
+
+    // Farming suggestions (only when soil telemetry is available)
+    const farmCtx = this.app?.farmCtx || null;
+    if (farmCtx?.soilMoisture) {
+      if (farmCtx.soilMoisture.status === 'dry') out.push('When to irrigate?');
+      else if (farmCtx.soilMoisture.status === 'saturated') out.push('Hold off irrigation — soil saturated');
+      else out.push('What to grow here?', 'Best spray window today?');
+    }
+    if (farmCtx?.nightMin != null) {
+      const frost = frostRiskForNight(farmCtx.nightMin, 2);
+      if (frost.level !== 'low') out.push('Frost risk tonight?');
+    }
 
     // De-duplicate, keep order, cap at 4.
     return [...new Set(out)].slice(0, 4);
@@ -1467,6 +1506,7 @@ export class AuraAssistant {
       case 'workfromhome': return this._answerWorkFromHome(ctx);
       case 'temperature': return this._answerTemperature(ctx);
       case 'overview': return this._answerOverview(ctx);
+      case 'farm': return this._answerFarm(ctx, scope);
       default: return this._answerUnknown(query, ctx);
     }
   }
@@ -1485,6 +1525,8 @@ export class AuraAssistant {
       bullets: [
         { k: 'Weather', v: 'Conditions, rain timing, temperature, humidity, wind and gusts' },
         { k: 'Decisions', v: 'Commute safety, outdoor workout windows, outdoor dining, visibility' },
+        { k: 'Farm', v: 'Spray windows, soil moisture, frost risk, irrigation, crop match, saved fields' },
+        { k: 'Fields', v: 'Ask about a saved field: "spray window at north field", "growth of home field"' },
         { k: 'Health', v: 'Air quality, pollen, UV exposure and heat stress' },
         { k: 'Sky', v: 'Sunset, golden hour, moon phase and stargazing score' },
         { k: 'Time scopes', v: 'Add "tonight", "tomorrow" or "this weekend" — or follow up with "and tomorrow?"' },
@@ -2608,6 +2650,185 @@ export class AuraAssistant {
     };
   }
 
+  /** ── Farm & field advice ─────────────────────────────────────────── */
+  //
+  // Spray conditions, soil moisture, frost risk, irrigation need and
+  // crop recommendations for this exact point. Reuses the farm scoring
+  // engine from features/farm.js; falls back to weather-only advice when
+  // the Farm tab hasn't loaded soil telemetry yet.
+
+  _answerFarm(ctx, scope = null) {
+    const f = this._fmt();
+    const { curr } = ctx;
+    const farmCtx = this.app?.farmCtx || null;
+    const bullets = [];
+    const followups = [];
+
+    // ── Field-specific lookup ───────────────────────────────────────
+    // "spray window at north field", "growth of home field", etc.
+    const fieldName = extractFieldName(query);
+    let activeField = null;
+    if (fieldName) {
+      const fields = loadFields();
+      activeField = fields.find((f) => f.name.toLowerCase() === fieldName.toLowerCase());
+      if (!activeField) {
+        // Try partial match
+        const partial = fields.find((f) => f.name.toLowerCase().includes(fieldName.toLowerCase()) || fieldName.toLowerCase().includes(f.name.toLowerCase()));
+        activeField = partial || null;
+      }
+    }
+
+    // ── Spray window ────────────────────────────────────────────────
+    let sprayNow = null;
+    if (farmCtx?.hourly && farmCtx.vpdByTime && typeof farmCtx.hourIndex === 'number') {
+      const timeline = scoreSprayTimeline(farmCtx.hourly, farmCtx.vpdByTime, farmCtx.hourIndex, 12);
+      const { best } = summarizeSprayWindows(timeline);
+      if (best) {
+        bullets.push({
+          k: 'Best spray window (next 12h)',
+          v: `${best.startLabel} — ${best.avgScore}% score, ~${best.endIdx - best.startIdx + 1}h`,
+          tone: best.avgScore >= 60 ? 'good' : 'warn',
+        });
+        followups.push('When to irrigate?', 'Frost risk tonight?');
+      }
+    } else {
+      sprayNow = scoreSprayConditions({
+        windSpeed: curr.windSpeed,
+        windGusts: curr.windGusts,
+        precipitation: curr.precipitation,
+        precipitationProbability: curr.precipitation_probability,
+        temperature: curr.temperature,
+        humidity: curr.humidity,
+        isDay: curr.is_day,
+      });
+      bullets.push({
+        k: 'Spray conditions now',
+        v: `${sprayNow.label} (${sprayNow.score}/100)`,
+        tone: sprayNow.score >= 60 ? 'good' : 'warn',
+      });
+      if (sprayNow.reasons.length) {
+        bullets.push({ k: 'Watch out', v: sprayNow.reasons.slice(0, 2).join('; ') });
+      }
+      followups.push('Best spray window today?', 'When to irrigate?', 'Frost risk tonight?');
+    }
+
+    // ── Soil moisture ───────────────────────────────────────────────
+    if (farmCtx?.soilMoisture) {
+      const sm = farmCtx.soilMoisture;
+      bullets.push({
+        k: 'Root-zone soil moisture',
+        v: sm.label,
+        tone: sm.status === 'dry' || sm.status === 'saturated' ? 'warn' : 'good',
+      });
+      if (sm.advice) followups.push(sm.advice.length > 60 ? 'When to irrigate?' : 'When to irrigate?');
+    } else {
+      bullets.push({
+        k: 'Soil moisture',
+        v: 'Not available — open the Farm tab once to load it',
+        tone: 'warn',
+      });
+    }
+
+    // ── Frost risk ──────────────────────────────────────────────────
+    const nightMin = farmCtx?.nightMin ?? (ctx.today?.minTemp ?? null);
+    if (nightMin != null) {
+      const frost = frostRiskForNight(nightMin, 2);
+      if (frost.level !== 'low') {
+        bullets.push({
+          k: 'Frost risk tonight',
+          v: frost.label,
+          tone: frost.level === 'high' ? 'warn' : 'info',
+        });
+        if (!followups.includes('Frost risk tonight?')) followups.push('Frost risk tonight?');
+      } else if (!followups.includes('Frost risk tonight?')) {
+        followups.push('Frost risk tonight?');
+      }
+    }
+
+    // ── Irrigation / water balance ──────────────────────────────────
+    if (farmCtx?.daily) {
+      const wb = computeWaterBalance({
+        daily: farmCtx.daily,
+        soilMoisture: farmCtx.soilMoisture || null,
+      });
+      bullets.push({
+        k: 'Irrigation need',
+        v: wb.headline,
+        tone: wb.level === 'urgent' ? 'warn' : wb.level === 'soon' ? 'info' : 'good',
+      });
+      if (wb.level !== 'ok' && !followups.includes('When to irrigate?')) {
+        followups.push('When to irrigate?');
+      }
+    }
+
+    // ── Crop recommendation ─────────────────────────────────────────
+    let topCrop = null;
+    if (farmCtx) {
+      const recs = recommendCrops(farmCtx).slice(0, 3);
+      if (recs.length) {
+        topCrop = recs[0];
+        bullets.push({
+          k: 'Best crop match',
+          v: `${topCrop.cropName} — ${topCrop.score}% match`,
+          tone: topCrop.score >= 70 ? 'good' : 'warn',
+        });
+        if (recs.length > 1) {
+          bullets.push({
+            k: 'Also consider',
+            v: recs.slice(1, 3).map((r) => r.cropName).join(', '),
+          });
+        }
+        followups.push('What to grow here?');
+      }
+    }
+
+    // ── Field-specific details ──────────────────────────────────────
+    if (activeField) {
+      const soil = getSoil(activeField.soilId);
+      bullets.push({
+        k: `Field: ${esc(activeField.name)}`,
+        v: `${soil?.name || activeField.soilId} soil · ${esc(activeField.notes || "no notes")}`,
+      });
+      if (activeField.cropId) {
+        const crop = CROPS.find((c) => c.id === activeField.cropId);
+        const days = daysSinceSowing(activeField.sowingDate);
+        const stageTxt = days != null ? ` · Day ${days}` : "";
+        bullets.push({
+          k: 'Crop',
+          v: `${crop?.emoji ?? "🌱"} ${esc(crop?.name || activeField.cropId)}${stageTxt}`,
+        });
+        const stages = GROWTH_STAGES[activeField.cropId];
+        if (stages && activeField.sowingDate) {
+          // Simple stage estimate from days
+          const stageIdx = Math.min(Math.floor(days / 30), stages.length - 1);
+          bullets.push({
+            k: 'Growth stage',
+            v: `${esc(stages[stageIdx].label)}`,
+          });
+        }
+      }
+      if (!followups.includes(`What to grow at ${esc(activeField.name)}?`)) {
+        followups.push(`What to grow at ${esc(activeField.name)}?`);
+      }
+    }
+
+    const hasWarn = bullets.some((b) => b.tone === 'warn');
+
+    return {
+      icon: '🌾',
+      tone: hasWarn ? 'warn' : 'info',
+      title: `Farm & field advice · ${activeField ? esc(activeField.name) : ctx.loc}`,
+      bullets: bullets.length ? bullets : [{ k: 'Status', v: 'Farm data still loading — open the Farm tab once, then ask again.' }],
+      note: farmCtx
+        ? 'Scores combine live soil moisture, temperature, wind, rain probability and VPD for this exact point.'
+        : 'Open the Farm tab first so Aura can load soil and crop data for this location.',
+      actions: [
+        { id: 'tab', label: 'Open Farm tab', icon: '🌾', payload: { tab: 'farm' } },
+      ],
+      followups: followups.slice(0, 4),
+    };
+  }
+
   /** "Morning briefing" — day-ahead summary; also pins the Overview card. */
   _answerDailyBriefing(ctx) {
     const f = this._fmt();
@@ -2994,7 +3215,7 @@ export class AuraAssistant {
         { k: 'Wind', v: `${f.wind(curr.windSpeed)} ${f.dir(curr.windDirection)}` },
         { k: 'Air', v: ctx.aqi != null ? `US AQI ${ctx.aqi}` : 'Not available' },
       ],
-      note: 'I match on keywords, so try asking about rain, your commute, a workout, air quality, UV, sunset, stargazing — with "tonight" or "tomorrow" to scope it — or say "notify me when…". You can also ask about packing, running, cycling, or whether to work from home.',
+      note: 'I match on keywords, so try asking about rain, your commute, a workout, farming (spray windows, soil, frost, what to grow), air quality, UV, sunset, stargazing — with "tonight" or "tomorrow" to scope it — or say "notify me when…". You can also ask about packing, running, cycling, or whether to work from home.',
       actions: [
         { id: 'briefing', label: 'Give me a briefing', icon: '📝' },
         { id: 'shareWeather', label: 'Share this weather', icon: '📤' },

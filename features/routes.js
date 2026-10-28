@@ -1284,7 +1284,7 @@ function renderWaypointMarkers() {
 async function resolvePointName(pt) {
   try {
     const url = `https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${pt.lat}&lon=${pt.lng}&zoom=14`;
-    const res = await fetch(url, { headers: { "User-Agent": "Aurafisky/17.0.0", Accept: "application/json" } });
+    const res = await fetch(url, { headers: { "User-Agent": "Aurafisky/18.0.0", Accept: "application/json" } });
     if (!res.ok) return;
     const data = await res.json();
     const city =
@@ -1341,7 +1341,7 @@ async function searchPlacesForRoute(query) {
 
   try {
     const url = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(q)}&format=json&limit=5&addressdetails=1`;
-    const res = await fetch(url, { headers: { "User-Agent": "Aurafisky/17.0.0", Accept: "application/json" } });
+    const res = await fetch(url, { headers: { "User-Agent": "Aurafisky/18.0.0", Accept: "application/json" } });
     if (res.ok) {
       const list = await res.json();
       return list.map((item) => ({

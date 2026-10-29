@@ -592,7 +592,7 @@ function installShareImageButton(app) {
   const label = document.createElement("label");
   label.className =
     "block text-xs font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-500 mb-2";
-  label.textContent = "3. Share a weather card";
+  label.textContent = "3. Share a weather card (PNG)";
 
   const preview = document.createElement("div");
   preview.className = "mb-3 rounded-2xl border border-slate-200 dark:border-slate-700 bg-slate-100 dark:bg-slate-950 p-2.5";
@@ -629,9 +629,7 @@ function installShareImageButton(app) {
   );
 
   section.append(label, preview, row);
-  const shareTargets = modal.querySelector("#shareTargetNative")?.closest("div.space-y-2")?.parentElement;
-  if (shareTargets) body.insertBefore(section, shareTargets);
-  else body.appendChild(section);
+  body.appendChild(section);
 
   app.$.shareCardPreviewImage = previewImage;
   app.$.shareCardPreviewMessage = previewMessage;

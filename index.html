@@ -418,10 +418,12 @@
             </div>
             <p id="panelDescription" class="text-sm text-slate-600 dark:text-slate-300 mt-0.5">--</p>
             <p id="panelFeelsLike" class="text-xs text-slate-400 dark:text-slate-500 mt-0.5">Feels like --°</p>
+            <p id="panelTempRange" class="text-[10px] font-semibold text-slate-500 dark:text-slate-400 mt-0.5 truncate"></p>
             <div id="panelCardLocalTime" class="text-[11px] font-medium text-slate-500 dark:text-slate-400 mt-1 flex items-center gap-1.5 select-text">
               <span class="text-teal-600 dark:text-teal-400" aria-hidden="true">🕒</span>
               <span id="panelCardLocalTimeText" class="select-text truncate">--</span>
             </div>
+            <p id="panelCardFreshness" class="text-[10px] mt-0.5 text-slate-400 dark:text-slate-500" aria-live="polite">Forecast update time unavailable</p>
 
             <div id="percentileLabel" class="text-[10px] font-semibold text-slate-400 mt-0.5"></div>
             <div id="regimeLabel" class="text-[10px] font-bold text-teal-500 dark:text-teal-400 mt-0.5"></div>
@@ -1688,7 +1690,7 @@
   <!-- ============================================================ -->
   <div id="mobileMapControls" class="map-controls-right fixed top-1/2 -translate-y-1/2 right-3 sm:right-4 z-[1001] pointer-events-auto flex flex-col gap-1.5 items-center">
     <!-- 1. Map Modes & Terrain Switcher (Street, Satellite, Terrain, Dark) -->
-    <button id="mapLayersBtn" class="w-10 h-10 sm:w-11 sm:h-11 flex items-center justify-center rounded-xl glass bg-white/85 dark:bg-slate-800/85 hover:bg-white dark:hover:bg-slate-700 transition-all border border-slate-200/70 dark:border-slate-700/60 shadow-lg active:scale-95 group cursor-pointer" title="Map terrain & styles (L)" aria-label="Map terrain and styles" aria-expanded="false">
+    <button id="mapLayersBtn" class="w-10 h-10 sm:w-11 sm:h-11 flex items-center justify-center rounded-xl glass bg-white/85 dark:bg-slate-800/85 hover:bg-white dark:hover:bg-slate-700 transition-all border border-slate-200/70 dark:border-slate-700/60 shadow-lg active:scale-95 group cursor-pointer" title="Map layers and map style (L)" aria-label="Map layers and map style" aria-expanded="false">
       <svg class="w-5 h-5 text-slate-700 dark:text-slate-200 transition-transform group-hover:scale-110 duration-200" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
         <polygon points="12 2 2 7 12 12 22 7 12 2"></polygon>
         <polyline points="2 17 12 22 22 17"></polyline>
@@ -1697,7 +1699,7 @@
     </button>
 
     <!-- 2. Day/Night Terminator Toggle (Sun / Moon Dual Hemisphere) -->
-    <button id="terminatorToggleBtn" class="w-10 h-10 sm:w-11 sm:h-11 flex items-center justify-center rounded-xl glass bg-white/85 dark:bg-slate-800/85 hover:bg-white dark:hover:bg-slate-700 transition-all border border-slate-200/70 dark:border-slate-700/60 shadow-lg active:scale-95 group cursor-pointer" title="Toggle day/night terminator" aria-label="Toggle day/night terminator" aria-pressed="false">
+    <button id="terminatorToggleBtn" class="w-10 h-10 sm:w-11 sm:h-11 flex items-center justify-center rounded-xl glass bg-white/85 dark:bg-slate-800/85 hover:bg-white dark:hover:bg-slate-700 transition-all border border-slate-200/70 dark:border-slate-700/60 shadow-lg active:scale-95 group cursor-pointer" title="Toggle the global day/night boundary" aria-label="Toggle the global day and night boundary" aria-pressed="false">
       <svg class="w-5 h-5 transition-transform group-hover:rotate-12 duration-300" viewBox="0 0 24 24" fill="none">
         <defs>
           <linearGradient id="termSunGrad" x1="0" y1="0" x2="1" y2="1">
@@ -1735,7 +1737,7 @@
 
     <!-- 4. Radar Toggle -->
     <div id="radarControls" class="relative pointer-events-auto">
-      <button id="radarToggleBtn" class="w-10 h-10 sm:w-11 sm:h-11 flex items-center justify-center rounded-xl glass bg-white/85 dark:bg-slate-800/85 hover:bg-white dark:hover:bg-slate-700 transition-all border border-slate-200/70 dark:border-slate-700/60 shadow-lg active:scale-95 cursor-pointer" title="Toggle radar overlay" aria-label="Toggle radar overlay" aria-pressed="false">
+      <button id="radarToggleBtn" class="w-10 h-10 sm:w-11 sm:h-11 flex items-center justify-center rounded-xl glass bg-white/85 dark:bg-slate-800/85 hover:bg-white dark:hover:bg-slate-700 transition-all border border-slate-200/70 dark:border-slate-700/60 shadow-lg active:scale-95 cursor-pointer" title="Show or hide the precipitation radar" aria-label="Show or hide precipitation radar" aria-pressed="false">
         <span id="radarDot" class="w-3 h-3 rounded-full bg-slate-400 dark:bg-slate-500 transition-all duration-300 shadow-sm" aria-hidden="true"></span>
       </button>
       <button id="radarCollapsedBtn" class="hidden w-10 h-10 sm:w-11 sm:h-11 flex items-center justify-center rounded-xl glass bg-white/85 dark:bg-slate-800/85 hover:bg-white dark:hover:bg-slate-700 transition-all border border-slate-200/70 dark:border-slate-700/60 shadow-lg active:scale-95" title="Expand radar panel" aria-label="Expand radar panel">

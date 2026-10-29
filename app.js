@@ -484,6 +484,7 @@ class AurafiskyApp {
       mobilePanelTzBadge: document.getElementById("mobilePanelTzBadge"),
       panelCardLocalTime: document.getElementById("panelCardLocalTime"),
       panelCardLocalTimeText: document.getElementById("panelCardLocalTimeText"),
+      panelCardFreshness: document.getElementById("panelCardFreshness"),
       panelIcon: document.getElementById("panelIcon"),
       panelTemp: document.getElementById("panelTemp"),
       panelDescription: document.getElementById("panelDescription"),
@@ -3725,6 +3726,21 @@ class AurafiskyApp {
     }
   }
 
+  _syncDocumentTitle(weather = this.currentWeather) {
+    const rawName = String(this.selectedName || "").trim();
+    const isCoordinates = /^[-+]?\d+(?:\.\d+)?\s*,\s*[-+]?\d+(?:\.\d+)?$/.test(rawName);
+    const isPlaceholder = /^(locating\.\.\.|unknown location|fetching weather\.\.\.|location address)$/i.test(rawName);
+    const placeName = !isCoordinates && !isPlaceholder
+      ? shortPlaceName(rawName).trim()
+      : this.selectedLat != null && this.selectedLng != null
+        ? `${this.selectedLat.toFixed(2)}°, ${this.selectedLng.toFixed(2)}°`
+        : "Weather";
+    const condition = weather
+      ? `${WeatherService.formatTemp(weather.temperature)} ${weather.icon} `
+      : "";
+    document.title = `${condition}${placeName || "Weather"} — Aurafisky`;
+  }
+
   _renderLocationAddressLoading() {
     const content = document.getElementById("locationAddressContent");
     if (!content) return;
@@ -3895,6 +3911,7 @@ class AurafiskyApp {
           this._updateUrlParams(lat, lng, res.name);
           this._persistSession(lat, lng, res.name);
         }
+        this._syncDocumentTitle(this.currentWeather);
         if (this.marker) {
           const timeOffset = this.timeline24hMode ? this._getTimelineOffset?.() || 0 : 0;
           const targetIdx = parseInt(this.$.timelineSlider?.value || 0, 10) + timeOffset;
@@ -3932,6 +3949,7 @@ class AurafiskyApp {
       console.warn("Reverse geocode failed:", e);
       if (this.selectedLat === lat && this.selectedLng === lng) {
         this._renderLocationAddressCard(null, fallbackName || this.selectedName, lat, lng);
+        this._syncDocumentTitle(this.currentWeather);
       }
     }
   }
@@ -4023,6 +4041,10 @@ class AurafiskyApp {
 
   _setWeatherPanelState(state, options = {}) {
     // state: 'loading' | 'content' | 'error'
+    if (this.$.panelCardFreshness && state === "error") {
+      this.$.panelCardFreshness.textContent = "Forecast update unavailable";
+      this.$.panelCardFreshness.className = "text-[10px] mt-0.5 text-amber-600 dark:text-amber-400";
+    }
     if (this.$.weatherPanelSkeleton) {
       this.$.weatherPanelSkeleton.classList.toggle("hidden", state !== "loading");
     }
@@ -4070,6 +4092,9 @@ class AurafiskyApp {
       this.selectedLat = lat;
       this.selectedLng = lng;
       this.selectedName = name;
+      this.currentWeather = null;
+      this.freshnessTimestamp = null;
+      this._syncDocumentTitle(null);
       this.selectedAddress = null;
       this.selectedDisplayName = null;
       this._currentFullAddress = '';
@@ -4105,6 +4130,10 @@ class AurafiskyApp {
       if (this.$.panelTimeLabel) this.$.panelTimeLabel.textContent = "Fetching weather...";
       if (this.$.mobilePanelTimeLabel) this.$.mobilePanelTimeLabel.textContent = "Fetching weather...";
       if (this.$.panelCardLocalTimeText) this.$.panelCardLocalTimeText.textContent = "Fetching weather...";
+      if (this.$.panelCardFreshness) {
+        this.$.panelCardFreshness.textContent = "Updating forecast…";
+        this.$.panelCardFreshness.className = "text-[10px] mt-0.5 text-slate-400 dark:text-slate-500";
+      }
 
       // Clear the AI briefing — it describes the *previous* location, so leaving
       // it on screen attributes one place's conditions to another.
@@ -4847,6 +4876,13 @@ class AurafiskyApp {
       const fresh = WeatherService.getFreshnessLabel(this.freshnessTimestamp);
       this.$.freshnessLabel.textContent = `📡 ${fresh.label}`;
       this.$.freshnessLabel.style.opacity = fresh.opacity;
+      if (this.$.panelCardFreshness) {
+        this.$.panelCardFreshness.textContent = `Forecast updated ${fresh.label}`;
+        this.$.panelCardFreshness.className = `text-[10px] mt-0.5 ${fresh.isStale ? "text-amber-600 dark:text-amber-400" : "text-slate-400 dark:text-slate-500"}`;
+      }
+    } else if (this.$.panelCardFreshness) {
+      this.$.panelCardFreshness.textContent = "Forecast update time unavailable";
+      this.$.panelCardFreshness.className = "text-[10px] mt-0.5 text-slate-400 dark:text-slate-500";
     }
 
     // 15. Phase-space regime classifier
@@ -4867,7 +4903,7 @@ class AurafiskyApp {
 
     // Update browser tab favicon + title dynamically
     this.updateWeatherFavicon(weather.weatherCode, weather.isDay);
-    document.title = `${WeatherService.formatTemp(weather.temperature)} ${weather.icon} ${shortPlaceName(this.selectedName)} — Aurafisky`;
+    this._syncDocumentTitle(weather);
 
     // Draw Astronomy Widget (Solar Arc + Moon Phase)
     this.updateAstronomyWidget(weather, hourIndex);
@@ -5081,6 +5117,16 @@ class AurafiskyApp {
         ? WeatherService.formatPrecip(daily.precipitation_sum[dayIdx])
         : "--",
     );
+    const dayHigh = daily.temperature_2m_max?.[dayIdx];
+    const dayLow = daily.temperature_2m_min?.[dayIdx];
+    setText(
+      "panelTempRange",
+      dayHigh != null && dayLow != null
+        ? `${WeatherService.formatDayLabel(dateKey)} · High ${WeatherService.formatTemp(dayHigh)} · Low ${WeatherService.formatTemp(dayLow)}`
+        : "",
+    );
+    const rangeEl = document.getElementById("panelTempRange");
+    if (rangeEl) rangeEl.title = rangeEl.textContent;
 
     // ── Rain-chance strip (Hourly tab, next 12h) ───────────────
     const strip = document.getElementById("rainChanceStrip");
@@ -6769,7 +6815,7 @@ class AurafiskyApp {
     if (this.weatherData && this.selectedLat != null) {
       const weather = WeatherService.getHourlyAtIndex(this.weatherData, this.currentHourIndex);
       if (weather) {
-        document.title = `${WeatherService.formatTemp(weather.temperature)} ${weather.icon} ${shortPlaceName(this.selectedName)} — Aurafisky`;
+        this._syncDocumentTitle(weather);
       }
     }
     const meta = document.querySelector('meta[name="theme-color"]');

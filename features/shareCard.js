@@ -112,11 +112,11 @@ export function buildCardModel({ placeName, timeLabel, weather, daily, hours, va
       }))
     : [];
   const hourly = Array.isArray(hours)
-    ? hours.slice(0, 8).map((hour) => ({
+    ? hours.slice(0, 24).map((hour) => ({
         label: hour.label || "",
         emoji: conditionEmoji(hour.weatherCode, hour.isDay !== false),
         tempText: hour.tempText || "",
-        precipText: Number.isFinite(hour.precipProb) ? `${Math.round(hour.precipProb)}% rain` : "",
+        precipText: Number.isFinite(hour.precipProb) && hour.precipProb >= 10 ? `${Math.round(hour.precipProb)}%` : "",
       }))
     : [];
   const detailed = variant === "full";
@@ -198,6 +198,54 @@ function drawStatChips(ctx, stats, box, ink, inkSoft) {
 
 function drawForecastStrip(ctx, items, box, ink, inkSoft, hourly = false) {
   if (!items || !items.length) return;
+
+  if (hourly) {
+    // Render all 24 hours in 2 neat rows of 12 hours (12 columns x 2 rows = 24 hours)
+    const cols = 12;
+    const gap = 8;
+    const rowGap = 8;
+    const colW = (box.width - gap * (cols - 1)) / cols;
+    const colH = 98;
+
+    items.forEach((d, i) => {
+      const row = Math.floor(i / cols);
+      const col = i % cols;
+      const x = box.x + col * (colW + gap);
+      const y = box.y + row * (colH + rowGap);
+
+      roundRect(ctx, x, y, colW, colH, 14);
+      ctx.fillStyle = "rgba(255,255,255,.12)";
+      ctx.fill();
+
+      ctx.textAlign = "center";
+      // Hour label (e.g. 2p, 3p, 4p...)
+      ctx.fillStyle = inkSoft;
+      ctx.font = `600 15px ${FONT}`;
+      ctx.fillText(d.label || "", x + colW / 2, y + 21);
+
+      // Weather emoji
+      ctx.font = `23px ${FONT}`;
+      ctx.fillStyle = ink;
+      ctx.fillText(d.emoji || "", x + colW / 2, y + 46);
+
+      // Temperature
+      ctx.font = `700 15px ${FONT}`;
+      ctx.fillStyle = ink;
+      const tempY = d.precipText ? y + 66 : y + 72;
+      ctx.fillText(truncate(ctx, d.tempText || "--", colW - 6), x + colW / 2, tempY);
+
+      // Rain chance (if any rain predicted)
+      if (d.precipText) {
+        ctx.font = `600 11px ${FONT}`;
+        ctx.fillStyle = onDark ? "rgba(125, 211, 252, 0.95)" : "#0284c7";
+        ctx.fillText(truncate(ctx, d.precipText, colW - 6), x + colW / 2, y + 83);
+      }
+      ctx.textAlign = "left";
+    });
+    return;
+  }
+
+  // 7-day outlook (single row of 7 columns)
   const gap = 10;
   const colW = (box.width - gap * (items.length - 1)) / items.length;
   const colH = 178;
@@ -218,7 +266,7 @@ function drawForecastStrip(ctx, items, box, ink, inkSoft, hourly = false) {
 
     ctx.font = `600 18px ${FONT}`;
     ctx.fillStyle = inkSoft;
-    const values = hourly ? (d.tempText || "--") : `${d.maxText || "--"} / ${d.minText || "--"}`;
+    const values = `${d.maxText || "--"} / ${d.minText || "--"}`;
     ctx.fillText(truncate(ctx, values, colW - 8), x + colW / 2, box.y + 143);
     if (d.precipText) {
       ctx.font = `500 15px ${FONT}`;
@@ -352,7 +400,7 @@ function modelFromApp(app) {
   const variant = app.selectedShareType || "current";
   const hourly = app.weatherData?.hourly?.time || [];
   const hours = [];
-  for (let i = Math.max(0, idx); i < Math.min(hourly.length, idx + 24); i += 3) {
+  for (let i = Math.max(0, idx); i < Math.min(hourly.length, idx + 24); i++) {
     const hour = WS.getHourlyAtIndex(app.weatherData, i);
     if (!hour) continue;
     hours.push({

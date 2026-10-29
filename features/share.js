@@ -57,7 +57,7 @@ Wind: ${WeatherService.formatWind(weather.windSpeed)} ${WeatherService.getWindDi
       let temps24h = [];
       let hourlyRows = [];
 
-      for (let i = startIdx; i < endIdx; i += 3) {
+      for (let i = startIdx; i < endIdx; i++) {
         const hourWeather = WeatherService.getHourlyAtIndex(this.weatherData, i);
         if (hourWeather) {
           const hourLabel = WeatherService.formatHourLabel(h.time[i], this.weatherData?.utc_offset_seconds);

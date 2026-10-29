@@ -91,3 +91,23 @@ test("buildCardModel caps the day strip at seven days", () => {
   const model = buildCardModel({ placeName: "X", weather: {}, daily });
   assert.equal(model.days.length, 7);
 });
+
+test("buildCardModel preserves full 24 hours for hourly forecast", () => {
+  const hours = Array.from({ length: 24 }, (_, i) => ({
+    label: `${i % 12 || 12}${i >= 12 ? "p" : "a"}`,
+    weatherCode: 0,
+    tempText: `${20 + (i % 5)}°C`,
+    precipProb: i % 2 === 0 ? 10 : 0,
+  }));
+  const model = buildCardModel({
+    placeName: "Simpson",
+    variant: "hourly",
+    weather: { weatherCode: 0, tempText: "22°C" },
+    hours,
+  });
+  assert.equal(model.variant, "hourly");
+  assert.equal(model.forecastTitle, "NEXT 24 HOURS");
+  assert.equal(model.hours.length, 24);
+  assert.equal(model.hours[0].label, "12a");
+  assert.equal(model.hours[23].label, "11p");
+});

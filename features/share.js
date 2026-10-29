@@ -9,9 +9,17 @@ async function shareWeather(type = 'current', target = 'native') {
     // The slider value is a *view* index; in 24h mode it must be shifted by the
     // timeline offset to become a data index, exactly as updateTimeline does.
     const timeOffset = this.timeline24hMode ? this._getTimelineOffset() : 0;
-    const currentIdx = parseInt(this.$.timelineSlider.value, 10) + timeOffset;
+    const sliderValue = Number.parseInt(this.$.timelineSlider?.value ?? "", 10);
+    const currentIdx = sliderValue + timeOffset;
+    if (!Number.isFinite(currentIdx) || currentIdx < 0) {
+      this.showToast("Choose a valid time before sharing.", "error");
+      return;
+    }
     const weather = WeatherService.getHourlyAtIndex(this.weatherData, currentIdx);
-    if (!weather) return;
+    if (!weather) {
+      this.showToast("Weather data is unavailable for that time.", "error");
+      return;
+    }
 
     const timeStr = WeatherService.formatDateTime(
       weather.time,
@@ -32,10 +40,10 @@ async function shareWeather(type = 'current', target = 'native') {
       : "";
 
     // ── 1. Current Overview ──────────────────────────────────────────
-    let text = `🌤️ Weather Report for ${this.selectedName}${coordsStr}
-As of ${timeStr}
+    let text = `🌤️ Weather Report for ${this.selectedName || "Selected location"}${coordsStr}
+Conditions at ${timeStr}
 
-Current: ${WeatherService.formatTemp(weather.temperature)} ${weather.icon} ${weather.description}
+Conditions: ${WeatherService.formatTemp(weather.temperature)} ${weather.icon} ${weather.description}
 Feels like: ${WeatherService.formatTemp(weather.feelsLike)} | Humidity: ${weather.humidity}%
 Wind: ${WeatherService.formatWind(weather.windSpeed)} ${WeatherService.getWindDirection(weather.windDirection)}${gust}${pressure}${uv}${vis}${clouds}${precip}${aqiText}`;
 
@@ -75,7 +83,18 @@ Wind: ${WeatherService.formatWind(weather.windSpeed)} ${WeatherService.getWindDi
         // getDailyForecast returns PAST_DAYS of history before today, so start at
         // today rather than at index 0 — otherwise the "forecast" leads with
         // three days that have already happened.
-        const todayStr = new Date().toISOString().split("T")[0];
+        // The API's daily dates follow the selected location's timezone. Use
+        // that same calendar day so users near the date line don't get a
+        // forecast starting with yesterday or tomorrow.
+        const now = new Date();
+        const todayParts = new Intl.DateTimeFormat("en-CA", {
+          timeZone: this.weatherData?.timezone || "UTC",
+          year: "numeric",
+          month: "2-digit",
+          day: "2-digit",
+        }).formatToParts(now);
+        const todayValues = Object.fromEntries(todayParts.map(({ type, value }) => [type, value]));
+        const todayStr = `${todayValues.year}-${todayValues.month}-${todayValues.day}`;
         const todayIdx = dailyList.findIndex((d) => d.date === todayStr);
         const startDay = todayIdx >= 0 ? todayIdx : (WeatherService.PAST_DAYS ?? 0);
         text += `\n\n📅 7-Day Weekly Forecast:\n`;

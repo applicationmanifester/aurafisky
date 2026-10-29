@@ -57,16 +57,31 @@ export function conditionEmoji(weatherCode, isDay = true) {
  * @param {object} weather getHourlyAtIndex() result
  * @param {{temp?:(n:number)=>string, wind?:(n:number)=>string}} [fmt]
  */
-export function buildStatItems(weather, fmt) {
+export function buildStatItems(weather, fmt, detailed = false) {
   const f = fmt || {};
   const temp = typeof f.temp === "function" ? f.temp : (n) => `${Math.round(n)}°`;
   const wind = typeof f.wind === "function" ? f.wind : (n) => `${Math.round(n)} km/h`;
   const items = [];
   if (weather?.feelsLike != null) items.push({ label: "Feels like", value: temp(weather.feelsLike) });
   if (weather?.humidity != null) items.push({ label: "Humidity", value: `${Math.round(weather.humidity)}%` });
-  if (weather?.windSpeed != null) items.push({ label: "Wind", value: wind(weather.windSpeed) });
+  if (weather?.windSpeed != null) {
+    const direction = weather.windDirectionLabel ? ` ${weather.windDirectionLabel}` : "";
+    items.push({ label: "Wind", value: `${wind(weather.windSpeed)}${direction}` });
+  }
   if (weather?.precipProb != null) items.push({ label: "Rain", value: `${Math.round(weather.precipProb)}%` });
-  return items.slice(0, 4);
+  if (detailed) {
+    if (weather?.windGusts != null) items.push({ label: "Wind gusts", value: wind(weather.windGusts) });
+    if (weather?.uvIndex != null) items.push({ label: "UV index", value: Number(weather.uvIndex).toFixed(1) });
+    if (weather?.pressure != null && typeof f.pressure === "function") {
+      items.push({ label: "Pressure", value: f.pressure(weather.pressure) });
+    }
+    if (weather?.visibility != null && typeof f.visibility === "function") {
+      items.push({ label: "Visibility", value: f.visibility(weather.visibility) });
+    }
+    if (Number.isFinite(weather?.airQuality)) items.push({ label: "US AQI", value: `${Math.round(weather.airQuality)}` });
+    if (weather?.cloudCover != null) items.push({ label: "Cloud cover", value: `${Math.round(weather.cloudCover)}%` });
+  }
+  return items.slice(0, detailed ? 8 : 4);
 }
 
 /** Format a Date as "Fri, 25 Sep · 1:37 AM". */
@@ -85,7 +100,7 @@ export function formatCardDate(date) {
 /**
  * Assemble the draw model from raw app data. Pure — no canvas, no globals.
  */
-export function buildCardModel({ placeName, timeLabel, weather, daily }) {
+export function buildCardModel({ placeName, timeLabel, weather, daily, hours, variant = "current", timeZoneLabel = "" }) {
   const code = weather?.weatherCode ?? 0;
   const days = Array.isArray(daily)
     ? daily.slice(0, 7).map((d) => ({
@@ -93,21 +108,35 @@ export function buildCardModel({ placeName, timeLabel, weather, daily }) {
         emoji: conditionEmoji(d.weatherCode, true),
         maxText: d.maxText != null ? d.maxText : "",
         minText: d.minText != null ? d.minText : "",
+        precipText: Number.isFinite(d.precipProb) ? `${Math.round(d.precipProb)}% rain` : "",
       }))
     : [];
+  const hourly = Array.isArray(hours)
+    ? hours.slice(0, 8).map((hour) => ({
+        label: hour.label || "",
+        emoji: conditionEmoji(hour.weatherCode, hour.isDay !== false),
+        tempText: hour.tempText || "",
+        precipText: Number.isFinite(hour.precipProb) ? `${Math.round(hour.precipProb)}% rain` : "",
+      }))
+    : [];
+  const detailed = variant === "full";
   return {
     placeName: placeName || "Unknown location",
     timeLabel: timeLabel || "",
     emoji: conditionEmoji(code, weather?.isDay !== false),
     tempText: weather?.tempText || "",
     descText: weather?.description || "",
-    stats: buildStatItems(weather, weather?.fmt),
+    stats: buildStatItems(weather, weather?.fmt, detailed),
     days,
+    hours: hourly,
+    variant,
+    timeZoneLabel,
+    forecastTitle: variant === "hourly" ? "NEXT 24 HOURS" : variant === "full" ? "7-DAY + DETAILS" : "7-DAY OUTLOOK",
     gradient: pickGradient(code),
     width: CARD_WIDTH,
     height: CARD_HEIGHT,
     brand: "Aurafisky",
-    tagline: "Live weather explorer",
+    tagline: "Open-Meteo · aurafisky.web.app",
   };
 }
 
@@ -137,35 +166,42 @@ function roundRect(ctx, x, y, w, h, r) {
 
 function drawStatChips(ctx, stats, box, ink, inkSoft) {
   if (!stats || !stats.length) return;
-  const gap = 20;
-  const chipW = (box.width - gap * (stats.length - 1)) / stats.length;
-  const chipH = 150;
+  const columns = 4;
+  const gap = 14;
+  const rowGap = 12;
+  const rows = Math.ceil(stats.length / columns);
+  const chipW = (box.width - gap * (columns - 1)) / columns;
+  const chipH = rows > 1 ? 88 : 108;
   stats.forEach((s, i) => {
-    const x = box.x + i * (chipW + gap);
-    roundRect(ctx, x, box.y, chipW, chipH, 24);
-    ctx.fillStyle = "rgba(255,255,255,.16)";
+    const row = Math.floor(i / columns);
+    const col = i % columns;
+    const x = box.x + col * (chipW + gap);
+    const y = box.y + row * (chipH + rowGap);
+    roundRect(ctx, x, y, chipW, chipH, 22);
+    ctx.fillStyle = "rgba(255,255,255,.19)";
     ctx.fill();
-    ctx.strokeStyle = "rgba(255,255,255,.28)";
+    ctx.strokeStyle = "rgba(255,255,255,.3)";
     ctx.lineWidth = 2;
     ctx.stroke();
 
     ctx.textAlign = "center";
     ctx.fillStyle = inkSoft;
-    ctx.font = `500 24px ${FONT}`;
-    ctx.fillText(String(s.label).toUpperCase(), x + chipW / 2, box.y + 58);
+    ctx.font = `600 19px ${FONT}`;
+    ctx.fillText(String(s.label).toUpperCase(), x + chipW / 2, y + 33);
     ctx.fillStyle = ink;
-    ctx.font = `700 42px ${FONT}`;
-    ctx.fillText(s.value || "--", x + chipW / 2, box.y + 116);
+    ctx.font = `700 31px ${FONT}`;
+    ctx.fillText(truncate(ctx, s.value || "--", chipW - 18), x + chipW / 2, y + (chipH > 100 ? 78 : 65));
     ctx.textAlign = "left";
   });
+  return rows * chipH + (rows - 1) * rowGap;
 }
 
-function drawDayStrip(ctx, days, box, ink, inkSoft) {
-  if (!days || !days.length) return;
-  const gap = 14;
-  const colW = (box.width - gap * (days.length - 1)) / days.length;
-  const colH = 170;
-  days.forEach((d, i) => {
+function drawForecastStrip(ctx, items, box, ink, inkSoft, hourly = false) {
+  if (!items || !items.length) return;
+  const gap = 10;
+  const colW = (box.width - gap * (items.length - 1)) / items.length;
+  const colH = 178;
+  items.forEach((d, i) => {
     const x = box.x + i * (colW + gap);
     roundRect(ctx, x, box.y, colW, colH, 20);
     ctx.fillStyle = "rgba(255,255,255,.12)";
@@ -173,16 +209,22 @@ function drawDayStrip(ctx, days, box, ink, inkSoft) {
 
     ctx.textAlign = "center";
     ctx.fillStyle = inkSoft;
-    ctx.font = `600 22px ${FONT}`;
+    ctx.font = `600 20px ${FONT}`;
     ctx.fillText(d.label || "", x + colW / 2, box.y + 44);
 
-    ctx.font = `54px ${FONT}`;
+    ctx.font = `50px ${FONT}`;
     ctx.fillStyle = ink;
     ctx.fillText(d.emoji || "", x + colW / 2, box.y + 108);
 
-    ctx.font = `600 22px ${FONT}`;
+    ctx.font = `600 18px ${FONT}`;
     ctx.fillStyle = inkSoft;
-    ctx.fillText(`${d.maxText || "--"} / ${d.minText || "--"}`, x + colW / 2, box.y + 148);
+    const values = hourly ? (d.tempText || "--") : `${d.maxText || "--"} / ${d.minText || "--"}`;
+    ctx.fillText(truncate(ctx, values, colW - 8), x + colW / 2, box.y + 143);
+    if (d.precipText) {
+      ctx.font = `500 15px ${FONT}`;
+      ctx.fillStyle = inkSoft;
+      ctx.fillText(truncate(ctx, d.precipText, colW - 8), x + colW / 2, box.y + 164);
+    }
     ctx.textAlign = "left";
   });
 }
@@ -198,6 +240,12 @@ export function drawWeatherCard(ctx, model) {
   ctx.fillStyle = bg;
   ctx.fillRect(0, 0, width, height);
 
+  const halo = ctx.createRadialGradient(width * 0.82, height * 0.18, 10, width * 0.82, height * 0.18, width * 0.62);
+  halo.addColorStop(0, "rgba(255,255,255,.22)");
+  halo.addColorStop(1, "rgba(255,255,255,0)");
+  ctx.fillStyle = halo;
+  ctx.fillRect(0, 0, width, height * 0.66);
+
   const onDark = g.dark;
   const ink = onDark ? "#ffffff" : "#0f172a";
   const inkSoft = onDark ? "rgba(255,255,255,.82)" : "rgba(15,23,42,.68)";
@@ -210,7 +258,7 @@ export function drawWeatherCard(ctx, model) {
   ctx.textAlign = "left";
   ctx.fillText(model.brand || "", 64, 96);
   ctx.fillStyle = inkSoft;
-  ctx.font = `400 26px ${FONT}`;
+  ctx.font = `500 23px ${FONT}`;
   ctx.textAlign = "right";
   ctx.fillText(model.timeLabel || "", width - 64, 96);
 
@@ -220,47 +268,55 @@ export function drawWeatherCard(ctx, model) {
   ctx.font = `800 58px ${FONT}`;
   ctx.fillText(truncate(ctx, model.placeName || "", width - 128), 64, 205);
 
+  ctx.fillStyle = inkSoft;
+  ctx.font = `600 20px ${FONT}`;
+  const contextLabel = model.variant === "full" ? "DETAILED WEATHER SNAPSHOT" : model.variant === "hourly" ? "HOURLY FORECAST" : model.variant === "weekly" ? "WEEKLY FORECAST" : "SELECTED CONDITIONS";
+  ctx.fillText(contextLabel, 66, 250);
+
   // Big emoji
-  ctx.font = `200px ${FONT}`;
-  ctx.fillText(model.emoji || "", 56, 470);
+  ctx.font = `190px ${FONT}`;
+  ctx.fillText(model.emoji || "", 54, 478);
 
   // Temperature (right aligned)
   ctx.fillStyle = ink;
-  ctx.font = `800 180px ${FONT}`;
+  ctx.font = `800 174px ${FONT}`;
   ctx.textAlign = "right";
-  ctx.fillText(model.tempText || "--°", width - 64, 460);
+  ctx.fillText(model.tempText || "--°", width - 64, 472);
 
   // Description
   ctx.textAlign = "left";
   ctx.fillStyle = inkSoft;
-  ctx.font = `500 42px ${FONT}`;
-  ctx.fillText(model.descText || "", 64, 545);
+  ctx.font = `600 38px ${FONT}`;
+  ctx.fillText(truncate(ctx, model.descText || "", width - 128), 64, 550);
 
   // Stat chips
-  drawStatChips(ctx, model.stats, { x: 64, y: 620, width: width - 128 }, ink, inkSoft);
+  const statsHeight = drawStatChips(ctx, model.stats, { x: 64, y: 620, width: width - 128 }, ink, inkSoft) || 0;
+  const forecastTop = Math.max(810, 620 + statsHeight + 76);
 
   // Divider
   ctx.strokeStyle = onDark ? "rgba(255,255,255,.28)" : "rgba(15,23,42,.18)";
   ctx.lineWidth = 2;
   ctx.beginPath();
-  ctx.moveTo(64, height - 330);
-  ctx.lineTo(width - 64, height - 330);
+  ctx.moveTo(64, forecastTop - 22);
+  ctx.lineTo(width - 64, forecastTop - 22);
   ctx.stroke();
 
   // Strip heading
   ctx.fillStyle = ink;
-  ctx.font = `700 30px ${FONT}`;
+  ctx.font = `800 27px ${FONT}`;
   ctx.textAlign = "left";
-  ctx.fillText("7-DAY FORECAST", 64, height - 280);
+  ctx.fillText(model.forecastTitle || "FORECAST", 64, forecastTop + 20);
 
   // Day strip
-  drawDayStrip(ctx, model.days, { x: 64, y: height - 250, width: width - 128 }, ink, inkSoft);
+  const hourly = model.variant === "hourly";
+  drawForecastStrip(ctx, hourly ? model.hours : model.days, { x: 64, y: forecastTop + 42, width: width - 128 }, ink, inkSoft, hourly);
 
   // Footer
   ctx.fillStyle = inkSoft;
-  ctx.font = `400 24px ${FONT}`;
+  ctx.font = `500 20px ${FONT}`;
   ctx.textAlign = "left";
-  ctx.fillText(model.tagline || "", 64, height - 48);
+  const footer = [model.tagline, model.timeZoneLabel].filter(Boolean).join("  ·  ");
+  ctx.fillText(truncate(ctx, footer, width - 128), 64, height - 42);
 }
 
 // ────────────────── app integration ──────────────────
@@ -281,15 +337,42 @@ function modelFromApp(app) {
   if (!w) return null;
 
   const dailyRaw = WS.getDailyForecast(app.weatherData) || [];
-  // getDailyForecast leads with PAST_DAYS of history; start at today.
-  const todayStr = new Date().toISOString().split("T")[0];
+  const timezone = app.weatherData?.timezone || "UTC";
+  const todayParts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: timezone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(new Date());
+  const today = Object.fromEntries(todayParts.map(({ type, value }) => [type, value]));
+  const todayStr = `${today.year}-${today.month}-${today.day}`;
   const todayIdx = dailyRaw.findIndex((d) => d.date === todayStr);
   const startDay = todayIdx >= 0 ? todayIdx : WS.PAST_DAYS ?? 0;
   const week = dailyRaw.slice(startDay, startDay + 7);
+  const variant = app.selectedShareType || "current";
+  const hourly = app.weatherData?.hourly?.time || [];
+  const hours = [];
+  for (let i = Math.max(0, idx); i < Math.min(hourly.length, idx + 24); i += 3) {
+    const hour = WS.getHourlyAtIndex(app.weatherData, i);
+    if (!hour) continue;
+    hours.push({
+      label: formatLocalHour(hour.time),
+      weatherCode: hour.weatherCode,
+      isDay: hour.isDay,
+      tempText: WS.formatTemp(hour.temperature),
+      precipProb: hour.precipProb,
+    });
+  }
+  const aqiTimes = app.airQualityData?.hourly?.time;
+  const aqiTimeIndex = Array.isArray(aqiTimes) ? aqiTimes.indexOf(w.time) : -1;
+  const aqi = app.airQualityData?.hourly?.us_aqi?.[aqiTimeIndex >= 0 ? aqiTimeIndex : idx];
+  const timezoneLabel = app.weatherData?.timezone_abbreviation || timezone;
 
   return buildCardModel({
     placeName: app.selectedName,
-    timeLabel: formatCardDate(new Date()),
+    timeLabel: formatLocalWeatherTime(w.time),
+    timeZoneLabel: timezoneLabel,
+    variant,
     weather: {
       weatherCode: w.weatherCode,
       isDay: w.isDay,
@@ -298,19 +381,49 @@ function modelFromApp(app) {
       feelsLike: w.feelsLike,
       humidity: w.humidity,
       windSpeed: w.windSpeed,
+      windDirectionLabel: WS.getWindDirection(w.windDirection),
+      windGusts: w.windGusts,
       precipProb: w.precipProb,
+      uvIndex: w.uvIndex,
+      pressure: w.pressure,
+      visibility: w.visibility,
+      cloudCover: w.cloudCover,
+      airQuality: Number.isFinite(aqi) ? aqi : null,
       fmt: {
         temp: (n) => WS.formatTemp(n),
         wind: (n) => WS.formatWind(n),
+        pressure: (n) => WS.formatPressure(n),
+        visibility: (n) => WS.formatVisibility(n),
       },
     },
+    hours,
     daily: week.map((d) => ({
       label: WS.formatDayLabel(d.date),
       weatherCode: d.weatherCode,
       maxText: WS.formatTemp(d.maxTemp),
       minText: WS.formatTemp(d.minTemp),
+      precipProb: d.precipProb,
     })),
   });
+}
+
+function formatLocalWeatherTime(value) {
+  if (!value) return "Local forecast";
+  const [datePart, timePart] = String(value).split("T");
+  const [year, month, day] = (datePart || "").split("-").map(Number);
+  const [hour = 0, minute = 0] = (timePart || "").split(":").map(Number);
+  if (![year, month, day, hour, minute].every(Number.isFinite)) return "Local forecast";
+  const weekday = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"][new Date(Date.UTC(year, month - 1, day)).getUTCDay()];
+  const monthName = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"][month - 1];
+  const suffix = hour >= 12 ? "PM" : "AM";
+  const hour12 = hour % 12 || 12;
+  return `${weekday}, ${monthName} ${day} · ${hour12}:${String(minute).padStart(2, "0")} ${suffix} local`;
+}
+
+function formatLocalHour(value) {
+  const rawHour = Number(String(value || "").split("T")[1]?.split(":")[0]);
+  if (!Number.isFinite(rawHour)) return "--";
+  return `${rawHour % 12 || 12}${rawHour >= 12 ? "p" : "a"}`;
 }
 
 /** Render the current conditions to a PNG blob. Resolves to null on failure. */
@@ -344,6 +457,34 @@ function renderCardBlob(app) {
   });
 }
 
+function refreshShareCardPreview(app) {
+  const image = app.$?.shareCardPreviewImage;
+  const message = app.$?.shareCardPreviewMessage;
+  if (!image) return;
+  const model = modelFromApp(app);
+  if (!model) {
+    image.classList.add("hidden");
+    if (message) message.textContent = "Choose a place on the map to preview its card.";
+    return;
+  }
+  try {
+    const canvas = document.createElement("canvas");
+    canvas.width = CARD_WIDTH;
+    canvas.height = CARD_HEIGHT;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) throw new Error("Canvas is unavailable");
+    drawWeatherCard(ctx, model);
+    image.src = canvas.toDataURL("image/png");
+    image.alt = `${model.placeName} weather card: ${model.tempText}, ${model.descText}`;
+    image.classList.remove("hidden");
+    if (message) message.textContent = `${model.forecastTitle.toLowerCase()} · ${model.timeZoneLabel || "local time"}`;
+  } catch (error) {
+    console.warn("Share-card preview failed:", error);
+    image.classList.add("hidden");
+    if (message) message.textContent = "Preview is unavailable on this device.";
+  }
+}
+
 function downloadBlob(app, blob, filename) {
   try {
     const url = typeof blob === "string" ? blob : URL.createObjectURL(blob);
@@ -368,6 +509,20 @@ function cardFilename(app) {
   return `aurafisky-${place || "weather"}.png`;
 }
 
+function buildLocationShareUrl(app) {
+  try {
+    const url = new URL(window.location.href);
+    if (Number.isFinite(app.selectedLat) && Number.isFinite(app.selectedLng)) {
+      url.searchParams.set("lat", app.selectedLat.toFixed(4));
+      url.searchParams.set("lng", app.selectedLng.toFixed(4));
+      if (app.selectedName) url.searchParams.set("name", app.selectedName);
+    }
+    return url.toString();
+  } catch {
+    return "https://aurafisky.web.app/";
+  }
+}
+
 /**
  * Entry point wired to the "Share as Image" button.
  * @param {'native'|'download'|'copy'} [target='native']
@@ -380,6 +535,7 @@ async function shareWeatherImage(target = "native") {
   }
 
   app.showToast("Rendering weather card…", "info", 2000);
+  const model = modelFromApp(app);
   const blob = await renderCardBlob(app);
   if (!blob) {
     app.showToast("Could not render the weather card.", "error");
@@ -409,8 +565,8 @@ async function shareWeatherImage(target = "native") {
       if (navigator.canShare({ files: [file] })) {
         await navigator.share({
           files: [file],
-          title: `Weather — ${app.selectedName}`,
-          text: `Current weather in ${app.selectedName}`,
+          title: `${model?.forecastTitle || "Weather"} — ${model?.placeName || app.selectedName || "Aurafisky"}`,
+          text: `${model?.descText || "Weather conditions"} at ${model?.timeLabel || "the selected time"}. ${model?.timeZoneLabel ? `Local time: ${model.timeZoneLabel}.` : ""} ${buildLocationShareUrl(app)}`,
         });
         return;
       }
@@ -436,7 +592,20 @@ function installShareImageButton(app) {
   const label = document.createElement("label");
   label.className =
     "block text-xs font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-500 mb-2";
-  label.textContent = "3. Or Share as Image";
+  label.textContent = "3. Share a weather card";
+
+  const preview = document.createElement("div");
+  preview.className = "mb-3 rounded-2xl border border-slate-200 dark:border-slate-700 bg-slate-100 dark:bg-slate-950 p-2.5";
+  const previewImage = document.createElement("img");
+  previewImage.id = "shareCardPreviewImage";
+  previewImage.className = "hidden mx-auto max-h-56 w-auto rounded-xl shadow-lg";
+  previewImage.alt = "Preview of the weather card to share";
+  previewImage.loading = "lazy";
+  const previewMessage = document.createElement("p");
+  previewMessage.id = "shareCardPreviewMessage";
+  previewMessage.className = "py-4 text-center text-xs text-slate-500 dark:text-slate-400";
+  previewMessage.textContent = "Choose a place on the map to preview its card.";
+  preview.append(previewImage, previewMessage);
 
   const row = document.createElement("div");
   row.className = "grid grid-cols-3 gap-2";
@@ -459,12 +628,23 @@ function installShareImageButton(app) {
     mkBtn("shareAsImageCopy", "📋 Copy", () => shareWeatherImage.call(app, "copy"), false),
   );
 
-  section.append(label, row);
-  body.appendChild(section);
+  section.append(label, preview, row);
+  const shareTargets = modal.querySelector("#shareTargetNative")?.closest("div.space-y-2")?.parentElement;
+  if (shareTargets) body.insertBefore(section, shareTargets);
+  else body.appendChild(section);
+
+  app.$.shareCardPreviewImage = previewImage;
+  app.$.shareCardPreviewMessage = previewMessage;
+  modal.addEventListener("click", (event) => {
+    if (event.target.closest("#shareTypeContainer .share-type-btn")) {
+      refreshShareCardPreview(app);
+    }
+  });
 }
 
 export function init(app) {
   app.shareWeatherImage = shareWeatherImage;
+  app.refreshShareCardPreview = () => refreshShareCardPreview(app);
   installShareImageButton(app);
 }
 

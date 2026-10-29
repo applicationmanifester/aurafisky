@@ -64,6 +64,7 @@ function toggleShareModal(show) {
     if (show) {
       this.$.shareModal.classList.remove("hidden");
       this.$.shareModal.classList.add("flex");
+      this.refreshShareCardPreview?.();
     } else {
       this.$.shareModal.classList.add("hidden");
       this.$.shareModal.classList.remove("flex");

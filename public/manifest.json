@@ -1,7 +1,7 @@
 {
   "name": "Aurafisky - Weather & Maps",
   "short_name": "Aurafisky",
-  "description": "Beautiful, map-centric weather app with alerts and insights",
+  "description": "Explore live weather maps and radar, compare forecasts, and plan around conditions along your route.",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",

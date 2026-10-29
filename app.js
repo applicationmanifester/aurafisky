@@ -3441,6 +3441,8 @@ class AurafiskyApp {
         url.searchParams.set("lng", lng.toFixed(4));
         if (name) {
           url.searchParams.set("name", name);
+        } else {
+          url.searchParams.delete("name");
         }
         window.history.replaceState(null, "", url.toString());
       }
@@ -3498,7 +3500,10 @@ class AurafiskyApp {
         const lat = parseFloat(latStr);
         const lng = parseFloat(lngStr);
         if (!isNaN(lat) && !isNaN(lng) && lat >= -90 && lat <= 90 && lng >= -180 && lng <= 180) {
-          const name = nameStr ? decodeURIComponent(nameStr) : `${lat.toFixed(4)}, ${lng.toFixed(4)}`;
+          // URLSearchParams already decodes percent-escaped values. Decoding
+          // again breaks valid names containing a literal "%" (for example
+          // "100% Pure") and can prevent a shared location from loading.
+          const name = nameStr || `${lat.toFixed(4)}, ${lng.toFixed(4)}`;
           this.selectLocation(lat, lng, name);
           // Shared wallpaper link: open the wallpaper overlay for this location
           if (wallpaperStr === "true") {

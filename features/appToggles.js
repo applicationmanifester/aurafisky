@@ -8,6 +8,7 @@ import { fromLonLat } from "ol/proj.js";
 
 let tempOverlaySource = null;
 let tempOverlayLayer = null;
+let tempOverlayRequestId = 0;
 
 function ensureTempOverlayLayer(app) {
   if (tempOverlayLayer) return;
@@ -54,7 +55,8 @@ function installPWA() {
 
 async function initTempOverlayLayers() {
     this.clearTempOverlay();
-    if (!this.selectedLat || !this.selectedLng) return;
+    const requestId = ++tempOverlayRequestId;
+    if (!Number.isFinite(this.selectedLat) || !Number.isFinite(this.selectedLng)) return;
 
     const lat = this.selectedLat;
     const lng = this.selectedLng;
@@ -63,8 +65,8 @@ async function initTempOverlayLayers() {
     for (const dlat of offsets) {
       for (const dlng of offsets) {
         points.push({
-          lat: lat + dlat,
-          lng: lng + dlng + (dlat === 0 && dlng === 0 ? 0 : 0),
+          lat: Math.max(-90, Math.min(90, lat + dlat)),
+          lng: ((lng + dlng + 180) % 360 + 360) % 360 - 180,
         });
       }
     }
@@ -88,22 +90,21 @@ async function initTempOverlayLayers() {
         results = [results];
       }
 
-      const tempMin = Math.min(
-        ...results
-          .filter((r) => r?.current?.temperature_2m != null)
-          .map((r) => r.current.temperature_2m),
-      );
-      const tempMax = Math.max(
-        ...results
-          .filter((r) => r?.current?.temperature_2m != null)
-          .map((r) => r.current.temperature_2m),
-      );
+      // A slower request for the previous map point must not paint over the
+      // latest selection.
+      if (requestId !== tempOverlayRequestId) return;
+
+      const validResults = results
+        .map((data, i) => ({ data, point: points[i], temp: data?.current?.temperature_2m }))
+        .filter((item) => Number.isFinite(item.temp) && item.point);
+      if (!validResults.length) return;
+
+      const temperatures = validResults.map((item) => item.temp);
+      const tempMin = Math.min(...temperatures);
+      const tempMax = Math.max(...temperatures);
       const tempRange = Math.max(1, tempMax - tempMin);
 
-      results.forEach((data, i) => {
-        if (!data?.current?.temperature_2m) return;
-        const temp = data.current.temperature_2m;
-        const pt = points[i];
+      validResults.forEach(({ temp, point: pt }) => {
         const frac = (temp - tempMin) / tempRange;
         const color = this.tempToColor(frac);
         ensureTempOverlayLayer(this);
@@ -138,6 +139,8 @@ function tempToColor(frac) {
   }
 
 function clearTempOverlay() {
+    // Invalidate any in-flight fetch before clearing the currently drawn grid.
+    tempOverlayRequestId++;
     if (tempOverlaySource) tempOverlaySource.clear();
     this.tempOverlayLayers = [];
   }

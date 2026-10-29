@@ -88,11 +88,11 @@ export default defineConfig(({ mode }) => {
       // app.js registers the worker itself (updateViaCache:'none' + forced
       // update checks on focus/visibility). Don't inject a second registration.
       injectRegister: null,
-      includeAssets: ['favicon.svg', 'icon-192.png', 'icon-512.png', 'logo.svg'],
+      includeAssets: ['favicon.svg', 'icon-192.png', 'icon-512.png', 'logo.svg', 'aurafisky-social.png', 'robots.txt', 'sitemap.xml'],
       manifest: {
         name: 'Aurafisky Live Explorer',
         short_name: 'Aurafisky',
-        description: 'Interactive weather map with real-time conditions, forecasts, radar, and soundscapes.',
+        description: 'Explore live weather maps and radar, compare forecasts, and plan around conditions along your route.',
         theme_color: '#14b8a6',
         background_color: '#0f172a',
         display: 'standalone',

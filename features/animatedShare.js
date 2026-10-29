@@ -272,9 +272,7 @@ function truncate(ctx, text, maxWidth) {
 // ── App integration ─────────────────────────────────────────────────
 
 export function init(app) {
-  app.shareAnimatedCard = shareAnimatedCard;
-  app.shareWeatherImage = app.shareWeatherImage || shareWeatherImage;
-  installWhatsAppButton(app);
+  // GIF button in Share modal removed per user request
 }
 
 async function shareAnimatedCard(target = "native") {
@@ -431,41 +429,4 @@ function buildModelFromApp(app) {
     })),
     gradient: pickGradient(w.weatherCode),
   };
-}
-
-/** Install a "Share Animated GIF" button into the share modal. */
-function installWhatsAppButton(app) {
-  const modal = app.$ && app.$.shareModal;
-  if (!modal || modal.querySelector("#shareAnimatedBtn")) return;
-  const body = modal.querySelector(".p-4.space-y-4") || modal.querySelector(".p-4");
-  if (!body) return;
-
-  const section = document.createElement("div");
-
-  const label = document.createElement("label");
-  label.className = "block text-xs font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-500 mb-2";
-  label.textContent = "4. Animated Weather Card (GIF)";
-
-  const row = document.createElement("div");
-  row.className = "grid grid-cols-2 gap-2";
-
-  const mkBtn = (id, text, handler, primary) => {
-    const b = document.createElement("button");
-    b.id = id;
-    b.type = "button";
-    b.className = primary
-      ? "p-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-semibold text-xs transition-colors active:scale-95"
-      : "p-2.5 rounded-xl border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-200 font-semibold text-xs transition-colors active:scale-95";
-    b.textContent = text;
-    b.addEventListener("click", handler);
-    return b;
-  };
-
-  row.append(
-    mkBtn("shareAnimatedBtn", "📤 Share GIF", () => shareAnimatedCard.call(app, "native"), true),
-    mkBtn("shareAnimatedWhatsApp", "💬 WhatsApp", () => shareAnimatedCard.call(app, "whatsapp"), false),
-  );
-
-  section.append(label, row);
-  body.appendChild(section);
 }

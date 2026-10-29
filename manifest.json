@@ -1,7 +1,7 @@
 {
   "name": "Aurafisky Live Explorer",
   "short_name": "Aurafisky",
-  "description": "Interactive weather map with real-time conditions, forecasts, radar, and soundscapes.",
+  "description": "Explore live weather maps and radar, compare forecasts, and plan around conditions along your route.",
   "start_url": "./index.html",
   "display": "standalone",
   "display_override": ["standalone", "minimal-ui", "browser"],

@@ -2,7 +2,7 @@
   "name": "aurafisky",
   "version": "19.0.0",
   "type": "module",
-  "description": "Aurafisky — Interactive Weather & Map Explorer (Local-First, Fully Offline-Capable)",
+  "description": "Aurafisky — Interactive weather maps, radar, forecasts and route weather planning",
   "author": "Aurafisky",
   "main": "electron/main.cjs",
   "scripts": {

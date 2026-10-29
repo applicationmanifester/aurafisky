@@ -399,6 +399,35 @@ describe('Mobile Tabs & Navigation Layout', () => {
     expect(appJs).toContain('locationAddressCoordsText: document.getElementById("locationAddressCoordsText")');
     expect(appJs).toContain('Coordinates (Lat, Long)');
   });
+
+  it('renders local location time in header, address line, and overview card for mobile screens', () => {
+    const html = fs.readFileSync('index.html', 'utf-8');
+    const appJs = fs.readFileSync('app.js', 'utf-8');
+
+    // Header mobile time row & badge
+    expect(html).toContain('id="mobilePanelTimeRow"');
+    expect(html).toContain('id="mobilePanelTimeLabel"');
+    expect(html).toContain('id="mobilePanelTzBadge"');
+    expect(appJs).toContain('mobilePanelTimeRow: document.getElementById("mobilePanelTimeRow")');
+    expect(appJs).toContain('mobilePanelTimeLabel: document.getElementById("mobilePanelTimeLabel")');
+    expect(appJs).toContain('mobilePanelTzBadge: document.getElementById("mobilePanelTzBadge")');
+
+    // Address card mobile GPS line time
+    expect(html).toContain('id="locationAddressTimeDivider"');
+    expect(html).toContain('id="locationAddressTimeText"');
+    expect(appJs).toContain('locationAddressTimeDivider: document.getElementById("locationAddressTimeDivider")');
+    expect(appJs).toContain('locationAddressTimeText: document.getElementById("locationAddressTimeText")');
+
+    // Main overview temp card local time
+    expect(html).toContain('id="panelCardLocalTime"');
+    expect(html).toContain('id="panelCardLocalTimeText"');
+    expect(appJs).toContain('panelCardLocalTime: document.getElementById("panelCardLocalTime")');
+    expect(appJs).toContain('panelCardLocalTimeText: document.getElementById("panelCardLocalTimeText")');
+
+    // Detailed address card Local Time & Timezone section
+    expect(appJs).toContain('Local Time & Timezone');
+    expect(appJs).toContain('id="addressDetailLocalTime"');
+  });
 });
 
 

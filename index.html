@@ -220,11 +220,24 @@
 
       <!-- Sheet Primary Header (Location Name + Weather Pill + Controls) -->
       <div class="flex items-center justify-between px-4 sm:px-5 pt-1 pb-1 gap-2">
-        <div class="min-w-0 flex-1 flex items-baseline gap-2">
-          <h3 id="panelLocationName" class="text-lg sm:text-xl font-bold text-slate-900 dark:text-white leading-tight truncate break-words">Select location</h3>
-          <span id="panelHomeBadge" class="hidden home-badge text-[10px] font-bold text-amber-600 dark:text-amber-400 px-1.5 py-0.5 rounded-full bg-amber-500/10 border border-amber-500/20 whitespace-nowrap">🏠 Home</span>
-          <span id="auraLocationTitle" class="hidden">Select location</span>
-          <span id="googleLocationTitle" class="hidden">Select location</span>
+        <div class="min-w-0 flex-1 flex flex-col justify-center">
+          <div class="flex items-baseline gap-2 min-w-0">
+            <h3 id="panelLocationName" class="text-lg sm:text-xl font-bold text-slate-900 dark:text-white leading-tight truncate break-words">Select location</h3>
+            <span id="panelHomeBadge" class="hidden home-badge text-[10px] font-bold text-amber-600 dark:text-amber-400 px-1.5 py-0.5 rounded-full bg-amber-500/10 border border-amber-500/20 whitespace-nowrap">🏠 Home</span>
+            <span id="auraLocationTitle" class="hidden">Select location</span>
+            <span id="googleLocationTitle" class="hidden">Select location</span>
+          </div>
+          <!-- Mobile Local Time row (visible on mobile <sm, hidden on desktop >=sm where panelTimeLabel shows) -->
+          <div id="mobilePanelTimeRow" class="flex sm:hidden items-center gap-1.5 text-[11px] text-slate-500 dark:text-slate-400 mt-0.5 select-text font-medium min-w-0">
+            <span class="inline-flex items-center gap-1 text-slate-600 dark:text-slate-300 min-w-0">
+              <svg class="w-3.5 h-3.5 text-teal-600 dark:text-teal-400 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                <circle cx="12" cy="12" r="9" stroke-linecap="round" stroke-linejoin="round"/>
+                <path stroke-linecap="round" stroke-linejoin="round" d="M12 7v5l3 2"/>
+              </svg>
+              <span id="mobilePanelTimeLabel" class="select-text truncate">--</span>
+            </span>
+            <span id="mobilePanelTzBadge" class="hidden text-[9px] px-1 py-0.2 rounded font-mono font-bold bg-slate-100 dark:bg-slate-800 text-teal-700 dark:text-teal-300 border border-slate-200/60 dark:border-slate-700/60 select-none flex-shrink-0"></span>
+          </div>
         </div>
 
         <!-- Right Side: Weather & AQI Badge (hidden until live location weather data is loaded) -->
@@ -280,9 +293,11 @@
               </div>
             </div>
             <!-- Dedicated Lat / Long Coordinates line (visible on mobile and compact screens in address tab) -->
-            <div id="locationAddressCoords" class="flex sm:hidden items-center gap-1.5 pl-4 mt-0.5 text-[10px] font-mono text-slate-500 dark:text-slate-400 select-text cursor-pointer" title="Click to copy coordinates">
+            <div id="locationAddressCoords" class="flex sm:hidden items-center flex-wrap gap-1.5 pl-4 mt-0.5 text-[10px] font-mono text-slate-500 dark:text-slate-400 select-text cursor-pointer" title="Click to copy coordinates">
               <span class="text-[9px] font-sans font-bold tracking-wider text-teal-600 dark:text-teal-400 bg-teal-50 dark:bg-teal-950/60 border border-teal-200/70 dark:border-teal-800/60 px-1 py-0.2 rounded flex-shrink-0 select-none">GPS</span>
               <span id="locationAddressCoordsText" class="truncate font-mono select-text hover:underline"></span>
+              <span id="locationAddressTimeDivider" class="hidden text-slate-300 dark:text-slate-600 select-none">•</span>
+              <span id="locationAddressTimeText" class="hidden font-sans font-medium text-slate-600 dark:text-slate-300 select-text truncate"></span>
             </div>
           </div>
           <div class="flex items-center gap-1 flex-shrink-0">
@@ -399,6 +414,10 @@
             </div>
             <p id="panelDescription" class="text-sm text-slate-600 dark:text-slate-300 mt-0.5">--</p>
             <p id="panelFeelsLike" class="text-xs text-slate-400 dark:text-slate-500 mt-0.5">Feels like --°</p>
+            <div id="panelCardLocalTime" class="text-[11px] font-medium text-slate-500 dark:text-slate-400 mt-1 flex items-center gap-1.5 select-text">
+              <span class="text-teal-600 dark:text-teal-400" aria-hidden="true">🕒</span>
+              <span id="panelCardLocalTimeText" class="select-text truncate">--</span>
+            </div>
 
             <div id="percentileLabel" class="text-[10px] font-semibold text-slate-400 mt-0.5"></div>
             <div id="regimeLabel" class="text-[10px] font-bold text-teal-500 dark:text-teal-400 mt-0.5"></div>

@@ -474,7 +474,14 @@ class AurafiskyApp {
       panelCoordinates: document.getElementById("panelCoordinates"),
       locationAddressCoords: document.getElementById("locationAddressCoords"),
       locationAddressCoordsText: document.getElementById("locationAddressCoordsText"),
+      locationAddressTimeDivider: document.getElementById("locationAddressTimeDivider"),
+      locationAddressTimeText: document.getElementById("locationAddressTimeText"),
       panelTimeLabel: document.getElementById("panelTimeLabel"),
+      mobilePanelTimeRow: document.getElementById("mobilePanelTimeRow"),
+      mobilePanelTimeLabel: document.getElementById("mobilePanelTimeLabel"),
+      mobilePanelTzBadge: document.getElementById("mobilePanelTzBadge"),
+      panelCardLocalTime: document.getElementById("panelCardLocalTime"),
+      panelCardLocalTimeText: document.getElementById("panelCardLocalTimeText"),
       panelIcon: document.getElementById("panelIcon"),
       panelTemp: document.getElementById("panelTemp"),
       panelDescription: document.getElementById("panelDescription"),
@@ -3758,6 +3765,17 @@ class AurafiskyApp {
       summaryEl.title = b.fullAddress ? `${summaryText}\n${b.fullAddress}` : summaryText;
     }
 
+    const tzName = this.weatherData?.timezone || "";
+    const tzAbbr = this.weatherData?.timezone_abbreviation || "";
+    const utcOffSec = this.weatherData?.utc_offset_seconds;
+    const utcOffsetStr = utcOffSec != null
+      ? `UTC${utcOffSec >= 0 ? "+" : "-"}${String(Math.floor(Math.abs(utcOffSec) / 3600)).padStart(2, "0")}:${String(Math.floor((Math.abs(utcOffSec) % 3600) / 60)).padStart(2, "0")}`
+      : "";
+    const detailLocalTimeStr = WeatherService.getFormattedLocationCurrentDateTime
+      ? WeatherService.getFormattedLocationCurrentDateTime(tzName, utcOffSec || 0)
+      : "";
+    const detailTzBadge = [tzName, tzAbbr, utcOffsetStr].filter(Boolean).join(" · ");
+
     if (content) {
       content.innerHTML = `
         <div class="grid grid-cols-2 gap-x-2 gap-y-1.5 text-[10.5px] select-text">
@@ -3780,6 +3798,13 @@ class AurafiskyApp {
           <div class="col-span-2 flex flex-col min-w-0 select-text pt-1 border-t border-slate-200/50 dark:border-slate-700/40">
             <span class="text-[8.5px] uppercase font-bold text-slate-400 tracking-wider select-text">Coordinates (Lat, Long)</span>
             <span class="font-mono font-semibold text-teal-700 dark:text-teal-300 truncate select-text cursor-text" title="${coordAccuracy}">📍 ${coordFormatted}</span>
+          </div>
+          <div class="col-span-2 flex flex-col min-w-0 select-text pt-1 border-t border-slate-200/50 dark:border-slate-700/40">
+            <span class="text-[8.5px] uppercase font-bold text-slate-400 tracking-wider select-text">Local Time & Timezone</span>
+            <div class="flex items-center gap-1.5 min-w-0">
+              <span id="addressDetailLocalTime" class="font-semibold text-slate-800 dark:text-slate-200 truncate select-text cursor-text">🕒 ${detailLocalTimeStr || "Calculating..."}</span>
+              ${detailTzBadge ? `<span class="text-[9.5px] font-mono text-slate-500 dark:text-slate-400 truncate" title="${detailTzBadge}">(${detailTzBadge})</span>` : ""}
+            </div>
           </div>
         </div>
         <div class="mt-1.5 pt-1 border-t border-slate-200/60 dark:border-slate-700/50 flex items-center justify-between text-[10px] text-slate-500 dark:text-slate-400 select-text">
@@ -3888,30 +3913,80 @@ class AurafiskyApp {
   }
 
   _updatePanelTimeLabel(weather, hourIndex) {
-    if (!this.$.panelTimeLabel) return;
+    if (!this.$.panelTimeLabel && !this.$.mobilePanelTimeLabel && !this.$.panelCardLocalTimeText) return;
     const nowIdx = WeatherService.getCurrentHourIndex(
       this.weatherData,
       this.weatherData?.utc_offset_seconds || 0,
     );
     const isNow = hourIndex == null || hourIndex === nowIdx;
+    let label = "";
     if (isNow && WeatherService.getFormattedLocationCurrentDateTime) {
-      this.$.panelTimeLabel.textContent = WeatherService.getFormattedLocationCurrentDateTime(
+      label = WeatherService.getFormattedLocationCurrentDateTime(
         this.weatherData?.timezone,
         this.weatherData?.utc_offset_seconds || 0,
       );
     } else if (weather?.time) {
-      this.$.panelTimeLabel.textContent = WeatherService.formatDateTime(
+      label = WeatherService.formatDateTime(
         weather.time,
         this.weatherData?.timezone,
         this.weatherData?.utc_offset_seconds,
       );
+    }
+
+    if (this.$.panelTimeLabel) {
+      this.$.panelTimeLabel.textContent = label;
+    }
+    if (this.$.mobilePanelTimeLabel) {
+      this.$.mobilePanelTimeLabel.textContent = label;
+    }
+
+    // Timezone abbreviation / UTC offset badge
+    let tzAbbr = this.weatherData?.timezone_abbreviation;
+    if (!tzAbbr && this.weatherData?.utc_offset_seconds != null) {
+      const off = this.weatherData.utc_offset_seconds;
+      const sign = off >= 0 ? "+" : "-";
+      const h = Math.floor(Math.abs(off) / 3600);
+      const m = Math.floor((Math.abs(off) % 3600) / 60);
+      tzAbbr = m > 0 ? `UTC${sign}${h}:${String(m).padStart(2, "0")}` : `UTC${sign}${h}`;
+    }
+
+    if (this.$.mobilePanelTzBadge) {
+      if (tzAbbr) {
+        this.$.mobilePanelTzBadge.textContent = tzAbbr;
+        this.$.mobilePanelTzBadge.classList.remove("hidden");
+      } else {
+        this.$.mobilePanelTzBadge.classList.add("hidden");
+      }
+    }
+
+    // Main weather card local time display
+    if (this.$.panelCardLocalTimeText) {
+      this.$.panelCardLocalTimeText.textContent = tzAbbr ? `${label} (${tzAbbr})` : label;
+    }
+
+    // Mobile address GPS line local time
+    if (this.$.locationAddressTimeText && this.$.locationAddressTimeDivider) {
+      if (label) {
+        this.$.locationAddressTimeText.textContent = tzAbbr ? `🕒 ${label} · ${tzAbbr}` : `🕒 ${label}`;
+        this.$.locationAddressTimeText.classList.remove("hidden");
+        this.$.locationAddressTimeDivider.classList.remove("hidden");
+      } else {
+        this.$.locationAddressTimeText.classList.add("hidden");
+        this.$.locationAddressTimeDivider.classList.add("hidden");
+      }
+    }
+
+    // Collapsible Address Details card local time (if open)
+    const addressDetailTime = document.getElementById("addressDetailLocalTime");
+    if (addressDetailTime && label) {
+      addressDetailTime.textContent = tzAbbr ? `🕒 ${label} (${tzAbbr})` : `🕒 ${label}`;
     }
   }
 
   _startPanelClockTicker() {
     if (this._panelClockTimer) return;
     this._panelClockTimer = setInterval(() => {
-      if (!this.weatherData || !this.$.panelTimeLabel) return;
+      if (!this.weatherData || (!this.$.panelTimeLabel && !this.$.mobilePanelTimeLabel)) return;
       const nowIdx = WeatherService.getCurrentHourIndex(
         this.weatherData,
         this.weatherData?.utc_offset_seconds || 0,
@@ -4003,7 +4078,9 @@ class AurafiskyApp {
       this._updateHeaderLocationAndCoords(name, lat, lng);
       this._renderLocationAddressLoading();
       this.resolveLocationAddress(lat, lng, name);
-      this.$.panelTimeLabel.textContent = "Fetching weather...";
+      if (this.$.panelTimeLabel) this.$.panelTimeLabel.textContent = "Fetching weather...";
+      if (this.$.mobilePanelTimeLabel) this.$.mobilePanelTimeLabel.textContent = "Fetching weather...";
+      if (this.$.panelCardLocalTimeText) this.$.panelCardLocalTimeText.textContent = "Fetching weather...";
 
       // Clear the AI briefing — it describes the *previous* location, so leaving
       // it on screen attributes one place's conditions to another.

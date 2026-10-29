@@ -3807,8 +3807,8 @@ class AurafiskyApp {
           <div class="col-span-2 flex flex-col min-w-0 select-text pt-1 border-t border-slate-200/50 dark:border-slate-700/40">
             <span class="text-[8.5px] uppercase font-bold text-slate-400 tracking-wider select-text">Local Time & Timezone</span>
             <div class="flex items-center gap-1.5 min-w-0">
-              <span id="addressDetailLocalTime" class="font-semibold text-slate-800 dark:text-slate-200 truncate select-text cursor-text">🕒 ${detailLocalTimeStr || "Calculating..."}</span>
-              ${detailTzBadge ? `<span class="text-[9.5px] font-mono text-slate-500 dark:text-slate-400 truncate" title="${detailTzBadge}">(${detailTzBadge})</span>` : ""}
+              <span id="addressDetailLocalTime" class="font-semibold text-slate-800 dark:text-slate-200 select-text cursor-text whitespace-nowrap">🕒 ${detailLocalTimeStr || "Calculating..."}</span>
+              ${detailTzBadge ? `<span class="text-[9.5px] font-mono text-slate-500 dark:text-slate-400 whitespace-normal" title="${detailTzBadge}">(${detailTzBadge})</span>` : ""}
             </div>
           </div>
         </div>

@@ -352,6 +352,90 @@ export function describeProximity(lat, lng, parentLat, parentLng, parentName) {
 
 // ── Locality classification ────────────────────────────────────────
 
+export const OCEAN_NAMES = new Set([
+  'indian ocean',
+  'atlantic ocean',
+  'north atlantic ocean',
+  'south atlantic ocean',
+  'pacific ocean',
+  'north pacific ocean',
+  'south pacific ocean',
+  'arctic ocean',
+  'southern ocean',
+  'antarctic region',
+  'arctic region',
+]);
+
+export function isOceanName(name) {
+  if (!name || typeof name !== 'string') return false;
+  const c = name.trim().toLowerCase().replace(/^the\s+/, '');
+  return OCEAN_NAMES.has(c);
+}
+
+/**
+ * Checks if a coordinate pair falls on a continental or major island landmass.
+ * Prevents terrestrial coordinates from being falsely labeled as open ocean basins
+ * (e.g., prevents Southern India from being called "Indian Ocean").
+ */
+export function isCoordinateOnLand(lat, lng) {
+  if (lat == null || lng == null || Number.isNaN(lat) || Number.isNaN(lng)) return false;
+  const lon = ((((lng + 180) % 360) + 360) % 360) - 180;
+
+  // 1. Indian Subcontinent & South Asia
+  // South tip of India is Kanyakumari (~8.08°N). Mainland spans north through Himalayas.
+  if (lat >= 8.08 && lat <= 37.5 && lon >= 68.0 && lon <= 97.5) {
+    // Exclude western Arabian Sea off coastal waters
+    if (lon < 72.2 && lat < 21.0) return false;
+    // Exclude eastern Bay of Bengal off coastal waters
+    if (lon > 80.8 && lat < 20.0) return false;
+    return true;
+  }
+
+  // Sri Lanka
+  if (lat >= 5.8 && lat <= 9.9 && lon >= 79.5 && lon <= 82.0) return true;
+
+  // 2. Mainland Africa & Madagascar
+  if (lat >= -35.0 && lat <= 37.5 && lon >= -17.8 && lon <= 51.5) {
+    if (lat >= -1.0 && lat <= 5.5 && lon >= -8.0 && lon <= 10.0) return false;
+    if (lat >= 12.5 && lat <= 30.0 && lon >= 32.0 && lon <= 43.5) return false;
+    return true;
+  }
+  if (lat >= -25.7 && lat <= -11.9 && lon >= 43.2 && lon <= 50.6) return true;
+
+  // 3. Eurasia (Europe, Middle East, Central Asia, East Asia, SE Asia)
+  if (lat >= 1.0 && lat <= 77.0 && lon >= -10.0 && lon <= 180.0) {
+    for (const b of REGIONAL_WATER_BODIES) {
+      if (lat >= b.minLat && lat <= b.maxLat && lon >= b.minLng && lon <= b.maxLng) {
+        return false;
+      }
+    }
+    return true;
+  }
+
+  // 4. North America
+  if (lat >= 7.5 && lat <= 83.5 && lon >= -168.0 && lon <= -52.0) {
+    for (const b of REGIONAL_WATER_BODIES) {
+      if (lat >= b.minLat && lat <= b.maxLat && lon >= b.minLng && lon <= b.maxLng) {
+        return false;
+      }
+    }
+    return true;
+  }
+
+  // 5. South America
+  if (lat >= -56.0 && lat <= 13.0 && lon >= -81.5 && lon <= -34.5) {
+    return true;
+  }
+
+  // 6. Australia, New Zealand, Japan, British Isles
+  if (lat >= -43.8 && lat <= -10.5 && lon >= 113.0 && lon <= 153.8) return true;
+  if (lat >= -47.5 && lat <= -34.0 && lon >= 166.0 && lon <= 178.8) return true;
+  if (lat >= 30.0 && lat <= 45.6 && lon >= 128.5 && lon <= 146.0) return true;
+  if (lat >= 49.8 && lat <= 61.0 && lon >= -10.8 && lon <= 2.0) return true;
+
+  return false;
+}
+
 /**
  * Regional marginal seas, gulfs, bays, and large inland water bodies.
  * Evaluated before falling back to coarse ocean basins.
@@ -395,8 +479,10 @@ export const REGIONAL_WATER_BODIES = [
 /**
  * A descriptor for coordinates with no reverse-geocode result —
  * specific seas, bays, gulfs, large lakes, open oceans, or polar regions.
+ * Never assigns open ocean basins to continental land coordinates.
  */
 export function describeCoordinates(lat, lng) {
+  if (lat == null || lng == null || Number.isNaN(lat) || Number.isNaN(lng)) return '';
   if (lat <= -60) return 'Antarctic Region';
   if (lat >= 66.5) return 'Arctic Region';
 
@@ -409,6 +495,11 @@ export function describeCoordinates(lat, lng) {
     if (lat >= b.minLat && lat <= b.maxLat && lon >= b.minLng && lon <= b.maxLng) {
       return b.name;
     }
+  }
+
+  // If coordinates fall on a continental or island landmass, never label as open ocean
+  if (isCoordinateOnLand(lat, lon)) {
+    return formatCoordinates(lat, lon);
   }
 
   let basin;
@@ -433,6 +524,10 @@ export function describeCoordinates(lat, lng) {
  */
 export function breakdownAddress(address = {}, displayName = '', lat = null, lng = null) {
   const a = (address && typeof address === 'object') ? address : {};
+
+  // Discard invalid ocean basin names when coordinates are known to be on land
+  const isInvalidOcean = isOceanName(displayName) && lat != null && lng != null && isCoordinateOnLand(lat, lng);
+  const cleanDisplayName = isInvalidOcean ? '' : (displayName || '');
 
   // 1. Area / Locality: road, suburb, neighbourhood, quarter, village, hamlet, or water feature
   const subArea = clean(a.suburb || a.quarter || a.neighbourhood || a.residential);
@@ -470,9 +565,9 @@ export function breakdownAddress(address = {}, displayName = '', lat = null, lng
 
   // Fallback: If structured address fields are missing, extract from comma-separated displayName,
   // but NEVER when displayName is a raw coordinate string (e.g. "16.4106, 77.6953").
-  const isCoordString = /^\s*[-+]?\d+\.?\d*°?\s*[NSEW]?\s*,\s*[-+]?\d+\.?\d*°?\s*[NSEW]?\s*$/i.test(displayName || '');
-  if (!isCoordString && !area && !city && !taluk && !district && !state && displayName && String(displayName).includes(',')) {
-    const rawSegments = String(displayName).split(',').map(s => s.trim()).filter(Boolean);
+  const isCoordString = /^\s*[-+]?\d+\.?\d*°?\s*[NSEW]?\s*,\s*[-+]?\d+\.?\d*°?\s*[NSEW]?\s*$/i.test(cleanDisplayName || '');
+  if (!isCoordString && !area && !city && !taluk && !district && !state && cleanDisplayName && String(cleanDisplayName).includes(',')) {
+    const rawSegments = String(cleanDisplayName).split(',').map(s => s.trim()).filter(Boolean);
     if (rawSegments.length >= 5) {
       area = rawSegments[0] || '';
       taluk = rawSegments[1] || '';
@@ -497,8 +592,8 @@ export function breakdownAddress(address = {}, displayName = '', lat = null, lng
 
   // 7. Country
   let country = clean(a.country || '');
-  if (!country && !isCoordString && displayName && String(displayName).includes(',')) {
-    const rawSegments = String(displayName).split(',').map(s => s.trim()).filter(Boolean);
+  if (!country && !isCoordString && cleanDisplayName && String(cleanDisplayName).includes(',')) {
+    const rawSegments = String(cleanDisplayName).split(',').map(s => s.trim()).filter(Boolean);
     if (rawSegments.length >= 3) {
       country = rawSegments[rawSegments.length - 1] || '';
     }
@@ -516,11 +611,11 @@ export function breakdownAddress(address = {}, displayName = '', lat = null, lng
   if (postcode && !parts.some(p => looseEquals(p, postcode))) parts.push(postcode);
   if (country && !parts.some(p => looseEquals(p, country))) parts.push(country);
 
-  const fullAddress = (!isCoordString && clean(displayName) && String(displayName).includes(','))
-    ? clean(displayName)
+  const fullAddress = (!isCoordString && clean(cleanDisplayName) && String(cleanDisplayName).includes(','))
+    ? clean(cleanDisplayName)
     : (parts.length > 0
         ? parts.join(', ')
-        : (!isCoordString ? clean(displayName) : '') || (lat != null && lng != null ? `${lat.toFixed(4)}, ${lng.toFixed(4)}` : ''));
+        : (!isCoordString ? clean(cleanDisplayName) : '') || (lat != null && lng != null ? `${lat.toFixed(4)}, ${lng.toFixed(4)}` : ''));
 
   return {
     area,

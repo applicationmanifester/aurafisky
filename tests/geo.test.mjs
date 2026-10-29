@@ -21,6 +21,8 @@ import {
   describeProximity,
   describeCoordinates,
   breakdownAddress,
+  isCoordinateOnLand,
+  isOceanName,
 } from "../modules/geo.js";
 
 // 12.9716, 77.5946 — central Bengaluru. Note how much of the ladder a
@@ -354,9 +356,55 @@ describe("describeCoordinates", () => {
     expect(describeCoordinates(47.5, -88.0)).toBe("Lake Superior");
   });
 
+  test("never labels land coordinates as open ocean basins", () => {
+    // Ambur / Tamil Nadu, India (12.8148°N, 78.7334°E)
+    expect(describeCoordinates(12.8148, 78.7334)).not.toBe("Indian Ocean");
+    expect(describeCoordinates(12.8148, 78.7334)).toContain("12.8148");
+
+    // Delhi, India
+    expect(describeCoordinates(28.6139, 77.2090)).not.toBe("Indian Ocean");
+
+    // Paris, France
+    expect(describeCoordinates(48.8566, 2.3522)).not.toBe("North Atlantic Ocean");
+
+    // New York, USA
+    expect(describeCoordinates(40.7128, -74.0060)).not.toBe("North Pacific Ocean");
+
+    // Sydney, Australia
+    expect(describeCoordinates(-33.8688, 151.2093)).not.toBe("Pacific Ocean");
+  });
+
   test("normalises multi-world longitudes", () => {
     // A click three worlds to the right arrives as lng 900.
     expect(describeCoordinates(0, 900)).toBe(describeCoordinates(0, -180));
+  });
+});
+
+describe("isCoordinateOnLand and isOceanName", () => {
+  test("identifies terrestrial continental locations accurately", () => {
+    expect(isCoordinateOnLand(12.8148, 78.7334)).toBe(true); // Ambur, India
+    expect(isCoordinateOnLand(28.6139, 77.2090)).toBe(true); // Delhi, India
+    expect(isCoordinateOnLand(48.8566, 2.3522)).toBe(true);  // Paris
+    expect(isCoordinateOnLand(40.7128, -74.0060)).toBe(true); // New York
+    expect(isCoordinateOnLand(-33.8688, 151.2093)).toBe(true); // Sydney
+    expect(isCoordinateOnLand(-25.1231, 136.8750)).toBe(true); // Simpson Desert
+  });
+
+  test("rejects open ocean basins and marine waters as land", () => {
+    expect(isCoordinateOnLand(-20, 100)).toBe(false); // Indian Ocean
+    expect(isCoordinateOnLand(0, -30)).toBe(false);   // Atlantic Ocean
+    expect(isCoordinateOnLand(0, -140)).toBe(false);  // Pacific Ocean
+    expect(isCoordinateOnLand(18.0, 66.0)).toBe(false); // Arabian Sea
+    expect(isCoordinateOnLand(15.0, 88.0)).toBe(false); // Bay of Bengal
+  });
+
+  test("isOceanName matches known ocean basin identifiers", () => {
+    expect(isOceanName("Indian Ocean")).toBe(true);
+    expect(isOceanName("The Indian Ocean")).toBe(true);
+    expect(isOceanName("North Atlantic Ocean")).toBe(true);
+    expect(isOceanName("Pacific Ocean")).toBe(true);
+    expect(isOceanName("Ambur")).toBe(false);
+    expect(isOceanName("Bengaluru")).toBe(false);
   });
 });
 

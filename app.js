@@ -52,6 +52,8 @@ import {
   haversineMeters,
   describeProximity,
   describeCoordinates,
+  isCoordinateOnLand,
+  isOceanName,
 } from "./modules/geo.js";
 import { reverseUrls, labelFromReverse, reverseGeocode } from "./modules/reverseGeocode.js";
 import { applyViewportHeight, watchViewport } from "./modules/viewport.js";
@@ -3503,8 +3505,13 @@ class AurafiskyApp {
           // URLSearchParams already decodes percent-escaped values. Decoding
           // again breaks valid names containing a literal "%" (for example
           // "100% Pure") and can prevent a shared location from loading.
-          const name = nameStr || `${lat.toFixed(4)}, ${lng.toFixed(4)}`;
-          this.selectLocation(lat, lng, name);
+          // Discard invalid ocean basin names from shared link when coordinates are on land
+          let name = nameStr;
+          if (name && isOceanName(name) && isCoordinateOnLand(lat, lng)) {
+            name = null;
+          }
+          const effName = name || `${lat.toFixed(4)}, ${lng.toFixed(4)}`;
+          this.selectLocation(lat, lng, effName);
           // Shared wallpaper link: open the wallpaper overlay for this location
           if (wallpaperStr === "true") {
             setTimeout(() => {
@@ -3600,10 +3607,14 @@ class AurafiskyApp {
   _restoreSession() {
     const saved = this._localCache?._lastSession;
     if (saved && saved.lat != null && saved.lng != null) {
+      let savedName = saved.name;
+      if (savedName && isOceanName(savedName) && isCoordinateOnLand(saved.lat, saved.lng)) {
+        savedName = null;
+      }
       this.selectLocation(
         saved.lat,
         saved.lng,
-        saved.name || `${saved.lat.toFixed(4)}, ${saved.lng.toFixed(4)}`,
+        savedName || `${saved.lat.toFixed(4)}, ${saved.lng.toFixed(4)}`,
       );
       return true;
     }
@@ -3872,9 +3883,17 @@ class AurafiskyApp {
         this.addressResolvedForLng = lng;
         this._renderLocationAddressCard(this.selectedAddress, this.selectedDisplayName, lat, lng);
 
-        if (res.name && (!this.selectedName || /^\s*[-+]?\d+\.\d+\s*,\s*[-+]?\d+\.\d+\s*$/.test(this.selectedName))) {
+        const isGenericOrCoordOrInvalidOcean =
+          !this.selectedName ||
+          /^\s*[-+]?\d+\.?\d*°?\s*[NSEW]?\s*,\s*[-+]?\d+\.?\d*°?\s*[NSEW]?\s*$/i.test(this.selectedName) ||
+          /^(locating\.\.\.|unknown location|fetching weather\.\.\.|location address)$/i.test(this.selectedName.trim()) ||
+          (isOceanName(this.selectedName) && (!isOceanName(res.name) || isCoordinateOnLand(lat, lng)));
+
+        if (res.name && isGenericOrCoordOrInvalidOcean) {
           this.selectedName = res.name;
           this._updateHeaderLocationAndCoords(res.name, lat, lng);
+          this._updateUrlParams(lat, lng, res.name);
+          this._persistSession(lat, lng, res.name);
         }
         if (this.marker) {
           const timeOffset = this.timeline24hMode ? this._getTimelineOffset?.() || 0 : 0;

@@ -244,4 +244,19 @@ describe("reverseGeocode service", () => {
     expect(res.name).toBe("Middle of the Ocean");
     expect(res.cached).toBe(false);
   });
+
+  test("never returns an ocean fallback for land coordinates when network fails", async () => {
+    const mockFetch = vi.fn(async () => {
+      throw new Error("Network error");
+    });
+
+    // Coordinates in Ambur / Tamil Nadu, India (12.8148°N, 78.7334°E)
+    const res = await reverseGeocode(12.8148, 78.7334, {
+      fetchFn: mockFetch,
+      describeFallback: "Indian Ocean",
+    });
+
+    expect(res.name).not.toBe("Indian Ocean");
+    expect(res.name).toContain("12.8148");
+  });
 });

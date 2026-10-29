@@ -21,7 +21,7 @@
 //     contributes those.
 //   * When the two disagree about the settlement, the coarser one wins.
 
-import { formatPlaceName } from './geo.js';
+import { formatPlaceName, isOceanName, isCoordinateOnLand, formatCoordinates } from './geo.js';
 
 /** Settlement-level parts, in priority order, per Nominatim's address schema. */
 const SETTLEMENT_KEYS = ['city', 'town', 'village', 'municipality', 'hamlet'];
@@ -132,7 +132,13 @@ export function clearGeocodeCache() {
 export function getGeocodeCache(lat, lng, lang = 'en') {
   const key = getCacheKey(lat, lng, lang);
   if (memCache.has(key)) {
-    return memCache.get(key);
+    const item = memCache.get(key);
+    // Invalidate stale ocean labels for coordinates known to be on land
+    if (item && isOceanName(item.name) && isCoordinateOnLand(lat, lng)) {
+      memCache.delete(key);
+    } else {
+      return item;
+    }
   }
   try {
     if (typeof localStorage !== 'undefined') {
@@ -140,8 +146,14 @@ export function getGeocodeCache(lat, lng, lang = 'en') {
       if (stored) {
         const parsed = JSON.parse(stored);
         if (parsed[key]) {
-          memCache.set(key, parsed[key]);
-          return parsed[key];
+          const item = parsed[key];
+          if (item && isOceanName(item.name) && isCoordinateOnLand(lat, lng)) {
+            delete parsed[key];
+            localStorage.setItem(GEOCODE_CACHE_KEY, JSON.stringify(parsed));
+          } else {
+            memCache.set(key, item);
+            return item;
+          }
         }
       }
     }
@@ -149,7 +161,12 @@ export function getGeocodeCache(lat, lng, lang = 'en') {
   return null;
 }
 
-function persistGeocodeCache(key, data) {
+function persistGeocodeCache(key, data, lat = null, lng = null) {
+  // Never persist open ocean basin names if coordinates are on land
+  if (data && isOceanName(data.name) && lat != null && lng != null && isCoordinateOnLand(lat, lng)) {
+    return;
+  }
+
   if (memCache.size >= MAX_MEM_CACHE) {
     const oldestKey = memCache.keys().next().value;
     memCache.delete(oldestKey);
@@ -215,7 +232,7 @@ export async function reverseGeocode(lat, lng, opts = {}) {
   }
 
   const fetchFn = opts.fetchFn || globalThis.fetch;
-  const timeoutMs = opts.timeoutMs || 6000;
+  const timeoutMs = opts.timeoutMs || 8000;
 
   const promise = (async () => {
     const urls = reverseUrls(lat, lng, lang);
@@ -240,9 +257,27 @@ export async function reverseGeocode(lat, lng, opts = {}) {
         if (res && res.ok) {
           return await res.json();
         }
+        // If throttled (HTTP 429), retry once after a short 400ms backoff
+        if (res && res.status === 429 && !controller.signal.aborted) {
+          await new Promise((resolve) => setTimeout(resolve, 400));
+          if (!controller.signal.aborted) {
+            const retryRes = await fetchFn(url, { signal: controller.signal });
+            if (retryRes && retryRes.ok) {
+              return await retryRes.json();
+            }
+          }
+        }
       } catch (_) {}
       return null;
     };
+
+    // Calculate safe terrestrial fallback if fallback string accidentally names an ocean on land
+    const safeDescribeFallback = (() => {
+      if (opts.describeFallback && isOceanName(opts.describeFallback) && isCoordinateOnLand(lat, lng)) {
+        return formatCoordinates(lat, lng);
+      }
+      return opts.describeFallback;
+    })();
 
     try {
       // Coarse first (zoom 14 gives settlement identity)
@@ -256,17 +291,26 @@ export async function reverseGeocode(lat, lng, opts = {}) {
 
       const labeled = labelFromReverse(coarse, fine, {
         sanitize: opts.sanitize,
-        describeFallback: opts.describeFallback,
-        fallback: opts.describeFallback,
+        describeFallback: safeDescribeFallback,
+        fallback: safeDescribeFallback,
       });
 
-      const displayName = fine?.display_name || coarse?.display_name || labeled.name;
+      let name = labeled.name;
+      // Final guard: never return an ocean name if the coordinate is on land
+      if (isOceanName(name) && isCoordinateOnLand(lat, lng)) {
+        name = formatCoordinates(lat, lng);
+      }
+
+      let displayName = fine?.display_name || coarse?.display_name || name;
+      if (isOceanName(displayName) && isCoordinateOnLand(lat, lng)) {
+        displayName = name;
+      }
 
       const result = {
-        name: labeled.name,
+        name,
         address: labeled.address || {},
         settlement: labeled.settlement || '',
-        displayName: displayName || labeled.name,
+        displayName,
         coarse: coarse || null,
         fine: fine || null,
         cached: false,
@@ -278,16 +322,17 @@ export async function reverseGeocode(lat, lng, opts = {}) {
           address: result.address,
           settlement: result.settlement,
           displayName: result.displayName,
-        });
+        }, lat, lng);
       }
 
       return result;
     } catch (_) {
+      const fallbackLabel = safeDescribeFallback || formatCoordinates(lat, lng) || `${Number(lat).toFixed(4)}, ${Number(lng).toFixed(4)}`;
       return {
-        name: opts.describeFallback || `${Number(lat).toFixed(4)}, ${Number(lng).toFixed(4)}`,
+        name: fallbackLabel,
         address: {},
         settlement: '',
-        displayName: opts.describeFallback || '',
+        displayName: fallbackLabel,
         coarse: null,
         fine: null,
         cached: false,

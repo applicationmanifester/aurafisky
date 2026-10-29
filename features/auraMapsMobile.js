@@ -227,7 +227,6 @@ export class AuraMobileController {
     this.app?.hideWeatherPanel?.();
     const pill = document.getElementById('restoreSheetPill');
     if (pill) pill.classList.add('hidden');
-    this.app.showToast?.('🚗 Route Weather: Driving hazards & road weather intelligence loaded', 'info');
     if (typeof this.app.openRouteStudio === 'function') {
       this.app.openRouteStudio();
     } else if (typeof this.app.toggleRoute === 'function') {

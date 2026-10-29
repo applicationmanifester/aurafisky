@@ -934,8 +934,8 @@ export function init(app) {
   }
   btn = document.getElementById("routeBtn");
   if (btn) {
-    btn.title = "Route Weather & Planner";
-    btn.setAttribute("aria-label", "Route Weather & Planner");
+    btn.title = "Plan a route around weather";
+    btn.setAttribute("aria-label", "Plan a route around weather");
     btn.addEventListener("click", (e) => {
       e.stopPropagation();
       toggleRouteDropdown();
@@ -967,7 +967,7 @@ export function closeRouteStudio() {
 
   if (btn) {
     btn.classList.remove("bg-indigo-600", "text-white", "ring-2", "ring-indigo-400/50");
-    btn.title = "Route Weather & Planner";
+    btn.title = "Plan a route around weather";
   }
 
   hideHUD();
@@ -1021,10 +1021,16 @@ export function openRouteStudio() {
     renderWaypointMarkers();
   }
 
-  // On mobile: if user doesn't have 2+ stops yet, keep the map clear so they can tap Origin & Destination!
+  // On mobile, show a compact setup sheet until the first stop is chosen so search is discoverable.
   if (isMobileLayout() && pts.length < 2) {
     showHUD();
-    hidePanel();
+    if (pts.length === 0) {
+      showPanel();
+      snapRouteSheet("peek");
+      renderEmptyRoutePanel();
+    } else {
+      hidePanel();
+    }
     updateHUD();
   } else {
     hideHUD();
@@ -1041,9 +1047,9 @@ export function openRouteStudio() {
   window.addEventListener("keydown", onKeyDown);
 
   if (pts.length === 0) {
-    appRef.showToast?.("🚗 Route Weather: Tap map to place Departure point (A)", "info");
+    appRef.showToast?.("Choose a start point by searching or tapping the map.", "info");
   } else if (pts.length === 1) {
-    appRef.showToast?.(`📍 Departure set: ${pts[0].name}. Tap map for Destination (B)`, "info");
+    appRef.showToast?.(`Start set: ${pts[0].name}. Choose a destination by search or map.`, "info");
   } else {
     appRef.showToast?.(`🚗 Route Weather: ${pts.length} stops ready.`, "info");
   }
@@ -1582,9 +1588,9 @@ async function onMapClick(e) {
     await fetchAndRenderRoutePlan();
   } else {
     if (pts.length === 1) {
-      appRef?.showToast?.("📍 Start point (A) set! Tap map for Destination (B)", "info");
+      appRef?.showToast?.("Start set. Search or tap the map to choose your destination.", "info");
     } else if (pts.length === 2) {
-      appRef?.showToast?.("🏁 Destination (B) set! Route ready. Tap map to add more stops or tap 'Analyze'.", "success");
+      appRef?.showToast?.("Destination set. Your route is ready to analyze.", "success");
     } else if (pts.length > 2) {
       appRef?.showToast?.(`➕ Stop ${pts.length - 2} added to route`, "info");
     }
@@ -1850,7 +1856,7 @@ function buildHUD() {
         <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-indigo-400 opacity-75"></span>
         <span class="relative inline-flex rounded-full h-2 w-2 bg-indigo-600"></span>
       </div>
-      <div id="routeHudStatus" class="text-xs font-semibold text-slate-800 dark:text-slate-100 truncate max-w-[110px] sm:max-w-[200px]">
+      <div id="routeHudStatus" role="status" aria-live="polite" class="text-xs font-semibold text-slate-800 dark:text-slate-100 truncate max-w-[160px] sm:max-w-[200px]">
         Tap map to add start
       </div>
       <span id="routeHudWeatherBadge" class="hidden select-none"></span>
@@ -1880,8 +1886,8 @@ function buildHUD() {
 
     <!-- Action Buttons -->
     <div class="flex items-center gap-0.5 sm:gap-1 flex-shrink-0">
-      <button type="button" id="routeHudAddSearch" class="p-1.5 rounded-xl hover:bg-indigo-50 dark:hover:bg-slate-700/60 text-indigo-600 dark:text-indigo-400 transition-colors" title="Search place to add stop" aria-label="Add stop by search">
-        <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4"/></svg>
+      <button type="button" id="routeHudAddSearch" class="p-1.5 rounded-xl hover:bg-indigo-50 dark:hover:bg-slate-700/60 text-indigo-600 dark:text-indigo-400 transition-colors" title="Search for a route stop" aria-label="Search for a route stop">
+        <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><circle cx="10.8" cy="10.8" r="6.8"/><path stroke-linecap="round" d="m16 16 4.5 4.5"/></svg>
       </button>
 
       <button type="button" id="routeHudUndo" class="p-1.5 rounded-xl hover:bg-slate-200/60 dark:hover:bg-slate-700/60 text-slate-600 dark:text-slate-300 transition-colors" title="Undo last stop (Ctrl+Z)" aria-label="Undo">
@@ -2025,10 +2031,10 @@ function updateHUD() {
       else optBtn.classList.add("hidden");
     }
     if (pts.length === 0) {
-      if (statusEl) statusEl.textContent = "Tap map to add start";
+      if (statusEl) statusEl.textContent = "Search or tap map for start";
       if (finishBtn) finishBtn.disabled = true;
     } else if (pts.length === 1) {
-      if (statusEl) statusEl.textContent = "Tap map for destination";
+      if (statusEl) statusEl.textContent = "Search or tap map for destination";
       if (finishBtn) finishBtn.disabled = true;
     } else {
       const distStr = activeRouteData ? formatRouteDistance(activeRouteData.distanceM, units) : "--";
@@ -2229,7 +2235,7 @@ export function snapRouteSheet(state = "half") {
   panelEl.style.transform = "translateY(0)";
 
   if (state === "peek") {
-    const targetHeight = 150;
+    const targetHeight = pts.length === 0 ? 204 : 150;
     panelEl.style.setProperty("top", "auto", "important");
     panelEl.style.setProperty("bottom", "calc(3.5rem + env(safe-area-inset-bottom, 0px) + 0.5rem)", "important");
     panelEl.style.setProperty("left", "0.75rem", "important");
@@ -2479,7 +2485,7 @@ function renderEmptyRoutePanel() {
       <div class="relative">
         <div class="flex items-center gap-2 px-3 py-2 rounded-2xl bg-white/70 dark:bg-slate-800/70 border border-slate-200/80 dark:border-slate-700/80 focus-within:ring-2 focus-within:ring-indigo-500/50 transition-all shadow-xs">
           <span class="text-slate-400 text-xs">🔍</span>
-          <input type="text" id="routeSearchAddInput" placeholder="Add stop by city, address or landmark..." class="w-full bg-transparent text-xs text-slate-800 dark:text-slate-100 placeholder-slate-400 outline-none" autocomplete="off" />
+          <input type="text" id="routeSearchAddInput" aria-label="Search for a route stop" placeholder="Search a city, address or landmark…" class="w-full bg-transparent text-xs text-slate-800 dark:text-slate-100 placeholder-slate-400 outline-none" autocomplete="off" />
           <div id="routeSearchAddSpinner" class="hidden w-3.5 h-3.5 border-2 border-indigo-500/30 border-t-indigo-500 rounded-full animate-spin flex-shrink-0"></div>
         </div>
         <div id="routeSearchAddDropdown" class="hidden absolute top-full left-0 right-0 mt-1 bg-white dark:bg-slate-800 rounded-2xl shadow-2xl border border-slate-200/80 dark:border-slate-700/80 p-1.5 z-50 max-h-52 overflow-y-auto custom-scrollbar"></div>
@@ -2487,16 +2493,16 @@ function renderEmptyRoutePanel() {
 
       ${singleStopCardHtml}
 
-      <div class="py-10 text-center space-y-3">
-        <div class="text-4xl">🗺️</div>
+      <div class="py-4 sm:py-10 text-center space-y-2 sm:space-y-3">
+        <div class="text-2xl sm:text-4xl">🗺️</div>
         <div class="font-extrabold text-sm text-slate-800 dark:text-slate-100">
-          ${pts.length === 0 ? "Place Departure Point" : "Add Destination Stop"}
+          ${pts.length === 0 ? "Where are you starting?" : "Where are you going next?"}
         </div>
         <div class="text-xs text-slate-500 dark:text-slate-400 leading-relaxed max-w-[280px] mx-auto">
           ${
             pts.length === 0
-              ? "Click anywhere on the map or type a city in the search bar above to set your departure point (A)."
-              : "Click the map or search above to set your destination point (B) or intermediate waypoints."
+              ? "Search for a place above, or tap the map to set your starting point."
+              : "Search or tap the map to add your destination or another stop."
           }
         </div>
       </div>

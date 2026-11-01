@@ -565,6 +565,16 @@ input[type='range'].timeline-slider:focus-visible {
     z-index: 2550 !important;
     display: block !important;
   }
+
+  body.sky-radar-fullscreen-active.sky-panel-dropdown-open #celestialRadarSection,
+  body.sky-radar-fullscreen-active:has(.panel-open-mobile) #celestialRadarSection {
+    z-index: 2600 !important;
+  }
+
+  body.sky-radar-fullscreen-active.sky-panel-dropdown-open #timelineBar,
+  body.sky-radar-fullscreen-active:has(.panel-open-mobile) #timelineBar {
+    z-index: 2400 !important;
+  }
 }
 
 /* Very small phones (e.g. Galaxy Z Flip/Fold cover screen, iPhone SE): density & adaptiveness without losing info */

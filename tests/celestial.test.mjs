@@ -281,4 +281,93 @@ describe('Celestial Astronomy Engine', () => {
 
     domeGroup.remove();
   });
+
+  it('guarantees mobile sky panel dropdown displays over timeline bar and supports scroll in styles.css', async () => {
+    const fs = await import('fs');
+    const styles = fs.readFileSync('styles.css', 'utf8');
+    const polish = fs.readFileSync('css/aura-polish.css', 'utf8');
+
+    // Radar section elevated to 2600 when dropdown is open
+    expect(styles).toMatch(/body\.sky-radar-fullscreen-active\.sky-panel-dropdown-open\s+#celestialRadarSection[^{]*\{[^}]*z-index:\s*2600\s*!important/s);
+    expect(polish).toMatch(/body\.sky-radar-fullscreen-active\.sky-panel-dropdown-open\s+#celestialRadarSection[^{]*\{[^}]*z-index:\s*2600\s*!important/s);
+
+    // Timeline bar lowered to 2400 when dropdown is open
+    expect(styles).toMatch(/body\.sky-radar-fullscreen-active\.sky-panel-dropdown-open\s+#timelineBar[^{]*\{[^}]*z-index:\s*2400\s*!important/s);
+    expect(polish).toMatch(/body\.sky-radar-fullscreen-active\.sky-panel-dropdown-open\s+#timelineBar[^{]*\{[^}]*z-index:\s*2400\s*!important/s);
+
+    // Panel open mobile has z-index 2650 and internal scrolling enabled
+    expect(styles).toMatch(/#celestialRadarSection\.sky-radar-fullscreen\s+\.sky-radar-side-panel\.panel-open-mobile\s*\{[^}]*z-index:\s*2650\s*!important/s);
+    expect(styles).toMatch(/#celestialRadarSection\.sky-radar-fullscreen\s+\.sky-radar-side-panel\.panel-open-mobile\s+\.sky-tab-pane\.active\s*\{[^}]*overflow-y:\s*auto\s*!important/s);
+  });
+
+  it('manages mobile dropdown open state, click-outside dismissal, and keyboard escape', async () => {
+    const celestialSection = document.createElement('div');
+    celestialSection.id = 'celestialRadarSection';
+    celestialSection.className = 'sky-radar-fullscreen';
+
+    const expandBtn = document.createElement('button');
+    expandBtn.id = 'expandSkyRadarBtn';
+    celestialSection.appendChild(expandBtn);
+
+    const leftToggle = document.createElement('button');
+    leftToggle.id = 'toggleLeftSkyPanelBtn';
+    celestialSection.appendChild(leftToggle);
+
+    const rightToggle = document.createElement('button');
+    rightToggle.id = 'toggleRightSkyPanelBtn';
+    celestialSection.appendChild(rightToggle);
+
+    const leftPanel = document.createElement('aside');
+    leftPanel.id = 'skyRadarLeftPanel';
+    celestialSection.appendChild(leftPanel);
+
+    const rightPanel = document.createElement('aside');
+    rightPanel.id = 'skyRadarRightPanel';
+
+    const rightCloseBtn = document.createElement('button');
+    rightCloseBtn.className = 'sky-panel-close-btn';
+    rightCloseBtn.dataset.panel = 'right';
+    rightPanel.appendChild(rightCloseBtn);
+
+    celestialSection.appendChild(rightPanel);
+    document.body.appendChild(celestialSection);
+
+    const { init } = await import('../features/astronomy.js');
+    init({});
+
+    // 1. Click Right Toggle (Constellations) -> opens right panel, adds sky-panel-dropdown-open to body
+    rightToggle.click();
+    expect(rightPanel.classList.contains('panel-open-mobile')).toBe(true);
+    expect(rightToggle.classList.contains('active')).toBe(true);
+    expect(rightToggle.getAttribute('aria-expanded')).toBe('true');
+    expect(document.body.classList.contains('sky-panel-dropdown-open')).toBe(true);
+
+    // 2. Click Left Toggle (Planets) -> closes right panel, opens left panel
+    leftToggle.click();
+    expect(rightPanel.classList.contains('panel-open-mobile')).toBe(false);
+    expect(rightToggle.classList.contains('active')).toBe(false);
+    expect(leftPanel.classList.contains('panel-open-mobile')).toBe(true);
+    expect(leftToggle.classList.contains('active')).toBe(true);
+    expect(document.body.classList.contains('sky-panel-dropdown-open')).toBe(true);
+
+    // 3. Escape key closes open mobile dropdown first without exiting fullscreen
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
+    expect(leftPanel.classList.contains('panel-open-mobile')).toBe(false);
+    expect(document.body.classList.contains('sky-panel-dropdown-open')).toBe(false);
+    expect(celestialSection.classList.contains('sky-radar-fullscreen')).toBe(true);
+
+    // 4. Tap outside dismissal
+    rightToggle.click();
+    expect(rightPanel.classList.contains('panel-open-mobile')).toBe(true);
+    expect(document.body.classList.contains('sky-panel-dropdown-open')).toBe(true);
+
+    // Click outside on section background
+    celestialSection.click();
+    expect(rightPanel.classList.contains('panel-open-mobile')).toBe(false);
+    expect(document.body.classList.contains('sky-panel-dropdown-open')).toBe(false);
+
+    // Clean up
+    celestialSection.remove();
+    document.body.classList.remove('sky-panel-dropdown-open');
+  });
 });

@@ -604,6 +604,7 @@ function wireSkyRadarFullscreen(app) {
       document.getElementById("skyRadarRightPanel")?.classList.remove("panel-open-mobile");
       document.getElementById("toggleLeftSkyPanelBtn")?.classList.remove("active");
       document.getElementById("toggleRightSkyPanelBtn")?.classList.remove("active");
+      document.body.classList.remove("sky-panel-dropdown-open");
 
       // Restore back to original slot in Astronomy tab
       if (skyRadarPlaceholder && skyRadarPlaceholder.parentNode) {
@@ -639,8 +640,26 @@ function wireSkyRadarFullscreen(app) {
     app?._haptic?.("selection");
   });
 
+  const syncBodyDropdownState = () => {
+    const isAnyOpen = Boolean(
+      leftPanel?.classList.contains("panel-open-mobile") ||
+      rightPanel?.classList.contains("panel-open-mobile")
+    );
+    document.body.classList.toggle("sky-panel-dropdown-open", isAnyOpen);
+  };
+
   document.addEventListener("keydown", (e) => {
     if (e.key === "Escape" && section.classList.contains("sky-radar-fullscreen")) {
+      if (document.body.classList.contains("sky-panel-dropdown-open")) {
+        leftPanel?.classList.remove("panel-open-mobile");
+        rightPanel?.classList.remove("panel-open-mobile");
+        toggleLeftBtn?.classList.remove("active");
+        toggleLeftBtn?.setAttribute("aria-expanded", "false");
+        toggleRightBtn?.classList.remove("active");
+        toggleRightBtn?.setAttribute("aria-expanded", "false");
+        syncBodyDropdownState();
+        return;
+      }
       toggleFullscreen(false);
     }
   });
@@ -677,9 +696,17 @@ function wireSkyRadarFullscreen(app) {
     toggleLeftBtn.addEventListener("click", (e) => {
       e.stopPropagation();
       const isOpen = leftPanel.classList.toggle("panel-open-mobile");
-      if (isOpen && rightPanel) rightPanel.classList.remove("panel-open-mobile");
+      if (isOpen && rightPanel) {
+        rightPanel.classList.remove("panel-open-mobile");
+        if (toggleRightBtn) {
+          toggleRightBtn.classList.remove("active");
+          toggleRightBtn.setAttribute("aria-expanded", "false");
+        }
+      }
       toggleLeftBtn.classList.toggle("active", isOpen);
-      if (toggleRightBtn) toggleRightBtn.classList.remove("active");
+      toggleLeftBtn.setAttribute("aria-expanded", isOpen ? "true" : "false");
+      syncBodyDropdownState();
+      app?._haptic?.("selection");
     });
   }
 
@@ -687,9 +714,17 @@ function wireSkyRadarFullscreen(app) {
     toggleRightBtn.addEventListener("click", (e) => {
       e.stopPropagation();
       const isOpen = rightPanel.classList.toggle("panel-open-mobile");
-      if (isOpen && leftPanel) leftPanel.classList.remove("panel-open-mobile");
+      if (isOpen && leftPanel) {
+        leftPanel.classList.remove("panel-open-mobile");
+        if (toggleLeftBtn) {
+          toggleLeftBtn.classList.remove("active");
+          toggleLeftBtn.setAttribute("aria-expanded", "false");
+        }
+      }
       toggleRightBtn.classList.toggle("active", isOpen);
-      if (toggleLeftBtn) toggleLeftBtn.classList.remove("active");
+      toggleRightBtn.setAttribute("aria-expanded", isOpen ? "true" : "false");
+      syncBodyDropdownState();
+      app?._haptic?.("selection");
     });
   }
 
@@ -700,9 +735,33 @@ function wireSkyRadarFullscreen(app) {
       const panelSide = closeBtn.dataset.panel;
       const targetPanel = panelSide === "left" ? leftPanel : rightPanel;
       if (targetPanel) targetPanel.classList.remove("panel-open-mobile");
-      if (toggleLeftBtn) toggleLeftBtn.classList.remove("active");
-      if (toggleRightBtn) toggleRightBtn.classList.remove("active");
+      if (toggleLeftBtn) {
+        toggleLeftBtn.classList.remove("active");
+        toggleLeftBtn.setAttribute("aria-expanded", "false");
+      }
+      if (toggleRightBtn) {
+        toggleRightBtn.classList.remove("active");
+        toggleRightBtn.setAttribute("aria-expanded", "false");
+      }
+      syncBodyDropdownState();
+      app?._haptic?.("selection");
     });
+  });
+
+  // Tap outside dismissal: tapping dome area or background closes mobile dropdown panel
+  section.addEventListener("click", (e) => {
+    if (!document.body.classList.contains("sky-panel-dropdown-open")) return;
+    const isInsidePanel = e.target.closest(".sky-radar-side-panel.panel-open-mobile");
+    const isInsideToggle = e.target.closest("#toggleLeftSkyPanelBtn, #toggleRightSkyPanelBtn");
+    if (!isInsidePanel && !isInsideToggle) {
+      leftPanel?.classList.remove("panel-open-mobile");
+      rightPanel?.classList.remove("panel-open-mobile");
+      toggleLeftBtn?.classList.remove("active");
+      toggleLeftBtn?.setAttribute("aria-expanded", "false");
+      toggleRightBtn?.classList.remove("active");
+      toggleRightBtn?.setAttribute("aria-expanded", "false");
+      syncBodyDropdownState();
+    }
   });
 
   if (app) {

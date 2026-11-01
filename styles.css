@@ -1599,14 +1599,37 @@ input[type='range'].timeline-slider::-moz-range-thumb {
 
 #celestialRadarSection.sky-radar-fullscreen .sky-tab-pane {
   display: none;
-  flex: 1;
+  flex: 1 1 auto;
+  min-height: 0;
   overflow-y: auto;
   overflow-x: hidden;
   padding-right: 0.25rem;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.3) rgba(255, 255, 255, 0.05);
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
 }
 
 #celestialRadarSection.sky-radar-fullscreen .sky-tab-pane.active {
   display: block;
+}
+
+#celestialRadarSection.sky-radar-fullscreen .sky-tab-pane::-webkit-scrollbar {
+  width: 5px;
+}
+
+#celestialRadarSection.sky-radar-fullscreen .sky-tab-pane::-webkit-scrollbar-track {
+  background: rgba(255, 255, 255, 0.04);
+  border-radius: 9999px;
+}
+
+#celestialRadarSection.sky-radar-fullscreen .sky-tab-pane::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.28);
+  border-radius: 9999px;
+}
+
+#celestialRadarSection.sky-radar-fullscreen .sky-tab-pane::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.5);
 }
 
 #celestialRadarSection.sky-radar-fullscreen .sky-topdown-pill {
@@ -1680,8 +1703,9 @@ input[type='range'].timeline-slider::-moz-range-thumb {
     align-items: center;
     justify-content: center;
     gap: 0.5rem;
-    z-index: 20;
+    z-index: 2660 !important; /* Higher than open dropdown (2650) so pills remain toggleable */
     margin: 0.25rem 0;
+    flex-shrink: 0;
   }
 
   #celestialRadarSection.sky-radar-fullscreen .sky-radar-side-panel {
@@ -1690,14 +1714,49 @@ input[type='range'].timeline-slider::-moz-range-thumb {
 
   #celestialRadarSection.sky-radar-fullscreen .sky-radar-side-panel.panel-open-mobile {
     display: flex !important;
+    flex-direction: column !important;
     position: absolute !important;
-    top: 0.5rem !important;
+    top: 0.25rem !important;
     left: 50% !important;
     transform: translateX(-50%) !important;
-    width: min(92vw, 360px) !important;
-    max-height: 62vh !important;
-    z-index: 50 !important;
+    width: min(94vw, 380px) !important;
+    height: min(68vh, 520px) !important;
+    max-height: min(68vh, 520px) !important;
+    z-index: 2650 !important; /* Display above timeline bar */
     animation: skyPanelDropIn 0.25s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+    box-shadow: 0 25px 60px -5px rgba(0, 0, 0, 0.88), 0 0 0 1px rgba(255, 255, 255, 0.18) !important;
+    overflow: hidden !important;
+  }
+
+  #celestialRadarSection.sky-radar-fullscreen .sky-radar-side-panel.panel-open-mobile .sky-panel-inner {
+    height: 100% !important;
+    max-height: 100% !important;
+    display: flex !important;
+    flex-direction: column !important;
+    overflow: hidden !important;
+    background: rgba(11, 18, 34, 0.94) !important;
+    backdrop-filter: blur(28px) saturate(200%) !important;
+    -webkit-backdrop-filter: blur(28px) saturate(200%) !important;
+  }
+
+  #celestialRadarSection.sky-radar-fullscreen .sky-radar-side-panel.panel-open-mobile .sky-panel-body {
+    flex: 1 1 auto !important;
+    min-height: 0 !important;
+    display: flex !important;
+    flex-direction: column !important;
+    overflow: hidden !important;
+  }
+
+  #celestialRadarSection.sky-radar-fullscreen .sky-radar-side-panel.panel-open-mobile .sky-tab-pane.active {
+    display: block !important;
+    flex: 1 1 auto !important;
+    min-height: 0 !important;
+    overflow-y: auto !important;
+    overflow-x: hidden !important;
+    -webkit-overflow-scrolling: touch !important;
+    overscroll-behavior: contain !important;
+    padding-right: 0.35rem !important;
+    padding-bottom: 2rem !important; /* Ensure last items (like Lyra, Taurus, Gemini) scroll cleanly into view */
   }
 
   #celestialRadarSection.sky-radar-fullscreen .sky-topdown-pill.active svg {
@@ -2012,6 +2071,17 @@ body.sky-radar-fullscreen-active .weather-panel.open ~ #timelineBar {
   z-index: 2550 !important; /* Above fullscreen radar (2500) */
   display: block !important;
   padding: 0 1rem 0.5rem 1rem !important; /* Low-profile bottom anchor */
+}
+
+/* When mobile dropdown panel is open, elevate radar section above timeline bar and lower timeline */
+body.sky-radar-fullscreen-active.sky-panel-dropdown-open #celestialRadarSection,
+body.sky-radar-fullscreen-active:has(.panel-open-mobile) #celestialRadarSection {
+  z-index: 2600 !important;
+}
+
+body.sky-radar-fullscreen-active.sky-panel-dropdown-open #timelineBar,
+body.sky-radar-fullscreen-active:has(.panel-open-mobile) #timelineBar {
+  z-index: 2400 !important;
 }
 
 /* Slim, streamlined glass drawer (wider horizontal span for easy scrubbing) */

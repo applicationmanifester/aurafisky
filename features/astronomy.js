@@ -592,9 +592,11 @@ function wireSkyRadarFullscreen(app) {
 
       section.classList.add("sky-radar-fullscreen");
       document.body.classList.add("sky-radar-fullscreen-active");
+      app?.pushHistoryOverlay?.("skyRadar");
     } else {
       section.classList.remove("sky-radar-fullscreen");
       document.body.classList.remove("sky-radar-fullscreen-active");
+      app?.popHistoryOverlay?.("skyRadar");
 
       // Clean up open mobile panels
       document.getElementById("skyRadarLeftPanel")?.classList.remove("panel-open-mobile");

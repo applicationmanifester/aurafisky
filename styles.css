@@ -1739,7 +1739,7 @@ input[type='range'].timeline-slider::-moz-range-thumb {
   margin: 0 !important;
   border-radius: 0 !important;
   border: none !important;
-  z-index: 1050 !important; /* Above weather card & top bar, below timelineBar (1100) */
+  z-index: 2500 !important; /* Above weather card (1200 on mobile, 1000 on desktop) & all mobile overlays */
   /* Ultra-luxurious frosted glass background over map/app */
   background: radial-gradient(ellipse 95% 80% at 50% 30%, rgba(13, 22, 44, 0.78) 0%, rgba(7, 13, 27, 0.88) 55%, rgba(3, 5, 12, 0.95) 100%) !important;
   backdrop-filter: blur(28px) saturate(190%) contrast(108%) !important;
@@ -1975,6 +1975,24 @@ input[type='range'].timeline-slider::-moz-range-thumb {
   }
 }
 
+/* While Fullscreen Sky Radar is open, hide underlying weather panel and mobile chrome so they cannot block or bleed */
+body.sky-radar-fullscreen-active #weatherPanel,
+body.sky-radar-fullscreen-active .weather-panel {
+  visibility: hidden !important;
+  pointer-events: none !important;
+}
+
+body.sky-radar-fullscreen-active #mobileBottomNav,
+body.sky-radar-fullscreen-active #mobileMapControls,
+body.sky-radar-fullscreen-active div[role="banner"] {
+  pointer-events: none !important;
+  visibility: hidden !important;
+}
+
+#celestialRadarSection.sky-radar-fullscreen #skyRadarExpandText {
+  display: inline !important;
+}
+
 /* ── Compact Glossy Floating Timeline Bar over Fullscreen Radar ─────── */
 body.sky-radar-fullscreen-active #timelineBar,
 body.sky-radar-fullscreen-active #timelineBar.hidden-by-sheet,
@@ -1984,7 +2002,7 @@ body.sky-radar-fullscreen-active .weather-panel.open ~ #timelineBar {
   pointer-events: auto !important;
   transform: translateY(0) !important;
   visibility: visible !important;
-  z-index: 1100 !important;
+  z-index: 2550 !important; /* Above fullscreen radar (2500) */
   display: block !important;
   padding: 0 1rem 0.5rem 1rem !important; /* Low-profile bottom anchor */
 }

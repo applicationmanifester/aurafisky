@@ -3121,7 +3121,7 @@ class AurafiskyApp {
       (e) => {
         if (e.touches.length !== 1) return;
         // Disable pull-to-refresh during map panning or panel interactions
-        const isMapTouch = e.target.closest("#map") || e.target.closest("#weatherPanel");
+        const isMapTouch = e.target.closest("#map") || e.target.closest("#weatherPanel") || e.target.closest("#celestialRadarSection");
         if (isMapTouch) {
           this._pullActive = false;
           return;
@@ -9288,6 +9288,17 @@ class AurafiskyApp {
   }
 
   closeTopmostOverlay() {
+    // 0. Live Sky Radar Fullscreen
+    const celestialRadar = document.getElementById("celestialRadarSection");
+    if (celestialRadar && celestialRadar.classList.contains("sky-radar-fullscreen")) {
+      if (typeof this.toggleSkyRadarFullscreen === "function") {
+        this.toggleSkyRadarFullscreen(false);
+      } else {
+        const btn = document.getElementById("expandSkyRadarBtn");
+        btn?.click();
+      }
+      return true;
+    }
     // 1. Settings Panel
     if (this.$.settingsPanel && !this.$.settingsPanel.classList.contains("hidden")) {
       this.toggleSettingsPanel(false);

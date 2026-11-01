@@ -203,7 +203,13 @@ describe('Celestial Astronomy Engine', () => {
     document.body.appendChild(weatherPanel);
 
     const { init } = await import('../features/astronomy.js');
-    const mockApp = { updateCelestialBodies: () => {} };
+    const pushedHistory = [];
+    const poppedHistory = [];
+    const mockApp = {
+      updateCelestialBodies: () => {},
+      pushHistoryOverlay: (id) => pushedHistory.push(id),
+      popHistoryOverlay: (id) => poppedHistory.push(id),
+    };
     init(mockApp);
 
     // Initial state: child of astronomy tab
@@ -215,6 +221,7 @@ describe('Celestial Astronomy Engine', () => {
     expect(celestialSection.parentNode).toBe(document.body);
     expect(celestialSection.classList.contains('sky-radar-fullscreen')).toBe(true);
     expect(document.body.classList.contains('sky-radar-fullscreen-active')).toBe(true);
+    expect(pushedHistory).toContain('skyRadar');
     expect(expandText.textContent).toBe('Close');
     expect(footer.classList.contains('hidden')).toBe(false);
 
@@ -224,10 +231,25 @@ describe('Celestial Astronomy Engine', () => {
     expect(celestialSection.nextSibling).toBe(afterSection);
     expect(celestialSection.classList.contains('sky-radar-fullscreen')).toBe(false);
     expect(document.body.classList.contains('sky-radar-fullscreen-active')).toBe(false);
+    expect(poppedHistory).toContain('skyRadar');
     expect(expandText.textContent).toBe('Expand');
 
     // Clean up mock DOM
     weatherPanel.remove();
     celestialSection.remove();
+  });
+
+  it('guarantees fullscreen sky radar z-index is above mobile weather card in styles.css', async () => {
+    const fs = await import('fs');
+    const css = fs.readFileSync('styles.css', 'utf8');
+
+    // Radar fullscreen z-index must be at least 2500, strictly above mobile weather panel (1200)
+    const radarMatch = css.match(/#celestialRadarSection\.sky-radar-fullscreen\s*\{[^}]*z-index:\s*(\d+)/s);
+    expect(radarMatch).toBeTruthy();
+    const radarZIndex = parseInt(radarMatch[1], 10);
+    expect(radarZIndex).toBeGreaterThanOrEqual(2500);
+
+    // Weather panel must be hidden when sky radar is fullscreen
+    expect(css).toMatch(/body\.sky-radar-fullscreen-active\s+#weatherPanel[^{]*\{[^}]*visibility:\s*hidden/s);
   });
 });

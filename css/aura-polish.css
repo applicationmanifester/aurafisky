@@ -548,13 +548,22 @@ input[type='range'].timeline-slider:focus-visible {
     height: 32px !important;
     border-radius: 10px !important;
   }
-  #timelineBar.hidden-by-sheet,
-  body:has(#restoreSheetPill:not(.hidden)) #timelineBar,
-  body:has(#weatherPanel.open) #timelineBar {
+  body:not(.sky-radar-fullscreen-active) #timelineBar.hidden-by-sheet,
+  body:not(.sky-radar-fullscreen-active):has(#restoreSheetPill:not(.hidden)) #timelineBar,
+  body:not(.sky-radar-fullscreen-active):has(#weatherPanel.open) #timelineBar {
     opacity: 0 !important;
     pointer-events: none !important;
     visibility: hidden !important;
     transform: translateY(16px) !important;
+  }
+
+  body.sky-radar-fullscreen-active #timelineBar {
+    opacity: 1 !important;
+    pointer-events: auto !important;
+    visibility: visible !important;
+    transform: translateY(0) !important;
+    z-index: 2550 !important;
+    display: block !important;
   }
 }
 

@@ -5617,39 +5617,70 @@ class AurafiskyApp {
       }
     }
 
+    const isMobile = typeof isMobileLayout === "function" ? isMobileLayout() : (typeof window !== "undefined" && window.innerWidth < 640);
     this.$.timelineDays.innerHTML = "";
-    dayMap.forEach((startIdx, dateStr) => {
+    let lastRenderedPct = -999;
+    const dayEntries = Array.from(dayMap.entries());
+
+    dayEntries.forEach(([dateStr, startIdx], entryIdx) => {
       const pct = (startIdx / (totalHours - 1)) * 100;
+      const fullDayText = WeatherService.formatDayLabel(dateStr);
+      const isToday = fullDayText === "Today";
+
+      // On mobile view with dense multi-day timelines, prevent pill collision:
+      // 1. Abbreviate "Yesterday" -> "Yest" and "Tomorrow" -> "Tmrw".
+      // 2. Enforce minimum spacing on mobile, always preserving "Today".
+      let compactDayText = fullDayText;
+      if (isMobile) {
+        if (fullDayText === "Yesterday") compactDayText = "Yest";
+        else if (fullDayText === "Tomorrow") compactDayText = "Tmrw";
+      }
+
+      if (isMobile && !isToday && totalHours > 48) {
+        if (pct - lastRenderedPct < 12) {
+          const nextIsToday = dayEntries[entryIdx + 1] && WeatherService.formatDayLabel(dayEntries[entryIdx + 1][0]) === "Today";
+          if (nextIsToday || (entryIdx % 2 !== 0)) {
+            return;
+          }
+        }
+      }
+
+      lastRenderedPct = pct;
+
       const label = document.createElement("span");
-      const dayText = WeatherService.formatDayLabel(dateStr);
-      const isToday = dayText === "Today";
       label.className = isToday
-        ? "absolute whitespace-nowrap px-2 py-0.5 rounded-full bg-primary/10 text-primary dark:bg-primary-light/15 dark:text-primary-light font-bold"
-        : "absolute whitespace-nowrap px-1.5 py-0.5 rounded-full bg-slate-200/60 dark:bg-slate-700/60";
+        ? "absolute whitespace-nowrap px-1.5 sm:px-2 py-0.5 rounded-full bg-primary/10 text-primary dark:bg-primary-light/15 dark:text-primary-light font-bold text-[8.5px] sm:text-[10px]"
+        : "absolute whitespace-nowrap px-1 sm:px-1.5 py-0.5 rounded-full bg-slate-200/60 dark:bg-slate-700/60 text-[8px] sm:text-[9.5px]";
       label.style.left = `${pct}%`;
       label.style.transform = "translateX(-50%)";
-      label.textContent = dayText;
+      label.textContent = compactDayText;
       this.$.timelineDays.appendChild(label);
     });
     this.$.timelineDays.style.position = "relative";
     this.$.timelineDays.style.height = "22px";
 
-    // Tick marks formatting
+    // Tick marks formatting with adaptive interval to prevent collisions
     this.$.timelineTicks.innerHTML = "";
+    let tickStep = 6;
+    if (this.timeline24hMode) {
+      tickStep = isMobile ? 3 : 1;
+    } else {
+      tickStep = isMobile ? ((typeof window !== "undefined" && window.innerWidth < 380) ? 24 : 12) : 6;
+    }
+
     for (let i = 0; i < totalHours; i++) {
       const actualIdx = i + timeOffset;
       const timePart = hourlyTimes[actualIdx]?.split("T")[1];
       if (!timePart) continue;
       const h = parseInt(timePart.split(":")[0], 10);
 
-      // Weekly: 00, 06, 12, 18. 24h mode: 00, 01, 02... 24
-      const isTickHour = this.timeline24hMode ? true : (h % 6 === 0);
+      const isTickHour = (h % tickStep === 0);
 
       if (isTickHour) {
         const tick = document.createElement("span");
         tick.className = this.timeline24hMode
-          ? "absolute text-[8px] sm:text-[10px] text-slate-400 dark:text-slate-500 font-semibold select-none"
-          : "absolute text-[10px] text-slate-400 dark:text-slate-500 font-semibold select-none";
+          ? "absolute text-[7.5px] sm:text-[9px] md:text-[10px] text-slate-400 dark:text-slate-500 font-semibold select-none"
+          : "absolute text-[8px] sm:text-[9.5px] md:text-[10px] text-slate-400 dark:text-slate-500 font-semibold select-none";
         tick.style.left = `${(i / (totalHours - 1)) * 100}%`;
         tick.style.transform = "translateX(-50%)";
         tick.style.top = "2px";
@@ -5836,6 +5867,14 @@ class AurafiskyApp {
       // Keep the minimised card in sync with the selected hour
       this.updateTimelineTooltip(hourIndex);
       this.updateTrackColors();
+
+      // Ensure celestial bodies and sky dome update immediately during timeline scrubbing
+      if (document.body.classList.contains("sky-radar-fullscreen-active") || this.activeWeatherTab === "astronomy") {
+        const timePart = this.weatherData?.hourly?.time?.[hourIndex];
+        if (timePart && typeof this.updateCelestialBodies === "function") {
+          this.updateCelestialBodies(new Date(timePart));
+        }
+      }
     });
   }
 

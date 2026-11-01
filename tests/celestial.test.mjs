@@ -252,4 +252,33 @@ describe('Celestial Astronomy Engine', () => {
     // Weather panel must be hidden when sky radar is fullscreen
     expect(css).toMatch(/body\.sky-radar-fullscreen-active\s+#weatherPanel[^{]*\{[^}]*visibility:\s*hidden/s);
   });
+
+  it('guarantees timeline bar is visible and responsive in fullscreen sky radar mode', async () => {
+    const fs = await import('fs');
+    const styles = fs.readFileSync('styles.css', 'utf8');
+    const polish = fs.readFileSync('css/aura-polish.css', 'utf8');
+
+    // Both styles.css and aura-polish.css must keep timelineBar visible in sky-radar-fullscreen-active
+    expect(styles).toMatch(/body\.sky-radar-fullscreen-active\s+#timelineBar[^{]*\{[^}]*opacity:\s*1\s*!important/s);
+    expect(polish).toMatch(/body\.sky-radar-fullscreen-active\s+#timelineBar\s*\{[^}]*opacity:\s*1\s*!important/s);
+  });
+
+  it('updates sky dome objects even without celestialPlanetsList or starsList DOM nodes', async () => {
+    const { init } = await import('../features/astronomy.js');
+    const domeGroup = document.createElement('g');
+    domeGroup.id = 'skyDomeObjectsGroup';
+    document.body.appendChild(domeGroup);
+
+    const mockApp = {
+      selectedLat: 13.13,
+      selectedLng: 78.13,
+    };
+    init(mockApp);
+
+    mockApp.updateCelestialBodies(new Date('2026-11-01T12:00:00Z'));
+    expect(domeGroup.innerHTML.length).toBeGreaterThan(0);
+    expect(domeGroup.innerHTML).toContain('Sun');
+
+    domeGroup.remove();
+  });
 });

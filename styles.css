@@ -1945,8 +1945,15 @@ input[type='range'].timeline-slider::-moz-range-thumb {
   }
 
   #celestialRadarSection.sky-radar-fullscreen #skyDomeContainer {
-    width: min(76vw, 42vh) !important;
-    height: min(76vw, 42vh) !important;
+    width: min(66vw, 32vh, 215px) !important;
+    height: min(66vw, 32vh, 215px) !important;
+  }
+
+  @media (max-width: 380px), (max-height: 680px) {
+    #celestialRadarSection.sky-radar-fullscreen #skyDomeContainer {
+      width: min(58vw, 26vh, 185px) !important;
+      height: min(58vw, 26vh, 185px) !important;
+    }
   }
 
   #celestialRadarSection.sky-radar-fullscreen .sky-radar-subtext {
@@ -2048,12 +2055,40 @@ body.sky-radar-fullscreen-active #timelineBar #momentumLabel {
   display: none !important;
 }
 
+body.sky-radar-fullscreen-active #timelineFullContent #nextRainBtn {
+  font-size: 9.5px !important;
+  padding: 1px 6px !important;
+  max-width: 120px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 body.sky-radar-fullscreen-active #timelineFullContent #timelineBadge {
   font-size: 10px !important;
   padding: 1px 6px !important;
   background: rgba(99, 102, 241, 0.25) !important;
   color: #c7d2fe !important;
   border: 1px solid rgba(165, 180, 252, 0.3) !important;
+}
+
+@media (max-width: 640px) {
+  body.sky-radar-fullscreen-active #timelineFullContent {
+    padding: 0.35rem 0.65rem 0.3rem 0.65rem !important;
+    max-width: 96vw !important;
+  }
+  body.sky-radar-fullscreen-active #timelineFullContent #timelineLabel {
+    font-size: 0.72rem !important;
+  }
+  body.sky-radar-fullscreen-active #timelineFullContent #nextRainBtn {
+    font-size: 8.5px !important;
+    padding: 1px 5px !important;
+    max-width: 100px !important;
+  }
+  body.sky-radar-fullscreen-active #timelineFullContent #timelineBadge {
+    font-size: 9px !important;
+    padding: 1px 5px !important;
+  }
 }
 
 body.sky-radar-fullscreen-active #timelineFullContent #timelineMinimiseBtn {
@@ -3531,18 +3566,27 @@ button, a, input, select, textarea, [role="button"] {
 
   /* When the weather panel, restore sheet pill, route panel, or compare panel is active on mobile,
      hide the timeline bar so they don't visually overlap or block touch gestures */
-  .weather-panel.open:not(.minimized) ~ #timelineBar,
-  .weather-panel.open ~ #timelineBar,
-  #comparePanel.open ~ #timelineBar,
-  body:has(#weatherPanel.open:not(.minimized)) #timelineBar,
-  body:has(#weatherPanel.open) #timelineBar,
-  body:has(#restoreSheetPill:not(.hidden)) #timelineBar,
-  body:has(#routePanel:not(.hidden)) #timelineBar,
-  #timelineBar.hidden-by-sheet {
+  body:not(.sky-radar-fullscreen-active) .weather-panel.open:not(.minimized) ~ #timelineBar,
+  body:not(.sky-radar-fullscreen-active) .weather-panel.open ~ #timelineBar,
+  body:not(.sky-radar-fullscreen-active) #comparePanel.open ~ #timelineBar,
+  body:not(.sky-radar-fullscreen-active):has(#weatherPanel.open:not(.minimized)) #timelineBar,
+  body:not(.sky-radar-fullscreen-active):has(#weatherPanel.open) #timelineBar,
+  body:not(.sky-radar-fullscreen-active):has(#restoreSheetPill:not(.hidden)) #timelineBar,
+  body:not(.sky-radar-fullscreen-active):has(#routePanel:not(.hidden)) #timelineBar,
+  body:not(.sky-radar-fullscreen-active) #timelineBar.hidden-by-sheet {
     opacity: 0 !important;
     pointer-events: none !important;
     transform: translateY(16px) !important;
     visibility: hidden !important;
+  }
+
+  body.sky-radar-fullscreen-active #timelineBar {
+    opacity: 1 !important;
+    pointer-events: auto !important;
+    transform: translateY(0) !important;
+    visibility: visible !important;
+    z-index: 2550 !important;
+    display: block !important;
   }
   #timelineBar {
     transition: opacity 0.25s cubic-bezier(0.16, 1, 0.3, 1), transform 0.25s cubic-bezier(0.16, 1, 0.3, 1);

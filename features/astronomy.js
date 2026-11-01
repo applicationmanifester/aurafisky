@@ -1,11 +1,18 @@
 // -- ASTRONOMY & DAY CYCLES --
+import { calculateCelestialSky, projectToSkyDome } from "./celestial.js";
 
 function updateAstronomyWidget(weather, _hourIndex) {
     if (!this.weatherData) return;
     if (typeof document !== "undefined") wireSkyRadarFullscreen(this);
 
     try {
-      const dateStr = weather.time.split("T")[0];
+      const currentTime = new Date(weather?.time || Date.now());
+
+      // Always compute & render real planetary, star, and celestial positions
+      // immediately on every timeline scrub or weather update, independent of daily sunrise/sunset!
+      this.updateCelestialBodies(currentTime);
+
+      const dateStr = weather?.time ? weather.time.split("T")[0] : "";
       const daily = WeatherService.getDailyForecast(this.weatherData);
       const currentDayData = daily.find((d) => d.date === dateStr) || daily[0];
 
@@ -19,15 +26,11 @@ function updateAstronomyWidget(weather, _hourIndex) {
 
       const sunriseTime = new Date(currentDayData.sunrise);
       const sunsetTime = new Date(currentDayData.sunset);
-      const currentTime = new Date(weather.time);
 
       // Independent of the day-length math below — the sky gazing score
       // only needs cloud cover and moon phase, so it renders the same way
       // on a polar day/night as on any other, and above the early return.
       this.updateStargazingWidget(weather, currentDayData, currentTime);
-
-      // Compute & render real planetary and prominent star positions
-      this.updateCelestialBodies(currentTime);
 
       // Inside the polar circles the sun can stay up (or down) for the whole
       // day, and the API reports sunrise and sunset as the same instant. That
@@ -221,17 +224,14 @@ function updateCelestialBodies(currentTime) {
     const lng = this.selectedLng;
     if (lat == null || lng == null || isNaN(lat) || isNaN(lng)) return;
 
-    const planetsList = document.getElementById("celestialPlanetsList");
-    const starsList = document.getElementById("celestialStarsList");
-    const planetsBadge = document.getElementById("planetsVisibleBadge");
-    const starsBadge = document.getElementById("starsVisibleBadge");
-
-    if (!planetsList || !starsList) return;
-
     try {
-      import("./celestial.js").then(({ calculateCelestialSky, projectToSkyDome }) => {
-        const sky = calculateCelestialSky(lat, lng, currentTime || new Date());
-        if (!sky) return;
+      const sky = calculateCelestialSky(lat, lng, currentTime || new Date());
+      if (!sky) return;
+
+      const planetsList = document.getElementById("celestialPlanetsList");
+      const starsList = document.getElementById("celestialStarsList");
+      const planetsBadge = document.getElementById("planetsVisibleBadge");
+      const starsBadge = document.getElementById("starsVisibleBadge");
 
         // 1. Update Badges
         if (planetsBadge) {
@@ -464,6 +464,7 @@ function updateCelestialBodies(currentTime) {
           });
         }
 
+      if (planetsList) {
         planetsList.innerHTML = primaryBodies.map((body) => {
           return `
             <div class="bg-slate-100/70 dark:bg-slate-800/60 rounded-xl p-2.5 flex items-center justify-between border border-slate-200/50 dark:border-slate-700/50 transition-all hover:border-slate-300 dark:hover:border-slate-600">
@@ -487,8 +488,10 @@ function updateCelestialBodies(currentTime) {
             </div>
           `;
         }).join("");
+      }
 
-        // 7. Render Stars List
+      // 7. Render Stars List
+      if (starsList) {
         starsList.innerHTML = sky.stars.map((star) => {
           const isVis = star.isCurrentlyVisible;
           const statusClass = isVis
@@ -514,14 +517,12 @@ function updateCelestialBodies(currentTime) {
             </div>
           `;
         }).join("");
+      }
 
-        // 8. Render Fullscreen Topdown Side Panels (Left: Planets/Satellites/Meteors, Right: Constellations/Stars)
-        renderFullscreenSkyPanels(sky);
-      }).catch((err) => {
-        console.warn("Celestial calculation error:", err);
-      });
-    } catch (e) {
-      console.warn("Failed to load celestial sky module:", e);
+      // 8. Render Fullscreen Topdown Side Panels (Left: Planets/Satellites/Meteors, Right: Constellations/Stars)
+      renderFullscreenSkyPanels(sky);
+    } catch (err) {
+      console.warn("Celestial calculation error:", err);
     }
   }
 
@@ -624,7 +625,8 @@ function wireSkyRadarFullscreen(app) {
     if (footer) footer.classList.toggle("hidden", !becomeFull);
 
     if (becomeFull) {
-      const currentTime = app?.currentTime || new Date();
+      const timeStr = app?.weatherData?.hourly?.time?.[app?.currentHourIndex];
+      const currentTime = timeStr ? new Date(timeStr) : (app?.currentTime || new Date());
       if (typeof app?.updateCelestialBodies === "function") {
         app.updateCelestialBodies(currentTime);
       }

@@ -18,6 +18,12 @@ import {
   getRouteFeatureStyle,
   getRouteGlowFeatureStyle,
   updateRouteSegmentColors,
+  addStop,
+  getStops,
+  clearRoute,
+  activateMapPickMode,
+  isMobileLayout,
+  snapRouteSheet,
 } from "../features/routes.js";
 
 test("formatRouteDistance correctly formats metric and imperial values", () => {
@@ -394,6 +400,60 @@ test("getRouteFeatureStyle and getRouteGlowFeatureStyle dynamically color code r
   const dangerGlow = getRouteGlowFeatureStyle(mockFeature("danger"));
   expect(dangerGlow.getStroke().getColor()).toContain("239, 68, 68");
 });
+
+test("addStop and getStops allow adding stops programmatically without throwing", async () => {
+  clearRoute();
+  expect(getStops()).toHaveLength(0);
+
+  // Add 1st stop (Departure A)
+  await addStop(19.076, 72.8777, "Mumbai");
+  const stops1 = getStops();
+  expect(stops1).toHaveLength(1);
+  expect(stops1[0].name).toBe("Mumbai");
+  expect(stops1[0].lat).toBe(19.076);
+  expect(stops1[0].lng).toBe(72.8777);
+
+  // Add 2nd stop (Destination B)
+  await addStop(18.5204, 73.8567, "Pune");
+  const stops2 = getStops();
+  expect(stops2).toHaveLength(2);
+  expect(stops2[1].name).toBe("Pune");
+
+  // Add 3rd stop (intermediate waypoint)
+  await addStop(18.7546, 73.4062, "Lonavala");
+  const stops3 = getStops();
+  expect(stops3).toHaveLength(3);
+  expect(stops3[2].name).toBe("Lonavala");
+
+  clearRoute();
+  expect(getStops()).toHaveLength(0);
+});
+
+test("isMobileLayout accurately detects mobile viewport breakpoint under 640px", () => {
+  const originalWidth = window.innerWidth;
+  try {
+    window.innerWidth = 375;
+    expect(isMobileLayout()).toBe(true);
+
+    window.innerWidth = 639;
+    expect(isMobileLayout()).toBe(true);
+
+    window.innerWidth = 640;
+    expect(isMobileLayout()).toBe(false);
+
+    window.innerWidth = 1024;
+    expect(isMobileLayout()).toBe(false);
+  } finally {
+    window.innerWidth = originalWidth;
+  }
+});
+
+test("activateMapPickMode activates route picking mode without error", () => {
+  expect(() => activateMapPickMode("origin")).not.toThrow();
+  expect(() => activateMapPickMode("destination")).not.toThrow();
+  expect(() => activateMapPickMode("stop")).not.toThrow();
+});
+
 
 
 

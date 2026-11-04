@@ -5737,7 +5737,11 @@ class AurafiskyApp {
     if (this.timeline24hMode) {
       tickStep = isMobile ? 3 : 1;
     } else {
-      tickStep = isMobile ? ((typeof window !== "undefined" && window.innerWidth < 380) ? 24 : 12) : 6;
+      if (isMobile) {
+        tickStep = 24;
+      } else {
+        tickStep = totalHours > 72 ? 12 : 6;
+      }
     }
 
     for (let i = 0; i < totalHours; i++) {

@@ -830,6 +830,13 @@ export function activateMapPickMode(role = "stop") {
   if (btn) {
     btn.classList.add("bg-indigo-600", "text-white", "ring-2", "ring-indigo-400/50");
   }
+
+  showHUD();
+  updateHUD();
+
+  if (isMobileLayout() && panelEl && isPanelOpen) {
+    snapRouteSheet("peek");
+  }
 }
 
 function initRouteDropdownListeners() {
@@ -1021,16 +1028,12 @@ export function openRouteStudio() {
     renderWaypointMarkers();
   }
 
-  // On mobile, show a compact setup sheet until the first stop is chosen so search is discoverable.
+  // On mobile, show a compact setup sheet until 2 stops are chosen so search and map picking are discoverable.
   if (isMobileLayout() && pts.length < 2) {
     showHUD();
-    if (pts.length === 0) {
-      showPanel();
-      snapRouteSheet("peek");
-      renderEmptyRoutePanel();
-    } else {
-      hidePanel();
-    }
+    showPanel();
+    snapRouteSheet("half");
+    renderEmptyRoutePanel();
     updateHUD();
   } else {
     hideHUD();
@@ -1396,8 +1399,26 @@ export async function addStop(lat, lng, name = null) {
   }
 
   if (isPanelOpen) {
-    await fetchAndRenderRoutePlan();
+    if (pts.length >= 2) {
+      await fetchAndRenderRoutePlan();
+    } else {
+      renderEmptyRoutePanel();
+      if (isMobileLayout()) {
+        snapRouteSheet("half");
+      }
+    }
+  } else {
+    // On mobile, once 2 stops are chosen, automatically show the route weather drawer!
+    if (isMobileLayout() && pts.length >= 2) {
+      showPanel();
+      snapRouteSheet("half");
+      await fetchAndRenderRoutePlan();
+    }
   }
+}
+
+export function getStops() {
+  return pts;
 }
 
 /**
@@ -1549,6 +1570,7 @@ async function onMapClick(e) {
   if (role === "origin") {
     if (pts.length === 0) {
       pts.push(pt);
+      pendingPickRole = "destination";
       appRef?.showToast?.("📍 Departure (A) set! Tap map for Destination (B)", "info");
     } else {
       if (pts[0].marker) {
@@ -1570,6 +1592,9 @@ async function onMapClick(e) {
     }
   } else {
     pts.push(pt);
+    if (pts.length === 1) {
+      pendingPickRole = "destination";
+    }
   }
 
   renderWaypointMarkers();
@@ -1585,14 +1610,31 @@ async function onMapClick(e) {
   await updateRouteGeometry();
 
   if (isPanelOpen) {
-    await fetchAndRenderRoutePlan();
+    if (pts.length >= 2) {
+      await fetchAndRenderRoutePlan();
+      if (isMobileLayout()) {
+        snapRouteSheet("half");
+      }
+    } else {
+      renderEmptyRoutePanel();
+    }
   } else {
     if (pts.length === 1) {
       appRef?.showToast?.("Start set. Search or tap the map to choose your destination.", "info");
     } else if (pts.length === 2) {
-      appRef?.showToast?.("Destination set. Your route is ready to analyze.", "success");
+      appRef?.showToast?.("Destination set. Your route is ready!", "success");
+      if (isMobileLayout()) {
+        showPanel();
+        snapRouteSheet("half");
+        await fetchAndRenderRoutePlan();
+      }
     } else if (pts.length > 2) {
       appRef?.showToast?.(`➕ Stop ${pts.length - 2} added to route`, "info");
+      if (isMobileLayout()) {
+        showPanel();
+        snapRouteSheet("half");
+        await fetchAndRenderRoutePlan();
+      }
     }
   }
 }
@@ -2036,7 +2078,16 @@ function updateHUD() {
       if (pts.length >= 4) optBtn.classList.remove("hidden");
       else optBtn.classList.add("hidden");
     }
-    if (pts.length === 0) {
+    if (pendingPickRole === "origin" || (pendingPickRole === "stop" && pts.length === 0)) {
+      if (statusEl) statusEl.textContent = "📍 Tap map to set Departure (A)";
+      if (finishBtn) finishBtn.disabled = true;
+    } else if (pendingPickRole === "destination" || (pendingPickRole === "stop" && pts.length === 1)) {
+      if (statusEl) statusEl.textContent = "🏁 Tap map to set Destination (B)";
+      if (finishBtn) finishBtn.disabled = true;
+    } else if (pendingPickRole === "stop" && pts.length >= 2) {
+      if (statusEl) statusEl.textContent = "➕ Tap map to add stop";
+      if (finishBtn) finishBtn.disabled = false;
+    } else if (pts.length === 0) {
       if (statusEl) statusEl.textContent = "Search or tap map for start";
       if (finishBtn) finishBtn.disabled = true;
     } else if (pts.length === 1) {
@@ -2435,7 +2486,7 @@ function showPanel() {
     panelEl.style.display = "flex";
     isPanelOpen = true;
     if (isMobileLayout()) {
-      snapRouteSheet("full");
+      snapRouteSheet(pts.length < 2 ? "half" : (routeSheetState || "half"));
     }
   }
 }
@@ -2485,30 +2536,50 @@ function renderEmptyRoutePanel() {
     `
       : "";
 
+  const searchPlaceholder =
+    pts.length === 0
+      ? "Search departure city, address or landmark…"
+      : "Search destination city or landmark…";
+
+  const pickMapLabel =
+    pts.length === 0 ? "Tap Map for Start" : "Tap Map for Dest";
+
   bodyEl.innerHTML = `
     <div class="space-y-3">
       <!-- Search Place to Add Stop -->
       <div class="relative">
         <div class="flex items-center gap-2 px-3 py-2 rounded-2xl bg-white/70 dark:bg-slate-800/70 border border-slate-200/80 dark:border-slate-700/80 focus-within:ring-2 focus-within:ring-indigo-500/50 transition-all shadow-xs">
           <span class="text-slate-400 text-xs">🔍</span>
-          <input type="text" id="routeSearchAddInput" aria-label="Search for a route stop" placeholder="Search a city, address or landmark…" class="w-full bg-transparent text-xs text-slate-800 dark:text-slate-100 placeholder-slate-400 outline-none" autocomplete="off" />
+          <input type="text" id="routeSearchAddInput" aria-label="Search for a route stop" placeholder="${searchPlaceholder}" class="w-full bg-transparent text-xs text-slate-800 dark:text-slate-100 placeholder-slate-400 outline-none" autocomplete="off" />
           <div id="routeSearchAddSpinner" class="hidden w-3.5 h-3.5 border-2 border-indigo-500/30 border-t-indigo-500 rounded-full animate-spin flex-shrink-0"></div>
         </div>
         <div id="routeSearchAddDropdown" class="hidden absolute top-full left-0 right-0 mt-1 bg-white dark:bg-slate-800 rounded-2xl shadow-2xl border border-slate-200/80 dark:border-slate-700/80 p-1.5 z-50 max-h-52 overflow-y-auto custom-scrollbar"></div>
       </div>
 
+      <!-- Quick Action Buttons for Fast Map & GPS Stop Addition -->
+      <div class="grid grid-cols-2 gap-2 pt-0.5">
+        <button type="button" id="routeEmptyPickMapBtn" class="flex items-center justify-center gap-1.5 py-2 px-3 rounded-xl bg-indigo-50 dark:bg-indigo-950/50 hover:bg-indigo-100 dark:hover:bg-indigo-900/50 text-indigo-600 dark:text-indigo-400 font-bold text-xs border border-indigo-200/60 dark:border-indigo-800/60 transition-all active:scale-95 cursor-pointer shadow-xs">
+          <span>📍</span>
+          <span>${pickMapLabel}</span>
+        </button>
+        <button type="button" id="routeEmptyUseGpsBtn" class="flex items-center justify-center gap-1.5 py-2 px-3 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 font-bold text-xs border border-slate-200/60 dark:border-slate-700/60 transition-all active:scale-95 cursor-pointer shadow-xs">
+          <span>🎯</span>
+          <span>My Location</span>
+        </button>
+      </div>
+
       ${singleStopCardHtml}
 
-      <div class="py-4 sm:py-10 text-center space-y-2 sm:space-y-3">
-        <div class="text-2xl sm:text-4xl">🗺️</div>
+      <div class="py-3 sm:py-8 text-center space-y-1.5 sm:space-y-2">
+        <div class="text-2xl sm:text-3xl">🗺️</div>
         <div class="font-extrabold text-sm text-slate-800 dark:text-slate-100">
           ${pts.length === 0 ? "Where are you starting?" : "Where are you going next?"}
         </div>
         <div class="text-xs text-slate-500 dark:text-slate-400 leading-relaxed max-w-[280px] mx-auto">
           ${
             pts.length === 0
-              ? "Search for a place above, or tap the map to set your starting point."
-              : "Search or tap the map to add your destination or another stop."
+              ? "Search a place above, or tap the map to place Departure Point (A)."
+              : "Search or tap the map to place Destination Point (B)."
           }
         </div>
       </div>
@@ -2523,6 +2594,35 @@ function renderEmptyRoutePanel() {
     });
   });
 
+  // Wire Map Pick Button
+  bodyEl.querySelector("#routeEmptyPickMapBtn")?.addEventListener("click", (e) => {
+    e.stopPropagation();
+    const targetRole = pts.length === 0 ? "origin" : "destination";
+    activateMapPickMode(targetRole);
+    if (isMobileLayout()) {
+      snapRouteSheet("peek");
+    }
+    appRef?.showToast?.(pts.length === 0 ? "📍 Tap map to set Departure (A)" : "🏁 Tap map to set Destination (B)", "info");
+  });
+
+  // Wire GPS Location Button
+  bodyEl.querySelector("#routeEmptyUseGpsBtn")?.addEventListener("click", (e) => {
+    e.stopPropagation();
+    if (appRef && appRef.selectedLat != null && appRef.selectedLng != null) {
+      const placeName = (appRef.selectedName || (pts.length === 0 ? "Departure Point" : `Stop ${pts.length + 1}`)).split(",")[0].trim();
+      addStop(appRef.selectedLat, appRef.selectedLng, placeName);
+      appRef.showToast?.(`Added "${placeName}" to route`, "success");
+    } else if (appRef && appRef.defaultLocation && appRef.defaultLocation.lat != null) {
+      addStop(appRef.defaultLocation.lat, appRef.defaultLocation.lng, appRef.defaultLocation.name || "Home Location");
+      appRef.showToast?.(`Added home location to route`, "success");
+    } else if (appRef && typeof appRef.getMyLocation === "function") {
+      appRef.getMyLocation();
+      appRef.showToast?.("Acquiring GPS location for route…", "info");
+    } else {
+      appRef?.showToast?.("Tap the GPS button or select a location on the map", "info");
+    }
+  });
+
   bindRouteSearchAddEvents(bodyEl);
 }
 
@@ -2535,6 +2635,13 @@ function bindRouteSearchAddEvents(containerEl) {
   const dropdownEl = containerEl.querySelector("#routeSearchAddDropdown");
   const spinnerEl = containerEl.querySelector("#routeSearchAddSpinner");
   if (!inputEl || !dropdownEl) return;
+
+  // On mobile focus, expand sheet so results are visible above keyboard
+  inputEl.addEventListener("focus", () => {
+    if (isMobileLayout() && routeSheetState === "peek") {
+      snapRouteSheet("half");
+    }
+  });
 
   let debounceTimer = null;
 
@@ -2583,7 +2690,9 @@ function bindRouteSearchAddEvents(containerEl) {
         dropdownEl.classList.remove("hidden");
 
         dropdownEl.querySelectorAll(".route-search-result-item").forEach((btn) => {
-          btn.addEventListener("click", () => {
+          const selectItem = (e) => {
+            e.preventDefault();
+            e.stopPropagation();
             const idx = parseInt(btn.dataset.idx, 10);
             const item = results[idx];
             if (item) {
@@ -2591,7 +2700,9 @@ function bindRouteSearchAddEvents(containerEl) {
               inputEl.value = "";
               addStop(item.lat, item.lng, item.name);
             }
-          });
+          };
+          btn.addEventListener("pointerdown", selectItem);
+          btn.addEventListener("click", selectItem);
         });
       } catch (err) {
         if (spinnerEl) spinnerEl.classList.add("hidden");
@@ -3114,7 +3225,10 @@ function renderRoutePanelContent(stops, units) {
       <!-- Quick Actions at bottom of Stops Tab -->
       <div class="pt-2 flex items-center gap-2 flex-wrap">
         <button type="button" id="routePanelTabAddMapBtn" class="flex-1 py-1.5 px-2.5 rounded-xl bg-indigo-50 dark:bg-indigo-900/30 hover:bg-indigo-100 text-indigo-600 dark:text-indigo-400 font-bold text-xs transition-colors flex items-center justify-center gap-1 cursor-pointer">
-          <span>+ Add from Map</span>
+          <span>📍 Add from Map</span>
+        </button>
+        <button type="button" id="routePanelTabAddGpsBtn" class="py-1.5 px-2.5 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 text-slate-700 dark:text-slate-200 font-bold text-xs transition-colors flex items-center justify-center gap-1 cursor-pointer" title="Add current GPS location as stop">
+          <span>🎯 GPS</span>
         </button>
         <button type="button" id="routePanelTabReverseBtn" class="py-1.5 px-2.5 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 text-slate-700 dark:text-slate-200 font-bold text-xs transition-colors flex items-center justify-center gap-1 cursor-pointer" title="Reverse trip direction">
           <span>🔄 Reverse</span>
@@ -3264,19 +3378,31 @@ function renderRoutePanelContent(stops, units) {
 
   // Bind quick buttons at bottom of stops tab
   bodyEl.querySelector("#routePanelTabAddMapBtn")?.addEventListener("click", () => {
-    hidePanel();
-    showHUD();
-    routeMode = true;
-    if (appRef) {
-      appRef._routeModeActive = true;
-      if (appRef.map) {
-        appRef.map.on("click", onMapClick);
-        const targetEl = appRef.map.getTargetElement();
-        if (targetEl) targetEl.style.cursor = "crosshair";
-      }
+    activateMapPickMode("stop");
+    if (isMobileLayout()) {
+      snapRouteSheet("peek");
+    } else {
+      hidePanel();
     }
+    showHUD();
     updateHUD();
-    if (appRef) appRef.showToast("Click map to add stop. Click 'Analyze Route' when done.", "info");
+    if (appRef) appRef.showToast("Tap map to add stop to route.", "info");
+  });
+
+  bodyEl.querySelector("#routePanelTabAddGpsBtn")?.addEventListener("click", () => {
+    if (appRef && appRef.selectedLat != null && appRef.selectedLng != null) {
+      const placeName = (appRef.selectedName || `Stop ${pts.length + 1}`).split(",")[0].trim();
+      addStop(appRef.selectedLat, appRef.selectedLng, placeName);
+      appRef.showToast?.(`Added "${placeName}" to route`, "success");
+    } else if (appRef && appRef.defaultLocation && appRef.defaultLocation.lat != null) {
+      addStop(appRef.defaultLocation.lat, appRef.defaultLocation.lng, appRef.defaultLocation.name || "Home Location");
+      appRef.showToast?.(`Added home location to route`, "success");
+    } else if (appRef && typeof appRef.getMyLocation === "function") {
+      appRef.getMyLocation();
+      appRef.showToast?.("Acquiring GPS location for route…", "info");
+    } else {
+      appRef?.showToast?.("Tap the GPS button or select a location on the map", "info");
+    }
   });
 
   bodyEl.querySelector("#routePanelTabReverseBtn")?.addEventListener("click", reverseRoute);

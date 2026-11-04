@@ -2079,15 +2079,19 @@ body.sky-radar-fullscreen-active .weather-panel.open ~ #timelineBar {
   padding: 0 1rem 0.5rem 1rem !important; /* Low-profile bottom anchor */
 }
 
-/* When mobile dropdown panel is open, elevate radar section above timeline bar and lower timeline */
+/* When mobile dropdown panel is open, elevate radar section and hide timeline bar so it never covers constellations/stars */
 body.sky-radar-fullscreen-active.sky-panel-dropdown-open #celestialRadarSection,
 body.sky-radar-fullscreen-active:has(.panel-open-mobile) #celestialRadarSection {
   z-index: 2600 !important;
 }
 
 body.sky-radar-fullscreen-active.sky-panel-dropdown-open #timelineBar,
-body.sky-radar-fullscreen-active:has(.panel-open-mobile) #timelineBar {
+body.sky-radar-fullscreen-active:has(.panel-open-mobile) #timelineBar,
+body.sky-panel-dropdown-open #timelineBar {
   z-index: 2400 !important;
+  opacity: 0 !important;
+  pointer-events: none !important;
+  visibility: hidden !important;
 }
 
 /* Slim, streamlined glass drawer (wider horizontal span for easy scrubbing) */

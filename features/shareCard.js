@@ -196,7 +196,7 @@ function drawStatChips(ctx, stats, box, ink, inkSoft) {
   return rows * chipH + (rows - 1) * rowGap;
 }
 
-function drawForecastStrip(ctx, items, box, ink, inkSoft, hourly = false) {
+function drawForecastStrip(ctx, items, box, ink, inkSoft, hourly = false, onDark = true) {
   if (!items || !items.length) return;
 
   if (hourly) {
@@ -357,7 +357,7 @@ export function drawWeatherCard(ctx, model) {
 
   // Day strip
   const hourly = model.variant === "hourly";
-  drawForecastStrip(ctx, hourly ? model.hours : model.days, { x: 64, y: forecastTop + 42, width: width - 128 }, ink, inkSoft, hourly);
+  drawForecastStrip(ctx, hourly ? model.hours : model.days, { x: 64, y: forecastTop + 42, width: width - 128 }, ink, inkSoft, hourly, onDark);
 
   // Footer
   ctx.fillStyle = inkSoft;

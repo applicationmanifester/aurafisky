@@ -392,7 +392,7 @@ function ensureAlertsUI() {
   // Inline styles below are the fallback; the CSS layer (device-adaptive.css)
   // is allowed to override them, including in dark mode, because the card is
   // otherwise a hard-coded white rectangle in a dark panel.
-  const dark = !!app.isDark;
+  const dark = !!(appRef?.isDark || (typeof document !== 'undefined' && document.documentElement.classList.contains("dark")));
   styleEl(card, {
     width: "100%",
     maxWidth: "420px",

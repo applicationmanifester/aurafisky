@@ -7,6 +7,7 @@ import { test, expect, describe } from "vitest";
 import {
   classify,
   extractPlace,
+  extractFieldName,
   extractTwoPlaces,
   buildCompareSummary,
   detectTimeScope,
@@ -368,5 +369,74 @@ describe("buildCompareSummary", () => {
     const now = bullets.find((b) => b.k === "Now");
     expect(now.v).toContain("30°");
     expect(now.v).toContain("10°");
+  });
+});
+
+describe("Farm & Crop intent handling in Aura", () => {
+  test("classifies farming and crop queries correctly", () => {
+    expect(classify("farm crops")?.id).toBe("farm");
+    expect(classify("What to grow here?")?.id).toBe("farm");
+    expect(classify("what to plant")?.id).toBe("farm");
+    expect(classify("farming advice")?.id).toBe("farm");
+    expect(classify("soil moisture and irrigation")?.id).toBe("farm");
+    expect(classify("frost risk for crops")?.id).toBe("farm");
+  });
+
+  test("extractFieldName parses field names safely without throwing on empty or undefined", () => {
+    expect(extractFieldName("spray window at north field")).toBe("north");
+    expect(extractFieldName("growth of home field")).toBe("home field");
+    expect(extractFieldName(undefined)).toBeNull();
+    expect(extractFieldName(null)).toBeNull();
+    expect(extractFieldName("")).toBeNull();
+  });
+
+  test("answers crop and farm queries without throwing ReferenceError", () => {
+    const assistant = Object.assign(Object.create(AuraAssistant.prototype), {
+      app: {
+        currentWeather: {
+          temperature: 24,
+          humidity: 60,
+          windSpeed: 10,
+          windGusts: 15,
+          precipitation: 0,
+          precipitation_probability: 5,
+          is_day: 1,
+        },
+        weatherData: {
+          hourly: {
+            time: Array.from({ length: 48 }, (_, i) => `2026-11-04T${String(i % 24).padStart(2, "0")}:00`),
+            temperature_2m: Array.from({ length: 48 }, () => 22),
+            relative_humidity_2m: Array.from({ length: 48 }, () => 60),
+            precipitation: Array.from({ length: 48 }, () => 0),
+            precipitation_probability: Array.from({ length: 48 }, () => 5),
+            wind_speed_10m: Array.from({ length: 48 }, () => 10),
+            wind_gusts_10m: Array.from({ length: 48 }, () => 15),
+          },
+          daily: {
+            time: ["2026-11-04", "2026-11-05"],
+            temperature_2m_max: [26, 25],
+            temperature_2m_min: [16, 15],
+            precipitation_sum: [0, 0],
+          },
+        },
+      },
+      _fmt: () => ({ temp: (t) => `${t}°C`, speed: (s) => `${s} km/h` }),
+    });
+
+    const ctx = {
+      loc: "Chennai",
+      curr: assistant.app.currentWeather,
+      today: { maxTemp: 26, minTemp: 16 },
+    };
+
+    const replyCrops = assistant._answerFarm(ctx, null, "farm crops");
+    expect(replyCrops).toBeDefined();
+    expect(replyCrops.title).toContain("Crop");
+    expect(replyCrops.bullets.length).toBeGreaterThan(0);
+
+    const replyGrow = assistant._answerFarm(ctx, null, "What to grow here?");
+    expect(replyGrow).toBeDefined();
+    expect(replyGrow.title).toContain("Crop");
+    expect(replyGrow.bullets.length).toBeGreaterThan(0);
   });
 });

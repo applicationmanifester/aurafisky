@@ -2757,6 +2757,7 @@ export async function finishRoute() {
     await fetchAndRenderRoutePlan();
   } catch (err) {
     console.error("Route analysis failed:", err);
+    const bodyEl = panelEl ? panelEl.querySelector("#routePanelBody") : document.getElementById("routePanelBody");
     if (bodyEl) {
       bodyEl.innerHTML = `
         <div class="py-8 text-center text-rose-500 space-y-2">

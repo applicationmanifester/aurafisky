@@ -80,8 +80,10 @@ import {
   computeWaterBalance,
   frostRiskForNight,
   recommendCrops,
+  buildSiteContext,
   GROWTH_STAGES,
 } from './farm.js';
+import { CROPS, getSoil } from './cropData.js';
 import { loadFields, getField, daysSinceSowing } from './farmFields.js';
 import { LinUCBBandit } from '../modules/aura-bandit.js';
 import { AuraHealthEngine } from '../modules/aura-health.js';
@@ -126,6 +128,7 @@ export function classify(query) {  let best = null;
 
 /** Pulls a place name out of "weather in Tokyo tomorrow". */
 export function extractPlace(query) {
+  if (!query || typeof query !== 'string') return null;
   const m =
     query.match(/\b(?:weather|forecast)\s+(?:in|at|for)\s+([a-zA-Z][a-zA-Z\s.'-]{1,40}?)(?=\s+(?:tomorrow|today|tonight|right\s+now|now|this\s+\w+)\b|[?!.]?$)/i) ||
     query.match(/\b(?:how(?:'s| is)|what(?:'s| is))\s+(?:it\s+)?(?:like\s+)?in\s+([a-zA-Z][a-zA-Z\s.'-]{1,40}?)(?=\s+(?:tomorrow|today|tonight|right\s+now|now)\b|[?!.]?$)/i) ||
@@ -143,6 +146,7 @@ export function extractPlace(query) {
 
 /** Extracts a saved field name from queries like "spray window at north field". */
 export function extractFieldName(query) {
+  if (!query || typeof query !== 'string') return null;
   const m =
     query.match(/\bat\s+(?:the\s+)?([a-zA-Z][a-zA-Z\s.'-]{1,40}?)(?:\s+field)?[?!.]?$/i) ||
     query.match(/\b(?:north|south|east|west|home|back|front|upper|lower)\s+field\b/i);
@@ -1536,7 +1540,7 @@ export class AuraAssistant {
       case 'workfromhome': return this._answerWorkFromHome(ctx);
       case 'temperature': return this._answerTemperature(ctx);
       case 'overview': return this._answerOverview(ctx);
-      case 'farm': return this._answerFarm(ctx, scope);
+      case 'farm': return this._answerFarm(ctx, scope, query);
       default: return this._answerUnknown(query, ctx);
     }
   }
@@ -2838,16 +2842,26 @@ export class AuraAssistant {
   // engine from features/farm.js; falls back to weather-only advice when
   // the Farm tab hasn't loaded soil telemetry yet.
 
-  _answerFarm(ctx, scope = null) {
+  _answerFarm(ctx, scope = null, query = '') {
     const f = this._fmt();
     const { curr } = ctx;
-    const farmCtx = this.app?.farmCtx || null;
+    let farmCtx = this.app?.farmCtx || null;
+    if (!farmCtx && this.app?.weatherData) {
+      try {
+        farmCtx = buildSiteContext({ weatherData: this.app.weatherData });
+        if (this.app) this.app.farmCtx = farmCtx;
+      } catch (e) {
+        console.warn('Aura buildSiteContext failed:', e);
+      }
+    }
     const bullets = [];
     const followups = [];
+    const qLower = (query || '').toLowerCase();
+    const isCropQuery = qLower.includes('crop') || qLower.includes('grow') || qLower.includes('plant') || qLower.includes('sow') || qLower.includes('fasal');
 
     // ── Field-specific lookup ───────────────────────────────────────
     // "spray window at north field", "growth of home field", etc.
-    const fieldName = extractFieldName(query);
+    const fieldName = extractFieldName(query || '');
     let activeField = null;
     if (fieldName) {
       const fields = loadFields();
@@ -2857,6 +2871,33 @@ export class AuraAssistant {
         const partial = fields.find((f) => f.name.toLowerCase().includes(fieldName.toLowerCase()) || fieldName.toLowerCase().includes(f.name.toLowerCase()));
         activeField = partial || null;
       }
+    }
+
+    // ── Crop recommendation ─────────────────────────────────────────
+    let topCrop = null;
+    const cropBullets = [];
+    if (farmCtx) {
+      const recs = recommendCrops(farmCtx).slice(0, 3);
+      if (recs.length) {
+        topCrop = recs[0];
+        cropBullets.push({
+          k: 'Best crop match',
+          v: `${topCrop.cropName} — ${topCrop.score}% match`,
+          tone: topCrop.score >= 70 ? 'good' : 'warn',
+        });
+        if (recs.length > 1) {
+          cropBullets.push({
+            k: 'Also consider',
+            v: recs.slice(1, 3).map((r) => r.cropName).join(', '),
+          });
+        }
+        if (!followups.includes('What to grow here?')) followups.push('What to grow here?');
+      }
+    }
+
+    // If query specifically asked about crops or what to grow, put crop matches upfront
+    if (isCropQuery && cropBullets.length) {
+      bullets.push(...cropBullets);
     }
 
     // ── Spray window ────────────────────────────────────────────────
@@ -2905,8 +2946,8 @@ export class AuraAssistant {
     } else {
       bullets.push({
         k: 'Soil moisture',
-        v: 'Not available — open the Farm tab once to load it',
-        tone: 'warn',
+        v: 'Estimating from surface water balance · Open Farm tab for satellite root-zone data',
+        tone: 'info',
       });
     }
 
@@ -2942,25 +2983,9 @@ export class AuraAssistant {
       }
     }
 
-    // ── Crop recommendation ─────────────────────────────────────────
-    let topCrop = null;
-    if (farmCtx) {
-      const recs = recommendCrops(farmCtx).slice(0, 3);
-      if (recs.length) {
-        topCrop = recs[0];
-        bullets.push({
-          k: 'Best crop match',
-          v: `${topCrop.cropName} — ${topCrop.score}% match`,
-          tone: topCrop.score >= 70 ? 'good' : 'warn',
-        });
-        if (recs.length > 1) {
-          bullets.push({
-            k: 'Also consider',
-            v: recs.slice(1, 3).map((r) => r.cropName).join(', '),
-          });
-        }
-        followups.push('What to grow here?');
-      }
+    // If query wasn't specifically crop-focused, show crop matches here
+    if (!isCropQuery && cropBullets.length) {
+      bullets.push(...cropBullets);
     }
 
     // ── Field-specific details ──────────────────────────────────────
@@ -2995,14 +3020,21 @@ export class AuraAssistant {
 
     const hasWarn = bullets.some((b) => b.tone === 'warn');
 
+    let title = `Farm & field advice · ${activeField ? esc(activeField.name) : ctx.loc}`;
+    if (isCropQuery && topCrop) {
+      title = `Crops for ${activeField ? esc(activeField.name) : ctx.loc} · ${topCrop.cropName} (${topCrop.score}%)`;
+    } else if (isCropQuery) {
+      title = `Crop recommendations · ${activeField ? esc(activeField.name) : ctx.loc}`;
+    }
+
     return {
       icon: '🌾',
       tone: hasWarn ? 'warn' : 'info',
-      title: `Farm & field advice · ${activeField ? esc(activeField.name) : ctx.loc}`,
-      bullets: bullets.length ? bullets : [{ k: 'Status', v: 'Farm data still loading — open the Farm tab once, then ask again.' }],
+      title,
+      bullets: bullets.length ? bullets : [{ k: 'Status', v: 'Farm data loading for this location.' }],
       note: farmCtx
         ? 'Scores combine live soil moisture, temperature, wind, rain probability and VPD for this exact point.'
-        : 'Open the Farm tab first so Aura can load soil and crop data for this location.',
+        : 'Open the Farm tab to customize field soils, sowing calendars and satellite layers.',
       actions: [
         { id: 'tab', label: 'Open Farm tab', icon: '🌾', payload: { tab: 'farm' } },
       ],

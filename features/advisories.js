@@ -49,13 +49,14 @@ function updateWeatherFavicon(weatherCode, isDay = true) {
     }
     // Use IconSystem to generate a proper SVG favicon with the weather icon
     if (
+      typeof window !== "undefined" &&
       window.IconSystem &&
-      typeof IconSystem.getDynamicFavicon === "function"
+      typeof window.IconSystem.getDynamicFavicon === "function"
     ) {
-      favicon.href = IconSystem.getDynamicFavicon(weatherCode, isDay);
-    } else {
+      favicon.href = window.IconSystem.getDynamicFavicon(weatherCode, isDay);
+    } else if (typeof window !== "undefined" && window.WeatherIcons) {
       // Fallback to original emoji-based favicon
-      const iconSvg = WeatherIcons.getIcon(weatherCode, isDay);
+      const iconSvg = window.WeatherIcons.getIcon(weatherCode, isDay);
       const inner = iconSvg.match(/<svg[^>]*>([\s\S]*)<\/svg>/);
       const content = inner ? inner[1] : iconSvg;
       favicon.href = `data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><g transform='scale(2) translate(26,26)'>${encodeURIComponent(content)}</g></svg>`;

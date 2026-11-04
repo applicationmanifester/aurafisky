@@ -11,6 +11,13 @@
 // Places chosen for a track record of extreme readings across categories —
 // not an exhaustive or authoritative list, just enough spread that the
 // live winner in each category is usually somewhere genuinely interesting.
+const SURF_EXTREME_STATIONS = [
+  { name: "Nazaré, Portugal", lat: 39.60, lng: -9.07 },
+  { name: "Teahupo'o, French Polynesia", lat: -17.85, lng: -149.27 },
+  { name: "Banzai Pipeline, Hawaii", lat: 21.66, lng: -158.05 },
+  { name: "Mavericks, California", lat: 37.49, lng: -122.50 },
+];
+
 const EXTREME_STATIONS = [
   { name: "Death Valley, USA", lat: 36.5323, lng: -116.9325 },
   { name: "Dasht-e Lut, Iran", lat: 30.7333, lng: 58.0 },
@@ -63,12 +70,23 @@ async function openExtremesPanel() {
   const lngParam = EXTREME_STATIONS.map((s) => s.lng.toFixed(4)).join(",");
 
   try {
-    const res = await fetch(
-      `https://api.open-meteo.com/v1/forecast?latitude=${latParam}&longitude=${lngParam}&current=temperature_2m,wind_speed_10m,wind_gusts_10m&timezone=auto`,
-    );
+    const surfLat = SURF_EXTREME_STATIONS.map((s) => s.lat.toFixed(4)).join(",");
+    const surfLng = SURF_EXTREME_STATIONS.map((s) => s.lng.toFixed(4)).join(",");
+    const surfUrl = `https://marine-api.open-meteo.com/v1/marine?latitude=${surfLat}&longitude=${surfLng}&current=wave_height,swell_wave_period,swell_wave_height&timezone=auto`;
+
+    const [res, surfRes] = await Promise.all([
+      fetch(`https://api.open-meteo.com/v1/forecast?latitude=${latParam}&longitude=${lngParam}&current=temperature_2m,wind_speed_10m,wind_gusts_10m&timezone=auto`),
+      fetch(surfUrl).catch(() => null),
+    ]);
     if (!res.ok) throw new Error("Extremes fetch failed");
     let results = await res.json();
     if (!Array.isArray(results)) results = [results];
+
+    let surfResults = [];
+    if (surfRes && surfRes.ok) {
+      const parsed = await surfRes.json();
+      surfResults = Array.isArray(parsed) ? parsed : [parsed];
+    }
 
     const readings = EXTREME_STATIONS.map((station, i) => ({
       station,
@@ -125,6 +143,32 @@ async function openExtremesPanel() {
           "Windiest tracked",
           windiest.station,
           `${Math.round(windiest.wind)} km/h`,
+        ),
+      );
+    }
+
+    let biggestSwell = null;
+    if (surfResults.length) {
+      const swells = SURF_EXTREME_STATIONS.map((station, i) => {
+        const cur = surfResults[i]?.current;
+        const waveHeight = cur?.wave_height ?? cur?.swell_wave_height ?? 0;
+        const period = cur?.swell_wave_period ?? 0;
+        return { station, waveHeight, period };
+      }).filter((s) => s.waveHeight > 0);
+
+      if (swells.length) {
+        biggestSwell = swells.reduce((a, b) => (b.waveHeight > a.waveHeight ? b : a));
+      }
+    }
+
+    if (biggestSwell) {
+      cards.push(
+        _extremeCardHtml(
+          "swell",
+          "🌊",
+          "Top Marine Swell",
+          biggestSwell.station,
+          `${biggestSwell.waveHeight.toFixed(1)}m @ ${Math.round(biggestSwell.period)}s`,
         ),
       );
     }

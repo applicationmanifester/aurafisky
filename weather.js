@@ -241,7 +241,17 @@ const WeatherService = (() => {
             "visibility",
             "is_day",
             ...(extended
-              ? ["sunshine_duration", "cape", "freezing_level_height"]
+              ? [
+                  "sunshine_duration",
+                  "cape",
+                  "freezing_level_height",
+                  "shortwave_radiation",
+                  "direct_normal_irradiance",
+                  "diffuse_radiation",
+                  "cloud_cover_low",
+                  "cloud_cover_mid",
+                  "cloud_cover_high",
+                ]
               : []),
           ].join(","),
           daily: [
@@ -373,6 +383,12 @@ const WeatherService = (() => {
       visibility: h.visibility[index],
       cape: h.cape?.[index],
       freezingLevel: h.freezing_level_height?.[index],
+      shortwaveRadiation: h.shortwave_radiation?.[index] ?? 0,
+      directNormalIrradiance: h.direct_normal_irradiance?.[index] ?? 0,
+      diffuseRadiation: h.diffuse_radiation?.[index] ?? 0,
+      cloudCoverLow: h.cloud_cover_low?.[index] ?? 0,
+      cloudCoverMid: h.cloud_cover_mid?.[index] ?? 0,
+      cloudCoverHigh: h.cloud_cover_high?.[index] ?? 0,
       isDay: isDay,
       description: info.description,
       icon: info.icon,
@@ -1456,6 +1472,196 @@ const WeatherService = (() => {
    * @param {number} aqiVal - Air Quality Index rating
    * @returns {Array<Object>} Active advisories
    */
+  /**
+   * Estimates instantaneous Rooftop Solar PV Yield (W/m²) and array power.
+   *
+   * Physical formula:
+   *   P_solar = (Direct + Diffuse) * eta * derateFactor
+   * where:
+   *   eta = 0.18 (standard 18% crystalline silicon panel efficiency)
+   *   derateFactor = 0.85 (inverter efficiency, wiring, ambient temperature derating)
+   */
+  function getSolarPvYield(directOrSnapshot, diffuseVal, options = {}) {
+    let direct = 0;
+    let diffuse = 0;
+    if (typeof directOrSnapshot === "object" && directOrSnapshot !== null) {
+      direct = directOrSnapshot.directNormalIrradiance ?? directOrSnapshot.direct_normal_irradiance ?? 0;
+      diffuse = directOrSnapshot.diffuseRadiation ?? directOrSnapshot.diffuse_radiation ?? 0;
+      if (direct === 0 && diffuse === 0 && directOrSnapshot.shortwaveRadiation != null) {
+        const sw = Math.max(0, directOrSnapshot.shortwaveRadiation);
+        direct = sw * 0.75;
+        diffuse = sw * 0.25;
+      }
+    } else {
+      direct = Math.max(0, directOrSnapshot || 0);
+      diffuse = Math.max(0, diffuseVal || 0);
+    }
+
+    const eta = options.efficiency ?? 0.18;
+    const derate = options.derate ?? 0.85;
+    const arrayArea = options.arrayAreaM2 ?? 25; // 25m² ~ standard 5kW residential array
+
+    const totalIrradiance = direct + diffuse;
+    const liveYieldM2 = totalIrradiance * eta * derate;
+    const arrayPowerWatts = liveYieldM2 * arrayArea;
+
+    let status = "Idle / Night";
+    if (liveYieldM2 >= 120) {
+      status = "Peak Generation";
+    } else if (liveYieldM2 >= 40) {
+      status = "Moderate Generation";
+    } else if (liveYieldM2 > 0) {
+      status = "Low Generation";
+    }
+
+    return {
+      instantaneousYieldWatts: Math.round(liveYieldM2),
+      arrayPowerWatts: Math.round(arrayPowerWatts),
+      directNormalWatts: Math.round(direct),
+      diffuseWatts: Math.round(diffuse),
+      totalIrradianceWatts: Math.round(totalIrradiance),
+      efficiencyPct: Math.round(eta * 100),
+      status,
+    };
+  }
+
+  /**
+   * Computes estimated daily Solar PV yield in kWh/m² across the 24h timeline.
+   */
+  function getDailySolarPvYield(weatherData, dayDateStr, options = {}) {
+    if (!weatherData?.hourly?.time) return { totalKwhM2: 0, standardArrayTotalKwh: 0, peakHourYieldWatts: 0 };
+    const h = weatherData.hourly;
+    const eta = options.efficiency ?? 0.18;
+    const derate = options.derate ?? 0.85;
+    const arrayArea = options.arrayAreaM2 ?? 25;
+
+    let totalWhM2 = 0;
+    let peakWatts = 0;
+
+    for (let i = 0; i < h.time.length; i++) {
+      if (dayDateStr && !h.time[i].startsWith(dayDateStr)) continue;
+      const direct = h.direct_normal_irradiance?.[i] ?? 0;
+      const diffuse = h.diffuse_radiation?.[i] ?? 0;
+      const sw = h.shortwave_radiation?.[i] ?? 0;
+      const totalIrr = (direct + diffuse > 0) ? (direct + diffuse) : sw;
+
+      const liveYield = Math.max(0, totalIrr) * eta * derate;
+      totalWhM2 += liveYield;
+      if (liveYield > peakWatts) peakWatts = liveYield;
+    }
+
+    const totalKwhM2 = Number((totalWhM2 / 1000).toFixed(2));
+    const standardArrayTotalKwh = Number(((totalWhM2 * arrayArea) / 1000).toFixed(1));
+
+    return {
+      totalKwhM2,
+      standardArrayTotalKwh,
+      peakHourYieldWatts: Math.round(peakWatts),
+    };
+  }
+
+  /**
+   * Evaluates Golden Hour atmospheric scattering quality (0–100%).
+   */
+  function getGoldenHourAesthetics(cloudLow = 0, cloudMid = 0, cloudHigh = 0, totalCloud = 0) {
+    const low = Math.max(0, Math.min(100, cloudLow ?? 0));
+    const mid = Math.max(0, Math.min(100, cloudMid ?? 0));
+    const high = Math.max(0, Math.min(100, cloudHigh ?? 0));
+    const total = Math.max(0, Math.min(100, totalCloud ?? low));
+
+    let score = 100;
+    score -= low * 1.4;
+
+    if (high >= 20 && high <= 60) {
+      score += 25;
+    } else if (high > 60) {
+      score += 10;
+    }
+
+    if (mid >= 15 && mid <= 50) {
+      score += 15;
+    }
+
+    if (total > 85) {
+      score = Math.min(score, 25);
+    }
+
+    score = Math.max(0, Math.min(100, Math.round(score)));
+
+    let label, icon, description;
+    if (score >= 80) {
+      label = "Vibrant Crimson Scattering";
+      icon = "🌅";
+      description = "Optimal high-cloud scattering with clear horizon for vivid sunsets";
+    } else if (score >= 60) {
+      label = "Favorable Sunset Colors";
+      icon = "🌇";
+      description = "Good color potential across mid/high cloud tiers";
+    } else if (score >= 40) {
+      label = "Muted Pastel Tones";
+      icon = "🌥️";
+      description = "Moderate cloud interference dampens chromatic intensity";
+    } else {
+      label = "Overcast / Obscured Horizon";
+      icon = "☁️";
+      description = "Low cloud strata blocking directional sunset rays";
+    }
+
+    return { score, label, icon, description };
+  }
+
+  /**
+   * Computes 0–100% Astrophotography & Stargazing Clarity Index.
+   */
+  function getAstrophotographyClarity(cloudCoverPct, moonPhaseFraction, aqiVal = 50, cloudLow = 0) {
+    if (cloudCoverPct == null) return null;
+
+    const cloud = Math.max(0, Math.min(100, cloudCoverPct));
+    const low = Math.max(0, Math.min(100, cloudLow ?? 0));
+    const phase = moonPhaseFraction ?? 0;
+    const illumination = (1 - Math.cos(phase * 2 * Math.PI)) / 2;
+    const aqi = Math.max(0, aqiVal ?? 50);
+
+    let score = 100;
+    score -= cloud * 0.75;
+    score -= low * 0.35;
+    score -= illumination * 30;
+
+    if (aqi > 50) {
+      const aqiPenalty = Math.min(15, (aqi - 50) * 0.15);
+      score -= aqiPenalty;
+    }
+
+    score = Math.max(0, Math.min(100, Math.round(score)));
+
+    let label, icon, recommendation;
+    if (score >= 85) {
+      label = "Pristine Deep-Sky Clarity";
+      icon = "🌌";
+      recommendation = "Ideal for nebulae, galaxies, and long-exposure astrophotography";
+    } else if (score >= 65) {
+      label = "Good Astro Conditions";
+      icon = "✨";
+      recommendation = "Favorable for constellations, star clusters, and planets";
+    } else if (score >= 40) {
+      label = "Planetary & Lunar Imaging Only";
+      icon = "🪐";
+      recommendation = "Bright targets viable; moon or high haze washes out faint DSO";
+    } else {
+      label = "Unfavorable for Astrophotography";
+      icon = "☁️";
+      recommendation = "Cloud cover or heavy light diffusion obscures celestial targets";
+    }
+
+    return {
+      score,
+      label,
+      icon,
+      recommendation,
+      illuminationPct: Math.round(illumination * 100),
+    };
+  }
+
   function getAdvisories(weather, aqiVal) {
     const alerts = [];
     if (!weather) return alerts;
@@ -2870,6 +3076,10 @@ const WeatherService = (() => {
     getMoonPhase,
     getStargazingScore,
     getGoldenBlueHourWindows,
+    getSolarPvYield,
+    getDailySolarPvYield,
+    getGoldenHourAesthetics,
+    getAstrophotographyClarity,
     getAdvisories,
 
     findBestOutdoorWindow,

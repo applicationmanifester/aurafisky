@@ -63,6 +63,8 @@ export default defineConfig(({ mode }) => {
             './features/tvNavigation.js',
             './features/navigation.js',
             './features/auraMapsMobile.js',
+            './features/activityWindow.js',
+            './features/marine.js',
           ],
           // Heavy features (aura, routes, timeMachine, compareCities) are
           // dynamically imported from registry.js — no eager chunk.

@@ -50,8 +50,12 @@ import * as auraMapsMobile from './auraMapsMobile.js';
 import * as deviceProfile from './deviceProfile.js';
 import * as tvNavigation from './tvNavigation.js';
 import * as sync from './sync.js';
+import * as activityWindow from './activityWindow.js';
+import * as marine from './marine.js';
 
 const featureModules = {
+  activityWindow,
+  marine,
   // Device profile runs first so data-device attributes exist on <html>
   // before any other feature (and before first panel paint) reads them.
   deviceProfile,

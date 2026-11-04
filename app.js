@@ -4380,6 +4380,7 @@ class AurafiskyApp {
 
         // Place customized divIcon weather label
         this.createWeatherMarker(lat, lng, this.currentHourIndex);
+        this.updateMarineFloodUI?.(lat, lng);
 
         // Refresh home badge and marker
         this.updateHomeButton();
@@ -5298,6 +5299,9 @@ class AurafiskyApp {
     } else if (this.$.pollenCard) {
       this.$.pollenCard.classList.add("hidden");
     }
+
+    // Refresh best 2-hour outdoor running/activity window
+    this.updateBestOutdoorWindowUI?.();
   }
 
   /**
@@ -10877,6 +10881,9 @@ class AurafiskyApp {
       this.pushHistoryOverlay("layers");
       this._updateMapStyleUI();
       this._updateMapLayersActiveBadge();
+      if (this.selectedLat != null && this.selectedLng != null) {
+        this.updateMarineFloodUI?.(this.selectedLat, this.selectedLng);
+      }
     } else {
       this.popHistoryOverlay("layers");
     }

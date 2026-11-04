@@ -194,3 +194,4 @@ export class HapticEngine {
     } catch (_) {}
   }
 }
+

@@ -100,3 +100,4 @@ export class ScreenWakeLockManager {
 }
 
 export const wakeLockManager = new ScreenWakeLockManager();
+

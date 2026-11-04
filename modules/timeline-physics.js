@@ -268,3 +268,4 @@ export function buildSparklinePillSvg(weatherData, hourIndex, units = 'metric') 
     </div>
   `;
 }
+

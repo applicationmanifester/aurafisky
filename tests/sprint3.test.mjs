@@ -210,3 +210,4 @@ describe('Celestial Radar Dropdown Stacking & Timeline Tick Anti-Collision', () 
     expect(styles).toMatch(/#celestialRadarSection\.sky-radar-fullscreen\s+\.sky-radar-side-panel\.panel-open-mobile\s+\.sky-tab-pane\.active\s*\{[^}]*padding-bottom:\s*5rem\s*!important/s);
   });
 });
+

@@ -40,6 +40,10 @@ const INTENT_DEFS = [
   { id: 'departure', priority: 72, phrases: ['best time to leave', 'when should i leave', 'best departure time', 'when to depart', 'safe time to drive', 'leave now or later', 'departure window', 'when can i leave', 'good time to leave'] },
   { id: 'compare', priority: 70, phrases: ['compare', 'versus', ' vs ', 'difference between', 'other city', 'another city'] },
   { id: 'astronomy', priority: 68, phrases: ['sunset', 'sunrise', 'sun set', 'sun rise', 'golden hour', 'blue hour', 'stargazing', 'stars', 'star gazing', 'moon', 'moonlight', 'night sky', 'photography', 'photo', 'photo shoot', 'aurora', 'meteor shower', 'twilight'] },
+  { id: 'healthAlerts', priority: 75, phrases: ['migraine', 'headache', 'joint pain', 'arthritis', 'asthma', 'respiratory', 'allergy', 'allergies', 'pollen', 'biometeorology', 'heat exhaustion', 'barometric migraine', 'sinus', 'head hurt', 'joints ache'] },
+  { id: 'outdoorPlanner', priority: 74, phrases: ['best time to run', 'running window', 'cycling window', 'best time to cycle', 'spray window', 'spraying', 'best window to hike', 'pareto', 'outdoor planner', 'workout window', 'astrophotography window', 'optimal window'] },
+  { id: 'gridResilience', priority: 73, phrases: ['power outage', 'blackout', 'grid strain', 'voltage surge', 'surge protection', 'pre-cool', 'pre-heat', 'unplug appliances', 'grid alert', 'brownout', 'power grid'] },
+  { id: 'calendarWorkflow', priority: 71, phrases: ['export calendar', 'calendar invite', 'add to calendar', 'icalendar', '.ics', 'export to calendar', 'schedule weather event', 'download ics'] },
   { id: 'dailyBriefing', priority: 67, phrases: ['morning briefing', 'daily briefing', 'brief me', 'my briefing', "today's briefing", 'week ahead', 'day ahead'] },
   { id: 'thunderstorm', priority: 66, phrases: ['thunder', 'lightning', 'thunderstorm', 'squall', 'lightning storm'] },
   { id: 'solar', priority: 65, phrases: ['solar energy', 'solar panel', 'solar power', 'solar generation', 'photovoltaic', 'pv output', 'sun energy'] },
@@ -79,6 +83,13 @@ import {
   GROWTH_STAGES,
 } from './farm.js';
 import { loadFields, getField, daysSinceSowing } from './farmFields.js';
+import { LinUCBBandit } from '../modules/aura-bandit.js';
+import { AuraHealthEngine } from '../modules/aura-health.js';
+import { AuraOutdoorPlanner } from '../modules/aura-planner.js';
+import { AuraGridResilience } from '../modules/aura-grid.js';
+import { AuraWorkflowEngine } from '../modules/aura-workflow.js';
+import { BarometerKalmanFilter } from '../modules/aura-sensor-fusion.js';
+import { ADWINDriftDetector } from '../modules/aura-drift.js';
 
 // Pre-compile every phrase once. Single words get word boundaries so "rain"
 // doesn't fire on "drain", and accept an -s/-ing suffix ("cafe" → "cafes",
@@ -355,6 +366,15 @@ export const ACTIONS = {
       app?.toggleRoutePlanner?.();
     },
   },
+  healthAlerts: { label: 'Health risks', icon: '🧠', run: (app) => app.aura?.ask('health alerts and migraine risk') },
+  outdoorPlanner: { label: 'Outdoor planner', icon: '🎯', run: (app) => app.aura?.ask('best outdoor window') },
+  gridResilience: { label: 'Grid resilience', icon: '⚡', run: (app) => app.aura?.ask('grid strain and outage risk') },
+  exportIcs: {
+    label: 'Export calendar invite',
+    icon: '📅',
+    silent: true,
+    run: (app) => app.aura?.ask('export calendar invite'),
+  },
   radar: { label: 'Show rain radar', icon: '🌧️', run: (app) => app.toggleRadar?.() },
   isobars: { label: 'Pressure map', icon: '📈', run: (app) => app.toggleIsobars?.() },
   terminator: { label: 'Day/night line', icon: '🌗', run: (app) => app.toggleDayNightTerminator?.() },
@@ -466,6 +486,12 @@ export class AuraAssistant {
     // Conversation memory: the last answerable intent, so bare follow-ups
     // like "and tomorrow?" re-run it instead of classifying fresh.
     this._lastIntent = null;
+    this.bandit = new LinUCBBandit();
+    this.healthEngine = new AuraHealthEngine();
+    this.outdoorPlanner = new AuraOutdoorPlanner();
+    this.gridEngine = new AuraGridResilience();
+    this.kalman = new BarometerKalmanFilter();
+    this.driftDetector = new ADWINDriftDetector();
 
     if (typeof document !== 'undefined') {
       if (document.readyState === 'loading') {
@@ -1477,6 +1503,10 @@ export class AuraAssistant {
     switch (match?.id) {
       case 'help': return this._answerHelp(ctx);
       case 'greeting': return this._answerGreeting(ctx);
+      case 'healthAlerts': return this._answerHealthAlerts(ctx);
+      case 'outdoorPlanner': return this._answerOutdoorPlanner(ctx, query);
+      case 'gridResilience': return this._answerGridResilience(ctx);
+      case 'calendarWorkflow': return this._answerCalendarWorkflow(ctx);
       case 'dailyBriefing': return this._answerDailyBriefing(ctx);
       case 'alert': return this._answerAlert(q, ctx);
       case 'place': return this._answerPlace(null, ctx);
@@ -1515,6 +1545,157 @@ export class AuraAssistant {
 
   _noData(what) {
     return { k: what, v: 'Not available for this location', tone: 'warn' };
+  }
+
+  _answerHealthAlerts(ctx) {
+    const { wd, idx, aqi } = ctx;
+    if (!wd) return this._noData('Health telemetry');
+    const health = this.healthEngine.evaluateHealthRisks(wd, idx, aqi);
+
+    const bullets = [
+      { k: '🧠 Migraine Risk', v: `${health.migraineRisk.toUpperCase()} — ${health.migraineReason}`, tone: health.migraineRisk === 'high' ? 'warn' : 'info' },
+      { k: '🌡️ Wet-Bulb Temp', v: `${health.wetBulbTempC}°C (Heat Risk: ${health.heatRisk.toUpperCase()})`, tone: health.heatRisk === 'critical' || health.heatRisk === 'high' ? 'warn' : 'info' },
+      { k: '🫁 Asthma Risk', v: `${health.asthmaRisk.toUpperCase()} based on airborne particulate & ozone`, tone: health.asthmaRisk === 'high' ? 'warn' : 'info' },
+    ];
+    if (health.uvBurnMinutes) {
+      bullets.push({ k: '🧴 UV Burn Time', v: `~${health.uvBurnMinutes} minutes without SPF 50+`, tone: 'warn' });
+    }
+
+    const note = health.alerts.length > 0
+      ? `Active advisory: ${health.alerts[0].recommendation}`
+      : 'All biometeorological metrics within standard comfortable thresholds.';
+
+    return {
+      icon: health.migraineRisk === 'high' || health.heatRisk === 'high' ? '⚠️' : '🌿',
+      tone: health.migraineRisk === 'high' ? 'warn' : 'info',
+      title: 'Biometeorology & Health Risk Forecast',
+      bullets,
+      note,
+      actions: [
+        { id: 'air', label: 'Air Quality Details', icon: '💨', run: (app) => app.switchWeatherTab?.('air') },
+      ],
+      followups: ['When is the best running window?', 'Is there power grid strain today?', 'Air quality details'],
+    };
+  }
+
+  _answerOutdoorPlanner(ctx, query) {
+    const { wd } = ctx;
+    if (!wd) return this._noData('Outdoor forecast');
+
+    const q = (query || '').toLowerCase();
+    let persona = 'runner';
+    if (q.includes('cycle') || q.includes('cycling') || q.includes('bike')) persona = 'cyclist';
+    else if (q.includes('spray') || q.includes('crop') || q.includes('field') || q.includes('farm')) persona = 'agronomist';
+    else if (q.includes('astro') || q.includes('star') || q.includes('night sky')) persona = 'astrophotographer';
+    else if (q.includes('hike') || q.includes('trail') || q.includes('trek')) persona = 'hiker';
+
+    const windows = this.outdoorPlanner.findOptimalWindows(wd, persona, 3);
+    if (!windows || windows.length === 0) {
+      return {
+        icon: '🏃',
+        tone: 'warn',
+        title: 'Outdoor Planner: No Ideal Window',
+        bullets: [{ k: 'Forecast', v: 'Severe weather or rain limits optimal activity slots over the next 48 hours.' }],
+        note: 'Check back as hourly models update.',
+      };
+    }
+
+    const bullets = windows.map((w) => {
+      const startD = new Date(w.startTime);
+      const dayStr = startD.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
+      const timeStr = startD.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
+      return {
+        k: `#${w.rank} ${dayStr} · ${timeStr}`,
+        v: `${w.rating} (Score: ${w.score}/100) — ${w.reason}`,
+        tone: w.score >= 80 ? 'good' : 'info',
+      };
+    });
+
+    const topWindow = windows[0];
+
+    return {
+      icon: '🎯',
+      tone: 'good',
+      title: `Optimal Activity Windows (${AuraOutdoorPlanner.PERSONAS[persona].name})`,
+      bullets,
+      note: 'Ranked using multi-objective Pareto optimization across the 168h forecast.',
+      actions: [
+        {
+          id: 'exportCalendar',
+          label: 'Export #1 Window to Calendar (.ics)',
+          icon: '📅',
+          run: () => {
+            AuraWorkflowEngine.exportToCalendar({
+              title: `${AuraOutdoorPlanner.PERSONAS[persona].name} Window`,
+              description: `Optimal weather window: ${topWindow.reason} (Score: ${topWindow.score}/100)`,
+              startTime: topWindow.startTime,
+              endTime: topWindow.endTime,
+              location: ctx.loc || 'My Location',
+            });
+          },
+        },
+      ],
+      followups: ['Best cycling window', 'Biometeorology & migraine risk', 'Plan my day'],
+    };
+  }
+
+  _answerGridResilience(ctx) {
+    const { wd, idx } = ctx;
+    if (!wd) return this._noData('Grid resilience metrics');
+    const grid = this.gridEngine.evaluateGridStrain(wd, idx);
+
+    const bullets = [
+      { k: '⚡ Grid Strain Level', v: `${grid.strainLevel.toUpperCase()} (Peak Temp: ${grid.maxTemp}°C, Min: ${grid.minTemp}°C)`, tone: grid.strainLevel === 'critical' ? 'warn' : 'info' },
+      { k: '💨 Peak Gusts', v: `${grid.maxWindGust} km/h over the next 24 hours`, tone: grid.maxWindGust > 60 ? 'warn' : 'info' },
+    ];
+
+    grid.recommendations.forEach((rec, i) => {
+      bullets.push({ k: `Recommendation ${i + 1}`, v: rec, tone: 'info' });
+    });
+
+    return {
+      icon: grid.strainLevel === 'critical' ? '⚡' : '🛡️',
+      tone: grid.strainLevel === 'critical' ? 'warn' : 'info',
+      title: 'Home Energy Grid & Storm Resilience',
+      bullets,
+      note: grid.alerts.length > 0 ? grid.alerts[0].detail : 'Regional grid operating under nominal meteorological conditions.',
+      actions: [
+        { id: 'radar', label: 'View Storm Radar', icon: '🌧️', run: (app) => app.toggleRadar?.() },
+      ],
+      followups: ['Is there lightning risk today?', 'Best outdoor window today?', 'Air quality details'],
+    };
+  }
+
+  _answerCalendarWorkflow(ctx) {
+    const { wd } = ctx;
+    if (!wd) return this._noData('Calendar export');
+    const windows = this.outdoorPlanner.findOptimalWindows(wd, 'runner', 2);
+    const top = windows[0] || {
+      startTime: new Date().toISOString(),
+      endTime: new Date(Date.now() + 7200000).toISOString(),
+      reason: 'Scheduled weather event',
+    };
+
+    AuraWorkflowEngine.exportToCalendar({
+      title: `Weather Activity Window — ${ctx.loc || 'Aurafisky'}`,
+      description: `Optimized time window: ${top.reason || 'Ideal meteorological conditions'} via Aurafisky`,
+      startTime: top.startTime,
+      endTime: top.endTime,
+      location: ctx.loc || 'Local Pin',
+    });
+
+    return {
+      icon: '📅',
+      tone: 'good',
+      title: 'Calendar Event (.ics) Generated',
+      bullets: [
+        { k: 'Status', v: 'iCalendar RFC 5545 file created and shared with your calendar app', tone: 'good' },
+        { k: 'Window', v: `${new Date(top.startTime).toLocaleString()} to ${new Date(top.endTime).toLocaleTimeString()}` },
+      ],
+      note: 'Compatible with Apple Calendar, Google Calendar, and Outlook.',
+      actions: [],
+      followups: ['Best running window', 'Plan my day', 'Biometeorology & migraine risk'],
+    };
   }
 
   _answerHelp(ctx) {

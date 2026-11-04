@@ -131,6 +131,17 @@ function updateWeatherCanvasOverlayEffect(code, windSpeed, windDirection) {
 function runWeatherCanvasLoop() {
     if (this.animationFrameId) return;
     const TWO_PI = Math.PI * 2;
+    let lastFrameTime = 0;
+    this._lastInteractionTime = Date.now();
+
+    if (!this._hasInteractionListeners && typeof window !== "undefined") {
+      this._hasInteractionListeners = true;
+      const onInteract = () => { this._lastInteractionTime = Date.now(); };
+      ["pointerdown", "touchstart", "wheel", "keydown"].forEach((evt) => {
+        window.addEventListener(evt, onInteract, { passive: true });
+      });
+    }
+
     const draw = (now) => {
       // Stop loop and clear canvas if no active weather particle effect
       if ((this.activeEffectType === "none" || !this.activeEffectType) && (!this.lightningFlash || this.lightningFlash <= 0)) {
@@ -148,6 +159,19 @@ function runWeatherCanvasLoop() {
         this.animationFrameId = null;
         return;
       }
+
+      // 3-Tier Thermal & Battery Governor:
+      // Tier 1: 60 FPS during active interaction, map touch, or radar playback
+      // Tier 2: 24 FPS with 50% particle density after 5 seconds of idle
+      const isRadarPlaying = Boolean(this.radarPlaying);
+      const isInteracting = isRadarPlaying || (Date.now() - (this._lastInteractionTime || 0) < 5000);
+      const minInterval = isInteracting ? 16 : 41.6; // 60 FPS vs 24 FPS
+
+      if (now - lastFrameTime < minInterval) {
+        this.animationFrameId = requestAnimationFrame(draw);
+        return;
+      }
+      lastFrameTime = now;
 
       // Throttle canvas particle animation during mobile map dragging for battery & GPU savings
       if (typeof window !== "undefined" && isMobileLayout() && this._mapWasDragged) {
@@ -179,7 +203,7 @@ function runWeatherCanvasLoop() {
       const windDy = sinT * windIntensity;
 
       const particles = this.particles;
-      const len = particles.length;
+      const len = isInteracting ? particles.length : Math.ceil(particles.length * 0.5);
 
       if (
         this.activeEffectType === "rain" ||

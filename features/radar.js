@@ -1,6 +1,7 @@
 // -- WEATHER RADAR & SATELLITE OVERLAYS (RainViewer API) --
 import TileLayer from "ol/layer/Tile.js";
 import XYZ from "ol/source/XYZ.js";
+import { wakeLockManager } from "../modules/wake-lock.js";
 
 function _mapHasLayer(map, layer) {
   return map.getLayers().getArray().includes(layer);
@@ -231,6 +232,7 @@ function startRadarPlayback() {
     this.radarPlaying = true;
     this.$.radarPlayIcon.classList.add("hidden");
     this.$.radarPauseIcon.classList.remove("hidden");
+    wakeLockManager.acquire("radarPlayback");
 
     this.radarTimer = setInterval(() => {
       const nextIdx = (this.radarIndex + 1) % this.radarLayers.length;
@@ -243,6 +245,7 @@ function pauseRadarPlayback() {
     this.$.radarPlayIcon.classList.remove("hidden");
     this.$.radarPauseIcon.classList.add("hidden");
     clearInterval(this.radarTimer);
+    wakeLockManager.release("radarPlayback");
   }
 
 function stopRadarPlayback() {
@@ -251,6 +254,7 @@ function stopRadarPlayback() {
   }
 
 function clearRadarLayers() {
+    wakeLockManager.release("radarPlayback");
     // Clear radar timer to prevent memory leaks
     if (this.radarTimer) {
       clearInterval(this.radarTimer);

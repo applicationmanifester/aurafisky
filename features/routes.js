@@ -23,6 +23,7 @@ import Overlay from "ol/Overlay.js";
 import { Style, Stroke } from "ol/style.js";
 import { fromLonLat, toLonLat } from "ol/proj.js";
 import { HtmlMarker } from "../modules/ol-marker.js";
+import { wakeLockManager } from "../modules/wake-lock.js";
 
 const OSRM_BASE = "https://router.project-osrm.org/route/v1/driving";
 const EARTH_RADIUS_M = 6371000;
@@ -957,6 +958,7 @@ export function init(app) {
  * Fully exit and close Route Studio: hides HUD, panel, removes map listeners & keydown.
  */
 export function closeRouteStudio() {
+  wakeLockManager.release("routeStudio");
   closeWaypointPopover();
   routeMode = false;
   isPanelOpen = false;
@@ -988,6 +990,7 @@ export function closeRouteStudio() {
  */
 export function openRouteStudio() {
   if (!appRef || !appRef.map) return;
+  wakeLockManager.acquire("routeStudio");
   routeMode = true;
   appRef._routeModeActive = true;
   appRef.pushHistoryOverlay?.("route");
@@ -1379,6 +1382,7 @@ export async function addStop(lat, lng, name = null) {
   pts.push(pt);
   renderWaypointMarkers();
   updateHUD();
+  appRef?._haptic?.("mapWaypointSnap");
 
   if (!name) {
     resolvePointName(pt);

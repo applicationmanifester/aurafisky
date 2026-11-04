@@ -1762,7 +1762,7 @@ input[type='range'].timeline-slider::-moz-range-thumb {
     -webkit-overflow-scrolling: touch !important;
     overscroll-behavior: contain !important;
     padding-right: 0.35rem !important;
-    padding-bottom: 2rem !important; /* Ensure last items (like Lyra, Taurus, Gemini) scroll cleanly into view */
+    padding-bottom: 5rem !important; /* Ensure last items (like Lyra, Taurus, Gemini) scroll cleanly into view */
   }
 
   #celestialRadarSection.sky-radar-fullscreen .sky-topdown-pill.active svg {
@@ -4658,4 +4658,55 @@ button, a, input, select, textarea, [role="button"] {
     gap: 0.75rem !important;
   }
 }
+
+/* ── Sprint 3 Haptic Feedback & Scrubber Physics Visual Standards ───── */
+.timeline-slider.thumb-haptic-active::-webkit-slider-thumb {
+  transform: scale(1.15) !important;
+  box-shadow: 0 0 14px #38bdf8, 0 0 0 2px #38bdf8 !important;
+  transition: transform 90ms cubic-bezier(0.34, 1.56, 0.64, 1) !important;
+}
+
+.timeline-slider.thumb-haptic-active::-moz-range-thumb {
+  transform: scale(1.15) !important;
+  box-shadow: 0 0 14px #38bdf8, 0 0 0 2px #38bdf8 !important;
+  transition: transform 90ms cubic-bezier(0.34, 1.56, 0.64, 1) !important;
+}
+
+.timeline-hazard-flash {
+  animation: timelineHazardGlow 0.6s ease-out !important;
+}
+
+@keyframes timelineHazardGlow {
+  0% {
+    box-shadow: 0 0 0 0 rgba(239, 68, 68, 0);
+  }
+  30% {
+    box-shadow: 0 0 20px 4px rgba(245, 158, 11, 0.8), 0 0 10px 2px rgba(239, 68, 68, 0.9);
+    filter: brightness(1.25);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(239, 68, 68, 0);
+  }
+}
+
+.waypoint-snap-bounce {
+  animation: waypointSnapBounce 0.35s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+}
+
+@keyframes waypointSnapBounce {
+  0% { transform: scale(0.8); }
+  50% { transform: scale(1.25); }
+  100% { transform: scale(1.0); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .timeline-slider.thumb-haptic-active::-webkit-slider-thumb,
+  .timeline-slider.thumb-haptic-active::-moz-range-thumb,
+  .waypoint-snap-bounce,
+  .timeline-hazard-flash {
+    animation: none !important;
+    transform: none !important;
+  }
+}
+
 

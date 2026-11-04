@@ -574,6 +574,9 @@ input[type='range'].timeline-slider:focus-visible {
   body.sky-radar-fullscreen-active.sky-panel-dropdown-open #timelineBar,
   body.sky-radar-fullscreen-active:has(.panel-open-mobile) #timelineBar {
     z-index: 2400 !important;
+    opacity: 0 !important;
+    pointer-events: none !important;
+    visibility: hidden !important;
   }
 }
 

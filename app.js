@@ -96,6 +96,9 @@ import './src/icons.js';
 import { initFeatures } from './features/registry.js';
 import { initWebVitals } from './features/analytics.js';
 import { init as initErrorHandler } from './features/errorHandler.js';
+import { HapticEngine } from './modules/haptics.js';
+import { SpringScrubber, buildSparklinePillSvg } from './modules/timeline-physics.js';
+import { wakeLockManager } from './modules/wake-lock.js';
 
 // Wallpaper backgrounds are generated procedurally on a canvas by
 // features/wallpaper.js rather than pulled from a stock-photo CDN. That
@@ -2559,9 +2562,9 @@ class AurafiskyApp {
       this.handleTimelineChange(val);
       this.updateTimelineTooltip(hourIndex);
       this._updateTrackFill(val);
-      // Light haptic on slider snap points (every 6 hours)
-      if (Math.abs(val - _lastSliderVal) >= 6) {
-        this._haptic('selection');
+      // Discrete integer hour boundary crossed -> trigger 8ms micro-tick (<=12Hz)
+      if (val !== _lastSliderVal) {
+        this.hapticEngine?.trigger('hourlyTick', this.$.timelineSlider);
         _lastSliderVal = val;
       }
     });
@@ -3254,8 +3257,12 @@ class AurafiskyApp {
       }
     } catch (_) {}
 
-    // ── Haptic feedback helper ─────────────────────────────────────
-    this._haptic = (type = 'light') => {
+    // ── Haptic feedback & tactile standards (Sprint 3) ────────────
+    this.hapticEngine = new HapticEngine({ audioContext: this.audioContext });
+    this._haptic = (type = 'light', targetEl = null) => {
+      return this.hapticEngine.trigger(type, targetEl);
+    };
+    this._legacyHaptic = (type = 'light') => {
       if (typeof navigator === 'undefined' || !navigator.vibrate) return;
       if (navigator.userActivation && !navigator.userActivation.hasBeenActive) return;
       const patterns = {
@@ -5703,13 +5710,14 @@ class AurafiskyApp {
       // 1. Abbreviate "Yesterday" -> "Yest" and "Tomorrow" -> "Tmrw".
       // 2. Enforce minimum spacing on mobile, always preserving "Today".
       let compactDayText = fullDayText;
-      if (isMobile) {
+      const isDenseTimeline = isMobile || totalHours > 48 || (typeof window !== "undefined" && window.innerWidth < 840);
+      if (isDenseTimeline) {
         if (fullDayText === "Yesterday") compactDayText = "Yest";
         else if (fullDayText === "Tomorrow") compactDayText = "Tmrw";
       }
 
-      if (isMobile && !isToday && totalHours > 48) {
-        if (pct - lastRenderedPct < 12) {
+      if (isDenseTimeline && !isToday && totalHours > 48) {
+        if (pct - lastRenderedPct < 11) {
           const nextIsToday = dayEntries[entryIdx + 1] && WeatherService.formatDayLabel(dayEntries[entryIdx + 1][0]) === "Today";
           if (nextIsToday || (entryIdx % 2 !== 0)) {
             return;
@@ -5737,11 +5745,23 @@ class AurafiskyApp {
     if (this.timeline24hMode) {
       tickStep = isMobile ? 3 : 1;
     } else {
-      if (isMobile) {
-        tickStep = 24;
+      if (totalHours > 48) {
+        tickStep = (!isMobile && typeof window !== "undefined" && window.innerWidth >= 1200) ? 12 : 24;
+      } else if (totalHours > 24) {
+        tickStep = isMobile ? 12 : 6;
       } else {
-        tickStep = totalHours > 72 ? 12 : 6;
+        tickStep = isMobile ? 3 : 1;
       }
+    }
+
+    // Dynamic track width collision guard (ensures >= 40px spacing between tick numbers)
+    const trackWidth = this.$.timelineTicks.clientWidth || (typeof window !== "undefined" ? window.innerWidth : 400);
+    const minHoursForClearTicks = Math.ceil((40 / Math.max(280, trackWidth)) * totalHours);
+    if (tickStep < minHoursForClearTicks) {
+      if (minHoursForClearTicks <= 3) tickStep = 3;
+      else if (minHoursForClearTicks <= 6) tickStep = 6;
+      else if (minHoursForClearTicks <= 12) tickStep = 12;
+      else tickStep = 24;
     }
 
     for (let i = 0; i < totalHours; i++) {
@@ -5828,28 +5848,41 @@ class AurafiskyApp {
     const tip = this.$.timelineTooltip;
     if (!tip || !this.weatherData?.hourly) return;
     const timeStr = this.weatherData.hourly.time[hourIndex];
-    const temp = this.weatherData.hourly.temperature_2m?.[hourIndex];
     if (!timeStr) {
       tip.classList.add("hidden");
       return;
     }
 
-    // Parse location-local ISO time string (e.g. "2026-07-24T02:00")
-    const parts = timeStr.split("T");
-    const dateParts = parts[0].split("-");
-    const timeParts = parts[1].split(":");
-    const localDate = new Date(
-      parseInt(dateParts[0], 10),
-      parseInt(dateParts[1], 10) - 1,
-      parseInt(dateParts[2], 10),
-      parseInt(timeParts[0], 10),
-      parseInt(timeParts[1], 10)
-    );
-    const dayName = localDate.toLocaleDateString("en-US", { weekday: "short" });
-    const timeFormatted = WeatherService.formatTimeOnly(timeStr);
-    const tempLabel = temp != null ? `${Math.round(temp)}°` : "--°";
+    const units = (typeof WeatherService !== "undefined" && WeatherService.getUnits?.()) || "metric";
+    const sparklineHtml = buildSparklinePillSvg(this.weatherData, hourIndex, units);
+    if (sparklineHtml) {
+      tip.innerHTML = sparklineHtml;
+    } else {
+      const parts = timeStr.split("T");
+      const dateParts = parts[0].split("-");
+      const timeParts = parts[1].split(":");
+      const localDate = new Date(
+        parseInt(dateParts[0], 10),
+        parseInt(dateParts[1], 10) - 1,
+        parseInt(dateParts[2], 10),
+        parseInt(timeParts[0], 10),
+        parseInt(timeParts[1], 10)
+      );
+      const dayName = localDate.toLocaleDateString("en-US", { weekday: "short" });
+      const timeFormatted = WeatherService.formatTimeOnly(timeStr);
+      const temp = this.weatherData.hourly.temperature_2m?.[hourIndex];
+      tip.textContent = `${dayName} ${timeFormatted} • ${temp != null ? Math.round(temp) + '°' : '--°'}`;
+    }
 
-    tip.textContent = `${dayName} ${timeFormatted} • ${tempLabel}`;
+    // Check hazard threshold crossing (UV >= 8, AQI > 150, Wind > 50 km/h, Precip > 5 mm/h)
+    if (this.hapticEngine) {
+      const metrics = {
+        uv: this.weatherData.hourly.uv_index?.[hourIndex],
+        windSpeed: this.weatherData.hourly.wind_speed_10m?.[hourIndex],
+        precipitation: this.weatherData.hourly.precipitation?.[hourIndex],
+      };
+      this.hapticEngine.checkWeatherThresholds(metrics, hourIndex, this.$.timelineSlider);
+    }
 
     // Calculate position based on slider index for 24h mode / weekly mode
     const slider = this.$.timelineSlider;

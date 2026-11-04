@@ -230,22 +230,22 @@ export function buildSparklinePillSvg(weatherData, hourIndex, units = 'metric') 
     : '';
 
   return `
-    <div class="sparkline-pill flex flex-col gap-1 p-2 rounded-xl bg-slate-900/90 dark:bg-slate-950/95 backdrop-blur-md border border-slate-700/60 shadow-xl text-white select-none">
-      <div class="flex items-center justify-between gap-2 border-b border-slate-800 pb-1">
-        <span class="text-[10px] font-bold text-sky-400 flex items-center gap-1">
+    <div class="sparkline-pill select-none">
+      <div class="flex items-center justify-between gap-2 border-b pb-1 border-slate-200/80 dark:border-slate-700/80">
+        <span class="text-[10px] font-bold text-sky-600 dark:text-sky-400 flex items-center gap-1">
           <span>⏱️</span> ${timeFormatted}
         </span>
         <div class="flex items-center gap-1">
           ${hazardBadge}
-          <span class="text-[11px] font-extrabold text-white">${Math.round(temp)}${tempUnit}</span>
+          <span class="text-[11px] font-black text-slate-800 dark:text-white tracking-tight">${Math.round(temp)}${tempUnit}</span>
         </div>
       </div>
-      <div class="flex items-center justify-between text-[9px] text-slate-300 gap-2">
+      <div class="flex items-center justify-between text-[9px] text-slate-600 dark:text-slate-300 gap-2 font-semibold">
         <span class="flex items-center gap-0.5">
           <span>💧</span> ${Math.round(precipProb)}%
         </span>
         <span class="flex items-center gap-1">
-          <svg class="w-2.5 h-2.5 text-cyan-400 transform" style="transform: rotate(${windDir}deg)" viewBox="0 0 24 24" fill="currentColor">
+          <svg class="w-2.5 h-2.5 text-teal-600 dark:text-cyan-400 transform" style="transform: rotate(${windDir}deg)" viewBox="0 0 24 24" fill="currentColor">
             <path d="M12 2L4.5 20.29l.71.71L12 18l6.79 3 .71-.71z"/>
           </svg>
           ${Math.round(windSpeed)} ${speedUnit}
@@ -254,15 +254,26 @@ export function buildSparklinePillSvg(weatherData, hourIndex, units = 'metric') 
       <div class="relative w-[140px] h-[24px] mt-0.5">
         <svg width="${svgWidth}" height="${svgHeight}" class="overflow-visible">
           <defs>
+            <linearGradient id="sparklineGradLight" x1="0" y1="0" x2="1" y2="0">
+              <stop offset="0%" stop-color="#0284c7" stop-opacity="0.8"/>
+              <stop offset="50%" stop-color="#4f46e5" stop-opacity="0.95"/>
+              <stop offset="100%" stop-color="#9333ea" stop-opacity="0.8"/>
+            </linearGradient>
+            <linearGradient id="sparklineGradDark" x1="0" y1="0" x2="1" y2="0">
+              <stop offset="0%" stop-color="#38bdf8" stop-opacity="0.75"/>
+              <stop offset="50%" stop-color="#818cf8" stop-opacity="0.95"/>
+              <stop offset="100%" stop-color="#c084fc" stop-opacity="0.75"/>
+            </linearGradient>
+            <!-- Backward compatibility gradient ID -->
             <linearGradient id="sparklineGrad" x1="0" y1="0" x2="1" y2="0">
-              <stop offset="0%" stop-color="#38bdf8" stop-opacity="0.5"/>
-              <stop offset="50%" stop-color="#818cf8" stop-opacity="0.9"/>
-              <stop offset="100%" stop-color="#c084fc" stop-opacity="0.5"/>
+              <stop offset="0%" stop-color="#38bdf8" stop-opacity="0.75"/>
+              <stop offset="50%" stop-color="#818cf8" stop-opacity="0.95"/>
+              <stop offset="100%" stop-color="#c084fc" stop-opacity="0.75"/>
             </linearGradient>
           </defs>
-          <path d="${pathD}" fill="none" stroke="url(#sparklineGrad)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-          <circle cx="${activePt.x}" cy="${activePt.y}" r="3" fill="#38bdf8" stroke="#ffffff" stroke-width="1.5" class="animate-ping" style="animation-duration: 2s;"/>
-          <circle cx="${activePt.x}" cy="${activePt.y}" r="2.5" fill="#38bdf8" stroke="#ffffff" stroke-width="1"/>
+          <path d="${pathD}" fill="none" class="sparkline-path" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>
+          <circle cx="${activePt.x}" cy="${activePt.y}" r="3.5" class="sparkline-active-ping animate-ping" style="animation-duration: 2s;"/>
+          <circle cx="${activePt.x}" cy="${activePt.y}" r="2.5" class="sparkline-active-dot" stroke="#ffffff" stroke-width="1.5"/>
         </svg>
       </div>
     </div>

@@ -5903,6 +5903,31 @@ class AurafiskyApp {
     const min = parseInt(slider.min, 10) || 0;
     const max = parseInt(slider.max, 10) || 1;
     const pct = Math.max(0, Math.min(1, (sliderIndex - min) / (max - min)));
+
+    // Edge clamping: ensure glossy pill never spills beyond timeline track edges
+    const sliderWidth = slider.offsetWidth || 300;
+    const pillHalfWidth = 80;
+    const thumbX = pct * sliderWidth;
+    let arrowOffset = 0;
+
+    if (thumbX < pillHalfWidth) {
+      const shift = pillHalfWidth - thumbX;
+      tip.style.transform = `translateX(calc(-50% + ${shift}px))`;
+      arrowOffset = -shift;
+    } else if (thumbX > sliderWidth - pillHalfWidth) {
+      const shift = thumbX - (sliderWidth - pillHalfWidth);
+      tip.style.transform = `translateX(calc(-50% - ${shift}px))`;
+      arrowOffset = shift;
+    } else {
+      tip.style.transform = "translateX(-50%)";
+      arrowOffset = 0;
+    }
+
+    const pill = tip.querySelector(".sparkline-pill");
+    if (pill) {
+      pill.style.setProperty("--arrow-offset", `${arrowOffset}px`);
+    }
+
     tip.style.left = `${pct * 100}%`;
     tip.classList.remove("hidden");
   }

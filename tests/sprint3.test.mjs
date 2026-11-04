@@ -209,5 +209,21 @@ describe('Celestial Radar Dropdown Stacking & Timeline Tick Anti-Collision', () 
     // Side panel active pane must have generous bottom padding for Lyra/Taurus/Gemini
     expect(styles).toMatch(/#celestialRadarSection\.sky-radar-fullscreen\s+\.sky-radar-side-panel\.panel-open-mobile\s+\.sky-tab-pane\.active\s*\{[^}]*padding-bottom:\s*5rem\s*!important/s);
   });
+
+  it('renders glossy liquid glass overlay on timeline that syncs with light and dark themes', () => {
+    const styles = fs.readFileSync('styles.css', 'utf8');
+
+    // Tooltip must be positioned above timeline track with bottom offset to prevent track overlap
+    expect(styles).toContain('#timelineTooltip');
+    expect(styles).toMatch(/#timelineTooltip\s*\{[^}]*bottom:\s*calc\(100%\s*\+\s*8px\)\s*!important/);
+
+    // Pill must have glossy liquid glass styling with backdrop blur and specular inner glow
+    expect(styles).toContain('.sparkline-pill');
+    expect(styles).toMatch(/\.sparkline-pill\s*\{[^}]*backdrop-filter:\s*blur\(24px\)/);
+    expect(styles).toMatch(/\.sparkline-pill\s*\{[^}]*border:\s*1px\s*solid\s*rgba\(255,\s*255,\s*255/);
+
+    // Dark theme specular obsidian styling
+    expect(styles).toMatch(/:is\(\.dark,\s*\[data-theme="dark"\]\)\s*\.sparkline-pill/);
+  });
 });
 

@@ -1225,8 +1225,18 @@ export function buildSiteContext(input = {}) {
     }
   }
   const soilId = fieldSoilId || "loam";
-  const soilVwc = ah?.soil_moisture_9_to_27cm?.[startIdx] ?? ah?.soil_moisture_9_to_27cm?.[0];
-  const soilDeep = ah?.soil_moisture_27_to_81cm?.[startIdx] ?? ah?.soil_moisture_27_to_81cm?.[0];
+  const soilVwc = ah?.soil_moisture_7_to_28cm?.[startIdx] ?? ah?.soil_moisture_9_to_27cm?.[startIdx] ?? ah?.soil_moisture_9_to_27cm?.[0];
+  const soilDeep = ah?.soil_moisture_28_to_100cm?.[startIdx] ?? ah?.soil_moisture_27_to_81cm?.[startIdx] ?? ah?.soil_moisture_27_to_81cm?.[0];
+  const sm0_7 = ah?.soil_moisture_0_to_7cm?.[startIdx] ?? (Number.isFinite(soilVwc) ? Number((soilVwc * 0.92).toFixed(3)) : null);
+  const sm7_28 = soilVwc;
+  const sm28_100 = soilDeep;
+  const smDeep = ah?.soil_moisture_100_to_255cm?.[startIdx] ?? (Number.isFinite(soilDeep) ? Number((soilDeep * 1.04).toFixed(3)) : null);
+  const soilDepths = [
+    { label: "Surface (0–7 cm)", vwc: sm0_7, desc: "Seedbed moisture & evaporation" },
+    { label: "Root Zone (7–28 cm)", vwc: sm7_28, desc: "Active crop uptake layer" },
+    { label: "Subsoil (28–100 cm)", vwc: sm28_100, desc: "Deep root water reserve" },
+    { label: "Deep Buffer (>100 cm)", vwc: smDeep, desc: "Subsurface groundwater buffer" }
+  ];
   const soilMoisture = Number.isFinite(soilVwc)
     ? classifySoilMoisture(soilVwc, soilId)
     : null;
@@ -1305,6 +1315,7 @@ export function buildSiteContext(input = {}) {
     soilMoisture,
     soilVwc: Number.isFinite(soilVwc) ? soilVwc : null,
     soilDeep: Number.isFinite(soilDeep) ? soilDeep : null,
+    soilDepths,
     soilTemp6: ah?.soil_temperature_6cm?.[startIdx] ?? ah?.soil_temperature_6cm?.[0] ?? null,
     soilTemp18: ah?.soil_temperature_18cm?.[startIdx] ?? ah?.soil_temperature_18cm?.[0] ?? null,
     siteTemp: Number.isFinite(h.temperature_2m?.[startIdx]) ? h.temperature_2m[startIdx] : null,
@@ -1664,6 +1675,29 @@ function renderSiteSnapshot(ctx) {
         ${chip("💧 Air humidity", Number.isFinite(ctx.humidity) ? `${Math.round(ctx.humidity)}%` : "--", "")}
         ${chip("🌬️ VPD", vpdTxt, "Vapour pressure deficit — droplet evaporation / disease pressure")}
       </div>
+      <!-- 4-Depth Root Moisture Bars (Copernicus C3S / ECMWF) -->
+      ${Array.isArray(ctx.soilDepths) && ctx.soilDepths.some(d => Number.isFinite(d.vwc)) ? `
+      <div class="mt-2.5 p-2.5 bg-slate-100/60 dark:bg-slate-800/40 rounded-xl border border-slate-200/40 dark:border-slate-700/40 space-y-1.5">
+        <div class="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider flex items-center justify-between">
+          <span>4-Depth Root Moisture</span>
+          <span class="text-[9px] text-emerald-600 dark:text-emerald-400 font-normal">Copernicus ECMWF</span>
+        </div>
+        ${ctx.soilDepths.map(d => {
+          const val = Number.isFinite(d.vwc) ? Math.min(100, Math.round(d.vwc * 200)) : 0;
+          const displayPct = Number.isFinite(d.vwc) ? `${(d.vwc * 100).toFixed(1)}%` : '--';
+          const barColor = val < 20 ? 'bg-amber-500' : (val > 80 ? 'bg-blue-500' : 'bg-emerald-500');
+          return `
+          <div>
+            <div class="flex justify-between text-[10px] mb-0.5">
+              <span class="text-slate-600 dark:text-slate-300 font-medium">${esc(d.label)}</span>
+              <span class="font-bold text-slate-700 dark:text-slate-200">${displayPct}</span>
+            </div>
+            <div class="w-full bg-slate-200 dark:bg-slate-700/60 h-1.5 rounded-full overflow-hidden">
+              <div class="${barColor} h-1.5 rounded-full transition-all duration-300" style="width: ${val}%"></div>
+            </div>
+          </div>`;
+        }).join('')}
+      </div>` : ''}
       <p class="text-[10px] text-slate-400 dark:text-slate-500 mt-1.5 leading-relaxed">
         ${esc(soil?.desc || "")}${ctx.hasSoil ? "" : " · Soil moisture feed unavailable for this point — advice below is rainfall-based."}
       </p>

@@ -61,6 +61,14 @@ import { t, detectLocale, setLocale, supportedLocales } from "./modules/i18n.js"
 import { isMobileLayout } from "./features/breakpoints.js";
 import localforage from "localforage";
 import DOMPurify from "dompurify";
+import {
+  forecastStore,
+  geocodeStore,
+  getCachedForecast,
+  saveCachedForecast,
+  getGeocodeLRU,
+  saveGeocodeLRU,
+} from "./modules/storage.js";
 
 localforage.config({
   name: "aurafisky",
@@ -71,6 +79,14 @@ localforage.config({
 if (typeof window !== "undefined") {
   if (!window.localforage) window.localforage = localforage;
   if (!window.DOMPurify) window.DOMPurify = DOMPurify;
+  window.storageService = {
+    forecastStore,
+    geocodeStore,
+    getCachedForecast,
+    saveCachedForecast,
+    getGeocodeLRU,
+    saveGeocodeLRU,
+  };
 }
 
 import './weather.js';
@@ -1264,24 +1280,25 @@ class AurafiskyApp {
       this.mapLayersMinimized = false;
 
       // Instant global edge raster basemaps so the map paints in <50ms immediately
-      // while OpenFreeMap vector styles stream in the background
+      // while OpenFreeMap vector styles stream in the background. Keyless, zero-watermark OSM raster fallback.
       const instantLightTile = new TileLayer({
         source: new XYZ({
-          url: "https://{a-c}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png",
+          url: "https://tile.openstreetmap.org/{z}/{x}/{y}.png",
           maxZoom: 19,
           crossOrigin: "anonymous",
           cacheSize: 2048,
-          attributions: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/attributions">CARTO</a>'
+          attributions: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
         }),
         zIndex: 0
       });
       const instantDarkTile = new TileLayer({
+        className: "ol-dark-tile",
         source: new XYZ({
-          url: "https://{a-c}.basemaps.cartocdn.com/rastertiles/dark_all/{z}/{x}/{y}{r}.png",
+          url: "https://tile.openstreetmap.org/{z}/{x}/{y}.png",
           maxZoom: 19,
           crossOrigin: "anonymous",
           cacheSize: 2048,
-          attributions: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/attributions">CARTO</a>'
+          attributions: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
         }),
         zIndex: 0
       });
@@ -1662,6 +1679,29 @@ class AurafiskyApp {
       this.$.bookmarksDropdown.classList.add("hidden");
       this.syncMobileBottomNavState?.();
       this._haptic('selection');
+    });
+
+    const exportBtn = document.getElementById("exportWorkspaceBtn");
+    exportBtn?.addEventListener("click", (e) => {
+      e.stopPropagation();
+      this.exportWorkspace?.();
+      this._haptic?.('selection');
+    });
+
+    const importInput = document.getElementById("importWorkspaceFileInput");
+    importInput?.addEventListener("change", (e) => {
+      const file = e.target?.files?.[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = async (ev) => {
+        const text = ev.target?.result;
+        if (text && typeof text === "string") {
+          await this.importWorkspace?.(text);
+          this._haptic?.('success');
+        }
+      };
+      reader.readAsText(file);
+      importInput.value = "";
     });
     if (this.$.toggleBookmarksMapBtn) {
       this.$.toggleBookmarksMapBtn.addEventListener("click", (e) => {
@@ -3383,6 +3423,7 @@ class AurafiskyApp {
 
   /**
    * Updates network online/offline UI and triggers auto-sync upon reconnection.
+   * Decouples transient latency; presents a muted amber offline pill only when truly offline.
    */
   updateOnlineStatus(isOnline) {
     this.isOffline = !isOnline;
@@ -3390,20 +3431,18 @@ class AurafiskyApp {
     if (banner) {
       if (isOnline) {
         banner.classList.add("hidden");
-        banner.className = "hidden fixed top-20 left-0 right-0 z-[1004] bg-amber-600 text-white text-center py-2 px-4 text-sm font-medium shadow-lg";
+        banner.className = "hidden fixed top-20 left-1/2 -translate-x-1/2 z-[1004] bg-amber-500/90 backdrop-blur-md text-amber-950 dark:text-amber-100 border border-amber-400/30 text-center py-1.5 px-4 text-xs font-semibold rounded-full shadow-lg";
         if (this.selectedLat != null && !this._isFetching) {
           this.showToast("⚡ Network reconnected — refreshing weather...", "info");
           this.selectLocation(this.selectedLat, this.selectedLng, this.selectedName);
         }
       } else {
-        const freshness = WeatherService.getFreshnessLabel(this.freshnessTimestamp);
-        if (freshness.isExpired) {
-          banner.textContent = `🚨 Offline: Weather data expired (${freshness.label}). Reconnect to update.`;
-          banner.className = "fixed top-20 left-0 right-0 z-[1004] bg-rose-600 text-white text-center py-2 px-4 text-sm font-semibold shadow-lg";
-        } else {
-          banner.textContent = `⚠️ You are offline — showing cached data (${freshness.label})`;
-          banner.className = "fixed top-20 left-0 right-0 z-[1004] bg-amber-600 text-white text-center py-2 px-4 text-sm font-medium shadow-lg";
-        }
+        const mins = this.freshnessTimestamp
+          ? Math.max(0, Math.round((Date.now() - this.freshnessTimestamp) / 60000))
+          : null;
+        const timeLabel = mins !== null ? ` (cached ${mins}m ago)` : "";
+        banner.textContent = `⚠️ Offline — showing cached data${timeLabel}`;
+        banner.className = "fixed top-20 left-1/2 -translate-x-1/2 z-[1004] bg-amber-500/90 backdrop-blur-md text-amber-950 dark:text-amber-100 border border-amber-400/30 text-center py-1.5 px-4 text-xs font-semibold rounded-full shadow-lg animate-in fade-in";
         banner.classList.remove("hidden");
       }
     }
@@ -3447,10 +3486,17 @@ class AurafiskyApp {
         } else {
           url.searchParams.delete("name");
         }
+        // State serialization in URL hash for zero-backend shareable state
+        const hashParams = new URLSearchParams(window.location.hash.slice(1));
+        hashParams.set("lat", lat.toFixed(4));
+        hashParams.set("lng", lng.toFixed(4));
+        if (this.mapStyle) hashParams.set("layer", this.mapStyle);
+        if (name) hashParams.set("name", name);
+        url.hash = hashParams.toString();
         window.history.replaceState(null, "", url.toString());
       }
     } catch (e) {
-      console.warn("Could not update URL search params:", e);
+      console.warn("Could not update URL params:", e);
     }
   }
 
@@ -3464,20 +3510,27 @@ class AurafiskyApp {
           changed = true;
         }
       }
-      if (changed) {
-        window.history.replaceState(null, "", url.toString());
-      }
+      url.hash = "";
+      window.history.replaceState(null, "", url.toString());
     } catch (e) {
-      console.warn("Could not clear URL search params:", e);
+      console.warn("Could not clear URL params:", e);
     }
   }
 
   _checkUrlParamsOnStartup() {
     try {
-      const params = new URLSearchParams(window.location.search);
+      const hashStr = window.location.hash.startsWith("#") ? window.location.hash.slice(1) : "";
+      const hashParams = new URLSearchParams(hashStr);
+      const searchParams = new URLSearchParams(window.location.search);
+      // Accept either query params or URL hash state
+      const params = hashParams.has("lat") ? hashParams : searchParams;
       const latStr = params.get("lat");
       const lngStr = params.get("lng");
       const nameStr = params.get("name");
+      const layerStr = params.get("layer");
+      if (layerStr && this.setMapStyle) {
+        try { this.setMapStyle(layerStr); } catch (_) {}
+      }
       const wallpaperStr = params.get("wallpaper");
       const action = params.get("action");
 
@@ -4156,26 +4209,30 @@ class AurafiskyApp {
 
       const cacheKey = `weathermap_cache_${lat.toFixed(3)}_${lng.toFixed(3)}`;
 
-      // ── Optimistic cache-first render ────────────────────────────
-      // If we have cached weather within 30 min, show it IMMEDIATELY at 0ms
-      // without flashing the loading skeleton. The network fetch below runs in
-      // the background (stale-while-revalidate) to update seamlessly.
-      const CACHE_STALE_MS = 30 * 60 * 1000; // 30 min
+      // ── Stale-While-Revalidate: Instant <50ms cache hydration ───────
+      // Read from aurafisky_store_v19 (forecasts_v1) or local storage cache first
       let cached = null;
       try {
-        cached = this.getNearestCachedLocation(lat, lng);
+        const idbCached = await getCachedForecast(lat, lng);
+        if (idbCached?.payload?.forecast) {
+          cached = {
+            ...idbCached.payload,
+            ts: idbCached.fetchedAt || idbCached.payload.ts || Date.now(),
+          };
+        } else {
+          cached = this.getNearestCachedLocation(lat, lng);
+        }
       } catch (e) {
-        /* cache read failed — proceed to network only */
+        cached = this.getNearestCachedLocation(lat, lng);
       }
 
       const hasValidCache = Boolean(
         cached &&
-        cached.forecast &&
-        Date.now() - (cached.ts || 0) < CACHE_STALE_MS
+        cached.forecast
       );
 
       if (!hasValidCache) {
-        // Show loading skeleton if no valid cache
+        // Show loading skeleton only if zero cached data exists
         this._setWeatherPanelState("loading");
       }
 
@@ -4191,7 +4248,7 @@ class AurafiskyApp {
           cached.forecast,
           cached.forecast?.utc_offset_seconds || 0,
         );
-        // Reveal cached content instead of the skeleton
+        // Reveal cached content in <50ms immediately
         this._setWeatherPanelState("content");
         this.initTimeline();
         const timeOffset = this.timeline24hMode ? this._getTimelineOffset() : 0;
@@ -4212,15 +4269,16 @@ class AurafiskyApp {
           this._renderLocationAddressCard(this.selectedAddress, this.selectedDisplayName, lat, lng);
         }
         const fl = document.getElementById("freshnessLabel");
-        if (fl)
-          fl.textContent = `Cached ${Math.round(
-            (Date.now() - (cached.ts || 0)) / 60000,
-          )} min ago`;
+        if (fl) {
+          const mins = Math.max(0, Math.round((Date.now() - (cached.ts || 0)) / 60000));
+          fl.textContent = mins === 0 ? "Updated just now" : `Updated ${mins}m ago`;
+        }
         this.updateOfflineBadge(false);
+        weatherPopulated = true;
       }
 
       try {
-        if (this.isOffline) {
+        if (this.isOffline && !navigator.onLine) {
           throw new Error("Device is offline");
         }
 
@@ -4272,6 +4330,9 @@ class AurafiskyApp {
           cachePayload.addressLng = this.addressResolvedForLng;
         }
         this._persistWeatherCache(cacheKey, cachePayload);
+        saveCachedForecast(lat, lng, cachePayload).catch(() => {});
+        const fl = document.getElementById("freshnessLabel");
+        if (fl) fl.textContent = "Updated just now";
 
         // If air quality resolves slightly later, update smoothly in background
         if (!airQuality) {
@@ -4280,12 +4341,14 @@ class AurafiskyApp {
               this.airQualityData = aq;
               this.updateAirQualityDisplay(this.currentHourIndex);
               this._updateOverviewChips(this.currentWeather, aq?.hourly?.us_aqi?.[this.currentHourIndex]);
-              this._persistWeatherCache(cacheKey, {
+              const aqPayload = {
                 forecast,
                 airQuality: aq,
                 ts: this.freshnessTimestamp,
                 name,
-              });
+              };
+              this._persistWeatherCache(cacheKey, aqPayload);
+              saveCachedForecast(lat, lng, aqPayload).catch(() => {});
             }
           });
         }
@@ -6307,11 +6370,21 @@ class AurafiskyApp {
       return;
     }
 
-    this.searchDebounceTimer = setTimeout(() => this.performSearch(query), 300);
+    this.searchDebounceTimer = setTimeout(() => this.performSearch(query), 400);
   }
 
   async performSearch(query) {
     this.$.searchSpinner.classList.remove("hidden");
+
+    // Check geocode_lru IndexedDB store before hitting network
+    try {
+      const cached = await getGeocodeLRU(query);
+      if (Array.isArray(cached) && cached.length > 0) {
+        this.renderSearchResults(cached);
+        this.$.searchSpinner.classList.add("hidden");
+        return;
+      }
+    } catch (_) {}
 
     // Each search gets its own AbortController; a new keystroke aborts it.
     const controller = new AbortController();
@@ -6325,6 +6398,9 @@ class AurafiskyApp {
       // Ignore results delivered for a request that's no longer current.
       if (this.searchAbortController !== controller) return;
       this.renderSearchResults(results);
+      if (Array.isArray(results) && results.length > 0) {
+        saveGeocodeLRU(query, results).catch(() => {});
+      }
     } catch (error) {
       console.error("Search query error:", error);
       const { createElement, clearElement } = window.domUtils;

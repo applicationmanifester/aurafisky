@@ -487,7 +487,86 @@ function startBookmarkAlertPolling() {
     );
   }
 
+
+export function exportWorkspaceData(app) {
+  try {
+    const backup = {
+      version: "19.0.0",
+      app: "Aurafisky",
+      exportedAt: new Date().toISOString(),
+      bookmarks: app.bookmarks || [],
+      homeLocation: app.defaultLocation || null,
+      settings: {
+        units: typeof WeatherService !== "undefined" && WeatherService.getUnits ? WeatherService.getUnits() : "metric",
+        theme: typeof document !== "undefined" && document.documentElement.classList.contains("dark") ? "dark" : "light",
+        mapStyle: app.mapStyle || "street",
+        timeline24h: app.timeline24hMode || false,
+      },
+    };
+    const jsonStr = JSON.stringify(backup, null, 2);
+    const blob = new Blob([jsonStr], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `aurafisky-workspace-${new Date().toISOString().slice(0, 10)}.json`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    app.showToast("✅ Workspace exported successfully!", "success");
+  } catch (err) {
+    console.error("Export workspace error:", err);
+    app.showToast("Failed to export workspace", "error");
+  }
+}
+
+export async function importWorkspaceData(app, jsonString) {
+  try {
+    const data = JSON.parse(jsonString);
+    if (!data || (!data.bookmarks && !data.settings)) {
+      throw new Error("Invalid workspace file format");
+    }
+
+    if (Array.isArray(data.bookmarks)) {
+      app.bookmarks = data.bookmarks;
+      await app.saveBookmarks();
+      app.renderBookmarksList();
+      app.refreshBookmarkPins?.();
+      app.updateStarUI();
+    }
+
+    if (data.homeLocation) {
+      app.defaultLocation = data.homeLocation;
+      try {
+        localStorage.setItem("aurafisky_home_location", JSON.stringify(data.homeLocation));
+        if (typeof localforage !== "undefined") {
+          await localforage.setItem("defaultLocation", data.homeLocation);
+        }
+      } catch (_) {}
+      app.updateHomeButton();
+      app.updateHomeMarker();
+    }
+
+    if (data.settings?.units && typeof WeatherService !== "undefined" && WeatherService.setUnits) {
+      WeatherService.setUnits(data.settings.units);
+    }
+
+    if (data.settings?.mapStyle && app.setMapStyle) {
+      app.setMapStyle(data.settings.mapStyle);
+    }
+
+    app.showToast(`✅ Imported ${app.bookmarks?.length || 0} favorites & settings!`, "success");
+    return true;
+  } catch (err) {
+    console.error("Import workspace error:", err);
+    app.showToast("Could not import workspace file: " + (err.message || "Invalid JSON"), "error");
+    return false;
+  }
+}
+
 export function init(app) {
+  app.exportWorkspace = () => exportWorkspaceData(app);
+  app.importWorkspace = (jsonStr) => importWorkspaceData(app, jsonStr);
   app.loadBookmarks = loadBookmarks;
   app._loadBookmarksFromStorage = _loadBookmarksFromStorage;
   app.saveBookmarks = saveBookmarks;

@@ -134,5 +134,19 @@ describe("Map Modes & Terrain Styles", () => {
     // Startup check verifies aurafisky_map_style
     expect(appJs).toContain('savedMapStyle === "dark"');
   });
+
+  test("zero Carto raster tile references and watermarks; enforces 100% keyless OSM/OpenFreeMap basemaps", () => {
+    const fs = require("fs");
+    const appJs = fs.readFileSync("app.js", "utf-8");
+    const indexHtml = fs.readFileSync("index.html", "utf-8");
+    const firebaseJson = fs.readFileSync("firebase.json", "utf-8");
+
+    expect(appJs).not.toContain("cartocdn.com");
+    expect(indexHtml).not.toContain("cartocdn.com");
+    expect(firebaseJson).not.toContain("cartocdn.com");
+    expect(appJs).toContain("https://tile.openstreetmap.org/{z}/{x}/{y}.png");
+    expect(appJs).toContain("https://tiles.openfreemap.org/styles/liberty");
+    expect(appJs).toContain("https://tiles.openfreemap.org/styles/dark");
+  });
 });
 

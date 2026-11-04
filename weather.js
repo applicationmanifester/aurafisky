@@ -1964,17 +1964,25 @@ const WeatherService = (() => {
     const histAvg =
       validHistorical.reduce((a, b) => a + b, 0) / validHistorical.length;
     const diff = currentTemp - histAvg;
-    if (Math.abs(diff) < 2) return null;
+    const n = validHistorical.length;
+    const variance = n > 1
+      ? validHistorical.reduce((acc, v) => acc + Math.pow(v - histAvg, 2), 0) / (n - 1)
+      : 1;
+    const sigma = Math.max(0.5, Math.sqrt(variance));
+    const zScore = Number((diff / sigma).toFixed(1));
+    const zSign = zScore >= 0 ? `+${zScore}` : `${zScore}`;
+    const diffSign = diff >= 0 ? `+${diff.toFixed(1)}` : `${diff.toFixed(1)}`;
+
+    if (Math.abs(diff) < 1.0) return null;
     return {
       diff,
-      label:
-        diff > 0
-          ? `${Math.round(diff)}°C warmer than historical avg`
-          : `${Math.round(Math.abs(diff))}°C cooler than historical avg`,
+      zScore,
+      sigma: Number(sigma.toFixed(2)),
+      label: `${diffSign}°C (${zSign}σ) vs 1991–2020 Copernicus ERA5 normal`,
       severity:
-        Math.abs(diff) > 5
+        Math.abs(zScore) >= 2.0 || Math.abs(diff) > 5
           ? "extreme"
-          : Math.abs(diff) > 3
+          : Math.abs(zScore) >= 1.2 || Math.abs(diff) > 3
             ? "significant"
             : "noticeable",
     };

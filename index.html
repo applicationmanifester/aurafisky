@@ -13,7 +13,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
-  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; child-src 'self' https://aurafisky.firebaseapp.com https://aurafisky.web.app; worker-src 'self' blob:; frame-src https://aurafisky.firebaseapp.com https://aurafisky.web.app; script-src 'self' https://unpkg.com https://cdn.jsdelivr.net https://www.gstatic.com https://apis.google.com https://accounts.google.com https://*.gstatic.com https://*.google.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://unpkg.com https://cdn.jsdelivr.net; font-src 'self' https://fonts.gstatic.com https://cdn.jsdelivr.net; img-src 'self' data: blob: https://tiles.openfreemap.org https://*.tile.openstreetmap.org https://*.basemaps.cartocdn.com https://*.openstreetmap.org https://*.rainviewer.com https://*.open-meteo.com https://*.googleusercontent.com https://server.arcgisonline.com https://services.arcgisonline.com https://*.arcgisonline.com https://*.tile.opentopomap.org; connect-src 'self' https://tiles.openfreemap.org https://*.tile.openstreetmap.org https://*.basemaps.cartocdn.com https://api.open-meteo.com https://air-quality-api.open-meteo.com https://geocoding-api.open-meteo.com https://archive-api.open-meteo.com https://*.open-meteo.com https://nominatim.openstreetmap.org https://router.project-osrm.org https://api.rainviewer.com https://tilecache.rainviewer.com https://*.firebaseio.com https://*.googleapis.com https://www.gstatic.com https://cdn.jsdelivr.net https://server.arcgisonline.com https://services.arcgisonline.com https://*.arcgisonline.com https://*.tile.opentopomap.org https://rest.isric.org https://api.gbif.org;" />
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; child-src 'self' https://aurafisky.firebaseapp.com https://aurafisky.web.app; worker-src 'self' blob:; frame-src https://aurafisky.firebaseapp.com https://aurafisky.web.app; script-src 'self' https://unpkg.com https://cdn.jsdelivr.net https://www.gstatic.com https://apis.google.com https://accounts.google.com https://*.gstatic.com https://*.google.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://unpkg.com https://cdn.jsdelivr.net; font-src 'self' https://fonts.gstatic.com https://cdn.jsdelivr.net; img-src 'self' data: blob: https://tiles.openfreemap.org https://*.tile.openstreetmap.org https://*.openstreetmap.org https://*.rainviewer.com https://*.open-meteo.com https://*.googleusercontent.com https://server.arcgisonline.com https://services.arcgisonline.com https://*.arcgisonline.com https://*.tile.opentopomap.org; connect-src 'self' https://tiles.openfreemap.org https://*.tile.openstreetmap.org https://api.open-meteo.com https://air-quality-api.open-meteo.com https://geocoding-api.open-meteo.com https://archive-api.open-meteo.com https://*.open-meteo.com https://nominatim.openstreetmap.org https://router.project-osrm.org https://api.rainviewer.com https://tilecache.rainviewer.com https://*.firebaseio.com https://*.googleapis.com https://www.gstatic.com https://cdn.jsdelivr.net https://server.arcgisonline.com https://services.arcgisonline.com https://*.arcgisonline.com https://*.tile.opentopomap.org https://rest.isric.org https://api.gbif.org;" />
   <meta name="mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
 
@@ -2427,6 +2427,15 @@
     <div id="bookmarksList" class="max-h-56 sm:max-h-64 overflow-y-auto custom-scrollbar text-sm text-slate-600 dark:text-slate-300 p-1" role="listbox">
       <div class="px-3 py-3 text-xs text-slate-400 text-center" role="option">No saved locations</div>
     </div>
+    <div class="px-2.5 py-1.5 border-t border-slate-200/50 dark:border-slate-700/50 flex items-center justify-between gap-1 text-[11px] bg-slate-50/50 dark:bg-slate-800/30">
+      <button id="exportWorkspaceBtn" type="button" class="flex items-center gap-1 px-2 py-1 rounded-lg hover:bg-slate-200/60 dark:hover:bg-slate-700/60 text-slate-600 dark:text-slate-300 font-medium transition-colors cursor-pointer" title="Export favorites and settings to JSON">
+        <span>💾</span> Export JSON
+      </button>
+      <label for="importWorkspaceFileInput" class="flex items-center gap-1 px-2 py-1 rounded-lg hover:bg-slate-200/60 dark:hover:bg-slate-700/60 text-slate-600 dark:text-slate-300 font-medium transition-colors cursor-pointer" title="Import favorites from JSON">
+        <span>📂</span> Import JSON
+        <input type="file" id="importWorkspaceFileInput" accept=".json" class="hidden" />
+      </label>
+    </div>
   </div>
 
   <!-- ============================================================ -->
@@ -2626,7 +2635,7 @@
   <!-- ============================================================ -->
   <!-- OFFLINE BANNER                                               -->
   <!-- ============================================================ -->
-  <div id="offlineBanner" class="hidden fixed top-20 left-0 right-0 z-[1004] bg-amber-600 text-white text-center py-2 px-4 text-sm font-medium shadow-lg" role="alert" aria-live="assertive">⚠️ You are offline — showing cached data</div>
+  <div id="offlineBanner" class="hidden fixed top-20 left-1/2 -translate-x-1/2 z-[1004] bg-amber-500/90 backdrop-blur-md text-amber-950 dark:text-amber-100 border border-amber-400/30 text-center py-1.5 px-4 text-xs font-semibold rounded-full shadow-lg" role="alert" aria-live="polite">⚠️ Offline — showing cached data</div>
 
   <!-- Error banner (hidden by default, shown on critical errors) -->
   <div id="errorBanner" class="hidden fixed inset-0 z-[5000] flex items-center justify-center bg-white dark:bg-slate-900/95 backdrop-blur-sm pointer-events-auto">

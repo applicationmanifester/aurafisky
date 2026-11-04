@@ -47,6 +47,12 @@
   filter: contrast(1.08) brightness(1.04);
 }
 
+/* Keyless instant dark basemap tile filter (zero watermark fallback) */
+.ol-dark-tile canvas,
+.ol-dark-tile img {
+  filter: invert(100%) hue-rotate(180deg) brightness(85%) contrast(90%);
+}
+
 /* Atmospheric Map Vignette Overlay */
 #map::after {
   content: "";

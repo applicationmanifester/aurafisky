@@ -1673,15 +1673,20 @@ async function updateRouteGeometry() {
     console.warn("OSRM road route unavailable or cross-ocean, falling back to direct line:", err);
   }
 
-  // 3. Fallback to direct connection if road network fails
+  // 3. Fallback to great-circle geodesic curve if road network fails (or OSRM 429/503)
   let totalDistM = 0;
+  const coordinates = [];
   for (let i = 0; i < pts.length - 1; i++) {
     totalDistM += haversineDistanceMeters(pts[i].lat, pts[i].lng, pts[i + 1].lat, pts[i + 1].lng);
+    const arc = interpolateGreatCircle(pts[i].lat, pts[i].lng, pts[i + 1].lat, pts[i + 1].lng, 25);
+    if (i > 0) arc.shift();
+    coordinates.push(...arc);
   }
 
-  const coordinates = pts.map((p) => [p.lng, p.lat]);
-  const olCoords = pts.map((p) => fromLonLat([p.lng, p.lat]));
-  routeSource.addFeature(new Feature(new LineString(olCoords)));
+  const olCoords = coordinates.map((p) => fromLonLat(p));
+  const fallbackFeature = new Feature(new LineString(olCoords));
+  fallbackFeature.set("isGeodesicFallback", true);
+  routeSource.addFeature(fallbackFeature);
 
   const durationS = calculateModeDuration(totalDistM, transportMode);
 
@@ -1690,6 +1695,7 @@ async function updateRouteGeometry() {
     distanceM: totalDistM,
     durationS,
     mode: transportMode,
+    isGeodesicFallback: true,
   };
 
   updateHUD();

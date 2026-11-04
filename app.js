@@ -261,7 +261,8 @@ class AurafiskyApp {
 
     // Search state
     this.searchHistoryKey = "weathermap_search_history";
-    this.searchHighlightIndex = -1; // Keyboard nav index in search results
+    this.searchHighlightIndex = -1;
+    this.searchActiveFilter = "all"; // Keyboard nav index in search results
 
     // Bookmark map markers
     this.bookmarkMarkers = []; // Leaflet markers for bookmarked locations
@@ -359,6 +360,7 @@ class AurafiskyApp {
       searchSpinner: document.getElementById("searchSpinner"),
       searchDropdown: document.getElementById("searchDropdown"),
       searchResults: document.getElementById("searchResults"),
+      searchFilterBar: document.getElementById("searchFilterBar"),
 
       myLocationBtn: document.getElementById("myLocationBtn"),
       settingsSoundToggle: document.getElementById("settingsSoundToggle"),
@@ -1643,6 +1645,16 @@ class AurafiskyApp {
       this.handleSearchInput(),
     );
     this.$.searchClearBtn.addEventListener("click", () => this.clearSearch());
+
+    // ── Filter Categories inside Search Dropdown ──────────────────
+    if (this.$.searchFilterBar) {
+      this.$.searchFilterBar.addEventListener("click", (e) => {
+        const chip = e.target.closest(".search-filter-chip");
+        if (chip && chip.dataset.filter) {
+          this.setSearchFilter(chip.dataset.filter);
+        }
+      });
+    }
 
     // ── Bookmarks Favorites ───────────────────────────────────
     this.$.bookmarksBtn.addEventListener("click", (e) => {
@@ -6142,26 +6154,321 @@ class AurafiskyApp {
   }
 
   addToSearchHistory(result) {
+    if (!result) return;
+    const name = result.name || result.displayName || "";
+    const displayName = result.displayName || result.name || "";
     // Remove duplicate if exists
     this.searchHistory = this.searchHistory.filter(
-      (h) => h.displayName !== result.displayName,
+      (h) => h.displayName !== displayName && h.name !== name,
     );
-    // Add to front — keep the rich metadata so history rows render
-    // with flags, regions and population like live results do.
+    // Add to front — keep the rich metadata so history rows render with flags and stats
     this.searchHistory.unshift({
-      displayName: result.displayName || result.name,
-      name: result.name || result.displayName,
-      latitude: result.latitude || result.lat,
-      longitude: result.longitude || result.lng,
+      displayName: displayName,
+      name: name,
+      latitude: result.latitude ?? result.lat,
+      longitude: result.longitude ?? result.lng,
       countryCode: result.countryCode || "",
       admin1: result.admin1 || "",
       country: result.country || "",
       population: result.population ?? null,
       featureCode: result.featureCode || "",
     });
-    // Keep last 8
-    this.searchHistory = this.searchHistory.slice(0, 8);
+    // Keep last 10
+    this.searchHistory = this.searchHistory.slice(0, 10);
     this._saveSearchHistory();
+  }
+
+  removeFromSearchHistory(target, e) {
+    if (e) {
+      e.stopPropagation();
+      e.preventDefault();
+    }
+    this._haptic?.('light');
+    if (typeof target === 'number') {
+      this.searchHistory.splice(target, 1);
+    } else {
+      this.searchHistory = this.searchHistory.filter(
+        (h) => h.displayName !== target && h.name !== target,
+      );
+    }
+    this._saveSearchHistory();
+    if (this.searchActiveFilter === 'recents') {
+      this.showSearchRecentsOnly();
+    } else {
+      this.showSearchHistory();
+    }
+  }
+
+  clearSearchHistory(e) {
+    if (e) {
+      e.stopPropagation();
+      e.preventDefault();
+    }
+    this._haptic?.('selection');
+    this.searchHistory = [];
+    this._saveSearchHistory();
+    if (this.searchActiveFilter === 'recents') {
+      this.showSearchRecentsOnly();
+    } else {
+      this.showSearchHistory();
+    }
+    this.showToast?.("Search history cleared", "info", 1500);
+  }
+
+  /**
+   * Reads cached temperature & weather code for a location if stored in localStorage or memory.
+   * Returns { temp, unit, weatherCode } or null.
+   */
+  _getCachedTempForLocation(lat, lng) {
+    if (lat == null || lng == null) return null;
+    const nLat = Number(lat);
+    const nLng = Number(lng);
+    if (!isFinite(nLat) || !isFinite(nLng)) return null;
+
+    // 1. Check active loaded location
+    if (
+      this.currentData?.current &&
+      this.selectedLat != null &&
+      this.selectedLng != null &&
+      Math.abs(this.selectedLat - nLat) < 0.08 &&
+      Math.abs(this.selectedLng - nLng) < 0.08
+    ) {
+      const cur = this.currentData.current;
+      const temp = cur.temperature_2m ?? cur.temperature;
+      if (temp != null && isFinite(temp)) {
+        return {
+          temp: Math.round(temp),
+          unit: this.units?.temperature || "°C",
+          weatherCode: cur.weather_code ?? cur.weathercode,
+        };
+      }
+    }
+
+    // 2. Check localStorage weathermap_cache_* keys
+    try {
+      const exactKey = `weathermap_cache_${nLat.toFixed(3)}_${nLng.toFixed(3)}`;
+      const exactRaw = localStorage.getItem(exactKey);
+      if (exactRaw) {
+        const parsed = JSON.parse(exactRaw);
+        const cur = parsed?.forecast?.current;
+        if (cur && (cur.temperature_2m != null || cur.temperature != null)) {
+          const temp = cur.temperature_2m ?? cur.temperature;
+          return {
+            temp: Math.round(temp),
+            unit: this.units?.temperature || "°C",
+            weatherCode: cur.weather_code ?? cur.weathercode,
+          };
+        }
+      }
+
+      // Check nearby cache keys within ~0.1 deg (~10km)
+      const keys = this._getCacheKeyList ? this._getCacheKeyList() : [];
+      for (const k of keys) {
+        const parts = k.replace("weathermap_cache_", "").split("_");
+        if (parts.length >= 2) {
+          const cLat = parseFloat(parts[0]);
+          const cLng = parseFloat(parts[1]);
+          if (Math.abs(cLat - nLat) < 0.08 && Math.abs(cLng - nLng) < 0.08) {
+            const parsed = JSON.parse(localStorage.getItem(k));
+            const cur = parsed?.forecast?.current;
+            if (cur && (cur.temperature_2m != null || cur.temperature != null)) {
+              const temp = cur.temperature_2m ?? cur.temperature;
+              return {
+                temp: Math.round(temp),
+                unit: this.units?.temperature || "°C",
+                weatherCode: cur.weather_code ?? cur.weathercode,
+              };
+            }
+          }
+        }
+      }
+    } catch (_) {}
+    return null;
+  }
+
+  _getWeatherEmoji(code) {
+    if (code == null) return "🌡️";
+    if (code === 0) return "☀️";
+    if (code <= 3) return "⛅";
+    if (code === 45 || code === 48) return "🌫️";
+    if (code >= 51 && code <= 67) return "🌧️";
+    if (code >= 71 && code <= 77) return "🌨️";
+    if (code >= 80 && code <= 82) return "🌦️";
+    if (code >= 85 && code <= 86) return "🌨️";
+    if (code >= 95) return "⛈️";
+    return "🌡️";
+  }
+
+  _createSvgIcon(name) {
+    const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+    svg.setAttribute("class", "w-4 h-4");
+    svg.setAttribute("viewBox", "0 0 24 24");
+    svg.setAttribute("stroke-linecap", "round");
+    svg.setAttribute("stroke-linejoin", "round");
+
+    if (name === "gps") {
+      svg.setAttribute("fill", "none");
+      svg.setAttribute("stroke", "currentColor");
+      svg.setAttribute("stroke-width", "2.2");
+      const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
+      path.setAttribute("d", "M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7z");
+      const circle = document.createElementNS("http://www.w3.org/2000/svg", "circle");
+      circle.setAttribute("cx", "12");
+      circle.setAttribute("cy", "9");
+      circle.setAttribute("r", "2.5");
+      svg.appendChild(path);
+      svg.appendChild(circle);
+    } else if (name === "home") {
+      svg.setAttribute("fill", "none");
+      svg.setAttribute("stroke", "currentColor");
+      svg.setAttribute("stroke-width", "2.2");
+      const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
+      path.setAttribute("d", "M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z");
+      const poly = document.createElementNS("http://www.w3.org/2000/svg", "polyline");
+      poly.setAttribute("points", "9 22 9 12 15 12 15 22");
+      svg.appendChild(path);
+      svg.appendChild(poly);
+    } else if (name === "star") {
+      svg.setAttribute("fill", "currentColor");
+      const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
+      path.setAttribute("d", "M12 17.27L18.18 21l-1.64-7.03L22 9.24l-7.19-.61L12 2 9.19 8.63 2 9.24l5.46 4.73L5.82 21z");
+      svg.appendChild(path);
+    } else if (name === "clock") {
+      svg.setAttribute("fill", "none");
+      svg.setAttribute("stroke", "currentColor");
+      svg.setAttribute("stroke-width", "2");
+      const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
+      path.setAttribute("d", "M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z");
+      svg.appendChild(path);
+    } else if (name === "globe") {
+      svg.setAttribute("fill", "none");
+      svg.setAttribute("stroke", "currentColor");
+      svg.setAttribute("stroke-width", "2");
+      const circle = document.createElementNS("http://www.w3.org/2000/svg", "circle");
+      circle.setAttribute("cx", "12");
+      circle.setAttribute("cy", "12");
+      circle.setAttribute("r", "10");
+      const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
+      path.setAttribute("d", "M2 12h20M12 2a15.3 15.3 0 014 10 15.3 15.3 0 01-4 10 15.3 15.3 0 01-4-10 15.3 15.3 0 014-10z");
+      svg.appendChild(circle);
+      svg.appendChild(path);
+    }
+    return svg;
+  }
+
+  setSearchFilter(filter) {
+    this.searchActiveFilter = filter;
+    const chips = this.$.searchDropdown?.querySelectorAll(".search-filter-chip");
+    chips?.forEach((chip) => {
+      const active = chip.dataset.filter === filter;
+      chip.classList.toggle("active", active);
+      chip.setAttribute("aria-selected", active ? "true" : "false");
+    });
+    this._haptic?.('selection');
+
+    const query = this.$.searchInput?.value.trim() || "";
+    if (query.length >= 2) {
+      this.performSearch(query);
+    } else {
+      if (filter === "favorites") {
+        this.showSearchBookmarks();
+      } else if (filter === "recents") {
+        this.showSearchRecentsOnly();
+      } else if (filter === "popular") {
+        this.showSearchPopularOnly();
+      } else {
+        this.showSearchHistory();
+      }
+    }
+  }
+
+  _renderSearchShortcuts(container) {
+    const { createElement } = window.domUtils;
+    const shortcutsGrid = createElement("div", {
+      className: "search-shortcuts-grid grid grid-cols-3 gap-1.5 p-2 border-b border-slate-200/60 dark:border-slate-700/60",
+    });
+
+    // 1. My Location (GPS)
+    const gpsBtn = createElement(
+      "button",
+      {
+        type: "button",
+        className: "search-shortcut-card flex flex-col items-center justify-center p-2 rounded-xl bg-slate-100/70 hover:bg-teal-500/10 dark:bg-slate-800/60 dark:hover:bg-teal-500/15 border border-slate-200/60 dark:border-slate-700/60 transition-all text-center group cursor-pointer",
+        title: "Go to current GPS location",
+      },
+      createElement(
+        "div",
+        { className: "w-7 h-7 rounded-full bg-teal-500/15 text-teal-600 dark:text-teal-400 flex items-center justify-center mb-1 group-hover:scale-110 transition-transform" },
+        this._createSvgIcon("gps"),
+      ),
+      createElement("span", { className: "text-[11px] font-semibold text-slate-800 dark:text-slate-200 leading-tight", textContent: "My GPS" }),
+      createElement("span", { className: "text-[9px] text-slate-400 dark:text-slate-500", textContent: "Device location" }),
+    );
+    gpsBtn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      this.$.searchDropdown.classList.remove("open");
+      if (this.$.searchInput) this.$.searchInput.blur();
+      this.getMyLocation();
+      this._haptic?.('selection');
+    });
+    shortcutsGrid.appendChild(gpsBtn);
+
+    // 2. Home Location
+    const homeName = this.defaultLocation?.name ? this.defaultLocation.name.split(",")[0] : "Set Home";
+    const homeBtn = createElement(
+      "button",
+      {
+        type: "button",
+        className: "search-shortcut-card flex flex-col items-center justify-center p-2 rounded-xl bg-slate-100/70 hover:bg-orange-500/10 dark:bg-slate-800/60 dark:hover:bg-orange-500/15 border border-slate-200/60 dark:border-slate-700/60 transition-all text-center group cursor-pointer",
+        title: this.defaultLocation?.name ? `Go to Home (${homeName})` : "Set home location",
+      },
+      createElement(
+        "div",
+        { className: "w-7 h-7 rounded-full bg-orange-500/15 text-orange-600 dark:text-orange-400 flex items-center justify-center mb-1 group-hover:scale-110 transition-transform" },
+        this._createSvgIcon("home"),
+      ),
+      createElement("span", { className: "text-[11px] font-semibold text-slate-800 dark:text-slate-200 leading-tight", textContent: "Home" }),
+      createElement("span", { className: "text-[9px] text-slate-400 dark:text-slate-500 truncate max-w-[70px]", textContent: homeName }),
+    );
+    homeBtn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      this.$.searchDropdown.classList.remove("open");
+      if (this.$.searchInput) this.$.searchInput.blur();
+      if (this.defaultLocation && this.defaultLocation.lat != null) {
+        this.goToHomeLocation?.();
+      } else if (this.selectedLat != null && this.selectedLng != null) {
+        this.setHomeLocation?.(this.selectedLat, this.selectedLng, this.selectedName);
+      } else {
+        this.showToast?.("Search or tap a location on the map, then tap Home to save it.", "info");
+      }
+      this._haptic?.('selection');
+    });
+    shortcutsGrid.appendChild(homeBtn);
+
+    // 3. Saved Places
+    const bookmarkCount = this.bookmarks?.length || 0;
+    const savedBtn = createElement(
+      "button",
+      {
+        type: "button",
+        className: "search-shortcut-card flex flex-col items-center justify-center p-2 rounded-xl bg-slate-100/70 hover:bg-amber-500/10 dark:bg-slate-800/60 dark:hover:bg-amber-500/15 border border-slate-200/60 dark:border-slate-700/60 transition-all text-center group cursor-pointer",
+        title: "View saved places",
+      },
+      createElement(
+        "div",
+        { className: "w-7 h-7 rounded-full bg-amber-500/15 text-amber-600 dark:text-amber-400 flex items-center justify-center mb-1 group-hover:scale-110 transition-transform" },
+        this._createSvgIcon("star"),
+      ),
+      createElement("span", { className: "text-[11px] font-semibold text-slate-800 dark:text-slate-200 leading-tight", textContent: "Saved" }),
+      createElement("span", { className: "text-[9px] text-slate-400 dark:text-slate-500", textContent: `${bookmarkCount} places` }),
+    );
+    savedBtn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      this.setSearchFilter("favorites");
+    });
+    shortcutsGrid.appendChild(savedBtn);
+
+    container.appendChild(shortcutsGrid);
   }
 
   showSearchHistory() {
@@ -6170,54 +6477,61 @@ class AurafiskyApp {
     const container = this.$.searchResults;
     clearElement(container);
 
-    if (history.length === 0) {
-      this._showPopularLocations();
-      return;
+    // 1. Top Quick Shortcuts (My GPS, Home, Saved)
+    this._renderSearchShortcuts(container);
+
+    let itemIndex = 0;
+
+    // 2. Recent Searches (up to 5 items)
+    if (history.length > 0) {
+      const header = createElement(
+        "div",
+        { className: "search-section-header flex items-center justify-between px-3 py-1.5 text-[10px] font-bold text-slate-400 dark:text-slate-500 tracking-wider uppercase" },
+        createElement("div", { className: "flex items-center gap-1.5" },
+          this._createSvgIcon("clock"),
+          createElement("span", { textContent: "Recent Searches" }),
+        ),
+        createElement("button", {
+          type: "button",
+          className: "text-[10px] text-slate-400 hover:text-rose-500 dark:hover:text-rose-400 transition-colors font-medium cursor-pointer",
+          textContent: "Clear all",
+          title: "Clear all recent searches",
+        }),
+      );
+
+      header.querySelector("button").addEventListener("click", (e) => {
+        this.clearSearchHistory(e);
+      });
+      container.appendChild(header);
+
+      history.slice(0, 5).forEach((r) => {
+        const row = this._buildSearchResultRow(r, { index: itemIndex++, isHistory: true });
+        row.addEventListener("click", (e) => {
+          if (e.target.closest(".search-action-btn")) return;
+          e.stopPropagation();
+          this.selectSearchResult(r);
+        });
+        container.appendChild(row);
+      });
     }
 
-    const svgEl = document.createElementNS("http://www.w3.org/2000/svg", "svg");
-    svgEl.setAttribute("class", "w-3 h-3");
-    svgEl.setAttribute("viewBox", "0 0 24 24");
-    svgEl.setAttribute("fill", "none");
-    svgEl.setAttribute("stroke", "currentColor");
-    svgEl.setAttribute("stroke-width", "2");
-    const pathEl = document.createElementNS("http://www.w3.org/2000/svg", "path");
-    pathEl.setAttribute("stroke-linecap", "round");
-    pathEl.setAttribute("stroke-linejoin", "round");
-    pathEl.setAttribute("d", "M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z");
-    svgEl.appendChild(pathEl);
-
-    const header = createElement(
+    // 3. Popular World Cities
+    const popHeader = createElement(
       "div",
-      { className: "search-history-label" },
-      svgEl,
-      createElement("span", { textContent: "Recent" }),
-      createElement("button", {
-        className:
-          "ml-auto text-[10px] text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 transition-colors",
-        textContent: "Clear",
-        title: "Clear search history",
-      }),
+      { className: "search-section-header flex items-center gap-1.5 px-3 py-1.5 text-[10px] font-bold text-slate-400 dark:text-slate-500 tracking-wider uppercase border-t border-slate-200/50 dark:border-slate-700/50 mt-1 pt-2" },
+      this._createSvgIcon("globe"),
+      createElement("span", { textContent: "Popular World Cities" }),
     );
-    header.querySelector("button").addEventListener("click", (e) => {
-      e.stopPropagation();
-      this.searchHistory = [];
-      this._saveSearchHistory();
-      this.$.searchDropdown.classList.remove("open");
-    });
-    container.appendChild(header);
+    container.appendChild(popHeader);
 
-    history.forEach((r, i) => {
-      const btn = this._buildSearchResultRow(r, { index: i });
-      btn.addEventListener("click", (e) => {
+    POPULAR_LOCATIONS.forEach((r) => {
+      const row = this._buildSearchResultRow(r, { index: itemIndex++ });
+      row.addEventListener("click", (e) => {
+        if (e.target.closest(".search-action-btn")) return;
         e.stopPropagation();
-        this.$.searchDropdown.classList.remove("open");
-        this.$.searchInput.value = r.displayName;
-        this.$.searchClearBtn.classList.remove("hidden");
-        if (this.$.searchInput) this.$.searchInput.blur();
-        this.selectLocation(r.latitude, r.longitude, r.displayName);
+        this.selectSearchResult(r);
       });
-      container.appendChild(btn);
+      container.appendChild(row);
     });
 
     this.$.searchDropdown.classList.add("open");
@@ -6225,32 +6539,135 @@ class AurafiskyApp {
     this._syncSearchAria();
   }
 
-  /**
-   * "Popular places" — curated world cities shown when there is no
-   * search history. Zero network cost, works offline.
-   */
-  _showPopularLocations() {
+  showSearchBookmarks() {
     const { createElement, clearElement } = window.domUtils;
     const container = this.$.searchResults;
     clearElement(container);
 
-    container.appendChild(
-      createElement("div", { className: "search-history-label" },
-        createElement("span", { textContent: "🌍 Popular places" })),
+    const bookmarks = this.bookmarks || [];
+    const header = createElement(
+      "div",
+      { className: "search-section-header flex items-center justify-between px-3 py-1.5 text-[10px] font-bold text-slate-400 dark:text-slate-500 tracking-wider uppercase" },
+      createElement("div", { className: "flex items-center gap-1.5" },
+        this._createSvgIcon("star"),
+        createElement("span", { textContent: `Saved Places (${bookmarks.length})` }),
+      ),
+    );
+    container.appendChild(header);
+
+    if (bookmarks.length === 0) {
+      const emptyCard = createElement(
+        "div",
+        { className: "p-6 text-center flex flex-col items-center justify-center text-slate-400 dark:text-slate-500" },
+        createElement("div", { className: "text-3xl mb-2", textContent: "⭐" }),
+        createElement("div", { className: "text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1", textContent: "No saved places yet" }),
+        createElement("div", { className: "text-[11px] max-w-[240px]", textContent: "Search for any city or tap the map, then tap the star icon to save it here for 1-tap weather." }),
+      );
+      container.appendChild(emptyCard);
+    } else {
+      bookmarks.forEach((b, i) => {
+        const itemData = {
+          displayName: b.name,
+          name: b.name,
+          latitude: b.lat,
+          longitude: b.lng,
+          country: "",
+          countryCode: "",
+          featureCode: "",
+          type: "Saved place",
+        };
+        const row = this._buildSearchResultRow(itemData, { index: i, isBookmark: true });
+        row.addEventListener("click", (e) => {
+          if (e.target.closest(".search-action-btn")) return;
+          e.stopPropagation();
+          this.selectSearchResult(itemData);
+        });
+        container.appendChild(row);
+      });
+    }
+
+    this.$.searchDropdown.classList.add("open");
+    this.searchHighlightIndex = -1;
+    this._syncSearchAria();
+  }
+
+  showSearchRecentsOnly() {
+    const history = this.getSearchHistory();
+    const { createElement, clearElement } = window.domUtils;
+    const container = this.$.searchResults;
+    clearElement(container);
+
+    const header = createElement(
+      "div",
+      { className: "search-section-header flex items-center justify-between px-3 py-1.5 text-[10px] font-bold text-slate-400 dark:text-slate-500 tracking-wider uppercase" },
+      createElement("div", { className: "flex items-center gap-1.5" },
+        this._createSvgIcon("clock"),
+        createElement("span", { textContent: `Recent Searches (${history.length})` }),
+      ),
+      history.length > 0
+        ? createElement("button", {
+            type: "button",
+            className: "text-[10px] text-slate-400 hover:text-rose-500 dark:hover:text-rose-400 transition-colors font-medium cursor-pointer",
+            textContent: "Clear all",
+            title: "Clear all recent searches",
+          })
+        : null,
     );
 
-    POPULAR_LOCATIONS.forEach((r, i) => {
-      const btn = this._buildSearchResultRow(r, { index: i });
-      btn.addEventListener("click", (e) => {
-        e.stopPropagation();
-        this.$.searchDropdown.classList.remove("open");
-        this.$.searchInput.value = r.displayName;
-        this.$.searchClearBtn.classList.remove("hidden");
-        if (this.$.searchInput) this.$.searchInput.blur();
-        this.addToSearchHistory(r);
-        this.selectLocation(r.latitude, r.longitude, r.displayName);
+    if (history.length > 0) {
+      header.querySelector("button")?.addEventListener("click", (e) => {
+        this.clearSearchHistory(e);
       });
-      container.appendChild(btn);
+    }
+    container.appendChild(header);
+
+    if (history.length === 0) {
+      const emptyCard = createElement(
+        "div",
+        { className: "p-6 text-center flex flex-col items-center justify-center text-slate-400 dark:text-slate-500" },
+        createElement("div", { className: "text-3xl mb-2", textContent: "🕒" }),
+        createElement("div", { className: "text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1", textContent: "No recent searches" }),
+        createElement("div", { className: "text-[11px] max-w-[240px]", textContent: "Cities you explore will be saved here for rapid 1-tap recall." }),
+      );
+      container.appendChild(emptyCard);
+    } else {
+      history.forEach((r, i) => {
+        const row = this._buildSearchResultRow(r, { index: i, isHistory: true });
+        row.addEventListener("click", (e) => {
+          if (e.target.closest(".search-action-btn")) return;
+          e.stopPropagation();
+          this.selectSearchResult(r);
+        });
+        container.appendChild(row);
+      });
+    }
+
+    this.$.searchDropdown.classList.add("open");
+    this.searchHighlightIndex = -1;
+    this._syncSearchAria();
+  }
+
+  showSearchPopularOnly() {
+    const { createElement, clearElement } = window.domUtils;
+    const container = this.$.searchResults;
+    clearElement(container);
+
+    const popHeader = createElement(
+      "div",
+      { className: "search-section-header flex items-center gap-1.5 px-3 py-1.5 text-[10px] font-bold text-slate-400 dark:text-slate-500 tracking-wider uppercase" },
+      this._createSvgIcon("globe"),
+      createElement("span", { textContent: "Popular World Cities" }),
+    );
+    container.appendChild(popHeader);
+
+    POPULAR_LOCATIONS.forEach((r, i) => {
+      const row = this._buildSearchResultRow(r, { index: i });
+      row.addEventListener("click", (e) => {
+        if (e.target.closest(".search-action-btn")) return;
+        e.stopPropagation();
+        this.selectSearchResult(r);
+      });
+      container.appendChild(row);
     });
 
     this.$.searchDropdown.classList.add("open");
@@ -6258,39 +6675,93 @@ class AurafiskyApp {
     this._syncSearchAria();
   }
 
-  /**
-   * Builds one rich search-row button: flag + highlighted name + type
-   * chip on line one, "region, country" on line two, population or
-   * elevation right-aligned. Shared by live results, history and the
-   * popular-places list. Uses only text nodes — XSS-safe by design.
-   *
-   * @param {Object} r - location result (Open-Meteo shape)
-   * @param {Object} [opts]
-   * @param {number} [opts.index] - data-index for keyboard nav
-   * @param {string} [opts.query] - query to highlight within the name
-   * @returns {HTMLButtonElement}
-   */
-  _buildSearchResultRow(r, { index = null, query = "" } = {}) {
+  _showPopularLocations() {
+    this.showSearchPopularOnly();
+  }
+
+  toggleBookmarkForResult(r, e) {
+    if (e) {
+      e.stopPropagation();
+      e.preventDefault();
+    }
+    const lat = r.latitude ?? r.lat;
+    const lng = r.longitude ?? r.lng;
+    if (lat == null || lng == null) return;
+    const name = r.displayName || r.name || `${lat.toFixed(2)}, ${lng.toFixed(2)}`;
+
+    if (!this.bookmarks) this.bookmarks = [];
+    const existingIdx = this.bookmarks.findIndex(
+      (b) => Math.abs(b.lat - lat) < 0.001 && Math.abs(b.lng - lng) < 0.001,
+    );
+
+    if (existingIdx >= 0) {
+      this.bookmarks.splice(existingIdx, 1);
+      this.showToast?.(`Removed "${name.split(',')[0]}" from bookmarks`, "info", 2000);
+    } else {
+      this.bookmarks.push({ name, lat, lng });
+      this.showToast?.(`⭐ Saved "${name.split(',')[0]}" to bookmarks`, "success", 2000);
+    }
+
+    this.saveBookmarks?.();
+    this._haptic?.('selection');
+
+    if (this.searchActiveFilter === 'favorites') {
+      this.showSearchBookmarks();
+    } else {
+      const btn = e?.currentTarget;
+      if (btn) {
+        const isNowBookmarked = this.bookmarks.some(
+          (b) => Math.abs(b.lat - lat) < 0.001 && Math.abs(b.lng - lng) < 0.001,
+        );
+        btn.innerHTML = isNowBookmarked
+          ? `<svg class="w-4 h-4 text-amber-500 fill-amber-500" viewBox="0 0 24 24"><path d="M12 17.27L18.18 21l-1.64-7.03L22 9.24l-7.19-.61L12 2 9.19 8.63 2 9.24l5.46 4.73L5.82 21z"/></svg>`
+          : `<svg class="w-4 h-4 text-slate-400 hover:text-amber-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.197-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.784-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z"/></svg>`;
+        btn.className = `search-action-btn search-star-btn p-1 rounded-full transition-colors cursor-pointer ${isNowBookmarked ? "text-amber-500 hover:bg-amber-500/10" : "text-slate-400 hover:text-amber-500 hover:bg-amber-500/10"}`;
+      }
+    }
+  }
+
+  _buildSearchResultRow(r, { index = null, query = "", isHistory = false, isBookmark = false } = {}) {
     const { createElement } = window.domUtils;
-    const flagEmoji = WeatherService.getCountryFlag(r.countryCode);
-    const typeLabel =
-      WeatherService.getFeatureLabel(r.featureCode) || r.type || "";
+    const isCoords = r.featureCode === "COORD" || r.country === "Coordinates" || r.country === "GPS Coordinates";
+    let flagEmoji = isCoords ? "🧭" : WeatherService.getCountryFlag(r.countryCode);
+    if (!flagEmoji || flagEmoji === "📍") {
+      const code = (r.featureCode || "").toUpperCase();
+      if (code === "PPLC") flagEmoji = "🏛️";
+      else if (code.startsWith("PPL")) flagEmoji = "🏙️";
+      else if (code.startsWith("AIRP")) flagEmoji = "✈️";
+      else if (code === "MT" || code === "PK") flagEmoji = "🏔️";
+      else if (code === "ISL") flagEmoji = "🏝️";
+      else if (code === "LAKE" || code === "BAY" || code === "SEA") flagEmoji = "🌊";
+      else if (code === "PARK" || code === "RES") flagEmoji = "🌲";
+      else flagEmoji = "📍";
+    }
+
+    const typeLabel = isCoords
+      ? "Coordinates"
+      : WeatherService.getFeatureLabel(r.featureCode) || r.type || "";
 
     const meta = [];
     if (r.admin1 && r.admin1 !== r.name) meta.push(r.admin1);
-    if (r.country) meta.push(r.country);
+    if (r.country && r.country !== "Coordinates" && r.country !== "GPS Coordinates") meta.push(r.country);
     const metaText = meta.join(", ");
 
+    const lat = r.latitude ?? r.lat;
+    const lng = r.longitude ?? r.lng;
+
+    const cachedWeather = this._getCachedTempForLocation(lat, lng);
+
     const stats = [];
-    const popLabel = WeatherService.formatPopulation(r.population);
-    if (popLabel) stats.push(`${popLabel} people`);
-    else if (r.elevation != null && isFinite(r.elevation))
-      stats.push(`${Math.round(r.elevation)} m`);
+    if (!cachedWeather) {
+      const popLabel = WeatherService.formatPopulation(r.population);
+      if (popLabel) stats.push(`${popLabel} people`);
+      else if (r.elevation != null && isFinite(r.elevation))
+        stats.push(`${Math.round(r.elevation)} m`);
+    }
     const statsText = stats.join(" · ");
 
     const nameEl = createElement("span", {
-      className:
-        "text-xs font-semibold text-slate-800 dark:text-slate-100 truncate",
+      className: "text-xs font-semibold text-slate-800 dark:text-slate-100 truncate",
     });
     const nameStr = r.name || r.displayName || "";
     const q = (query || "").toLowerCase();
@@ -6300,7 +6771,7 @@ class AurafiskyApp {
         nameEl.appendChild(document.createTextNode(nameStr.slice(0, idx)));
       nameEl.appendChild(
         createElement("span", {
-          className: "text-primary dark:text-primary-light",
+          className: "text-teal-600 dark:text-teal-400 font-bold underline decoration-teal-400/40 underline-offset-2",
           textContent: nameStr.slice(idx, idx + q.length),
         }),
       );
@@ -6317,11 +6788,22 @@ class AurafiskyApp {
       { className: "flex items-center gap-1.5 min-w-0" },
       nameEl,
     );
+
     if (typeLabel) {
+      let badgeColor = "bg-teal-500/10 text-teal-700 dark:bg-teal-500/20 dark:text-teal-300";
+      const uType = typeLabel.toLowerCase();
+      if (uType.includes("capital")) {
+        badgeColor = "bg-amber-500/15 text-amber-800 dark:bg-amber-500/25 dark:text-amber-200 border border-amber-500/30";
+      } else if (uType.includes("airport")) {
+        badgeColor = "bg-indigo-500/15 text-indigo-800 dark:bg-indigo-500/25 dark:text-indigo-200 border border-indigo-500/30";
+      } else if (uType.includes("mountain")) {
+        badgeColor = "bg-emerald-500/15 text-emerald-800 dark:bg-emerald-500/25 dark:text-emerald-200 border border-emerald-500/30";
+      } else if (uType.includes("coord")) {
+        badgeColor = "bg-purple-500/15 text-purple-800 dark:bg-purple-500/25 dark:text-purple-200 border border-purple-500/30";
+      }
       row1.appendChild(
         createElement("span", {
-          className:
-            "text-[8px] font-bold uppercase tracking-wider px-1.5 py-px rounded bg-primary/10 text-primary dark:bg-primary/20 dark:text-primary-light flex-shrink-0",
+          className: `search-type-pill text-[8px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded ${badgeColor}`,
           textContent: typeLabel,
         }),
       );
@@ -6329,58 +6811,133 @@ class AurafiskyApp {
 
     const textBlock = createElement(
       "div",
-      { className: "min-w-0 flex-1" },
+      { className: "min-w-0 flex-1 ml-2 text-left" },
       row1,
     );
     if (metaText) {
       textBlock.appendChild(
         createElement("div", {
-          className:
-            "text-[10px] text-slate-400 dark:text-slate-500 truncate mt-px",
+          className: "text-[10px] text-slate-500 dark:text-slate-400 truncate mt-0.5",
           textContent: metaText,
         }),
       );
     }
 
-    const btn = createElement(
-      "button",
+    const rightSide = createElement("div", {
+      className: "flex items-center gap-2 flex-shrink-0 ml-2",
+    });
+
+    if (cachedWeather) {
+      const emoji = this._getWeatherEmoji(cachedWeather.weatherCode);
+      const tempBadge = createElement("span", {
+        className: "search-temp-badge text-[10px] font-bold px-2 py-0.5 rounded-full bg-slate-100 dark:bg-slate-800/80 text-slate-700 dark:text-slate-300 border border-slate-200/80 dark:border-slate-700/80",
+        textContent: `${emoji} ${cachedWeather.temp}°`,
+        title: "Current weather preview",
+      });
+      rightSide.appendChild(tempBadge);
+    } else if (statsText) {
+      rightSide.appendChild(
+        createElement("span", {
+          className: "text-[9px] text-slate-400 dark:text-slate-500 whitespace-nowrap font-medium",
+          textContent: statsText,
+        }),
+      );
+    }
+
+    if (isHistory) {
+      const delBtn = createElement("button", {
+        type: "button",
+        className: "search-action-btn search-delete-btn p-1 text-slate-400 hover:text-rose-500 hover:bg-rose-500/10 rounded-full transition-colors cursor-pointer",
+        title: "Remove from recent searches",
+        "aria-label": `Remove ${nameStr} from history`,
+      });
+      const delSvg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+      delSvg.setAttribute("class", "w-3.5 h-3.5");
+      delSvg.setAttribute("fill", "none");
+      delSvg.setAttribute("viewBox", "0 0 24 24");
+      delSvg.setAttribute("stroke", "currentColor");
+      delSvg.setAttribute("stroke-width", "2");
+      const delPath = document.createElementNS("http://www.w3.org/2000/svg", "path");
+      delPath.setAttribute("stroke-linecap", "round");
+      delPath.setAttribute("stroke-linejoin", "round");
+      delPath.setAttribute("d", "M6 18L18 6M6 6l12 12");
+      delSvg.appendChild(delPath);
+      delBtn.appendChild(delSvg);
+
+      delBtn.addEventListener("click", (e) => {
+        this.removeFromSearchHistory(r.displayName || r.name, e);
+      });
+      rightSide.appendChild(delBtn);
+    } else if (isBookmark) {
+      const starBtn = createElement("button", {
+        type: "button",
+        className: "search-action-btn search-star-btn p-1 text-amber-500 hover:text-amber-600 hover:bg-amber-500/10 rounded-full transition-colors cursor-pointer",
+        title: "Remove from saved places",
+        "aria-label": `Remove ${nameStr} from saved places`,
+      });
+      const starSvg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+      starSvg.setAttribute("class", "w-4 h-4 fill-amber-500");
+      starSvg.setAttribute("viewBox", "0 0 24 24");
+      const starPath = document.createElementNS("http://www.w3.org/2000/svg", "path");
+      starPath.setAttribute("d", "M12 17.27L18.18 21l-1.64-7.03L22 9.24l-7.19-.61L12 2 9.19 8.63 2 9.24l5.46 4.73L5.82 21z");
+      starSvg.appendChild(starPath);
+      starBtn.appendChild(starSvg);
+
+      starBtn.addEventListener("click", (e) => {
+        this.toggleBookmarkForResult(r, e);
+      });
+      rightSide.appendChild(starBtn);
+    } else {
+      const isFav = this.bookmarks?.some(
+        (b) => lat != null && lng != null && Math.abs(b.lat - lat) < 0.001 && Math.abs(b.lng - lng) < 0.001,
+      );
+      const starBtn = createElement("button", {
+        type: "button",
+        className: `search-action-btn search-star-btn p-1 rounded-full transition-colors cursor-pointer ${
+          isFav ? "text-amber-500 hover:bg-amber-500/10" : "text-slate-400 hover:text-amber-500 hover:bg-amber-500/10"
+        }`,
+        title: isFav ? "Saved to bookmarks (click to remove)" : "Save to bookmarks",
+        "aria-label": isFav ? `Remove ${nameStr} from bookmarks` : `Bookmark ${nameStr}`,
+      });
+      const starSvg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+      starSvg.setAttribute("class", `w-4 h-4 ${isFav ? "fill-amber-500 text-amber-500" : ""}`);
+      starSvg.setAttribute("viewBox", "0 0 24 24");
+      starSvg.setAttribute("stroke", "currentColor");
+      starSvg.setAttribute("stroke-width", "2");
+      starSvg.setAttribute("fill", isFav ? "currentColor" : "none");
+      const starPath = document.createElementNS("http://www.w3.org/2000/svg", "path");
+      starPath.setAttribute("stroke-linecap", "round");
+      starPath.setAttribute("stroke-linejoin", "round");
+      starPath.setAttribute("d", "M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.197-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.784-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z");
+      starSvg.appendChild(starPath);
+      starBtn.appendChild(starSvg);
+
+      starBtn.addEventListener("click", (e) => {
+        this.toggleBookmarkForResult(r, e);
+      });
+      rightSide.appendChild(starBtn);
+    }
+
+    const row = createElement(
+      "div",
       {
         className:
-          "search-result-item w-full text-left px-4 py-2 flex items-start gap-3 cursor-pointer",
+          "search-result-item w-full flex items-center justify-between px-3 py-2 rounded-xl cursor-pointer transition-all hover:bg-slate-100/90 dark:hover:bg-slate-700/50 select-none group",
         role: "option",
+        tabIndex: 0,
         "aria-selected": "false",
       },
       createElement("span", {
-        className: "text-sm leading-5 flex-shrink-0 mt-px",
+        className: "text-base leading-none flex-shrink-0 select-none",
         textContent: flagEmoji,
       }),
       textBlock,
-      statsText
-        ? createElement("span", {
-            className:
-              "text-[9px] text-slate-400 dark:text-slate-500 flex-shrink-0 mt-0.5 whitespace-nowrap font-medium",
-            textContent: statsText,
-          })
-        : null,
+      rightSide,
     );
-    if (index != null) btn.dataset.index = String(index);
-    return btn;
+
+    if (index != null) row.dataset.index = String(index);
+    return row;
   }
-
-  // ================================================================
-  //  BOOKMARK MAP PINS
-  // ================================================================
-  // (relocated to features/bookmarks.js -- see features/registry.js)
-
-  // ================================================================
-  //  MAP CANVAS WEATHER EFFECTS (Rain, Snow, Windy, Storm animations)
-  // ================================================================
-  // (relocated to features/canvasEffects.js -- see features/registry.js)
-
-  // ================================================================
-  //  IMMERSIVE AUDIO WEATHER SOUNDSCAPES (Web Audio Synthesizer)
-  // ================================================================
-  // (relocated to features/audio.js -- see features/registry.js)
 
   // ================================================================
   //  SEARCH INPUTS (Open-Meteo Geocoding Falls)
@@ -6392,8 +6949,6 @@ class AurafiskyApp {
 
     clearTimeout(this.searchDebounceTimer);
 
-    // Abort any in-flight request from a previous keystroke so stale
-    // responses can't overwrite newer ones.
     if (this.searchAbortController) {
       this.searchAbortController.abort();
       this.searchAbortController = null;
@@ -6401,7 +6956,6 @@ class AurafiskyApp {
 
     if (query.length < 2) {
       if (query.length === 0) {
-        // Cleared: bring back recents / popular picks (Maps-style)
         this.showSearchHistory();
       } else {
         this.$.searchDropdown.classList.remove("open");
@@ -6411,11 +6965,33 @@ class AurafiskyApp {
       return;
     }
 
-    this.searchDebounceTimer = setTimeout(() => this.performSearch(query), 400);
+    this.searchDebounceTimer = setTimeout(() => this.performSearch(query), 300);
   }
 
   async performSearch(query) {
     this.$.searchSpinner.classList.remove("hidden");
+
+    // 1. Direct Lat/Lng coordinate search (e.g., "11.38, 77.89" or "40.71 -74.00")
+    const coordMatch = query.match(/^(-?\d+(?:\.\d+)?)[,\s]+(-?\d+(?:\.\d+)?)$/);
+    if (coordMatch) {
+      const lat = parseFloat(coordMatch[1]);
+      const lng = parseFloat(coordMatch[2]);
+      if (lat >= -90 && lat <= 90 && lng >= -180 && lng <= 180) {
+        const coordResult = [{
+          name: `${lat.toFixed(4)}°, ${lng.toFixed(4)}°`,
+          country: "GPS Coordinates",
+          countryCode: "",
+          admin1: "Direct Coordinates",
+          latitude: lat,
+          longitude: lng,
+          featureCode: "COORD",
+          displayName: `Location at ${lat.toFixed(4)}°, ${lng.toFixed(4)}°`,
+        }];
+        this.renderSearchResults(coordResult);
+        this.$.searchSpinner.classList.add("hidden");
+        return;
+      }
+    }
 
     // Check geocode_lru IndexedDB store before hitting network
     try {
@@ -6427,7 +7003,6 @@ class AurafiskyApp {
       }
     } catch (_) {}
 
-    // Each search gets its own AbortController; a new keystroke aborts it.
     const controller = new AbortController();
     this.searchAbortController = controller;
 
@@ -6436,7 +7011,6 @@ class AurafiskyApp {
         query,
         controller.signal,
       );
-      // Ignore results delivered for a request that's no longer current.
       if (this.searchAbortController !== controller) return;
       this.renderSearchResults(results);
       if (Array.isArray(results) && results.length > 0) {
@@ -6464,29 +7038,33 @@ class AurafiskyApp {
     const container = this.$.searchResults;
     clearElement(container);
 
+    const query = this.$.searchInput.value.trim();
+
     if (!results || results.length === 0) {
-      container.appendChild(
-        createElement("div", {
-          className: "px-4 py-3 text-sm text-slate-400 dark:text-slate-500",
-          textContent: "No results found",
-        }),
+      const emptyDiv = createElement(
+        "div",
+        { className: "p-6 text-center flex flex-col items-center justify-center text-slate-400 dark:text-slate-500" },
+        createElement("div", { className: "text-3xl mb-2", textContent: "🔍" }),
+        createElement("div", { className: "text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1", textContent: `No locations found for "${query}"` }),
+        createElement("div", { className: "text-[11px] max-w-[260px]", textContent: "Check spelling or try searching by country, state, or lat/lng coordinates (e.g. 51.5, -0.12)." }),
       );
+      container.appendChild(emptyDiv);
       this.$.searchDropdown.classList.add("open");
       this._syncSearchAria();
       return;
     }
 
     this.searchHighlightIndex = -1;
-    const query = this.$.searchInput.value.trim();
 
     results.forEach((r, i) => {
-      const btn = this._buildSearchResultRow(r, { index: i, query });
-      btn.addEventListener("click", (e) => {
+      const row = this._buildSearchResultRow(r, { index: i, query });
+      row.addEventListener("click", (e) => {
+        if (e.target.closest(".search-action-btn")) return;
         e.stopPropagation();
-        const idx = parseInt(btn.dataset.index, 10);
-        this.selectSearchResult(results[idx]);
+        const idx = parseInt(row.dataset.index, 10);
+        this.selectSearchResult(results[idx] || r);
       });
-      container.appendChild(btn);
+      container.appendChild(row);
     });
 
     this.$.searchDropdown.classList.add("open");
@@ -6510,16 +7088,19 @@ class AurafiskyApp {
 
   async selectSearchResult(result) {
     this.$.searchDropdown.classList.remove("open");
-    this.$.searchInput.value = result.displayName;
+    this.$.searchInput.value = result.displayName || result.name || "";
     this.$.searchClearBtn.classList.remove("hidden");
     if (this.$.searchInput) this.$.searchInput.blur();
 
-    if (result.latitude && result.longitude) {
+    const lat = result.latitude ?? result.lat;
+    const lng = result.longitude ?? result.lng;
+
+    if (lat != null && lng != null) {
       this.addToSearchHistory(result);
       await this.selectLocation(
-        result.latitude,
-        result.longitude,
-        result.displayName,
+        lat,
+        lng,
+        result.displayName || result.name,
       );
     }
   }
@@ -6528,11 +7109,13 @@ class AurafiskyApp {
     this.$.searchInput.value = "";
     this.$.searchClearBtn.classList.add("hidden");
     this.$.searchResults.innerHTML = "";
+    this.searchActiveFilter = "all";
+    const chips = this.$.searchDropdown?.querySelectorAll(".search-filter-chip");
+    chips?.forEach((c) => c.classList.toggle("active", c.dataset.filter === "all"));
     this.$.searchInput.focus();
     this.showSearchHistory();
   }
-
-  // ================================================================
+// ================================================================
   //  THEME ADJUSTMENTS & MAP TILES
   // ================================================================
 

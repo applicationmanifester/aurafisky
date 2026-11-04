@@ -1150,7 +1150,7 @@ export class AuraMobileController {
         this._activeRecognition.abort();
       } catch (e) {}
       this._activeRecognition = null;
-      voiceBtn?.classList.remove('animate-pulse', 'text-teal-400', 'text-rose-500');
+      voiceBtn?.classList.remove('animate-pulse', 'text-teal-400', 'text-rose-500', 'ring-2', 'ring-rose-500/40', 'bg-rose-500/10');
       if (input && this._savedPlaceholder) {
         input.placeholder = this._savedPlaceholder;
       }
@@ -1170,12 +1170,12 @@ export class AuraMobileController {
         input.placeholder = '🎙️ Listening... speak clearly';
       }
 
-      voiceBtn?.classList.add('animate-pulse', 'text-rose-500');
+      voiceBtn?.classList.add('animate-pulse', 'text-rose-500', 'ring-2', 'ring-rose-500/40', 'bg-rose-500/10');
       this.app.showToast?.('🎙️ Listening... Say any city or location', 'info', 3000);
 
       const cleanup = () => {
         this._activeRecognition = null;
-        voiceBtn?.classList.remove('animate-pulse', 'text-teal-400', 'text-rose-500');
+        voiceBtn?.classList.remove('animate-pulse', 'text-teal-400', 'text-rose-500', 'ring-2', 'ring-rose-500/40', 'bg-rose-500/10');
         if (input && this._savedPlaceholder) {
           input.placeholder = this._savedPlaceholder;
         }
@@ -1231,7 +1231,7 @@ export class AuraMobileController {
       recognition.start();
     } catch (e) {
       this._activeRecognition = null;
-      voiceBtn?.classList.remove('animate-pulse', 'text-teal-400', 'text-rose-500');
+      voiceBtn?.classList.remove('animate-pulse', 'text-teal-400', 'text-rose-500', 'ring-2', 'ring-rose-500/40', 'bg-rose-500/10');
       this.app.showToast?.('Could not activate microphone. Please try again.', 'warn', 3000);
     }
   }

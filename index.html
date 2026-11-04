@@ -153,6 +153,21 @@
 
           <!-- Search Results Dropdown -->
           <div id="searchDropdown" class="search-dropdown border-t border-slate-200/60 dark:border-slate-600/30" role="listbox" aria-label="Search results">
+            <!-- Search Category Filter Tabs -->
+            <div id="searchFilterBar" class="search-filter-bar flex items-center gap-1.5 px-3 py-2 border-b border-slate-200/60 dark:border-slate-700/60 overflow-x-auto hide-scrollbar" role="tablist" aria-label="Search categories">
+              <button type="button" class="search-filter-chip active" data-filter="all" role="tab" aria-selected="true">
+                <span>All</span>
+              </button>
+              <button type="button" class="search-filter-chip" data-filter="favorites" role="tab" aria-selected="false">
+                <span>⭐ Saved</span>
+              </button>
+              <button type="button" class="search-filter-chip" data-filter="recents" role="tab" aria-selected="false">
+                <span>🕒 Recent</span>
+              </button>
+              <button type="button" class="search-filter-chip" data-filter="popular" role="tab" aria-selected="false">
+                <span>🌍 Popular</span>
+              </button>
+            </div>
             <div id="searchResults" class="py-1" role="presentation"></div>
           </div>
         </div>

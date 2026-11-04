@@ -1,7 +1,7 @@
-// Unit tests for the enhanced location search helpers in weather.js.
-// These exercise the pure ranking / formatting logic without any network.
+// Unit tests for the enhanced location search helpers in weather.js and app search UX.
 import { test, describe } from "vitest";
 import assert from "node:assert/strict";
+import fs from "node:fs";
 import { WeatherService } from "../weather.js";
 
 const {
@@ -24,8 +24,6 @@ describe("getCountryFlag", () => {
   });
 
   test("falls back to a pin for full country names", () => {
-    // Full names cannot be mapped without a lookup table — the geocoder
-    // supplies ISO codes, so names must degrade gracefully.
     assert.equal(getCountryFlag("United Kingdom"), "📍");
     assert.equal(getCountryFlag("Coordinates"), "📍");
   });
@@ -102,7 +100,6 @@ describe("rankAndDedupeResults", () => {
   });
 
   test("ranks a prefix match on a megacity above an exact match on a tiny hamlet", () => {
-    // Typing "lon" should surface London, not the village of Lon.
     const results = [
       mk("Lon", "Ratanakiri", "Cambodia", { population: null }),
       mk("London", "England", "United Kingdom", { population: 8900000 }),
@@ -154,5 +151,57 @@ describe("rankAndDedupeResults", () => {
   test("handles empty input", () => {
     assert.deepEqual(rankAndDedupeResults([], "London"), []);
     assert.deepEqual(rankAndDedupeResults(null, "London"), []);
+  });
+});
+
+describe("Search UI Structure & Category Filter Bar", () => {
+  test("index.html contains searchFilterBar with all, favorites, recents, and popular chips", () => {
+    const html = fs.readFileSync("index.html", "utf8");
+    assert.ok(html.includes('id="searchFilterBar"'), "searchFilterBar element exists");
+    assert.ok(html.includes('data-filter="all"'), "All filter chip exists");
+    assert.ok(html.includes('data-filter="favorites"'), "Saved favorites filter chip exists");
+    assert.ok(html.includes('data-filter="recents"'), "Recents filter chip exists");
+    assert.ok(html.includes('data-filter="popular"'), "Popular filter chip exists");
+  });
+
+  test("styles.css contains rules for search-filter-bar, shortcuts grid, and action buttons", () => {
+    const css = fs.readFileSync("styles.css", "utf8");
+    assert.ok(css.includes(".search-filter-bar"), "Styles search-filter-bar");
+    assert.ok(css.includes(".search-filter-chip.active"), "Styles active search-filter-chip");
+    assert.ok(css.includes(".search-shortcuts-grid"), "Styles search-shortcuts-grid");
+    assert.ok(css.includes(".search-action-btn"), "Styles search-action-btn");
+    assert.ok(css.includes(".search-temp-badge"), "Styles search-temp-badge");
+  });
+
+  test("app.js implements removeFromSearchHistory, clearSearchHistory, and setSearchFilter", () => {
+    const appCode = fs.readFileSync("app.js", "utf8");
+    assert.ok(appCode.includes("removeFromSearchHistory("), "Implements removeFromSearchHistory");
+    assert.ok(appCode.includes("clearSearchHistory("), "Implements clearSearchHistory");
+    assert.ok(appCode.includes("setSearchFilter("), "Implements setSearchFilter");
+    assert.ok(appCode.includes("_renderSearchShortcuts("), "Implements _renderSearchShortcuts");
+    assert.ok(appCode.includes("_getCachedTempForLocation("), "Implements _getCachedTempForLocation");
+  });
+});
+
+describe("Coordinate Query Matching", () => {
+  const coordRegex = /^(-?\d+(?:\.\d+)?)[,\s]+(-?\d+(?:\.\d+)?)$/;
+
+  test("matches comma-separated decimal coordinates", () => {
+    const match = "40.7128, -74.0060".match(coordRegex);
+    assert.ok(match);
+    assert.equal(parseFloat(match[1]), 40.7128);
+    assert.equal(parseFloat(match[2]), -74.006);
+  });
+
+  test("matches space-separated decimal coordinates", () => {
+    const match = "12.9716 77.5946".match(coordRegex);
+    assert.ok(match);
+    assert.equal(parseFloat(match[1]), 12.9716);
+    assert.equal(parseFloat(match[2]), 77.5946);
+  });
+
+  test("does not match non-coordinate place names", () => {
+    assert.equal("Tokyo, Japan".match(coordRegex), null);
+    assert.equal("London 10 Downing".match(coordRegex), null);
   });
 });

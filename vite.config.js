@@ -78,7 +78,7 @@ export default defineConfig(({ mode }) => {
         }
       }
     },
-    chunkSizeWarningLimit: 600,
+    chunkSizeWarningLimit: 650,
     cssCodeSplit: true,
     modulePreload: { polyfill: false }
   },

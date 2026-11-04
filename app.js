@@ -4798,9 +4798,10 @@ class AurafiskyApp {
     );
     this.updatePressureTendency(tendency);
 
-    // Wind shift detection
+    // Wind shift detection (deduplicated so scrubbing does not trigger duplicate toasts)
     const windShift = WeatherService.getWindShift(this.weatherData, hourIndex);
-    if (windShift) {
+    if (windShift && this._lastNotifiedWindShiftHour !== hourIndex) {
+      this._lastNotifiedWindShiftHour = hourIndex;
       this.showToast(`${windShift.icon} ${windShift.label}`, "info");
     }
 
@@ -4944,12 +4945,16 @@ class AurafiskyApp {
       weather.windDirection,
     );
 
-    // Temporal compression grid (replaces daily forecast with 3h block matrix)
-    const matrices = WeatherService.getTemporalCompression(this.weatherData);
-    this.renderTemporalGrid(matrices);
-
-    // UV Index Forecast Chart
-    this.renderUVChart();
+    // Temporal compression grid & UV chart only need rendering when forecast data or units change,
+    // avoiding heavy DOM re-parsing on every timeline scrub frame
+    const currentUnits = (typeof WeatherService !== "undefined" && WeatherService.getUnits?.()) || "metric";
+    if (this._lastRenderedGridData !== this.weatherData || this._lastRenderedGridUnits !== currentUnits) {
+      this._lastRenderedGridData = this.weatherData;
+      this._lastRenderedGridUnits = currentUnits;
+      const matrices = WeatherService.getTemporalCompression(this.weatherData);
+      this.renderTemporalGrid(matrices);
+      this.renderUVChart();
+    }
 
     // Extended device-adaptive metrics, daily summary & rain-chance strip
     this.updateExtendedWeatherInfo(weather, hourIndex);
@@ -7301,6 +7306,10 @@ class AurafiskyApp {
 
     // Set canvas size — persistent listener so the wallpaper canvas keeps
     // tracking the window across resizes (not just the first one).
+    if (this._wallpaperResize) {
+      window.removeEventListener("resize", this._wallpaperResize);
+      this._wallpaperResize = null;
+    }
     this._wallpaperResize = () => {
       canvas.width = canvas.offsetWidth;
       canvas.height = canvas.offsetHeight;

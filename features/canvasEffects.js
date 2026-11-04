@@ -5,6 +5,7 @@ function initWeatherCanvas() {
     this.canvas = document.getElementById("weatherCanvas");
     if (!this.canvas) return;
     this.ctx = this.canvas.getContext("2d");
+    this.lightningFlash = 0;
 
     // Resize canvas to cover map exactly
     this.resizeWeatherCanvas();
@@ -20,11 +21,14 @@ function initWeatherCanvas() {
       this.canvas.style.opacity = "1";
     });
 
-    // Restart loop when returning to tab/app
+    // Restart loop when returning to tab/app, or cancel loop when tab hidden
     if (typeof document !== "undefined") {
       document.addEventListener("visibilitychange", () => {
         if (!document.hidden && this.activeEffectType && this.activeEffectType !== "none" && !this.animationFrameId) {
           this.runWeatherCanvasLoop();
+        } else if (document.hidden && this.animationFrameId) {
+          cancelAnimationFrame(this.animationFrameId);
+          this.animationFrameId = null;
         }
       });
     }
@@ -128,7 +132,13 @@ function runWeatherCanvasLoop() {
     if (this.animationFrameId) return;
     const TWO_PI = Math.PI * 2;
     const draw = (now) => {
-      if (this.activeEffectType === "none" && this.lightningFlash === 0) {
+      // Stop loop and clear canvas if no active weather particle effect
+      if ((this.activeEffectType === "none" || !this.activeEffectType) && (!this.lightningFlash || this.lightningFlash <= 0)) {
+        if (this.ctx) {
+          const w = this.canvasCssWidth ?? this.canvas.width;
+          const h = this.canvasCssHeight ?? this.canvas.height;
+          this.ctx.clearRect(0, 0, w, h);
+        }
         this.animationFrameId = null;
         return;
       }

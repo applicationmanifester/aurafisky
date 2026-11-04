@@ -640,6 +640,12 @@ function wireSkyRadarFullscreen(app) {
     app?._haptic?.("selection");
   });
 
+  // Wire Mobile Quick-Toggle Buttons and Side Panels
+  const toggleLeftBtn = document.getElementById("toggleLeftSkyPanelBtn");
+  const toggleRightBtn = document.getElementById("toggleRightSkyPanelBtn");
+  const leftPanel = document.getElementById("skyRadarLeftPanel");
+  const rightPanel = document.getElementById("skyRadarRightPanel");
+
   const syncBodyDropdownState = () => {
     const isAnyOpen = Boolean(
       leftPanel?.classList.contains("panel-open-mobile") ||
@@ -687,11 +693,6 @@ function wireSkyRadarFullscreen(app) {
   });
 
   // Wire Mobile Quick-Toggle Buttons
-  const toggleLeftBtn = document.getElementById("toggleLeftSkyPanelBtn");
-  const toggleRightBtn = document.getElementById("toggleRightSkyPanelBtn");
-  const leftPanel = document.getElementById("skyRadarLeftPanel");
-  const rightPanel = document.getElementById("skyRadarRightPanel");
-
   if (toggleLeftBtn && leftPanel) {
     toggleLeftBtn.addEventListener("click", (e) => {
       e.stopPropagation();
@@ -793,6 +794,11 @@ export { getMoonSvgPath };
  */
 function renderFullscreenSkyPanels(sky) {
   if (!sky) return;
+
+  // Performance optimization: skip re-rendering 42 heavy HTML cards when sky radar is not fullscreen
+  const isFullscreen = document.body.classList.contains("sky-radar-fullscreen-active") ||
+    document.getElementById("celestialRadarSection")?.classList.contains("sky-radar-fullscreen");
+  if (!isFullscreen) return;
 
   // ── LEFT PANEL: Tab 1 (Solar System: Sun, Moon & Planets) ──
   const fsPlanets = document.getElementById("skyFullscreenPlanetsList");

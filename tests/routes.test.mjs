@@ -473,6 +473,18 @@ test("Route Weather quick chip, dropdown, and panel replace legacy 'Plan a route
   expect(routesCode).toContain('btn.title = "Route Weather";');
 });
 
+test("Route stop cards allow full place name visibility without aggressive single-line truncation on mobile", () => {
+  const fs = require("fs");
+  const routesCode = fs.readFileSync("features/routes.js", "utf-8");
+
+  // Place title in stop card must use break-words and not truncate so full names are visible on mobile
+  expect(routesCode).toContain('break-words leading-snug" data-stop-title-idx');
+  expect(routesCode).not.toContain('truncate" data-stop-title-idx');
+
+  // Address details line should exist for secondary context
+  expect(routesCode).toContain('stop.fullAddress');
+});
+
 
 
 

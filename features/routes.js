@@ -1295,24 +1295,48 @@ function renderWaypointMarkers() {
  */
 async function resolvePointName(pt) {
   try {
-    const url = `https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${pt.lat}&lon=${pt.lng}&zoom=14`;
-    const res = await fetch(url, { headers: { "User-Agent": "Aurafisky/18.0.0", Accept: "application/json" } });
+    const lang = typeof navigator !== "undefined" && navigator.language ? navigator.language : "en";
+    const url = `https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${pt.lat}&lon=${pt.lng}&zoom=14&addressdetails=1&namedetails=1&accept-language=en,${lang};q=0.8`;
+    const res = await fetch(url, { headers: { "User-Agent": "Aurafisky/19.0.0", Accept: "application/json" } });
     if (!res.ok) return;
     const data = await res.json();
     const city =
+      data.namedetails?.["name:en"] ||
+      data.address?.["city:en"] ||
+      data.address?.["town:en"] ||
+      data.address?.["village:en"] ||
       data.address?.city ||
       data.address?.town ||
       data.address?.village ||
       data.address?.hamlet ||
       data.address?.suburb ||
       data.address?.county;
-    const state = data.address?.state;
+    const state = data.address?.["state:en"] || data.address?.state;
+    const road = data.address?.["road:en"] || data.address?.road;
+    const country = data.address?.["country:en"] || data.address?.country;
+
+    let resolvedName = "";
     if (city) {
-      pt.name = state ? `${city}, ${state}` : city;
-      pt.shortName = city;
+      resolvedName = state ? `${city}, ${state}` : city;
+    } else if (data.namedetails?.["name:en"]) {
+      resolvedName = data.namedetails["name:en"];
     } else if (data.name) {
-      pt.name = data.name;
-      pt.shortName = data.name;
+      resolvedName = state ? `${data.name}, ${state}` : data.name;
+    } else if (road) {
+      resolvedName = state ? `${road}, ${state}` : road;
+    } else if (data.display_name) {
+      resolvedName = data.display_name.split(",").slice(0, 2).join(",").trim();
+    }
+
+    // If name is in non-Latin script and state is Latin, combine them nicely: e.g. "Puttur (ಬನ್ನೂರು)"
+    if (resolvedName) {
+      const hasNonLatin = /[\u0600-\u06FF\u0750-\u077F\u0900-\u0D7F\u4E00-\u9FFF]/.test(resolvedName);
+      if (hasNonLatin && state && /[a-zA-Z]/.test(state)) {
+        resolvedName = `${state} (${resolvedName})`;
+      }
+      pt.name = resolvedName;
+      pt.shortName = city || resolvedName;
+      pt.fullAddress = data.display_name || resolvedName;
     }
 
     // Refresh titles in DOM if open
@@ -1341,27 +1365,41 @@ async function searchPlacesForRoute(query) {
     if (res.ok) {
       const data = await res.json();
       if (data.results && data.results.length) {
-        return data.results.map((r) => ({
-          name: r.name,
-          details: [r.admin1, r.country].filter(Boolean).join(", "),
-          lat: r.latitude,
-          lng: r.longitude,
-        }));
+        return data.results.map((r) => {
+          const mainName = r.name;
+          const contextParts = [r.admin1, r.country].filter(Boolean);
+          const fullName = [mainName, ...contextParts].join(", ");
+          return {
+            name: fullName,
+            shortName: mainName,
+            details: contextParts.join(", "),
+            lat: r.latitude,
+            lng: r.longitude,
+          };
+        });
       }
     }
   } catch (e) {}
 
   try {
-    const url = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(q)}&format=json&limit=5&addressdetails=1`;
-    const res = await fetch(url, { headers: { "User-Agent": "Aurafisky/18.0.0", Accept: "application/json" } });
+    const lang = typeof navigator !== "undefined" && navigator.language ? navigator.language : "en";
+    const url = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(q)}&format=json&limit=5&addressdetails=1&namedetails=1&accept-language=en,${lang};q=0.8`;
+    const res = await fetch(url, { headers: { "User-Agent": "Aurafisky/19.0.0", Accept: "application/json" } });
     if (res.ok) {
       const list = await res.json();
-      return list.map((item) => ({
-        name: item.name || item.display_name.split(",")[0],
-        details: item.display_name,
-        lat: parseFloat(item.lat),
-        lng: parseFloat(item.lon),
-      }));
+      return list.map((item) => {
+        const shortName = item.namedetails?.["name:en"] || item.name || item.display_name.split(",")[0].trim();
+        const displayParts = item.display_name.split(",").map((s) => s.trim()).filter(Boolean);
+        // Form clean 2-3 segment name (e.g. "Bengaluru, Karnataka, India")
+        const cleanName = displayParts.slice(0, 3).join(", ");
+        return {
+          name: cleanName || shortName,
+          shortName: shortName,
+          details: item.display_name,
+          lat: parseFloat(item.lat),
+          lng: parseFloat(item.lon),
+        };
+      });
     }
   } catch (e) {}
 
@@ -1371,12 +1409,13 @@ async function searchPlacesForRoute(query) {
 /**
  * Add a stop programmatically by coordinates & optional name
  */
-export async function addStop(lat, lng, name = null) {
+export async function addStop(lat, lng, name = null, fullAddress = null) {
   closeWaypointPopover();
   const pt = {
     lat,
     lng,
     name: name || `Stop ${pts.length + 1}`,
+    fullAddress: fullAddress || null,
     marker: null,
   };
   pts.push(pt);
@@ -2135,29 +2174,29 @@ function buildPanel() {
     </div>
 
     <!-- Header -->
-    <div id="routePanelHeader" class="flex items-center justify-between px-4 py-2.5 sm:py-3 border-b border-slate-200/60 dark:border-slate-700/60 bg-white/50 dark:bg-slate-800/50 flex-shrink-0 sm:cursor-grab active:sm:cursor-grabbing select-none">
-      <div class="flex items-center gap-2.5 min-w-0">
+    <div id="routePanelHeader" class="flex items-center justify-between px-3.5 py-2 sm:py-3 border-b border-slate-200/60 dark:border-slate-700/60 bg-white/50 dark:bg-slate-800/50 flex-shrink-0 sm:cursor-grab active:sm:cursor-grabbing select-none gap-2">
+      <div class="flex items-center gap-2 min-w-0 flex-1">
         <div class="w-8 h-8 rounded-xl bg-gradient-to-tr from-indigo-600 to-violet-600 text-white flex items-center justify-center font-bold text-sm shadow-md shadow-indigo-500/20 flex-shrink-0" id="routePanelModeIcon">🚗</div>
-        <div class="min-w-0">
-          <h3 class="text-xs font-black uppercase tracking-wider text-slate-900 dark:text-slate-100 truncate" id="routePanelTitle">Route Weather</h3>
-          <div id="routePanelSubtitle" class="text-[10px] text-slate-500 dark:text-slate-400 font-medium truncate">Trip Weather & Road Hazard Intelligence</div>
+        <div class="min-w-0 flex-1">
+          <h3 class="text-xs sm:text-sm font-black uppercase tracking-wider text-slate-900 dark:text-slate-100 truncate" id="routePanelTitle">Route Weather</h3>
+          <div id="routePanelSubtitle" class="text-[10px] text-slate-500 dark:text-slate-400 font-medium truncate">Trip Weather & Hazards</div>
         </div>
       </div>
       <div class="flex items-center gap-1 flex-shrink-0">
-        <button type="button" id="routePanelViewMapBtn" class="px-2.5 py-1 rounded-xl text-xs font-bold text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-950/40 hover:bg-indigo-100 dark:hover:bg-indigo-900/50 border border-indigo-200/50 dark:border-indigo-800/40 transition-colors sm:hidden flex items-center gap-1 cursor-pointer" title="View route on map">
-          <span>🗺️</span><span>Map</span>
+        <button type="button" id="routePanelViewMapBtn" class="px-2 py-1 rounded-xl text-xs font-bold text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-950/40 hover:bg-indigo-100 dark:hover:bg-indigo-900/50 border border-indigo-200/50 dark:border-indigo-800/40 transition-colors sm:hidden flex items-center gap-1 cursor-pointer" title="View route on map">
+          <span>🗺️</span><span class="hidden xs:inline">Map</span>
         </button>
-        <button type="button" id="routePanelUndoBtn" class="p-1.5 rounded-lg hover:bg-slate-200/60 dark:hover:bg-slate-700/50 text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-100 transition-colors" title="Undo last stop (Ctrl+Z)" aria-label="Undo">
+        <button type="button" id="routePanelUndoBtn" class="hidden sm:inline-flex p-1.5 rounded-lg hover:bg-slate-200/60 dark:hover:bg-slate-700/50 text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-100 transition-colors" title="Undo last stop (Ctrl+Z)" aria-label="Undo">
           <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M3 10h10a5 5 0 015 5v2m-15-7l4-4m-4 4l4 4"/></svg>
         </button>
-        <button type="button" id="routePanelReverseBtn" class="p-1.5 rounded-lg hover:bg-slate-200/60 dark:hover:bg-slate-700/50 text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-100 transition-colors" title="Reverse route direction" aria-label="Reverse">
+        <button type="button" id="routePanelReverseBtn" class="hidden sm:inline-flex p-1.5 rounded-lg hover:bg-slate-200/60 dark:hover:bg-slate-700/50 text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-100 transition-colors" title="Reverse route direction" aria-label="Reverse">
           <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M7 16V4m0 0L3 8m4-4l4 4m6 0v12m0 0l4-4m-4 4l-4-4"/></svg>
         </button>
         <button type="button" id="routePanelOptimizeBtn" class="px-2 py-1 rounded-lg text-xs font-bold text-amber-600 dark:text-amber-400 hover:bg-amber-50 dark:hover:bg-slate-700/50 transition-colors hidden" title="⚡ Optimize intermediate stops (2-Opt TSP)">⚡ Optimize</button>
         <button type="button" id="routePanelClearBtn" class="p-1.5 rounded-lg hover:bg-rose-50 dark:hover:bg-rose-900/30 text-rose-500 transition-colors" title="Clear entire route" aria-label="Clear">
           <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
         </button>
-        <button type="button" id="routePanelCloseBtn" class="p-1.5 rounded-lg hover:bg-slate-200/60 dark:hover:bg-slate-700/50 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition-colors ml-1 font-bold text-sm" aria-label="Close route panel">✕</button>
+        <button type="button" id="routePanelCloseBtn" class="p-1.5 rounded-lg hover:bg-slate-200/60 dark:hover:bg-slate-700/50 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition-colors ml-0.5 font-bold text-sm" aria-label="Close route panel">✕</button>
       </div>
     </div>
 
@@ -2522,19 +2561,17 @@ function renderEmptyRoutePanel() {
   const singleStopCardHtml =
     pts.length === 1
       ? `
-      <div class="rounded-2xl bg-white/70 dark:bg-slate-800/70 border border-slate-200/80 dark:border-slate-700/80 p-3 space-y-2 hover:border-indigo-400/50 transition-all shadow-xs">
+      <div class="rounded-2xl bg-white/80 dark:bg-slate-800/80 border border-slate-200/80 dark:border-slate-700/80 p-3.5 space-y-2 hover:border-indigo-400/50 transition-all shadow-xs">
         <div class="flex items-center justify-between gap-2">
-          <div class="flex items-center gap-2 min-w-0">
-            <span class="px-2 py-0.5 rounded-lg border text-[10px] font-black uppercase tracking-wider flex-shrink-0 bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border-emerald-500/30">Start (A)</span>
-            <div class="min-w-0">
-              <div class="font-extrabold text-xs text-slate-900 dark:text-slate-100 truncate">${escapeXml(pts[0].name || "Departure Point")}</div>
-              <div class="text-[10px] text-slate-400 font-mono">${pts[0].lat.toFixed(4)}, ${pts[0].lng.toFixed(4)}</div>
-            </div>
-          </div>
-
+          <span class="px-2 py-0.5 rounded-lg border text-[10px] font-black uppercase tracking-wider flex-shrink-0 bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border-emerald-500/30">Start (A)</span>
           <button type="button" class="route-delete-stop-btn p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-900/30 transition-colors cursor-pointer" data-delete-idx="0" title="Remove this stop" aria-label="Delete stop">
             <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
           </button>
+        </div>
+        <div class="space-y-0.5">
+          <div class="font-black text-sm text-slate-900 dark:text-slate-100 break-words leading-snug">${escapeXml(pts[0].name || "Departure Point")}</div>
+          ${pts[0].fullAddress && pts[0].fullAddress !== pts[0].name ? `<div class="text-[11px] text-slate-500 dark:text-slate-400 break-words leading-tight line-clamp-2">${escapeXml(pts[0].fullAddress)}</div>` : ""}
+          <div class="text-[10px] text-slate-400 font-mono">${pts[0].lat.toFixed(4)}, ${pts[0].lng.toFixed(4)}</div>
         </div>
       </div>
     `
@@ -2702,7 +2739,7 @@ function bindRouteSearchAddEvents(containerEl) {
             if (item) {
               dropdownEl.classList.add("hidden");
               inputEl.value = "";
-              addStop(item.lat, item.lng, item.name);
+              addStop(item.lat, item.lng, item.name, item.details);
             }
           };
           btn.addEventListener("pointerdown", selectItem);
@@ -3088,18 +3125,10 @@ function renderRoutePanelContent(stops, units) {
       }
 
       return `
-        <div class="rounded-2xl bg-white/70 dark:bg-slate-800/70 border border-slate-200/80 dark:border-slate-700/80 p-3 space-y-2 hover:border-indigo-400/50 transition-all shadow-xs" data-stop-card="${i}">
+        <div class="rounded-2xl bg-white/80 dark:bg-slate-800/80 border border-slate-200/80 dark:border-slate-700/80 p-3.5 space-y-2.5 hover:border-indigo-400/50 transition-all shadow-xs" data-stop-card="${i}">
+          <!-- Top Row: Role Badge on Left, Action Buttons on Right -->
           <div class="flex items-center justify-between gap-2">
-            <div class="flex items-center gap-2 min-w-0">
-              <span class="px-2 py-0.5 rounded-lg border text-[10px] font-black uppercase tracking-wider flex-shrink-0 ${roleBadgeBg}">${roleLabel}</span>
-              <div class="min-w-0">
-                <div class="font-extrabold text-xs text-slate-900 dark:text-slate-100 truncate" data-stop-title-idx="${i}">
-                  ${escapeXml(stop.name || roleLabel)}
-                </div>
-                <div class="text-[10px] text-slate-400 font-mono">${stop.lat.toFixed(4)}, ${stop.lng.toFixed(4)}</div>
-              </div>
-            </div>
-
+            <span class="px-2 py-0.5 rounded-lg border text-[10px] font-black uppercase tracking-wider flex-shrink-0 ${roleBadgeBg}">${roleLabel}</span>
             <div class="flex items-center gap-1 flex-shrink-0">
               <button type="button" class="route-move-up-btn p-1.5 rounded-lg text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700/60 transition-colors cursor-pointer ${i === 0 ? "invisible pointer-events-none" : ""}" data-move-up="${i}" title="Move earlier in trip" aria-label="Move stop up">
                 ↑
@@ -3113,12 +3142,22 @@ function renderRoutePanelContent(stops, units) {
             </div>
           </div>
 
-          <div class="flex items-center justify-between pt-1 border-t border-slate-200/50 dark:border-slate-700/50 text-[11px] cursor-pointer" data-zoom-stop="${i}">
+          <!-- Middle Block: Full Place Name (Never truncated) & Address Context -->
+          <div class="space-y-0.5">
+            <div class="font-black text-sm text-slate-900 dark:text-slate-100 break-words leading-snug" data-stop-title-idx="${i}">
+              ${escapeXml(stop.name || roleLabel)}
+            </div>
+            ${stop.fullAddress && stop.fullAddress !== stop.name ? `<div class="text-[11px] text-slate-500 dark:text-slate-400 break-words leading-tight line-clamp-2">${escapeXml(stop.fullAddress)}</div>` : ""}
+            <div class="text-[10px] text-slate-400 font-mono">${stop.lat.toFixed(4)}, ${stop.lng.toFixed(4)}</div>
+          </div>
+
+          <!-- Bottom Row: ETA & Live Weather -->
+          <div class="flex items-center justify-between pt-1.5 border-t border-slate-200/50 dark:border-slate-700/50 text-[11px] cursor-pointer" data-zoom-stop="${i}">
             <span class="font-bold text-indigo-600 dark:text-indigo-400">ETA ${etaStr}</span>
-            <span class="inline-flex items-center gap-1 text-slate-600 dark:text-slate-300 font-medium">
+            <span class="inline-flex items-center gap-1.5 text-slate-700 dark:text-slate-200 font-semibold">
               <span>${info.icon}</span>
-              <span>${formatTemp(stop.weather.temperature, units)}</span>
-              <span class="opacity-75">· ${info.description}</span>
+              <span class="font-bold text-slate-900 dark:text-white">${formatTemp(stop.weather.temperature, units)}</span>
+              <span class="text-slate-500 dark:text-slate-400 font-normal">· ${info.description}</span>
             </span>
           </div>
         </div>
@@ -3155,7 +3194,7 @@ function renderRoutePanelContent(stops, units) {
         .join("");
 
       return `
-        <div class="rounded-2xl bg-white/70 dark:bg-slate-800/70 border border-slate-200/80 dark:border-slate-700/80 p-3 space-y-2 hover:border-indigo-400/50 transition-all cursor-pointer shadow-xs" data-zoom-stop="${i}">
+        <div class="rounded-2xl bg-white/80 dark:bg-slate-800/80 border border-slate-200/80 dark:border-slate-700/80 p-3.5 space-y-2 hover:border-indigo-400/50 transition-all cursor-pointer shadow-xs" data-zoom-stop="${i}">
           <div class="flex items-center justify-between">
             <div class="flex items-center gap-2">
               <span class="px-2 py-0.5 rounded-lg border text-[10px] font-black uppercase tracking-wider ${roleBadgeBg}">${roleLabel}</span>
@@ -3166,11 +3205,11 @@ function renderRoutePanelContent(stops, units) {
             </div>
           </div>
 
-          <div class="flex items-center justify-between text-xs">
-            <div class="text-slate-600 dark:text-slate-300 text-[11px] font-medium truncate max-w-[190px]">
+          <div class="flex items-start justify-between gap-2 text-xs">
+            <div class="text-slate-700 dark:text-slate-200 text-xs font-bold break-words flex-1 min-w-0 leading-snug">
               ${escapeXml(stop.name || info.description)}
             </div>
-            <div class="font-black text-sm text-slate-900 dark:text-white">
+            <div class="font-black text-sm text-slate-900 dark:text-white flex-shrink-0">
               ${formatTemp(stop.weather.temperature, units)}
             </div>
           </div>

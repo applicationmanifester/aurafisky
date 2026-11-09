@@ -454,6 +454,26 @@ test("activateMapPickMode activates route picking mode without error", () => {
   expect(() => activateMapPickMode("stop")).not.toThrow();
 });
 
+test("Route Weather quick chip, dropdown, and panel replace legacy 'Plan a route'", () => {
+  const fs = require("fs");
+  const html = fs.readFileSync("index.html", "utf-8");
+  const routesCode = fs.readFileSync("features/routes.js", "utf-8");
+
+  // 1. Quick chip in index.html is labeled 'Route Weather' with road icon and no 'Plan a route'
+  expect(html).toContain('data-category="route-weather"');
+  expect(html).toContain('<span>Route Weather</span>');
+  expect(html).not.toContain('<span>Plan a route</span>');
+
+  // 2. Dropdown header and buttons are labeled 'Route Weather'
+  expect(html).toContain('<span class="text-xs font-bold text-slate-800 dark:text-slate-100 truncate">Route Weather</span>');
+  expect(html).toContain('Close Route Weather');
+
+  // 3. routes.js default tab is 'weather'
+  expect(routesCode).toContain('let activeRouteTab = "weather";');
+  expect(routesCode).toContain('btn.title = "Route Weather";');
+});
+
+
 
 
 

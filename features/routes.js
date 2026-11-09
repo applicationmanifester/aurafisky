@@ -46,7 +46,7 @@ let hudEl = null;
 let panelEl = null;
 let activeRouteData = null; // cached analysis data
 let isPanelOpen = false;
-let activeRouteTab = "stops"; // 'stops' | 'weather' | 'analytics'
+let activeRouteTab = "weather"; // 'weather' | 'stops' | 'analytics' - default to weather for Route Weather
 let lastLoadedStops = [];
 
 // ============================================================================
@@ -688,7 +688,7 @@ export function updateRouteDropdownUI() {
   // Status Badge
   if (statusBadge) {
     if (studioActive) {
-      statusBadge.textContent = "Studio Active";
+      statusBadge.textContent = "Route Weather Active";
       statusBadge.className = "text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 shrink-0";
     } else if (hasStops) {
       statusBadge.textContent = `${pts.length} stop${pts.length > 1 ? "s" : ""}`;
@@ -915,7 +915,7 @@ function initRouteDropdownListeners() {
     e.stopPropagation();
     toggleRouteDropdown(false);
     closeRouteStudio();
-    appRef?.showToast?.("Route Weather Studio closed", "info");
+    appRef?.showToast?.("Route Weather closed", "info");
   });
 
   const deleteBtn = document.getElementById("routeDropdownDeleteLocationsBtn");
@@ -942,8 +942,8 @@ export function init(app) {
   }
   btn = document.getElementById("routeBtn");
   if (btn) {
-    btn.title = "Plan a route around weather";
-    btn.setAttribute("aria-label", "Plan a route around weather");
+    btn.title = "Route Weather";
+    btn.setAttribute("aria-label", "Route Weather");
     btn.addEventListener("click", (e) => {
       e.stopPropagation();
       toggleRouteDropdown();
@@ -976,7 +976,7 @@ export function closeRouteStudio() {
 
   if (btn) {
     btn.classList.remove("bg-indigo-600", "text-white", "ring-2", "ring-indigo-400/50");
-    btn.title = "Plan a route around weather";
+    btn.title = "Route Weather";
   }
 
   hideHUD();
@@ -1057,7 +1057,7 @@ export function openRouteStudio() {
   } else if (pts.length === 1) {
     appRef.showToast?.(`Start set: ${pts[0].name}. Choose a destination by search or map.`, "info");
   } else {
-    appRef.showToast?.(`🚗 Route Weather: ${pts.length} stops ready.`, "info");
+    appRef.showToast?.(`🛣️ Route Weather: ${pts.length} stops ready.`, "info");
   }
 }
 
@@ -2139,8 +2139,8 @@ function buildPanel() {
       <div class="flex items-center gap-2.5 min-w-0">
         <div class="w-8 h-8 rounded-xl bg-gradient-to-tr from-indigo-600 to-violet-600 text-white flex items-center justify-center font-bold text-sm shadow-md shadow-indigo-500/20 flex-shrink-0" id="routePanelModeIcon">🚗</div>
         <div class="min-w-0">
-          <h3 class="text-xs font-black uppercase tracking-wider text-slate-900 dark:text-slate-100 truncate" id="routePanelTitle">Route Weather Studio</h3>
-          <div id="routePanelSubtitle" class="text-[10px] text-slate-500 dark:text-slate-400 font-medium truncate">Trip Weather & Safety Intelligence</div>
+          <h3 class="text-xs font-black uppercase tracking-wider text-slate-900 dark:text-slate-100 truncate" id="routePanelTitle">Route Weather</h3>
+          <div id="routePanelSubtitle" class="text-[10px] text-slate-500 dark:text-slate-400 font-medium truncate">Trip Weather & Road Hazard Intelligence</div>
         </div>
       </div>
       <div class="flex items-center gap-1 flex-shrink-0">
@@ -2187,11 +2187,11 @@ function buildPanel() {
 
     <!-- Tab Strip -->
     <div class="flex items-center border-b border-slate-200/60 dark:border-slate-700/60 bg-slate-50/70 dark:bg-slate-900/60 px-3 py-1.5 gap-1.5 flex-shrink-0" id="routePanelTabStrip">
-      <button type="button" data-route-tab="stops" class="route-tab-pill flex-1 py-1.5 px-2 rounded-xl text-xs font-bold transition-all bg-white dark:bg-slate-800 text-indigo-600 dark:text-indigo-400 shadow-xs border border-slate-200/60 dark:border-slate-700/60 cursor-pointer">
-        🗺️ Stops (<span id="routePanelStopsCount">0</span>)
-      </button>
-      <button type="button" data-route-tab="weather" class="route-tab-pill flex-1 py-1.5 px-2 rounded-xl text-xs font-medium transition-all text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white cursor-pointer">
+      <button type="button" data-route-tab="weather" class="route-tab-pill flex-1 py-1.5 px-2 rounded-xl text-xs font-bold transition-all bg-white dark:bg-slate-800 text-indigo-600 dark:text-indigo-400 shadow-xs border border-slate-200/60 dark:border-slate-700/60 cursor-pointer">
         🌤️ Weather
+      </button>
+      <button type="button" data-route-tab="stops" class="route-tab-pill flex-1 py-1.5 px-2 rounded-xl text-xs font-medium transition-all text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white cursor-pointer">
+        🗺️ Stops (<span id="routePanelStopsCount">0</span>)
       </button>
       <button type="button" data-route-tab="analytics" class="route-tab-pill flex-1 py-1.5 px-2 rounded-xl text-xs font-medium transition-all text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white cursor-pointer">
         📊 Analytics
@@ -2542,7 +2542,7 @@ function renderEmptyRoutePanel() {
 
   const searchPlaceholder =
     pts.length === 0
-      ? "Search departure city, address or landmark…"
+      ? "Search departure city or landmark…"
       : "Search destination city or landmark…";
 
   const pickMapLabel =
@@ -2575,15 +2575,15 @@ function renderEmptyRoutePanel() {
       ${singleStopCardHtml}
 
       <div class="py-3 sm:py-8 text-center space-y-1.5 sm:space-y-2">
-        <div class="text-2xl sm:text-3xl">🗺️</div>
+        <div class="text-2xl sm:text-3xl">🛣️</div>
         <div class="font-extrabold text-sm text-slate-800 dark:text-slate-100">
-          ${pts.length === 0 ? "Where are you starting?" : "Where are you going next?"}
+          ${pts.length === 0 ? "Check Weather Along Your Route" : "Where are you heading?"}
         </div>
         <div class="text-xs text-slate-500 dark:text-slate-400 leading-relaxed max-w-[280px] mx-auto">
           ${
             pts.length === 0
-              ? "Search a place above, or tap the map to place Departure Point (A)."
-              : "Search or tap the map to place Destination Point (B)."
+              ? "Search a departure city above, tap My Location, or tap the map to begin."
+              : "Search destination city or tap the map to forecast weather along your drive."
           }
         </div>
       </div>
@@ -2941,11 +2941,22 @@ function renderRoutePanelContent(stops, units) {
   if (modeIconEl) modeIconEl.textContent = modeEmoji;
 
   const subtitleEl = panelEl?.querySelector("#routePanelSubtitle");
-  if (subtitleEl) subtitleEl.textContent = `${modeName} Trip Weather & Safety Intelligence`;
+  if (subtitleEl) subtitleEl.textContent = `${modeName} Route Weather & Hazard Intelligence`;
 
   // Update stop count in panel tab strip
   const panelStopsCountEl = document.getElementById("routePanelStopsCount");
   if (panelStopsCountEl) panelStopsCountEl.textContent = String(stops.length);
+
+  // Synchronize Tab Strip Pill Styles with activeRouteTab
+  panelEl?.querySelectorAll(".route-tab-pill").forEach((b) => {
+    if (b.dataset.routeTab === activeRouteTab) {
+      b.className =
+        "route-tab-pill flex-1 py-1.5 px-2 rounded-xl text-xs font-bold transition-all bg-white dark:bg-slate-800 text-indigo-600 dark:text-indigo-400 shadow-xs border border-slate-200/60 dark:border-slate-700/60 cursor-pointer";
+    } else {
+      b.className =
+        "route-tab-pill flex-1 py-1.5 px-2 rounded-xl text-xs font-medium transition-all text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white cursor-pointer";
+    }
+  });
 
   // Toggle Header Optimize Button if 4+ stops exist
   const panelOptBtn = panelEl ? panelEl.querySelector("#routePanelOptimizeBtn") : document.getElementById("routePanelOptimizeBtn");

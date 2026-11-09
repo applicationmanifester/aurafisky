@@ -1,5 +1,6 @@
 function getMyLocation(options = {}) {
     const { silent = false, onFail = null } = options;
+    const { onSuccess = null, updateMap = true } = options;
     const { precise = false } = options;
     if (typeof window !== "undefined" && window.isSecureContext === false) {
       if (!silent) this.showToast("Location requires HTTPS or localhost (insecure connection).", "error");
@@ -18,13 +19,16 @@ function getMyLocation(options = {}) {
     if (this._lastKnownGpsCoords && !precise) {
       const { latitude, longitude } = this._lastKnownGpsCoords;
       optimisticCoords = { latitude, longitude };
-      if (typeof this.handleMapClick === "function") {
-        this.handleMapClick(latitude, longitude, { isGps: true });
-      } else if (typeof this.selectLocation === "function") {
-        this.selectLocation(latitude, longitude);
-      } else if (typeof this._debouncedHandleMapClick === "function") {
-        this._debouncedHandleMapClick(latitude, longitude);
+      if (updateMap) {
+        if (typeof this.handleMapClick === "function") {
+          this.handleMapClick(latitude, longitude, { isGps: true });
+        } else if (typeof this.selectLocation === "function") {
+          this.selectLocation(latitude, longitude);
+        } else if (typeof this._debouncedHandleMapClick === "function") {
+          this._debouncedHandleMapClick(latitude, longitude);
+        }
       }
+      if (typeof onSuccess === "function") onSuccess(optimisticCoords);
     } else if (!silent) {
       this.showToast("Finding your location...", "info");
     }
@@ -41,13 +45,16 @@ function getMyLocation(options = {}) {
       ) {
         return;
       }
-      if (typeof this.handleMapClick === "function") {
-        this.handleMapClick(latitude, longitude, { isGps: true, accuracy });
-      } else if (typeof this.selectLocation === "function") {
-        this.selectLocation(latitude, longitude);
-      } else if (typeof this._debouncedHandleMapClick === "function") {
-        this._debouncedHandleMapClick(latitude, longitude);
+      if (updateMap) {
+        if (typeof this.handleMapClick === "function") {
+          this.handleMapClick(latitude, longitude, { isGps: true, accuracy });
+        } else if (typeof this.selectLocation === "function") {
+          this.selectLocation(latitude, longitude);
+        } else if (typeof this._debouncedHandleMapClick === "function") {
+          this._debouncedHandleMapClick(latitude, longitude);
+        }
       }
+      if (typeof onSuccess === "function") onSuccess({ latitude, longitude, accuracy });
     };
 
     const onLocationError = (err) => {

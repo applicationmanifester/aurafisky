@@ -192,5 +192,70 @@ describe("Internationalisation (i18n) Engine & Language Support", () => {
     const thunderKn = getWeatherInfo(95, true, "kn");
     expect(thunderKn.description).toBe("ಗುಡುಗು ಸಹಿತ ಮಳೆ");
   });
+
+  it("translates all Settings drawer and core UI elements when Chinese (zh-CN) is selected", () => {
+    // Settings panel phrases in Simplified Chinese
+    expect(translateText("Settings", "zh-CN")).toBe("设置");
+    expect(translateText("Units (Metric)", "zh-CN")).toBe("单位 (公制)");
+    expect(translateText("Dark mode", "zh-CN")).toBe("深色模式");
+    expect(translateText("24h timeline", "zh-CN")).toBe("24小时时间轴");
+    expect(translateText("Map style", "zh-CN")).toBe("地图样式");
+    expect(translateText("App Language", "zh-CN")).toBe("应用语言");
+    expect(translateText("Map language", "zh-CN")).toBe("地图语言");
+    expect(translateText("Ambient sounds", "zh-CN")).toBe("环境音效");
+    expect(translateText("Sync history", "zh-CN")).toBe("同步历史");
+    expect(translateText("Default location", "zh-CN")).toBe("默认位置");
+    expect(translateText("Set here", "zh-CN")).toBe("设在此处");
+    expect(translateText("Notify on default", "zh-CN")).toBe("在默认位置提醒");
+
+    // Weather, Search & Briefing phrases
+    expect(translateText("Search a city...", "zh-CN")).toBe("搜索城市…");
+    expect(translateText("Today's briefing", "zh-CN")).toBe("今日简报");
+    expect(translateText("TODAY'S BRIEFING", "zh-CN")).toBe("今日简报");
+    expect(translateText("Right now", "zh-CN")).toBe("当前天气");
+    expect(translateText("Elevation Key", "zh-CN")).toBe("海拔图例");
+
+    // Trust score translations (pure English and mixed partial)
+    const trustPure = translateText("55% trust (temp 62%, wind 52%, precip 47%)", "zh-CN");
+    expect(trustPure).toBe("🎯 55% 置信度 (温度 62%, 风速 52%, 降水 47%)");
+
+    const trustMixed = translateText("🎯 55% trust (温度 62%, 风速 52%, precipitation 47%)", "zh-CN");
+    expect(trustMixed).toBe("🎯 55% 置信度 (温度 62%, 风速 52%, 降水 47%)");
+  });
+
+  it("translates Settings panel DOM elements to Chinese and reverts back to English", () => {
+    const panel = document.createElement("div");
+    panel.innerHTML = `
+      <h3>Settings</h3>
+      <span id="settingsUnitsLabel">Units (Metric)</span>
+      <span id="settingsUnitsSub">°C, km/h, mm</span>
+      <span>Dark mode</span>
+      <span>24h timeline</span>
+      <span>Map style</span>
+      <span id="settingsAppLanguageLabel">App Language</span>
+      <span id="settingsAppLanguageSub">Translate all features & tabs</span>
+      <span>Ambient sounds</span>
+      <span>Sync history</span>
+      <span>Default location</span>
+      <button id="setDefaultLocationBtn">Set here</button>
+    `;
+
+    // Translate to Chinese
+    translateDOM(panel, "zh-CN");
+
+    expect(panel.querySelector("h3").textContent).toBe("设置");
+    expect(panel.querySelector("#settingsUnitsLabel").textContent).toBe("单位 (公制)");
+    expect(panel.querySelector("#settingsAppLanguageLabel").textContent).toBe("应用语言");
+    expect(panel.querySelector("#settingsAppLanguageSub").textContent).toBe("翻译所有功能与标签页");
+    expect(panel.querySelector("#setDefaultLocationBtn").textContent).toBe("设在此处");
+
+    // Revert to English
+    translateDOM(panel, "en");
+    expect(panel.querySelector("h3").textContent).toBe("Settings");
+    expect(panel.querySelector("#settingsUnitsLabel").textContent).toBe("Units (Metric)");
+    expect(panel.querySelector("#settingsAppLanguageLabel").textContent).toBe("App Language");
+    expect(panel.querySelector("#settingsAppLanguageSub").textContent).toBe("Translate all features & tabs");
+    expect(panel.querySelector("#setDefaultLocationBtn").textContent).toBe("Set here");
+  });
 });
 

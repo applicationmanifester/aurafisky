@@ -10981,6 +10981,9 @@ class AurafiskyApp {
     if (show) {
       this.pushHistoryOverlay("settings");
       this.$.settingsPanel.classList.remove("hidden");
+      if (typeof translateDOM === "function") {
+        translateDOM(this.$.settingsPanel, this.language || detectLocale());
+      }
       setTimeout(() => this.$.settingsPanel.classList.add("open"), 10);
     } else {
       this.popHistoryOverlay("settings");
@@ -11464,6 +11467,11 @@ class AurafiskyApp {
     // 10. Run deep recursive DOM translation across the full active document
     if (typeof translateDOM === "function") {
       translateDOM(document.body, lang);
+    }
+
+    // 11. Re-translate Settings Panel if open or present
+    if (this.$.settingsPanel && typeof translateDOM === "function") {
+      translateDOM(this.$.settingsPanel, lang);
     }
 
     // 11. Re-translate Route Studio if open

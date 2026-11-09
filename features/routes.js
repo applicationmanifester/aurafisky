@@ -28,10 +28,12 @@ import { translateDOM } from "../modules/i18n.js";
 
 const OSRM_BASE = "https://router.project-osrm.org/route/v1/driving";
 const EARTH_RADIUS_M = 6371000;
+const ROUTE_RECENTS_KEY = "aurafisky_route_recent_places";
 
 let appRef = null;
 let routeMode = false;
 let pts = []; // [{ lat, lng, name, marker }]
+let pendingDestination = null; // destination selected before an origin is set
 let activeMarkers = []; // tracks all allocated HtmlMarker instances
 let activePopoverOverlay = null; // currently open waypoint popover
 
@@ -1020,18 +1022,6 @@ export function openRouteStudio() {
   const restorePill = document.getElementById("restoreSheetPill");
   if (restorePill) restorePill.classList.add("hidden");
 
-  // If user already had a selected location and no stops exist yet, set it as Origin (A)
-  if (pts.length === 0 && appRef.selectedLat != null && appRef.selectedLng != null) {
-    const ptA = {
-      lat: appRef.selectedLat,
-      lng: appRef.selectedLng,
-      name: (appRef.selectedName || "Departure Point").split(",")[0].trim(),
-      marker: null,
-    };
-    pts.push(ptA);
-    renderWaypointMarkers();
-  }
-
   // On mobile, show a compact setup sheet until 2 stops are chosen so search and map picking are discoverable.
   if (isMobileLayout() && pts.length < 2) {
     showHUD();
@@ -1461,6 +1451,45 @@ export async function addStop(lat, lng, name = null, fullAddress = null) {
   }
 }
 
+/** Set or replace the route's start or destination from a place search result. */
+async function setRouteEndpoint(role, place) {
+  const point = {
+    lat: place.lat,
+    lng: place.lng,
+    name: place.name || (role === "origin" ? "Starting point" : "Destination"),
+    fullAddress: place.details || null,
+    marker: null,
+  };
+
+  if (role === "origin") {
+    if (pts.length === 0) pts.push(point);
+    else pts[0] = point;
+    if (pendingDestination) {
+      pts.push(pendingDestination);
+      pendingDestination = null;
+    }
+  } else if (pts.length === 0) {
+    pendingDestination = point;
+  } else if (pts.length === 1) {
+    pts.push(point);
+  } else {
+    pts[pts.length - 1] = point;
+  }
+
+  renderWaypointMarkers();
+  updateHUD();
+  updateRouteDropdownUI();
+  await updateRouteGeometry();
+
+  if (pts.length >= 2) {
+    activeRouteTab = "stops";
+    showRoutePanelLoading();
+    await fetchAndRenderRoutePlan();
+  } else {
+    renderEmptyRoutePanel();
+  }
+}
+
 export function getStops() {
   return pts;
 }
@@ -1854,6 +1883,18 @@ export function reverseRoute() {
   }
 }
 
+/** Swap the route endpoints while keeping intermediate stops in their order. */
+async function swapRouteEndpoints() {
+  if (pts.length < 2) return;
+  const lastIndex = pts.length - 1;
+  [pts[0], pts[lastIndex]] = [pts[lastIndex], pts[0]];
+  renderWaypointMarkers();
+  await updateRouteGeometry();
+  updateHUD();
+  updateRouteDropdownUI();
+  if (isPanelOpen) await fetchAndRenderRoutePlan();
+}
+
 /**
  * 1-Click 2-Opt Waypoint Optimizer:
  * Reorders intermediate stops to minimize total journey distance while
@@ -1907,6 +1948,7 @@ export async function optimizeWaypointOrder() {
 export function clearRoute() {
   closeWaypointPopover();
   pts = [];
+  pendingDestination = null;
   activeRouteData = null;
   if (routeSource) routeSource.clear();
   clearWaypointMarkers();
@@ -2023,7 +2065,12 @@ function buildHUD() {
       renderEmptyRoutePanel();
     }
     setTimeout(() => {
-      document.getElementById("routeSearchAddInput")?.focus();
+      const selector = pts.length >= 2
+        ? "#routeSearchAddInput"
+        : pts.length === 0
+          ? '[data-route-role="origin"]'
+          : '[data-route-role="destination"]';
+      panelEl?.querySelector(selector)?.focus();
     }, 100);
   });
 
@@ -2061,12 +2108,13 @@ function hideHUD() {
 function setTransportMode(mode) {
   transportMode = mode;
   document.querySelectorAll(".route-mode-btn").forEach((b) => {
+    const panelModeClasses = b.closest("#routePanelModeGroup");
     if (b.dataset.mode === mode) {
       b.className =
-        "route-mode-btn px-2 sm:px-2.5 py-1 rounded-lg text-xs font-semibold transition-all bg-white dark:bg-indigo-600 shadow-xs text-indigo-600 dark:text-white flex items-center gap-1 cursor-pointer";
+        `route-mode-btn ${panelModeClasses ? "min-h-11 flex-1 sm:flex-none justify-center px-1.5 sm:px-2.5 whitespace-nowrap" : "px-2 sm:px-2.5 py-1"} rounded-lg text-xs font-semibold transition-all bg-white dark:bg-indigo-600 shadow-xs text-indigo-600 dark:text-white flex items-center gap-1 cursor-pointer`;
     } else {
       b.className =
-        "route-mode-btn px-2 sm:px-2.5 py-1 rounded-lg text-xs font-medium transition-all text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white flex items-center gap-1 cursor-pointer";
+        `route-mode-btn ${panelModeClasses ? "min-h-11 flex-1 sm:flex-none justify-center px-1.5 sm:px-2.5 whitespace-nowrap" : "px-2 sm:px-2.5 py-1"} rounded-lg text-xs font-medium transition-all text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white flex items-center gap-1 cursor-pointer`;
     }
   });
 
@@ -2113,6 +2161,16 @@ function updateHUD() {
       liveStatsEl.textContent = "Click map to start";
     }
   }
+
+  const routeReady = pts.length >= 2;
+  ["routeNavBtn", "routeExportGpxBtn", "routeShareBtn", "routeSaveBtn"].forEach((id) => {
+    const action = document.getElementById(id);
+    if (action) action.disabled = !routeReady;
+  });
+  const actionHint = document.getElementById("routePanelActionHint");
+  if (actionHint) actionHint.classList.toggle("hidden", routeReady);
+  const swapEndpointsBtn = document.getElementById("routeSwapEndpointsBtn");
+  if (swapEndpointsBtn) swapEndpointsBtn.disabled = !routeReady;
 
   if (hudEl) {
     const statusEl = hudEl.querySelector("#routeHudStatus");
@@ -2174,17 +2232,25 @@ function buildPanel() {
       <div class="w-10 h-1.5 rounded-full bg-slate-300 dark:bg-slate-600"></div>
     </div>
 
+    <div id="routeSearchFocusedHeader" class="hidden items-center gap-3 px-4 py-3 border-b border-slate-200/60 dark:border-slate-700/60">
+      <button type="button" id="routeSearchBackBtn" class="min-h-11 min-w-11 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-200 text-xl" aria-label="Back to route overview">‹</button>
+      <div>
+        <div class="text-base font-bold text-slate-900 dark:text-slate-100">Search locations</div>
+        <div class="text-sm text-slate-500 dark:text-slate-400">Type a city, address, or landmark</div>
+      </div>
+    </div>
+
     <!-- Header -->
     <div id="routePanelHeader" class="flex items-center justify-between px-3.5 py-2 sm:py-3 border-b border-slate-200/60 dark:border-slate-700/60 bg-white/50 dark:bg-slate-800/50 flex-shrink-0 sm:cursor-grab active:sm:cursor-grabbing select-none gap-2">
       <div class="flex items-center gap-2 min-w-0 flex-1">
         <div class="w-8 h-8 rounded-xl bg-gradient-to-tr from-indigo-600 to-violet-600 text-white flex items-center justify-center font-bold text-sm shadow-md shadow-indigo-500/20 flex-shrink-0" id="routePanelModeIcon">🚗</div>
         <div class="min-w-0 flex-1">
-          <h3 class="text-xs sm:text-sm font-black uppercase tracking-wider text-slate-900 dark:text-slate-100 truncate" id="routePanelTitle">Route Weather</h3>
-          <div id="routePanelSubtitle" class="text-[10px] text-slate-500 dark:text-slate-400 font-medium truncate">Trip Weather & Hazards</div>
+          <h3 class="text-sm font-black uppercase tracking-wider text-slate-900 dark:text-slate-100 truncate" id="routePanelTitle">Route Weather</h3>
+          <div id="routePanelSubtitle" class="text-xs text-slate-500 dark:text-slate-400 font-medium truncate">Trip Weather & Hazards</div>
         </div>
       </div>
       <div class="flex items-center gap-1 flex-shrink-0">
-        <button type="button" id="routePanelViewMapBtn" class="px-2 py-1 rounded-xl text-xs font-bold text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-950/40 hover:bg-indigo-100 dark:hover:bg-indigo-900/50 border border-indigo-200/50 dark:border-indigo-800/40 transition-colors sm:hidden flex items-center gap-1 cursor-pointer" title="View route on map">
+        <button type="button" id="routePanelViewMapBtn" class="min-h-11 min-w-11 px-2 py-1 rounded-xl text-xs font-bold text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-950/40 hover:bg-indigo-100 dark:hover:bg-indigo-900/50 border border-indigo-200/50 dark:border-indigo-800/40 transition-colors sm:hidden flex items-center gap-1 cursor-pointer" title="View route on map">
           <span>🗺️</span><span class="hidden xs:inline">Map</span>
         </button>
         <button type="button" id="routePanelUndoBtn" class="hidden sm:inline-flex p-1.5 rounded-lg hover:bg-slate-200/60 dark:hover:bg-slate-700/50 text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-100 transition-colors" title="Undo last stop (Ctrl+Z)" aria-label="Undo">
@@ -2194,72 +2260,73 @@ function buildPanel() {
           <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M7 16V4m0 0L3 8m4-4l4 4m6 0v12m0 0l4-4m-4 4l-4-4"/></svg>
         </button>
         <button type="button" id="routePanelOptimizeBtn" class="px-2 py-1 rounded-lg text-xs font-bold text-amber-600 dark:text-amber-400 hover:bg-amber-50 dark:hover:bg-slate-700/50 transition-colors hidden" title="⚡ Optimize intermediate stops (2-Opt TSP)">⚡ Optimize</button>
-        <button type="button" id="routePanelClearBtn" class="p-1.5 rounded-lg hover:bg-rose-50 dark:hover:bg-rose-900/30 text-rose-500 transition-colors" title="Clear entire route" aria-label="Clear">
+        <button type="button" id="routePanelClearBtn" class="min-h-11 min-w-11 p-1.5 rounded-lg hover:bg-rose-50 dark:hover:bg-rose-900/30 text-rose-500 transition-colors" title="Clear entire route" aria-label="Clear">
           <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
         </button>
-        <button type="button" id="routePanelCloseBtn" class="p-1.5 rounded-lg hover:bg-slate-200/60 dark:hover:bg-slate-700/50 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition-colors ml-0.5 font-bold text-sm" aria-label="Close route panel">✕</button>
+        <button type="button" id="routePanelCloseBtn" class="min-h-11 min-w-11 p-1.5 rounded-lg hover:bg-slate-200/60 dark:hover:bg-slate-700/50 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition-colors ml-0.5 font-bold text-sm" aria-label="Close route panel">✕</button>
       </div>
     </div>
 
     <!-- Integrated Transport Modes & Live Trip Status Strip -->
-    <div class="px-3.5 py-2 border-b border-slate-200/60 dark:border-slate-700/60 bg-slate-50/70 dark:bg-slate-900/50 flex items-center justify-between gap-2 flex-shrink-0">
+    <div id="routePanelModeStrip" class="px-3.5 py-2 border-b border-slate-200/60 dark:border-slate-700/60 bg-slate-50/70 dark:bg-slate-900/50 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 flex-shrink-0">
       <!-- Mode buttons -->
-      <div class="flex items-center gap-1 bg-slate-200/70 dark:bg-slate-800/80 p-0.5 rounded-xl flex-shrink-0" id="routePanelModeGroup">
-        <button type="button" data-mode="driving" class="route-mode-btn px-2 sm:px-2.5 py-1 rounded-lg text-xs font-semibold transition-all bg-white dark:bg-indigo-600 shadow-xs text-indigo-600 dark:text-white flex items-center gap-1 cursor-pointer" title="Drive (Road network)">
-          <span>🚗</span><span class="text-[11px]">Drive</span>
+      <div class="flex items-center gap-1 bg-slate-200/70 dark:bg-slate-800/80 p-1 rounded-xl w-full sm:w-auto overflow-x-auto" id="routePanelModeGroup">
+        <button type="button" data-mode="driving" class="route-mode-btn min-h-11 flex-1 sm:flex-none justify-center px-1.5 sm:px-2.5 rounded-lg text-xs font-semibold transition-all bg-white dark:bg-indigo-600 shadow-xs text-indigo-600 dark:text-white flex items-center gap-1 cursor-pointer whitespace-nowrap" title="Drive (Road network)">
+          <span>🚗</span><span class="text-xs">Drive</span>
         </button>
-        <button type="button" data-mode="cycling" class="route-mode-btn px-2 sm:px-2.5 py-1 rounded-lg text-xs font-medium transition-all text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white flex items-center gap-1 cursor-pointer" title="Bike (Cycling pace ~18 km/h)">
-          <span>🚲</span><span class="text-[11px]">Bike</span>
+        <button type="button" data-mode="cycling" class="route-mode-btn min-h-11 flex-1 sm:flex-none justify-center px-1.5 sm:px-2.5 rounded-lg text-xs font-medium transition-all text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white flex items-center gap-1 cursor-pointer whitespace-nowrap" title="Bike (Cycling pace ~18 km/h)">
+          <span>🚲</span><span class="text-xs">Bike</span>
         </button>
-        <button type="button" data-mode="walking" class="route-mode-btn px-2 sm:px-2.5 py-1 rounded-lg text-xs font-medium transition-all text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white flex items-center gap-1 cursor-pointer" title="Walk (Hiking pace ~4.8 km/h)">
-          <span>🚶</span><span class="text-[11px]">Walk</span>
+        <button type="button" data-mode="walking" class="route-mode-btn min-h-11 flex-1 sm:flex-none justify-center px-1.5 sm:px-2.5 rounded-lg text-xs font-medium transition-all text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white flex items-center gap-1 cursor-pointer whitespace-nowrap" title="Walk (Hiking pace ~4.8 km/h)">
+          <span>🚶</span><span class="text-xs">Walk</span>
         </button>
-        <button type="button" data-mode="direct" class="route-mode-btn px-2 sm:px-2.5 py-1 rounded-lg text-xs font-medium transition-all text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white flex items-center gap-1 cursor-pointer" title="Flight (Great circle arc)">
-          <span>✈️</span><span class="text-[11px]">Flight</span>
+        <button type="button" data-mode="direct" class="route-mode-btn min-h-11 flex-1 sm:flex-none justify-center px-1.5 sm:px-2.5 rounded-lg text-xs font-medium transition-all text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white flex items-center gap-1 cursor-pointer whitespace-nowrap" title="Flight (Great circle arc)">
+          <span>✈️</span><span class="text-xs">Flight</span>
         </button>
       </div>
 
       <!-- Live Trip Stats (Duration & Distance) -->
-      <div id="routePanelLiveStats" class="text-right text-xs font-black text-indigo-600 dark:text-indigo-400 truncate min-w-0">
+      <div id="routePanelLiveStats" class="text-left sm:text-right text-xs font-black text-indigo-600 dark:text-indigo-400 min-w-0">
         --
       </div>
     </div>
 
     <!-- Tab Strip -->
     <div class="flex items-center border-b border-slate-200/60 dark:border-slate-700/60 bg-slate-50/70 dark:bg-slate-900/60 px-3 py-1.5 gap-1.5 flex-shrink-0" id="routePanelTabStrip">
-      <button type="button" data-route-tab="weather" class="route-tab-pill flex-1 py-1.5 px-2 rounded-xl text-xs font-bold transition-all bg-white dark:bg-slate-800 text-indigo-600 dark:text-indigo-400 shadow-xs border border-slate-200/60 dark:border-slate-700/60 cursor-pointer">
+      <button type="button" data-route-tab="weather" class="route-tab-pill min-h-11 flex-1 py-1.5 px-2 rounded-xl text-xs font-bold transition-all bg-white dark:bg-slate-800 text-indigo-600 dark:text-indigo-400 shadow-xs border border-slate-200/60 dark:border-slate-700/60 cursor-pointer">
         🌤️ Weather
       </button>
-      <button type="button" data-route-tab="stops" class="route-tab-pill flex-1 py-1.5 px-2 rounded-xl text-xs font-medium transition-all text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white cursor-pointer">
+      <button type="button" data-route-tab="stops" class="route-tab-pill min-h-11 flex-1 py-1.5 px-2 rounded-xl text-xs font-medium transition-all text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white cursor-pointer">
         🗺️ Stops (<span id="routePanelStopsCount">0</span>)
       </button>
-      <button type="button" data-route-tab="analytics" class="route-tab-pill flex-1 py-1.5 px-2 rounded-xl text-xs font-medium transition-all text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white cursor-pointer">
+      <button type="button" data-route-tab="analytics" class="route-tab-pill min-h-11 flex-1 py-1.5 px-2 rounded-xl text-xs font-medium transition-all text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white cursor-pointer">
         📊 Analytics
       </button>
     </div>
 
     <!-- Scrollable Content -->
-    <div id="routePanelBody" class="overflow-y-auto custom-scrollbar p-3.5 space-y-3.5 text-slate-700 dark:text-slate-200 text-xs flex-1">
+    <div id="routePanelBody" class="overflow-y-auto custom-scrollbar p-3.5 space-y-3.5 text-slate-700 dark:text-slate-200 text-sm flex-1">
       <!-- Injected dynamically in finishRoute() or renderEmptyRoutePanel() -->
     </div>
 
     <!-- Pro Actions Footer -->
-    <div class="px-3.5 py-3 border-t border-slate-200/60 dark:border-slate-700/60 bg-white/60 dark:bg-slate-800/60 flex flex-wrap gap-2 flex-shrink-0 justify-between">
-      <button type="button" id="routeNavBtn" class="flex-1 min-w-[130px] py-2 px-3 rounded-xl bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-500 hover:to-violet-500 text-white font-bold text-xs shadow-md shadow-indigo-500/20 flex items-center justify-center gap-1.5 transition-all cursor-pointer">
+    <div id="routePanelFooter" class="px-3.5 py-3 border-t border-slate-200/60 dark:border-slate-700/60 bg-white/60 dark:bg-slate-800/60 flex flex-wrap gap-2 flex-shrink-0 justify-between">
+      <button type="button" id="routeNavBtn" disabled class="min-h-11 flex-1 min-w-[130px] py-2 px-3 rounded-xl bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-500 hover:to-violet-500 text-white font-bold text-sm shadow-md shadow-indigo-500/20 flex items-center justify-center gap-1.5 transition-all cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed disabled:pointer-events-none">
         <span>🚗 Start Navigation</span>
       </button>
 
       <div class="flex items-center gap-1.5">
-        <button type="button" id="routeExportGpxBtn" class="p-2 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-700/60 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 font-semibold text-xs transition-colors cursor-pointer" title="Export GPX file for Garmin/Strava/GPS">
+        <button type="button" id="routeExportGpxBtn" disabled class="min-h-11 min-w-11 p-2 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-700/60 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 font-semibold text-sm transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed disabled:pointer-events-none" title="Export GPX file for Garmin/Strava/GPS">
           📥 GPX
         </button>
-        <button type="button" id="routeShareBtn" class="p-2 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-700/60 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 font-semibold text-xs transition-colors cursor-pointer" title="Copy route itinerary & GeoJSON">
+        <button type="button" id="routeShareBtn" disabled class="min-h-11 min-w-11 p-2 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-700/60 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 font-semibold text-sm transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed disabled:pointer-events-none" title="Copy route itinerary & GeoJSON">
           📋 Share
         </button>
-        <button type="button" id="routeSaveBtn" class="p-2 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-700/60 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 font-semibold text-xs transition-colors cursor-pointer" title="Save trip to favorite routes">
+        <button type="button" id="routeSaveBtn" disabled class="min-h-11 min-w-11 p-2 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-700/60 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 font-semibold text-sm transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed disabled:pointer-events-none" title="Save trip to favorite routes">
           💾 Save
         </button>
       </div>
+      <div id="routePanelActionHint" class="w-full text-center text-sm text-slate-500 dark:text-slate-400 ${pts.length >= 2 ? "hidden" : ""}">Add a starting point and destination to enable trip actions.</div>
     </div>
   `;
 
@@ -2282,10 +2349,10 @@ function buildPanel() {
       panelEl.querySelectorAll(".route-tab-pill").forEach((b) => {
         if (b.dataset.routeTab === activeRouteTab) {
           b.className =
-            "route-tab-pill flex-1 py-1.5 px-2 rounded-xl text-xs font-bold transition-all bg-white dark:bg-slate-800 text-indigo-600 dark:text-indigo-400 shadow-xs border border-slate-200/60 dark:border-slate-700/60 cursor-pointer";
+            "route-tab-pill min-h-11 flex-1 py-1.5 px-2 rounded-xl text-xs font-bold transition-all bg-white dark:bg-slate-800 text-indigo-600 dark:text-indigo-400 shadow-xs border border-slate-200/60 dark:border-slate-700/60 cursor-pointer";
         } else {
           b.className =
-            "route-tab-pill flex-1 py-1.5 px-2 rounded-xl text-xs font-medium transition-all text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white cursor-pointer";
+            "route-tab-pill min-h-11 flex-1 py-1.5 px-2 rounded-xl text-xs font-medium transition-all text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white cursor-pointer";
         }
       });
       const stopsView = panelEl.querySelector("#routeTabStopsContent");
@@ -2308,6 +2375,10 @@ function buildPanel() {
     }
   });
   panelEl.querySelector("#routePanelCloseBtn")?.addEventListener("click", closeRouteStudio);
+  panelEl.querySelector("#routeSearchBackBtn")?.addEventListener("click", () => {
+    panelEl?.classList.remove("route-search-focused");
+    panelEl?.querySelector(".route-location-search:focus, #routeSearchAddInput:focus")?.blur();
+  });
   panelEl.querySelector("#routePanelClearBtn")?.addEventListener("click", clearRoute);
   panelEl.querySelector("#routePanelOptimizeBtn")?.addEventListener("click", optimizeWaypointOrder);
 
@@ -2361,8 +2432,8 @@ export function snapRouteSheet(state = "half") {
     panelEl.style.setProperty("left", "0px", "important");
     panelEl.style.setProperty("right", "0px", "important");
     panelEl.style.setProperty("width", "100%", "important");
-    panelEl.style.setProperty("height", "100dvh", "important");
-    panelEl.style.setProperty("max-height", "100dvh", "important");
+    panelEl.style.setProperty("height", "var(--app-height, 100dvh)", "important");
+    panelEl.style.setProperty("max-height", "var(--app-height, 100dvh)", "important");
     panelEl.style.setProperty("border-radius", "0px", "important");
   }
 }
@@ -2541,6 +2612,8 @@ function showPanel() {
 
 function hidePanel() {
   if (panelEl) {
+    panelEl.classList.remove("route-search-focused");
+    panelEl.querySelector("input:focus")?.blur();
     panelEl.classList.add("hidden");
     panelEl.style.display = "none";
     isPanelOpen = false;
@@ -2582,35 +2655,21 @@ function renderEmptyRoutePanel() {
     `
       : "";
 
-  const searchPlaceholder =
-    pts.length === 0
-      ? "Search departure city or landmark…"
-      : "Search destination city or landmark…";
-
   const pickMapLabel =
     pts.length === 0 ? "Tap Map for Start" : "Tap Map for Dest";
 
   bodyEl.innerHTML = `
     <div class="space-y-3">
-      <!-- Search Place to Add Stop -->
-      <div class="relative">
-        <div class="flex items-center gap-2 px-3 py-2 rounded-2xl bg-white/70 dark:bg-slate-800/70 border border-slate-200/80 dark:border-slate-700/80 focus-within:ring-2 focus-within:ring-indigo-500/50 transition-all shadow-xs">
-          <span class="text-slate-400 text-xs">🔍</span>
-          <input type="text" id="routeSearchAddInput" aria-label="Search for a route stop" placeholder="${searchPlaceholder}" class="w-full bg-transparent text-xs text-slate-800 dark:text-slate-100 placeholder-slate-400 outline-none" autocomplete="off" />
-          <div id="routeSearchAddSpinner" class="hidden w-3.5 h-3.5 border-2 border-indigo-500/30 border-t-indigo-500 rounded-full animate-spin flex-shrink-0"></div>
-        </div>
-        <div id="routeSearchAddDropdown" class="hidden absolute top-full left-0 right-0 mt-1 bg-white dark:bg-slate-800 rounded-2xl shadow-2xl border border-slate-200/80 dark:border-slate-700/80 p-1.5 z-50 max-h-52 overflow-y-auto custom-scrollbar"></div>
-      </div>
+      ${routeEndpointSearchFieldsHtml()}
 
       <!-- Quick Action Buttons for Fast Map & GPS Stop Addition -->
-      <div class="grid grid-cols-2 gap-2 pt-0.5">
-        <button type="button" id="routeEmptyPickMapBtn" class="flex items-center justify-center gap-1.5 py-2 px-3 rounded-xl bg-indigo-50 dark:bg-indigo-950/50 hover:bg-indigo-100 dark:hover:bg-indigo-900/50 text-indigo-600 dark:text-indigo-400 font-bold text-xs border border-indigo-200/60 dark:border-indigo-800/60 transition-all active:scale-95 cursor-pointer shadow-xs">
+      <div class="route-entry-secondary grid grid-cols-2 gap-2 pt-0.5">
+        <button type="button" id="routeEmptyPickMapBtn" class="min-h-11 flex items-center justify-center gap-1.5 py-2 px-3 rounded-xl bg-indigo-50 dark:bg-indigo-950/50 hover:bg-indigo-100 dark:hover:bg-indigo-900/50 text-indigo-600 dark:text-indigo-400 font-bold text-sm border border-indigo-200/60 dark:border-indigo-800/60 transition-all active:scale-95 cursor-pointer shadow-xs">
           <span>📍</span>
           <span>${pickMapLabel}</span>
         </button>
-        <button type="button" id="routeEmptyUseGpsBtn" class="flex items-center justify-center gap-1.5 py-2 px-3 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 font-bold text-xs border border-slate-200/60 dark:border-slate-700/60 transition-all active:scale-95 cursor-pointer shadow-xs">
-          <span>🎯</span>
-          <span>My Location</span>
+        <button type="button" id="routeEmptyUseGpsBtn" class="min-h-11 flex items-center justify-center gap-1.5 py-2 px-3 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 font-bold text-sm border border-slate-200/60 dark:border-slate-700/60 transition-all active:scale-95 cursor-pointer shadow-xs">
+          <span>🎯</span><span>Use my location as start</span>
         </button>
       </div>
 
@@ -2621,11 +2680,11 @@ function renderEmptyRoutePanel() {
         <div class="font-extrabold text-sm text-slate-800 dark:text-slate-100">
           ${pts.length === 0 ? "Check Weather Along Your Route" : "Where are you heading?"}
         </div>
-        <div class="text-xs text-slate-500 dark:text-slate-400 leading-relaxed max-w-[280px] mx-auto">
+        <div class="text-sm text-slate-500 dark:text-slate-400 leading-relaxed max-w-[320px] mx-auto">
           ${
             pts.length === 0
-              ? "Search a departure city above, tap My Location, or tap the map to begin."
-              : "Search destination city or tap the map to forecast weather along your drive."
+              ? "Choose a starting point and destination to see route weather."
+              : "Starting point selected. Choose a destination to see route weather."
           }
         </div>
       </div>
@@ -2654,22 +2713,37 @@ function renderEmptyRoutePanel() {
   // Wire GPS Location Button
   bodyEl.querySelector("#routeEmptyUseGpsBtn")?.addEventListener("click", (e) => {
     e.stopPropagation();
-    if (appRef && appRef.selectedLat != null && appRef.selectedLng != null) {
-      const placeName = (appRef.selectedName || (pts.length === 0 ? "Departure Point" : `Stop ${pts.length + 1}`)).split(",")[0].trim();
-      addStop(appRef.selectedLat, appRef.selectedLng, placeName);
-      appRef.showToast?.(`Added "${placeName}" to route`, "success");
-    } else if (appRef && appRef.defaultLocation && appRef.defaultLocation.lat != null) {
-      addStop(appRef.defaultLocation.lat, appRef.defaultLocation.lng, appRef.defaultLocation.name || "Home Location");
-      appRef.showToast?.(`Added home location to route`, "success");
-    } else if (appRef && typeof appRef.getMyLocation === "function") {
-      appRef.getMyLocation();
-      appRef.showToast?.("Acquiring GPS location for route…", "info");
+    if (appRef && typeof appRef.getMyLocation === "function") {
+      let locationWasFound = false;
+      appRef.showToast?.("Finding your current location…", "info");
+      appRef.getMyLocation({
+        silent: true,
+        updateMap: false,
+        onSuccess: ({ latitude, longitude }) => {
+          locationWasFound = true;
+          setRouteEndpoint("origin", { lat: latitude, lng: longitude, name: "My Location" });
+          appRef.showToast?.("Set starting point to your current location", "success");
+        },
+        onFail: () => {
+          if (locationWasFound) return;
+          if (appRef.defaultLocation?.lat != null) {
+            setRouteEndpoint("origin", { ...appRef.defaultLocation, name: appRef.defaultLocation.name || "Saved location" });
+            appRef.showToast?.("GPS unavailable. Using your saved location as the start.", "info");
+          } else {
+            appRef.showToast?.("Could not get your location. Search for a starting point instead.", "error");
+          }
+        },
+      });
+    } else if (appRef?.defaultLocation?.lat != null) {
+      setRouteEndpoint("origin", { ...appRef.defaultLocation, name: appRef.defaultLocation.name || "Saved location" });
+      appRef.showToast?.("Set starting point to your saved location", "success");
     } else {
-      appRef?.showToast?.("Tap the GPS button or select a location on the map", "info");
+      appRef?.showToast?.("Search for a starting point or choose one on the map", "info");
     }
   });
 
   bindRouteSearchAddEvents(bodyEl);
+  bindRouteEndpointSwap(bodyEl);
 
   const curLang = appRef?.language || (typeof localStorage !== "undefined" ? localStorage.getItem("aurafisky_lang") : "en") || "en";
   if (curLang && curLang !== "en" && panelEl) {
@@ -2677,107 +2751,219 @@ function renderEmptyRoutePanel() {
   }
 }
 
+function routeEndpointSearchFieldsHtml() {
+  const originName = pts[0]?.name || "";
+  const destinationName = (pts.length > 1 ? pts[pts.length - 1]?.name : pendingDestination?.name) || "";
+  return `
+    <div class="route-endpoint-editor space-y-3">
+      <div class="route-endpoint-search relative">
+        <label for="routeOriginSearchInput" class="block mb-1.5 text-sm font-bold text-slate-700 dark:text-slate-200">Starting point</label>
+        <div class="flex items-center gap-2 px-3 min-h-12 rounded-2xl bg-white/80 dark:bg-slate-800/80 border border-slate-200/80 dark:border-slate-700/80 focus-within:ring-2 focus-within:ring-indigo-500/50 transition-all shadow-xs">
+          <span class="text-emerald-600 text-base" aria-hidden="true">A</span>
+          <input type="search" id="routeOriginSearchInput" data-route-role="origin" class="route-location-search w-full bg-transparent text-base text-slate-800 dark:text-slate-100 placeholder-slate-400 outline-none" aria-label="Starting point" placeholder="Search city, address, or landmark" value="${escapeXml(originName)}" autocomplete="off" />
+          <div id="routeOriginSearchSpinner" class="hidden w-4 h-4 border-2 border-indigo-500/30 border-t-indigo-500 rounded-full animate-spin flex-shrink-0"></div>
+        </div>
+        <div id="routeOriginSearchDropdown" class="route-search-dropdown hidden mt-2 bg-white dark:bg-slate-800 rounded-2xl shadow-xl border border-slate-200/80 dark:border-slate-700/80 p-1.5 overflow-y-auto custom-scrollbar" role="listbox"></div>
+      </div>
+      <div class="route-swap-control flex justify-end -my-2">
+        <button type="button" id="routeSwapEndpointsBtn" disabled class="min-h-11 px-3 rounded-xl text-sm font-semibold text-indigo-600 dark:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-950/40 disabled:opacity-40 disabled:cursor-not-allowed" aria-label="Swap starting point and destination">↕ Swap</button>
+      </div>
+      <div class="route-endpoint-search relative">
+        <label for="routeDestinationSearchInput" class="block mb-1.5 text-sm font-bold text-slate-700 dark:text-slate-200">Destination</label>
+        <div class="flex items-center gap-2 px-3 min-h-12 rounded-2xl bg-white/80 dark:bg-slate-800/80 border border-slate-200/80 dark:border-slate-700/80 focus-within:ring-2 focus-within:ring-indigo-500/50 transition-all shadow-xs">
+          <span class="text-rose-600 text-base" aria-hidden="true">B</span>
+          <input type="search" id="routeDestinationSearchInput" data-route-role="destination" class="route-location-search w-full bg-transparent text-base text-slate-800 dark:text-slate-100 placeholder-slate-400 outline-none" aria-label="Destination" placeholder="Search city, address, or landmark" value="${escapeXml(destinationName)}" autocomplete="off" />
+          <div id="routeDestinationSearchSpinner" class="hidden w-4 h-4 border-2 border-indigo-500/30 border-t-indigo-500 rounded-full animate-spin flex-shrink-0"></div>
+        </div>
+        <div id="routeDestinationSearchDropdown" class="route-search-dropdown hidden mt-2 bg-white dark:bg-slate-800 rounded-2xl shadow-xl border border-slate-200/80 dark:border-slate-700/80 p-1.5 overflow-y-auto custom-scrollbar" role="listbox"></div>
+      </div>
+    </div>
+  `;
+}
+
+function readRecentRoutePlaces() {
+  try {
+    const places = JSON.parse(localStorage.getItem(ROUTE_RECENTS_KEY) || "[]");
+    return Array.isArray(places) ? places.slice(0, 5) : [];
+  } catch (_) {
+    return [];
+  }
+}
+
+function rememberRecentRoutePlace(place) {
+  if (!place || !Number.isFinite(place.lat) || !Number.isFinite(place.lng)) return;
+  const recent = readRecentRoutePlaces().filter((entry) =>
+    Math.abs(entry.lat - place.lat) > 0.0001 || Math.abs(entry.lng - place.lng) > 0.0001
+  );
+  recent.unshift({
+    lat: place.lat,
+    lng: place.lng,
+    name: place.name || "Saved place",
+    details: place.details || place.fullAddress || "",
+  });
+  try {
+    localStorage.setItem(ROUTE_RECENTS_KEY, JSON.stringify(recent.slice(0, 5)));
+  } catch (_) {}
+}
+
+function renderRecentRoutePlaces(dropdownEl, onSelect) {
+  const recent = readRecentRoutePlaces();
+  if (!recent.length) {
+    dropdownEl.classList.add("hidden");
+    dropdownEl.innerHTML = "";
+    return;
+  }
+  dropdownEl.innerHTML = `
+    <div class="px-3 pt-2 pb-1 text-xs font-bold uppercase tracking-wide text-slate-500 dark:text-slate-400">Recent places</div>
+    ${recent.map((place, index) => `
+      <button type="button" role="option" data-recent-idx="${index}" class="route-recent-place-item min-h-12 w-full text-left px-3 py-2 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-700/60 flex items-center gap-3">
+        <span class="text-slate-400" aria-hidden="true">◷</span>
+        <span class="min-w-0 flex-1">
+          <span class="block text-sm font-semibold text-slate-800 dark:text-slate-100 truncate">${escapeXml(place.name)}</span>
+          ${place.details ? `<span class="block text-xs text-slate-500 dark:text-slate-400 truncate">${escapeXml(place.details)}</span>` : ""}
+        </span>
+      </button>
+    `).join("")}
+  `;
+  dropdownEl.classList.remove("hidden");
+  dropdownEl.querySelectorAll(".route-recent-place-item").forEach((button) => {
+    button.addEventListener("click", (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      const place = recent[Number(button.dataset.recentIdx)];
+      if (place) onSelect(place);
+    });
+  });
+}
+
+function bindRouteEndpointSwap(containerEl) {
+  const button = containerEl?.querySelector("#routeSwapEndpointsBtn");
+  if (!button) return;
+  button.disabled = pts.length < 2;
+  button.addEventListener("click", (event) => {
+    event.preventDefault();
+    swapRouteEndpoints();
+  });
+}
+
 /**
- * Binds autocomplete search input for quickly adding stops by place name
+ * Binds autocomplete for route endpoints and intermediate stops.
  */
 function bindRouteSearchAddEvents(containerEl) {
   if (!containerEl) return;
-  const inputEl = containerEl.querySelector("#routeSearchAddInput");
-  const dropdownEl = containerEl.querySelector("#routeSearchAddDropdown");
-  const spinnerEl = containerEl.querySelector("#routeSearchAddSpinner");
-  if (!inputEl || !dropdownEl) return;
+  const inputs = containerEl.querySelectorAll(".route-location-search, #routeSearchAddInput");
 
-  // On mobile focus, expand sheet so results are visible above keyboard
-  inputEl.addEventListener("focus", () => {
-    if (isMobileLayout() && routeSheetState === "peek") {
-      snapRouteSheet("half");
-    }
-  });
+  inputs.forEach((inputEl) => {
+    const role = inputEl.dataset.routeRole || null;
+    const field = inputEl.closest(".route-endpoint-search, .route-stop-search") || inputEl.parentElement?.parentElement;
+    const dropdownEl = field?.querySelector(".route-search-dropdown, #routeSearchAddDropdown");
+    const spinnerEl = field?.querySelector("[id$='SearchSpinner'], #routeSearchAddSpinner");
+    if (!dropdownEl) return;
 
-  let debounceTimer = null;
-
-  inputEl.addEventListener("input", (e) => {
-    const val = e.target.value.trim();
-    if (debounceTimer) clearTimeout(debounceTimer);
-
-    if (val.length < 2) {
+    const choosePlace = async (item) => {
+      rememberRecentRoutePlace(item);
       dropdownEl.classList.add("hidden");
-      dropdownEl.innerHTML = "";
-      if (spinnerEl) spinnerEl.classList.add("hidden");
-      return;
-    }
-
-    if (spinnerEl) spinnerEl.classList.remove("hidden");
-
-    debounceTimer = setTimeout(async () => {
-      try {
-        const results = await searchPlacesForRoute(val);
-        if (spinnerEl) spinnerEl.classList.add("hidden");
-
-        if (!results || results.length === 0) {
-          dropdownEl.innerHTML = `
-            <div class="p-2.5 text-center text-xs text-slate-400">
-              No matching places found
-            </div>
-          `;
-          dropdownEl.classList.remove("hidden");
-          return;
+      if (role) {
+        await setRouteEndpoint(role, item);
+        if (pts.length < 2) {
+          const nextRole = role === "origin" ? "destination" : "origin";
+          setTimeout(() => panelEl?.querySelector(`[data-route-role="${nextRole}"]`)?.focus(), 50);
+        } else {
+          panelEl?.classList.remove("route-search-focused");
+          inputEl.blur();
         }
+      } else {
+        panelEl?.classList.remove("route-search-focused");
+        inputEl.blur();
+        inputEl.value = "";
+        addStop(item.lat, item.lng, item.name, item.details);
+      }
+    };
 
-        dropdownEl.innerHTML = results
-          .map(
-            (r, i) => `
-          <button type="button" class="route-search-result-item w-full text-left p-2 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-700/60 transition-colors flex items-center justify-between gap-2 cursor-pointer group" data-idx="${i}">
-            <div class="min-w-0">
-              <div class="text-xs font-bold text-slate-800 dark:text-slate-100 group-hover:text-indigo-600 dark:group-hover:text-indigo-400 truncate">${escapeXml(r.name)}</div>
-              ${r.details ? `<div class="text-[10px] text-slate-400 truncate">${escapeXml(r.details)}</div>` : ""}
-            </div>
-            <span class="text-xs text-indigo-500 opacity-0 group-hover:opacity-100 transition-opacity font-bold">+ Add</span>
-          </button>
-        `,
-          )
-          .join("");
+    // Focusing a place field enters a clean full-screen search state; direct
+    // focus from a tap also opens the mobile keyboard.
+    inputEl.addEventListener("focus", () => {
+      if (isMobileLayout()) {
+        snapRouteSheet("full");
+        panelEl?.classList.add("route-search-focused");
+      }
+      if (role && inputEl.value.trim()) inputEl.select();
+      renderRecentRoutePlaces(dropdownEl, choosePlace);
+    });
 
-        dropdownEl.classList.remove("hidden");
-
-        dropdownEl.querySelectorAll(".route-search-result-item").forEach((btn) => {
-          const selectItem = (e) => {
-            e.preventDefault();
-            e.stopPropagation();
-            const idx = parseInt(btn.dataset.idx, 10);
-            const item = results[idx];
-            if (item) {
-              dropdownEl.classList.add("hidden");
-              inputEl.value = "";
-              addStop(item.lat, item.lng, item.name, item.details);
-            }
-          };
-          btn.addEventListener("pointerdown", selectItem);
-          btn.addEventListener("click", selectItem);
-        });
-      } catch (err) {
+    let debounceTimer = null;
+    let searchSequence = 0;
+    inputEl.addEventListener("input", (e) => {
+      const val = e.target.value.trim();
+      if (debounceTimer) clearTimeout(debounceTimer);
+      const requestSequence = ++searchSequence;
+      if (val.length < 2) {
+        renderRecentRoutePlaces(dropdownEl, choosePlace);
         if (spinnerEl) spinnerEl.classList.add("hidden");
-        dropdownEl.classList.add("hidden");
+        return;
       }
-    }, 280);
-  });
 
-  inputEl.addEventListener("keydown", (e) => {
-    if (e.key === "Escape") {
       dropdownEl.classList.add("hidden");
-    }
+      if (spinnerEl) spinnerEl.classList.remove("hidden");
+      debounceTimer = setTimeout(async () => {
+        try {
+          const results = await searchPlacesForRoute(val);
+          if (requestSequence !== searchSequence) return;
+          if (spinnerEl) spinnerEl.classList.add("hidden");
+          if (!results || results.length === 0) {
+            dropdownEl.innerHTML = '<div class="p-3 text-center text-sm text-slate-500">No matching places found</div>';
+            dropdownEl.classList.remove("hidden");
+            return;
+          }
+
+          dropdownEl.innerHTML = results.map((r, i) => `
+            <button type="button" role="option" class="route-search-result-item min-h-12 w-full text-left px-3 py-2.5 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-700/60 transition-colors flex items-center justify-between gap-2 cursor-pointer group" data-idx="${i}">
+              <div class="min-w-0">
+                <div class="text-sm font-bold text-slate-800 dark:text-slate-100 group-hover:text-indigo-600 dark:group-hover:text-indigo-400 truncate">${escapeXml(r.name)}</div>
+                ${r.details ? `<div class="text-xs text-slate-500 dark:text-slate-400 truncate">${escapeXml(r.details)}</div>` : ""}
+              </div>
+              <span class="text-xs text-indigo-600 dark:text-indigo-400 font-semibold">${role ? "Select" : "+ Add"}</span>
+            </button>
+          `).join("");
+          dropdownEl.classList.remove("hidden");
+
+          dropdownEl.querySelectorAll(".route-search-result-item").forEach((resultBtn) => {
+            resultBtn.addEventListener("click", (event) => {
+              event.preventDefault();
+              event.stopPropagation();
+              const item = results[parseInt(resultBtn.dataset.idx, 10)];
+              if (!item) return;
+              choosePlace(item);
+            });
+          });
+        } catch (err) {
+          if (requestSequence !== searchSequence) return;
+          if (spinnerEl) spinnerEl.classList.add("hidden");
+          dropdownEl.classList.add("hidden");
+        }
+      }, 280);
+    });
+
+    inputEl.addEventListener("keydown", (event) => {
+      if (event.key === "Escape") {
+        dropdownEl.classList.add("hidden");
+        panelEl?.classList.remove("route-search-focused");
+        inputEl.blur();
+      } else if (event.key === "Enter" && !event.isComposing) {
+        const firstSuggestion = dropdownEl.querySelector(".route-search-result-item, .route-recent-place-item");
+        if (firstSuggestion) {
+          event.preventDefault();
+          firstSuggestion.click();
+        }
+      }
+    });
   });
 
-  // Hide dropdown on click outside
-  document.addEventListener(
-    "click",
-    (e) => {
-      if (!containerEl.contains(e.target)) {
-        dropdownEl.classList.add("hidden");
-      }
-    },
-    { capture: true },
-  );
+  document.addEventListener("click", (event) => {
+    if (!containerEl.contains(event.target)) {
+      containerEl.querySelectorAll(".route-search-dropdown, #routeSearchAddDropdown").forEach((dropdown) => dropdown.classList.add("hidden"));
+    }
+  }, { capture: true });
 }
 
 // ============================================================================
@@ -2998,10 +3184,10 @@ function renderRoutePanelContent(stops, units) {
   panelEl?.querySelectorAll(".route-tab-pill").forEach((b) => {
     if (b.dataset.routeTab === activeRouteTab) {
       b.className =
-        "route-tab-pill flex-1 py-1.5 px-2 rounded-xl text-xs font-bold transition-all bg-white dark:bg-slate-800 text-indigo-600 dark:text-indigo-400 shadow-xs border border-slate-200/60 dark:border-slate-700/60 cursor-pointer";
+        "route-tab-pill min-h-11 flex-1 py-1.5 px-2 rounded-xl text-xs font-bold transition-all bg-white dark:bg-slate-800 text-indigo-600 dark:text-indigo-400 shadow-xs border border-slate-200/60 dark:border-slate-700/60 cursor-pointer";
     } else {
       b.className =
-        "route-tab-pill flex-1 py-1.5 px-2 rounded-xl text-xs font-medium transition-all text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white cursor-pointer";
+        "route-tab-pill min-h-11 flex-1 py-1.5 px-2 rounded-xl text-xs font-medium transition-all text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white cursor-pointer";
     }
   });
 
@@ -3272,14 +3458,16 @@ function renderRoutePanelContent(stops, units) {
   bodyEl.innerHTML = `
     <!-- TAB 1: STOPS & LEGS -->
     <div id="routeTabStopsContent" class="${activeRouteTab === "stops" ? "" : "hidden"} space-y-3">
+      ${routeEndpointSearchFieldsHtml()}
       <!-- Search Place to Add Stop -->
-      <div class="relative">
-        <div class="flex items-center gap-2 px-3 py-2 rounded-2xl bg-white/70 dark:bg-slate-800/70 border border-slate-200/80 dark:border-slate-700/80 focus-within:ring-2 focus-within:ring-indigo-500/50 transition-all shadow-xs">
-          <span class="text-slate-400 text-xs">🔍</span>
-          <input type="text" id="routeSearchAddInput" placeholder="Add stop by city, address or landmark..." class="w-full bg-transparent text-xs text-slate-800 dark:text-slate-100 placeholder-slate-400 outline-none" autocomplete="off" />
-          <div id="routeSearchAddSpinner" class="hidden w-3.5 h-3.5 border-2 border-indigo-500/30 border-t-indigo-500 rounded-full animate-spin flex-shrink-0"></div>
+      <div class="route-stop-search relative">
+        <label for="routeSearchAddInput" class="block mb-1.5 text-sm font-bold text-slate-700 dark:text-slate-200">Add a stop</label>
+        <div class="flex items-center gap-2 px-3 min-h-12 rounded-2xl bg-white/70 dark:bg-slate-800/70 border border-slate-200/80 dark:border-slate-700/80 focus-within:ring-2 focus-within:ring-indigo-500/50 transition-all shadow-xs">
+          <span class="text-slate-400 text-base" aria-hidden="true">🔍</span>
+          <input type="search" id="routeSearchAddInput" placeholder="Search a city, address, or landmark" class="w-full bg-transparent text-base text-slate-800 dark:text-slate-100 placeholder-slate-400 outline-none" autocomplete="off" />
+          <div id="routeSearchAddSpinner" class="hidden w-4 h-4 border-2 border-indigo-500/30 border-t-indigo-500 rounded-full animate-spin flex-shrink-0"></div>
         </div>
-        <div id="routeSearchAddDropdown" class="hidden absolute top-full left-0 right-0 mt-1 bg-white dark:bg-slate-800 rounded-2xl shadow-2xl border border-slate-200/80 dark:border-slate-700/80 p-1.5 z-50 max-h-52 overflow-y-auto custom-scrollbar"></div>
+        <div id="routeSearchAddDropdown" class="route-search-dropdown hidden mt-2 bg-white dark:bg-slate-800 rounded-2xl shadow-xl border border-slate-200/80 dark:border-slate-700/80 p-1.5 overflow-y-auto custom-scrollbar"></div>
       </div>
 
       <!-- Stop Cards List -->
@@ -3391,6 +3579,7 @@ function renderRoutePanelContent(stops, units) {
 
   // Bind Autocomplete search in Stops tab
   bindRouteSearchAddEvents(bodyEl);
+  bindRouteEndpointSwap(bodyEl);
 
   // Bind Departure time chips
   bodyEl.querySelectorAll(".route-departure-chip").forEach((chip) => {
@@ -3474,6 +3663,7 @@ function renderRoutePanelContent(stops, units) {
 
   // Bind autocomplete search input inside the Stops tab
   bindRouteSearchAddEvents(bodyEl);
+  bindRouteEndpointSwap(bodyEl);
 
   const curLang = appRef?.language || (typeof localStorage !== "undefined" ? localStorage.getItem("aurafisky_lang") : "en") || "en";
   if (curLang && curLang !== "en" && panelEl) {

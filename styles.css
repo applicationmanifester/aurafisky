@@ -3895,14 +3895,81 @@ button, a, input, select, textarea, [role="button"] {
     right: 0 !important;
     width: 100% !important;
     max-width: 100% !important;
-    height: 100% !important;
-    height: 100dvh !important;
-    max-height: 100dvh !important;
+    height: var(--app-height, 100dvh) !important;
+    max-height: var(--app-height, 100dvh) !important;
     border-radius: 0 !important;
     z-index: 1250 !important;
     padding-top: env(safe-area-inset-top, 0px);
     padding-bottom: env(safe-area-inset-bottom, 0px);
     transform: translateY(0) !important;
+  }
+
+  /* Focused place entry: keep the active field and results above the keyboard. */
+  #routePanel.route-search-focused #routePanelDragHandle,
+  #routePanel.route-search-focused #routePanelHeader,
+  #routePanel.route-search-focused #routePanelModeStrip,
+  #routePanel.route-search-focused #routePanelTabStrip,
+  #routePanel.route-search-focused #routePanelFooter {
+    display: none !important;
+  }
+
+  #routePanel.route-search-focused #routeSearchFocusedHeader {
+    display: flex !important;
+    flex: 0 0 auto;
+  }
+
+  #routePanel.route-search-focused #routePanelBody {
+    flex: 1 1 auto;
+    min-height: 0;
+    padding: 1rem;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  #routePanel.route-search-focused .route-entry-secondary,
+  #routePanel.route-search-focused .route-swap-control,
+  #routePanel.route-search-focused #routePanelBody .py-3,
+  #routePanel.route-search-focused #routeTabStopsContent > :not(.route-endpoint-editor):not(.route-stop-search) {
+    display: none !important;
+  }
+
+  #routePanel.route-search-focused .route-endpoint-search {
+    display: none;
+  }
+
+  #routePanel.route-search-focused .route-endpoint-search:focus-within {
+    display: block;
+  }
+
+  #routePanel.route-search-focused .route-endpoint-editor:has(.route-endpoint-search:focus-within) {
+    display: block;
+  }
+
+  #routePanel.route-search-focused #routeTabStopsContent > .route-endpoint-editor,
+  #routePanel.route-search-focused #routeTabStopsContent > .route-stop-search {
+    display: block !important;
+  }
+
+  #routePanel.route-search-focused #routeTabStopsContent > .route-endpoint-editor:not(:has(.route-endpoint-search:focus-within)),
+  #routePanel.route-search-focused #routeTabStopsContent > .route-stop-search:not(:focus-within) {
+    display: none !important;
+  }
+
+  #routePanel.route-search-focused #routeTabStopsContent > .route-endpoint-editor:has(.route-endpoint-search:focus-within) {
+    display: block !important;
+  }
+
+  #routePanel.route-search-focused .route-search-dropdown {
+    position: relative;
+    z-index: 2;
+    max-height: min(52dvh, calc(var(--visual-viewport-height, 100dvh) - 230px));
+    overscroll-behavior: contain;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  #routePanel.route-search-focused .route-search-result-item {
+    min-height: 52px;
   }
 
   /* Favorites / Bookmarks dropdown on mobile: anchor above bottom nav */

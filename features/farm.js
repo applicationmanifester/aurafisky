@@ -51,6 +51,10 @@ import {
   getActiveFieldId,
   FARM_ACTIVE_FIELD_KEY,
 } from "./farmFields.js";
+import {
+  cleanBotanicalName,
+  resolveIndianFloraName,
+} from "../modules/indianFloraNames.js";
 
 // ────────────────── constants ──────────────────
 
@@ -1073,6 +1077,11 @@ export async function fetchLocalPlants(lat, lng, opts = {}) {
         recorded: r.year != null ? Number(r.year) : null,
       };
       plantObj.type = classifyPlantType(plantObj);
+      plantObj.localInfo = resolveIndianFloraName(plantObj, {
+        lat,
+        lng,
+        locationName: opts.locationName || "",
+      });
       plants.push(plantObj);
     }
     _gbifCache.set(key, { ts: now, data: plants });
@@ -1585,8 +1594,12 @@ function renderLocalPlants(ctx, app) {
     const t = p.type?.id || classifyPlantType(p).id;
     if (activeCat !== "all" && t !== activeCat) return false;
     if (searchQ) {
-      const hay = `${p.vernacularName || ""} ${p.scientificName || ""} ${p.family || ""}`.toLowerCase();
-      if (!hay.includes(searchQ)) return false;
+      const info = p.localInfo || resolveIndianFloraName(p, {
+        lat: ctx?.lat ?? a?.selectedLat,
+        lng: ctx?.lng ?? a?.selectedLng,
+        locationName: a?.selectedName || ctx?.locationName || "",
+      });
+      if (!info.searchKeywords.includes(searchQ)) return false;
     }
     return true;
   });
@@ -1595,19 +1608,33 @@ function renderLocalPlants(ctx, app) {
   const visible = filtered.slice(0, maxVisible);
 
   const rows = visible.map((p) => {
-    const name = p.vernacularName || p.scientificName;
-    const sci = p.scientificName ? ` <span class="text-slate-400 text-[9px] italic">(${esc(p.scientificName)})</span>` : "";
-    const fam = p.family ? ` · ${esc(p.family)}` : "";
-    const recorded = p.recorded ? ` · observed ${p.recorded}` : "";
+    const info = p.localInfo || resolveIndianFloraName(p, {
+      lat: ctx?.lat ?? a?.selectedLat,
+      lng: ctx?.lng ?? a?.selectedLng,
+      locationName: a?.selectedName || ctx?.locationName || "",
+    });
     const pType = p.type || classifyPlantType(p);
+    const cleanSci = info.cleanScientific || cleanBotanicalName(p.scientificName) || p.scientificName;
+    const displayName = info.primaryDisplay || p.vernacularName || cleanSci;
+    const fam = p.family || "";
+    const badge = info.regionalBadge || "";
+    const recorded = p.recorded ? `obs. ${p.recorded}` : "";
+
     return `
-      <li class="flex items-center justify-between text-[10px] text-slate-700 dark:text-slate-200 leading-relaxed py-0.5 border-b border-slate-100/60 dark:border-slate-800/40 last:border-none">
-        <span class="truncate flex-1 pr-2">
-          ${esc(name)}${sci}${fam}${recorded}
-        </span>
-        <span class="text-[9px] font-medium text-slate-500 dark:text-slate-400 flex-shrink-0">
-          ${pType.emoji} ${esc(pType.label)}
-        </span>
+      <li class="py-1 px-1.5 rounded-lg bg-white/70 dark:bg-slate-800/60 border border-slate-200/50 dark:border-slate-700/50 space-y-0.5 transition-colors hover:bg-white dark:hover:bg-slate-800">
+        <div class="flex items-center justify-between gap-1.5">
+          <div class="font-semibold text-slate-800 dark:text-slate-100 text-[10.5px] truncate flex items-center gap-1.5 flex-1 min-w-0">
+            <span class="text-xs select-none flex-shrink-0" aria-hidden="true">${pType.emoji}</span>
+            <span class="truncate" title="${esc(displayName)}">${esc(displayName)}</span>
+          </div>
+          <span class="text-[9px] font-medium text-slate-500 dark:text-slate-400 flex-shrink-0 px-1.5 py-0.2 rounded bg-slate-100 dark:bg-slate-700/60">${esc(pType.label)}</span>
+        </div>
+        <div class="flex items-center gap-1.5 text-[9px] text-slate-500 dark:text-slate-400 flex-wrap">
+          <span class="italic text-teal-700 dark:text-teal-400 font-medium">${esc(cleanSci)}</span>
+          ${fam ? `<span>· ${esc(fam)}</span>` : ""}
+          ${badge ? `<span class="px-1 py-0.2 rounded text-[8px] bg-emerald-100/80 dark:bg-emerald-950/60 text-emerald-800 dark:text-emerald-300 font-medium">${esc(badge)}</span>` : ""}
+          ${recorded ? `<span class="text-slate-400">· ${esc(recorded)}</span>` : ""}
+        </div>
       </li>`;
   }).join("");
 
@@ -2498,7 +2525,9 @@ function scheduleFarmUpdate(app, force = false) {
       if (a.activeWeatherTab === "farm") renderFarmTab(a);
 
       try {
-        const plants = await fetchLocalPlants(a.selectedLat, a.selectedLng);
+        const plants = await fetchLocalPlants(a.selectedLat, a.selectedLng, {
+          locationName: a.selectedName || a.selectedAddress || "",
+        });
         if (a.farmCtx) {
           a.farmCtx.loadingLocalPlants = false;
           a.farmCtx.localPlants = plants || [];

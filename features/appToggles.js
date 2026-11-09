@@ -105,21 +105,21 @@ async function initTempOverlayLayers() {
       const tempRange = Math.max(1, tempMax - tempMin);
 
       validResults.forEach(({ temp, point: pt }) => {
-        const frac = (temp - tempMin) / tempRange;
-        const color = this.tempToColor(frac);
+        const color = this.tempToColor(temp);
         ensureTempOverlayLayer(this);
         const feature = new Feature(new Point(fromLonLat([pt.lng, pt.lat])));
         feature.setStyle(
           new Style({
             image: new CircleStyle({
-              radius: 18,
-              fill: new Fill({ color: withAlpha(color, 0.5) }),
-              stroke: new Stroke({ color: withAlpha(color, 0.7), width: 1 }),
+              radius: 20,
+              fill: new Fill({ color: withAlpha(color, 0.72) }),
+              stroke: new Stroke({ color: withAlpha(color, 0.95), width: 1.5 }),
             }),
             text: new Text({
-              text: `${temp.toFixed(1)}°C`,
+              text: `${temp.toFixed(1)}°`,
               font: "bold 11px sans-serif",
-              fill: new Fill({ color: this.isDark ? "#f1f5f9" : "#1e293b" }),
+              fill: new Fill({ color: "#ffffff" }),
+              stroke: new Stroke({ color: "#0f172a", width: 2.5 }),
             }),
           }),
         );
@@ -131,11 +131,39 @@ async function initTempOverlayLayers() {
     }
   }
 
-function tempToColor(frac) {
-    const r = Math.min(255, Math.round(255 * frac));
-    const b = Math.round(255 * (1 - frac));
-    const g = Math.round(120 * (1 - Math.abs(frac - 0.5) * 2));
-    return `rgb(${r},${g},${b})`;
+function tempToColor(val, isFraction = false) {
+    let frac;
+    if (isFraction || (typeof val === "number" && val >= 0 && val <= 1 && arguments.length > 1 && isFraction)) {
+      frac = Math.max(0, Math.min(1, val));
+    } else if (typeof val === "number") {
+      // Map Celsius temperature (-5°C to 42°C) onto 0..1 scale
+      frac = Math.max(0, Math.min(1, (val - (-5)) / (42 - (-5))));
+    } else {
+      frac = 0.5;
+    }
+
+    // Meteorological temperature scale: Blue -> Cyan -> Green -> Yellow -> Orange -> Red
+    const stops = [
+      { f: 0.0, r: 29, g: 78, b: 216 },   // Cold (< 0°C)
+      { f: 0.2, r: 2, g: 132, b: 199 },   // Chilly (0-10°C)
+      { f: 0.4, r: 22, g: 163, b: 74 },   // Mild / Green (10-22°C)
+      { f: 0.6, r: 234, g: 179, b: 8 },   // Warm / Yellow (22-28°C)
+      { f: 0.8, r: 234, g: 88, b: 12 },   // Hot / Orange (28-35°C)
+      { f: 1.0, r: 220, g: 38, b: 38 },   // Extreme / Red (> 35°C)
+    ];
+
+    for (let i = 0; i < stops.length - 1; i++) {
+      const s1 = stops[i];
+      const s2 = stops[i + 1];
+      if (frac >= s1.f && frac <= s2.f) {
+        const t = (frac - s1.f) / (s2.f - s1.f);
+        const r = Math.round(s1.r + t * (s2.r - s1.r));
+        const g = Math.round(s1.g + t * (s2.g - s1.g));
+        const b = Math.round(s1.b + t * (s2.b - s1.b));
+        return `rgb(${r},${g},${b})`;
+      }
+    }
+    return "rgb(220,38,38)";
   }
 
 function clearTempOverlay() {

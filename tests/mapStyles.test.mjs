@@ -148,5 +148,69 @@ describe("Map Modes & Terrain Styles", () => {
     expect(appJs).toContain("https://tiles.openfreemap.org/styles/liberty");
     expect(appJs).toContain("https://tiles.openfreemap.org/styles/dark");
   });
+
+  test("index.html contains on-map color indication widget with elevation notification & temp toggle", () => {
+    const fs = require("fs");
+    const html = fs.readFileSync("index.html", "utf-8");
+
+    // On-map legend widget elements
+    expect(html).toContain('id="mapColorLegendWidget"');
+    expect(html).toContain('id="mapLegendPillBtn"');
+    expect(html).toContain('id="mapLegendCard"');
+    expect(html).toContain('id="mapLegendNotification"');
+    expect(html).toContain('id="mapLegendSwitchModeBtn"');
+
+    // Flyout enhancements
+    expect(html).toContain('id="mapModeElevationHint"');
+    expect(html).toContain('id="tempGridOverlayToggle"');
+    expect(html).toContain('id="toggleMapLegendCardBtn"');
+  });
+
+  test("css/device-adaptive.css defines .legend-gradient-elevation with elevation relief colors", () => {
+    const fs = require("fs");
+    const css = fs.readFileSync("css/device-adaptive.css", "utf-8");
+    expect(css).toContain(".legend-gradient-elevation");
+    expect(css).toContain("#388e3c"); // Green lowland
+    expect(css).toContain("#d32f2f"); // Red mountain peak
+  });
+
+  test("features/appToggles.js tempToColor accurately denotes green, yellow, orange, and red shades", () => {
+    const fs = require("fs");
+    const code = fs.readFileSync("features/appToggles.js", "utf-8");
+    expect(code).toContain("tempToColor");
+
+    // Extract function and test temperature scale
+    const match = code.match(/function tempToColor[\s\S]*?\n  \}/);
+    expect(match).not.toBeNull();
+    const fn = new Function(`${match[0]}; return tempToColor;`)();
+
+    // Cold < 0°C should be in blue spectrum
+    const cold = fn(-2);
+    expect(cold).toMatch(/rgb\(\d+,\s*\d+,\s*\d+\)/);
+
+    // Mild 15°C should be green
+    const mild = fn(15);
+    const mildRgb = mild.match(/\d+/g).map(Number);
+    expect(mildRgb[1]).toBeGreaterThan(mildRgb[0]); // Green > Red
+    expect(mildRgb[1]).toBeGreaterThan(mildRgb[2]); // Green > Blue
+
+    // Warm 26°C should have high red & green (yellowish)
+    const warm = fn(26);
+    const warmRgb = warm.match(/\d+/g).map(Number);
+    expect(warmRgb[0]).toBeGreaterThan(180);
+    expect(warmRgb[1]).toBeGreaterThan(120);
+
+    // Hot 34°C should be orange (Red high, Green mid, Blue low)
+    const hot = fn(34);
+    const hotRgb = hot.match(/\d+/g).map(Number);
+    expect(hotRgb[0]).toBeGreaterThan(200);
+    expect(hotRgb[1]).toBeLessThan(warmRgb[1]);
+
+    // Extreme 40°C should be red
+    const extreme = fn(40);
+    const extremeRgb = extreme.match(/\d+/g).map(Number);
+    expect(extremeRgb[0]).toBeGreaterThan(200);
+    expect(extremeRgb[1]).toBeLessThan(70);
+  });
 });
 

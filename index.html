@@ -1749,6 +1749,86 @@
   </div>
 
   <!-- ============================================================ -->
+  <!-- MAP COLOR INDICATION & LEGEND WIDGET                         -->
+  <!-- ============================================================ -->
+  <div id="mapColorLegendWidget" class="fixed bottom-20 sm:bottom-6 left-3 sm:left-4 z-[1040] pointer-events-auto select-none transition-all duration-300 font-sans" role="region" aria-label="Map color legend and key">
+    <!-- Compact Pill Button -->
+    <button id="mapLegendPillBtn" type="button" class="glass-card backdrop-blur-md bg-white/95 dark:bg-slate-900/95 border border-slate-200/80 dark:border-slate-700/80 shadow-lg rounded-full px-3 py-1.5 flex items-center gap-2 cursor-pointer hover:shadow-xl active:scale-95 transition-all text-xs font-semibold text-slate-800 dark:text-slate-100 group" title="Toggle map color indication key" aria-expanded="false" aria-controls="mapLegendCard">
+      <span id="mapLegendPillIcon" class="text-sm">🧭</span>
+      <span id="mapLegendPillTitle" class="font-bold tracking-tight">Elevation Key</span>
+      <div id="mapLegendPillSwatches" class="flex items-center gap-0.5">
+        <span class="w-2.5 h-2.5 rounded-full bg-[#388e3c]" title="Lowlands (0-200m)"></span>
+        <span class="w-2.5 h-2.5 rounded-full bg-[#8bc34a]" title="Hills (200-500m)"></span>
+        <span class="w-2.5 h-2.5 rounded-full bg-[#f57c00]" title="Plateaus (500-1000m)"></span>
+        <span class="w-2.5 h-2.5 rounded-full bg-[#d32f2f]" title="Peaks (>1000m)"></span>
+      </div>
+      <svg class="w-3.5 h-3.5 text-slate-400 group-hover:text-slate-600 dark:group-hover:text-slate-200 transition-transform duration-200" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5">
+        <polyline points="18 15 12 9 6 15"></polyline>
+      </svg>
+    </button>
+
+    <!-- Expanded Glass Detail Card -->
+    <div id="mapLegendCard" class="hidden mt-2 w-72 max-w-[calc(100vw-2rem)] glass-card backdrop-blur-xl bg-white/95 dark:bg-slate-900/95 border border-slate-200/80 dark:border-slate-700/80 rounded-2xl shadow-2xl p-3.5 space-y-2.5 animate-in fade-in zoom-in-95 duration-200 select-text">
+      <!-- Header -->
+      <div class="flex items-start justify-between gap-2 border-b border-slate-200/60 dark:border-slate-700/60 pb-2">
+        <div class="flex items-center gap-1.5">
+          <span id="mapLegendCardIcon" class="text-base">🧭</span>
+          <div>
+            <h4 id="mapLegendCardTitle" class="text-xs font-black text-slate-900 dark:text-white uppercase tracking-wider">Topographic Elevation</h4>
+            <span id="mapLegendCardSubtitle" class="text-[10px] font-semibold text-slate-500 dark:text-slate-400 block">Height Above Sea Level (Relief)</span>
+          </div>
+        </div>
+        <button id="mapLegendCloseBtn" type="button" class="w-6 h-6 flex items-center justify-center rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition-colors cursor-pointer" title="Minimize legend" aria-label="Minimize legend">
+          <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+        </button>
+      </div>
+
+      <!-- Notification Callout Badge -->
+      <div id="mapLegendNotification" class="px-2.5 py-1.5 rounded-xl bg-amber-500/10 dark:bg-amber-500/15 border border-amber-500/30 text-[11px] font-medium text-amber-900 dark:text-amber-200 leading-snug">
+        <span>⚠️ <strong>Notice:</strong> Red, orange & green shades denote <strong>Elevation (Terrain)</strong>, not temperature.</span>
+      </div>
+
+      <!-- Gradient Bar -->
+      <div class="space-y-1">
+        <div id="mapLegendGradientBar" class="h-2.5 w-full rounded-md shadow-inner" style="background: linear-gradient(90deg, #388e3c, #8bc34a, #fbc02d, #f57c00, #d32f2f, #795548);"></div>
+        <div id="mapLegendGradientLabels" class="flex justify-between text-[9px] font-bold text-slate-500 dark:text-slate-400">
+          <span>0 m (Coast)</span>
+          <span>500 m</span>
+          <span>1,500 m+ (Peaks)</span>
+        </div>
+      </div>
+
+      <!-- Color Swatches Breakdown List -->
+      <div id="mapLegendSwatchesList" class="space-y-1.5 pt-1 text-[11px]">
+        <div class="flex items-center gap-2">
+          <span class="w-3 h-3 rounded-full bg-[#388e3c] flex-shrink-0"></span>
+          <span class="text-slate-600 dark:text-slate-300"><strong class="text-slate-900 dark:text-slate-100">0 – 200 m</strong> (0 – 650 ft) · Coastal lowlands & plains</span>
+        </div>
+        <div class="flex items-center gap-2">
+          <span class="w-3 h-3 rounded-full bg-[#8bc34a] flex-shrink-0"></span>
+          <span class="text-slate-600 dark:text-slate-300"><strong class="text-slate-900 dark:text-slate-100">200 – 500 m</strong> (650 – 1,600 ft) · Foothills & river valleys</span>
+        </div>
+        <div class="flex items-center gap-2">
+          <span class="w-3 h-3 rounded-full bg-[#f57c00] flex-shrink-0"></span>
+          <span class="text-slate-600 dark:text-slate-300"><strong class="text-slate-900 dark:text-slate-100">500 – 1,000 m</strong> (1,600 – 3,300 ft) · Tablelands & plateaus</span>
+        </div>
+        <div class="flex items-center gap-2">
+          <span class="w-3 h-3 rounded-full bg-[#d32f2f] flex-shrink-0"></span>
+          <span class="text-slate-600 dark:text-slate-300"><strong class="text-slate-900 dark:text-slate-100">> 1,000 m</strong> (> 3,300 ft) · Mountain ridges & peaks</span>
+        </div>
+      </div>
+
+      <!-- Action Switcher Button -->
+      <div class="pt-2 border-t border-slate-200/60 dark:border-slate-700/60 flex items-center justify-between">
+        <button id="mapLegendSwitchModeBtn" type="button" class="w-full py-1.5 px-3 rounded-xl bg-primary/10 hover:bg-primary/20 dark:bg-primary/20 dark:hover:bg-primary/30 text-primary dark:text-primary-light text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer active:scale-98">
+          <span id="mapLegendSwitchModeIcon">🌡️</span>
+          <span id="mapLegendSwitchModeText">Show Live Temperature Grid</span>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============================================================ -->
   <!-- ACTION CONTROLS (Right Centre - Single Vertical Column)       -->
   <!-- ============================================================ -->
   <div id="mobileMapControls" class="map-controls-right fixed top-1/2 -translate-y-1/2 right-3 sm:right-4 z-[1001] pointer-events-auto flex flex-col gap-1.5 items-center">
@@ -1931,6 +2011,20 @@
             <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7"/></svg>
           </button>
         </div>
+
+        <!-- Live mode hint / indication badge -->
+        <div id="mapModeElevationHint" class="mt-2 p-2 rounded-xl bg-slate-100/90 dark:bg-slate-800/90 border border-slate-200/60 dark:border-slate-700/60 text-[10px] space-y-1">
+          <div class="flex items-center justify-between font-bold text-slate-700 dark:text-slate-200">
+            <span>🧭 Elevation Relief</span>
+            <span class="text-[9px] text-amber-600 dark:text-amber-400 font-semibold">Not Temperature</span>
+          </div>
+          <div class="h-1.5 w-full rounded-sm" style="background: linear-gradient(90deg, #388e3c, #8bc34a, #fbc02d, #f57c00, #d32f2f, #795548);"></div>
+          <div class="flex justify-between text-[8px] font-medium text-slate-500 dark:text-slate-400">
+            <span>🟢 0m (Coast)</span>
+            <span>🟠 500m</span>
+            <span>🔴 1000m+</span>
+          </div>
+        </div>
       </div>
 
       <!-- Layer Opacity Control -->
@@ -1954,6 +2048,39 @@
           <input type="checkbox" id="terrainOverlayToggle" class="sr-only peer" />
           <div class="w-10 h-5 rounded-full bg-slate-300 peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-primary/30 peer dark:bg-slate-600 peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all dark:border-slate-600 peer-checked:bg-primary dark:peer-checked:bg-primary"></div>
         </label>
+      </div>
+
+      <!-- Live Temperature Grid Overlay -->
+      <div class="flex items-center justify-between pt-2 border-t border-slate-200/40 dark:border-slate-700/30">
+        <div class="flex items-center gap-2">
+          <div class="w-7 h-7 rounded-lg bg-orange-500/10 text-orange-500 flex items-center justify-center text-xs">
+            <span>🌡️</span>
+          </div>
+          <div>
+            <span class="text-[10px] font-semibold text-slate-700 dark:text-slate-300 block">Temperature Grid</span>
+            <span class="text-[8px] text-slate-400 block">Live °C readings & color scale</span>
+          </div>
+        </div>
+        <label class="relative inline-flex items-center cursor-pointer">
+          <input type="checkbox" id="tempGridOverlayToggle" class="sr-only peer" />
+          <div class="w-10 h-5 rounded-full bg-slate-300 peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-primary/30 peer dark:bg-slate-600 peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all dark:border-slate-600 peer-checked:bg-primary dark:peer-checked:bg-primary"></div>
+        </label>
+      </div>
+
+      <!-- Map Key / Legend Visibility -->
+      <div class="flex items-center justify-between pt-2 border-t border-slate-200/40 dark:border-slate-700/30">
+        <div class="flex items-center gap-2">
+          <div class="w-7 h-7 rounded-lg bg-emerald-500/10 text-emerald-500 flex items-center justify-center text-xs">
+            <span>🗺️</span>
+          </div>
+          <div>
+            <span class="text-[10px] font-semibold text-slate-700 dark:text-slate-300 block">Map Key / Legend</span>
+            <span class="text-[8px] text-slate-400 block">On-map color indication</span>
+          </div>
+        </div>
+        <button id="toggleMapLegendCardBtn" type="button" class="px-2.5 py-1 rounded-lg bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-[10px] font-bold text-slate-700 dark:text-slate-200 transition-colors cursor-pointer active:scale-95">
+          View Key
+        </button>
       </div>
 
       <!-- Marine Swell Hazard & River Flood Alert -->

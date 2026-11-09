@@ -2268,9 +2268,31 @@ class AurafiskyApp {
           localStorage.setItem("aurafisky_terrain_overlay", String(this.terrainOverlayEnabled));
         } catch (_) {}
         this._applyTerrainOverlay();
+        this._updateMapColorLegend?.();
         this._haptic?.('selection');
       });
     }
+
+    // ── Temperature Grid Overlay Toggle ───────────────
+    const tempGridToggle = document.getElementById("tempGridOverlayToggle");
+    if (tempGridToggle) {
+      tempGridToggle.addEventListener("change", (e) => {
+        this.toggleTemperatureOverlay(e.target.checked);
+        this._haptic?.('selection');
+      });
+    }
+
+    // ── Map Key / Legend Button in Flyout ─────────────
+    document.getElementById("toggleMapLegendCardBtn")?.addEventListener("click", () => {
+      const card = document.getElementById("mapLegendCard");
+      const pill = document.getElementById("mapLegendPillBtn");
+      if (card) card.classList.remove("hidden");
+      pill?.setAttribute("aria-expanded", "true");
+      this.toggleMapLayersFlyout(false);
+      this._haptic?.('selection');
+    });
+
+    this._initMapColorLegend();
 
 
     document.getElementById("closeMapLayersBtn")?.addEventListener("click", (e) => {
@@ -5089,7 +5111,7 @@ class AurafiskyApp {
     this._updateUrlParams(this.selectedLat, this.selectedLng, this.selectedName);
 
     // Refresh temperature overlay if active
-    if (this.radarActive && this.overlayType === "temperature") {
+    if ((this.radarActive && this.overlayType === "temperature") || this.temperatureOverlayEnabled) {
       this.clearTempOverlay();
       this.initTempOverlayLayers();
     }
@@ -11508,6 +11530,7 @@ class AurafiskyApp {
     }
 
     this._updateMapLayersActiveBadge();
+    this._updateMapColorLegend?.();
   }
 
   toggleMapLayersFlyout(force) {
@@ -11550,6 +11573,7 @@ class AurafiskyApp {
       minBtn.setAttribute("aria-expanded", target ? "false" : "true");
     }
     this._updateMapLayersActiveBadge();
+    this._updateMapColorLegend?.();
   }
 
   _updateMapLayersActiveBadge() {
@@ -11605,6 +11629,251 @@ class AurafiskyApp {
       applyMapboxLayerStyle(vtLayer, localized, "openmaptiles").catch((err) =>
         console.error("Map language re-style failed:", err),
       );
+    }
+  }
+
+  /** Toggle live temperature grid overlay */
+  toggleTemperatureOverlay(forceState) {
+    if (typeof forceState === "boolean") {
+      this.temperatureOverlayEnabled = forceState;
+    } else {
+      this.temperatureOverlayEnabled = !this.temperatureOverlayEnabled;
+    }
+
+    if (this.temperatureOverlayEnabled) {
+      this.initTempOverlayLayers?.();
+      this.showToast?.("🌡️ Live temperature grid loaded on map", "info");
+    } else {
+      this.clearTempOverlay?.();
+      this.showToast?.("Temperature grid cleared", "info");
+    }
+
+    const toggle = document.getElementById("tempGridOverlayToggle");
+    if (toggle) toggle.checked = this.temperatureOverlayEnabled;
+
+    this._updateMapColorLegend();
+  }
+
+  /** Initialize the on-map color indication & legend widget */
+  _initMapColorLegend() {
+    this.$.mapLegendPillBtn = document.getElementById("mapLegendPillBtn");
+    this.$.mapLegendCard = document.getElementById("mapLegendCard");
+    this.$.mapLegendCloseBtn = document.getElementById("mapLegendCloseBtn");
+    this.$.mapLegendSwitchModeBtn = document.getElementById("mapLegendSwitchModeBtn");
+    this.$.mapColorLegendWidget = document.getElementById("mapColorLegendWidget");
+    this.$.tempGridOverlayToggle = document.getElementById("tempGridOverlayToggle");
+    this.$.toggleMapLegendCardBtn = document.getElementById("toggleMapLegendCardBtn");
+
+    if (this.$.mapLegendPillBtn) {
+      this.$.mapLegendPillBtn.addEventListener("click", () => {
+        const isHidden = this.$.mapLegendCard?.classList.contains("hidden");
+        this.$.mapLegendCard?.classList.toggle("hidden", !isHidden);
+        this.$.mapLegendPillBtn?.setAttribute("aria-expanded", isHidden ? "true" : "false");
+        this._haptic?.("selection");
+      });
+    }
+
+    if (this.$.mapLegendCloseBtn) {
+      this.$.mapLegendCloseBtn.addEventListener("click", () => {
+        this.$.mapLegendCard?.classList.add("hidden");
+        this.$.mapLegendPillBtn?.setAttribute("aria-expanded", "false");
+        this._haptic?.("selection");
+      });
+    }
+
+    if (this.$.mapLegendSwitchModeBtn) {
+      this.$.mapLegendSwitchModeBtn.addEventListener("click", () => {
+        this._haptic?.("selection");
+        const isTempActive = Boolean(this.temperatureOverlayEnabled || (this.radarActive && this.overlayType === "temperature"));
+        if (isTempActive) {
+          this.toggleTemperatureOverlay(false);
+          this.setMapStyle("opentopo");
+        } else {
+          this.toggleTemperatureOverlay(true);
+        }
+      });
+    }
+
+    this._updateMapColorLegend();
+  }
+
+  /** Update on-map color indication widget based on active layers & map modes */
+  _updateMapColorLegend() {
+    const widget = document.getElementById("mapColorLegendWidget");
+    if (!widget) return;
+
+    const isTempActive = Boolean(this.temperatureOverlayEnabled || (this.radarActive && this.overlayType === "temperature"));
+    const isElevationActive = ["opentopo", "terrain", "hillshade"].includes(this.mapStyle) || Boolean(this.terrainOverlayEnabled);
+
+    // Synchronize flyout toggle
+    const tempToggle = document.getElementById("tempGridOverlayToggle");
+    if (tempToggle) tempToggle.checked = isTempActive;
+
+    // Synchronize flyout elevation hint
+    const elevHint = document.getElementById("mapModeElevationHint");
+    if (elevHint) {
+      elevHint.classList.toggle("hidden", !isElevationActive && !["opentopo", "terrain", "hillshade"].includes(this.mapStyle));
+    }
+
+    const pillIcon = document.getElementById("mapLegendPillIcon");
+    const pillTitle = document.getElementById("mapLegendPillTitle");
+    const pillSwatches = document.getElementById("mapLegendPillSwatches");
+    const cardIcon = document.getElementById("mapLegendCardIcon");
+    const cardTitle = document.getElementById("mapLegendCardTitle");
+    const cardSubtitle = document.getElementById("mapLegendCardSubtitle");
+    const notification = document.getElementById("mapLegendNotification");
+    const gradientBar = document.getElementById("mapLegendGradientBar");
+    const gradientLabels = document.getElementById("mapLegendGradientLabels");
+    const swatchesList = document.getElementById("mapLegendSwatchesList");
+    const switchModeIcon = document.getElementById("mapLegendSwitchModeIcon");
+    const switchModeText = document.getElementById("mapLegendSwitchModeText");
+
+    if (isTempActive) {
+      // ── Temperature Mode ──
+      widget.classList.remove("hidden");
+      if (pillIcon) pillIcon.textContent = "🌡️";
+      if (pillTitle) pillTitle.textContent = "Temperature Scale";
+      if (pillSwatches) {
+        pillSwatches.innerHTML = `
+          <span class="w-2.5 h-2.5 rounded-full bg-[#1d4ed8]" title="Cold (<10°C)"></span>
+          <span class="w-2.5 h-2.5 rounded-full bg-[#16a34a]" title="Mild (10-22°C)"></span>
+          <span class="w-2.5 h-2.5 rounded-full bg-[#eab308]" title="Warm (22-28°C)"></span>
+          <span class="w-2.5 h-2.5 rounded-full bg-[#ea580c]" title="Hot (28-35°C)"></span>
+          <span class="w-2.5 h-2.5 rounded-full bg-[#dc2626]" title="Extreme (>35°C)"></span>
+        `;
+      }
+      if (cardIcon) cardIcon.textContent = "🌡️";
+      if (cardTitle) cardTitle.textContent = "Live Temperature Scale";
+      if (cardSubtitle) cardSubtitle.textContent = "Ground Air Temperature (°C)";
+      if (notification) {
+        notification.className = "px-2.5 py-1.5 rounded-xl bg-blue-500/10 dark:bg-blue-500/15 border border-blue-500/30 text-[11px] font-medium text-blue-900 dark:text-blue-200 leading-snug";
+        notification.innerHTML = "<span>🌡️ <strong>Active:</strong> Color circles denote <strong>Air Temperature</strong> across the region.</span>";
+      }
+      if (gradientBar) {
+        gradientBar.style.background = "linear-gradient(90deg, #1d4ed8, #0284c7, #16a34a, #eab308, #ea580c, #dc2626)";
+      }
+      if (gradientLabels) {
+        gradientLabels.innerHTML = "<span>&lt; 5°C (Cold)</span><span>22°C (Mild)</span><span>&gt; 38°C (Extreme)</span>";
+      }
+      if (swatchesList) {
+        swatchesList.innerHTML = `
+          <div class="flex items-center gap-2">
+            <span class="w-3 h-3 rounded-full bg-[#1d4ed8] flex-shrink-0"></span>
+            <span class="text-slate-600 dark:text-slate-300"><strong class="text-slate-900 dark:text-slate-100">&lt; 10°C</strong> (&lt; 50°F) · Cold / Chilly</span>
+          </div>
+          <div class="flex items-center gap-2">
+            <span class="w-3 h-3 rounded-full bg-[#16a34a] flex-shrink-0"></span>
+            <span class="text-slate-600 dark:text-slate-300"><strong class="text-slate-900 dark:text-slate-100">10°C – 22°C</strong> (50°F – 72°F) · Mild &amp; Pleasant</span>
+          </div>
+          <div class="flex items-center gap-2">
+            <span class="w-3 h-3 rounded-full bg-[#eab308] flex-shrink-0"></span>
+            <span class="text-slate-600 dark:text-slate-300"><strong class="text-slate-900 dark:text-slate-100">22°C – 28°C</strong> (72°F – 82°F) · Warm</span>
+          </div>
+          <div class="flex items-center gap-2">
+            <span class="w-3 h-3 rounded-full bg-[#ea580c] flex-shrink-0"></span>
+            <span class="text-slate-600 dark:text-slate-300"><strong class="text-slate-900 dark:text-slate-100">28°C – 35°C</strong> (82°F – 95°F) · Hot</span>
+          </div>
+          <div class="flex items-center gap-2">
+            <span class="w-3 h-3 rounded-full bg-[#dc2626] flex-shrink-0"></span>
+            <span class="text-slate-600 dark:text-slate-300"><strong class="text-slate-900 dark:text-slate-100">&gt; 35°C</strong> (&gt; 95°F) · Very Hot / Extreme Heat</span>
+          </div>
+        `;
+      }
+      if (switchModeIcon) switchModeIcon.textContent = "🧭";
+      if (switchModeText) switchModeText.textContent = "Switch to Elevation Relief";
+
+    } else if (isElevationActive) {
+      // ── Elevation Relief Mode ──
+      widget.classList.remove("hidden");
+      if (pillIcon) pillIcon.textContent = "🧭";
+      if (pillTitle) pillTitle.textContent = "Elevation Key";
+      if (pillSwatches) {
+        pillSwatches.innerHTML = `
+          <span class="w-2.5 h-2.5 rounded-full bg-[#388e3c]" title="Lowlands (0-200m)"></span>
+          <span class="w-2.5 h-2.5 rounded-full bg-[#8bc34a]" title="Hills (200-500m)"></span>
+          <span class="w-2.5 h-2.5 rounded-full bg-[#f57c00]" title="Plateaus (500-1000m)"></span>
+          <span class="w-2.5 h-2.5 rounded-full bg-[#d32f2f]" title="Peaks (>1000m)"></span>
+        `;
+      }
+      if (cardIcon) cardIcon.textContent = "🧭";
+      if (cardTitle) cardTitle.textContent = "Topographic Elevation";
+      if (cardSubtitle) cardSubtitle.textContent = "Height Above Sea Level (Relief)";
+      if (notification) {
+        notification.className = "px-2.5 py-1.5 rounded-xl bg-amber-500/10 dark:bg-amber-500/15 border border-amber-500/30 text-[11px] font-medium text-amber-900 dark:text-amber-200 leading-snug";
+        notification.innerHTML = "<span>⚠️ <strong>Notice:</strong> Red, orange &amp; green shades denote <strong>Elevation</strong> above sea level, not temperature.</span>";
+      }
+      if (gradientBar) {
+        gradientBar.style.background = "linear-gradient(90deg, #388e3c, #8bc34a, #fbc02d, #f57c00, #d32f2f, #795548)";
+      }
+      if (gradientLabels) {
+        gradientLabels.innerHTML = "<span>0 m (Coast)</span><span>500 m</span><span>1,500 m+ (Peaks)</span>";
+      }
+      if (swatchesList) {
+        swatchesList.innerHTML = `
+          <div class="flex items-center gap-2">
+            <span class="w-3 h-3 rounded-full bg-[#388e3c] flex-shrink-0"></span>
+            <span class="text-slate-600 dark:text-slate-300"><strong class="text-slate-900 dark:text-slate-100">0 – 200 m</strong> (0 – 650 ft) · Coastal lowlands &amp; plains</span>
+          </div>
+          <div class="flex items-center gap-2">
+            <span class="w-3 h-3 rounded-full bg-[#8bc34a] flex-shrink-0"></span>
+            <span class="text-slate-600 dark:text-slate-300"><strong class="text-slate-900 dark:text-slate-100">200 – 500 m</strong> (650 – 1,600 ft) · Foothills &amp; river valleys</span>
+          </div>
+          <div class="flex items-center gap-2">
+            <span class="w-3 h-3 rounded-full bg-[#f57c00] flex-shrink-0"></span>
+            <span class="text-slate-600 dark:text-slate-300"><strong class="text-slate-900 dark:text-slate-100">500 – 1,000 m</strong> (1,600 – 3,300 ft) · Tablelands &amp; plateaus</span>
+          </div>
+          <div class="flex items-center gap-2">
+            <span class="w-3 h-3 rounded-full bg-[#d32f2f] flex-shrink-0"></span>
+            <span class="text-slate-600 dark:text-slate-300"><strong class="text-slate-900 dark:text-slate-100">&gt; 1,000 m</strong> (&gt; 3,300 ft) · Mountain ridges &amp; peaks</span>
+          </div>
+        `;
+      }
+      if (switchModeIcon) switchModeIcon.textContent = "🌡️";
+      if (switchModeText) switchModeText.textContent = "Show Live Temperature Grid";
+
+    } else {
+      // ── Standard Basemap (Street/Satellite) ──
+      widget.classList.remove("hidden");
+      if (pillIcon) pillIcon.textContent = "🗺️";
+      if (pillTitle) pillTitle.textContent = "Map Key";
+      if (pillSwatches) {
+        pillSwatches.innerHTML = `
+          <span class="w-2.5 h-2.5 rounded-full bg-[#388e3c]" title="Lowlands"></span>
+          <span class="w-2.5 h-2.5 rounded-full bg-[#f57c00]" title="Plateau"></span>
+          <span class="w-2.5 h-2.5 rounded-full bg-[#d32f2f]" title="Peaks"></span>
+        `;
+      }
+      if (cardIcon) cardIcon.textContent = "🗺️";
+      if (cardTitle) cardTitle.textContent = "Map Color Legend";
+      if (cardSubtitle) cardSubtitle.textContent = "Elevation &amp; Temperature Keys";
+      if (notification) {
+        notification.className = "px-2.5 py-1.5 rounded-xl bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-[11px] font-medium text-slate-700 dark:text-slate-300 leading-snug";
+        notification.innerHTML = "<span>Switch between <strong>Topographic Elevation</strong> relief and <strong>Live Temperature Grid</strong> overlays.</span>";
+      }
+      if (gradientBar) {
+        gradientBar.style.background = "linear-gradient(90deg, #388e3c, #8bc34a, #fbc02d, #f57c00, #d32f2f, #795548)";
+      }
+      if (gradientLabels) {
+        gradientLabels.innerHTML = "<span>0 m (Coast)</span><span>500 m</span><span>1,500 m+ (Peaks)</span>";
+      }
+      if (swatchesList) {
+        swatchesList.innerHTML = `
+          <div class="flex items-center gap-2">
+            <span class="w-3 h-3 rounded-full bg-[#388e3c] flex-shrink-0"></span>
+            <span class="text-slate-600 dark:text-slate-300"><strong class="text-slate-900 dark:text-slate-100">Green</strong>: Coastal plains &amp; lowlands (0-200m)</span>
+          </div>
+          <div class="flex items-center gap-2">
+            <span class="w-3 h-3 rounded-full bg-[#f57c00] flex-shrink-0"></span>
+            <span class="text-slate-600 dark:text-slate-300"><strong class="text-slate-900 dark:text-slate-100">Orange</strong>: Plateaus &amp; tablelands (500-1000m)</span>
+          </div>
+          <div class="flex items-center gap-2">
+            <span class="w-3 h-3 rounded-full bg-[#d32f2f] flex-shrink-0"></span>
+            <span class="text-slate-600 dark:text-slate-300"><strong class="text-slate-900 dark:text-slate-100">Red</strong>: High mountain peaks (&gt;1000m)</span>
+          </div>
+        `;
+      }
+      if (switchModeIcon) switchModeIcon.textContent = "🌡️";
+      if (switchModeText) switchModeText.textContent = "Show Live Temperature Grid";
     }
   }
 }

@@ -422,6 +422,9 @@
 .legend-gradient-temp {
   background: linear-gradient(90deg, #0000ff, #00bfff, #00ff00, #ffff00, #ff8800, #ff0000);
 }
+.legend-gradient-elevation {
+  background: linear-gradient(90deg, #388e3c, #8bc34a, #fbc02d, #f57c00, #d32f2f, #795548);
+}
 #mobileQuickChips,
 #discoveriesCarousel {
   -webkit-overflow-scrolling: touch;
@@ -440,6 +443,9 @@
 }
 .legend-gradient-temp {
   background: linear-gradient(90deg, #0000ff, #00bfff, #00ff00, #ffff00, #ff8800, #ff0000);
+}
+.legend-gradient-elevation {
+  background: linear-gradient(90deg, #388e3c, #8bc34a, #fbc02d, #f57c00, #d32f2f, #795548);
 }
 #mobileQuickChips,
 #discoveriesCarousel {

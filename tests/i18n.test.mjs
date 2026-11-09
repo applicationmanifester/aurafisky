@@ -8,7 +8,10 @@ import {
   supportedLocales,
   isSupported,
   DICT,
+  translateText,
+  translateDOM,
 } from "../modules/i18n.js";
+import { getWeatherInfo } from "../weather.js";
 
 describe("Internationalisation (i18n) Engine & Language Support", () => {
   it("supports major world and Indian languages", () => {
@@ -114,6 +117,80 @@ describe("Internationalisation (i18n) Engine & Language Support", () => {
     expect(html).toContain('value="de"');
     expect(html).toContain('value="ja"');
     expect(html).toContain('value="ar"');
+    expect(html).toContain('value="or"'); // Odia
+    expect(html).toContain('value="sa"'); // Sanskrit
+    expect(html).toContain('value="as"'); // Assamese
+    expect(html).toContain('value="zh-TW"'); // Chinese Traditional
+    expect(html).toContain('value="ko"'); // Korean
+    expect(html).toContain('value="tr"'); // Turkish
     expect(html).toContain('id="google_translate_element"');
   });
+
+  it("translates universal weather card and route phrases via translateText", () => {
+    // Buttons & Labels in Kannada
+    expect(translateText("Copy", "kn")).toBe("ನಕಲಿಸಿ");
+    expect(translateText("Details", "kn")).toBe("ವಿವರಗಳು");
+    expect(translateText("Generate Briefing", "kn")).toBe("ಸಂಕ್ಷಿಪ್ತ ವರದಿ ರಚಿಸಿ");
+    expect(translateText("Show All (6)", "kn")).toBe("ಎಲ್ಲವನ್ನೂ ತೋರಿಸಿ (6)");
+    expect(translateText("Show Less", "kn")).toBe("ಕಡಿಮೆ ತೋರಿಸಿ");
+    expect(translateText("Stop 2", "kn")).toBe("ನಿಲುಗಡೆ 2");
+    expect(translateText("Earlier", "kn")).toBe("ಮೊದಲು");
+    expect(translateText("Remove Stop", "kn")).toBe("ನಿಲುಗಡೆ ತೆಗೆದುಹಾಕಿ");
+    expect(translateText("Start Navigation", "kn")).toBe("ನ್ಯಾವಿಗೇಷನ್ ಪ್ರಾರಂಭಿಸಿ");
+    expect(translateText("Driving & Road Grip", "kn")).toBe("ಚಾಲನೆ ಮತ್ತು ರಸ್ತೆ ಹಿಡಿತ");
+    expect(translateText("Temperature Scale", "kn")).toBe("ತಾಪಮಾನ ಮಾಪಕ");
+
+    // Dynamic patterns in Kannada
+    const trustStr = translateText("55% trust (temp 62%, wind 52%, precip 47%)", "kn");
+    expect(trustStr).toContain("ವಿಶ್ವಾಸಾರ್ಹತೆ");
+    expect(trustStr).toContain("ತಾಪ 62%");
+
+    const arriveStr = translateText("arriving in ~2h from the ENE", "kn");
+    expect(arriveStr).toBe("~2 ಗಂಟೆಯಲ್ಲಿ ENE ನಿಂದ ಬರುತ್ತಿದೆ");
+
+    const lwiStr = translateText("LIVE WEATHER INTELLIGENCE • JAKKANAHALLI", "kn");
+    expect(lwiStr).toContain("ಲೈವ್ ಹವಾಮಾನ ಮಾಹಿತಿ");
+    expect(lwiStr).toContain("JAKKANAHALLI");
+
+    const comfortStr = translateText("Temperature > Humidity > Wind limiting comfort", "kn");
+    expect(comfortStr).toContain("ಆರಾಮದಾಯಕತೆಯನ್ನು ಸೀಮಿತಗೊಳಿಸುತ್ತದೆ");
+  });
+
+  it("translates DOM tree elements idempotently using translateDOM", () => {
+    const container = document.createElement("div");
+    container.innerHTML = `
+      <div id="cardTitle">Live Intelligence</div>
+      <button id="copyBtn" title="Copy coordinates">Copy</button>
+      <input id="searchInp" placeholder="Add stop by city, address or landmark..." />
+      <span id="scaleLabel">Temperature Scale</span>
+    `;
+
+    // Translate to Kannada
+    translateDOM(container, "kn");
+
+    expect(container.querySelector("#cardTitle").textContent).toBe("ಲೈವ್ ಮಾಹಿತಿ");
+    expect(container.querySelector("#copyBtn").textContent).toBe("ನಕಲಿಸಿ");
+    expect(container.querySelector("#copyBtn").getAttribute("title")).toBe("ನಿರ್ದೇಶಾಂಕಗಳನ್ನು ನಕಲಿಸಿ");
+    expect(container.querySelector("#searchInp").getAttribute("placeholder")).toBe("ನಗರ, ವಿಳಾಸ ಅಥವಾ ಸ್ಥಳದಿಂದ ನಿಲುಗಡೆ ಸೇರಿಸಿ...");
+    expect(container.querySelector("#scaleLabel").textContent).toBe("ತಾಪಮಾನ ಮಾಪಕ");
+
+    // Revert back to English
+    translateDOM(container, "en");
+    expect(container.querySelector("#cardTitle").textContent).toBe("Live Intelligence");
+    expect(container.querySelector("#copyBtn").textContent).toBe("Copy");
+    expect(container.querySelector("#searchInp").getAttribute("placeholder")).toBe("Add stop by city, address or landmark...");
+    expect(container.querySelector("#scaleLabel").textContent).toBe("Temperature Scale");
+  });
+
+  it("translates WMO weather descriptions according to active language", () => {
+    const clearDayKn = getWeatherInfo(0, true, "kn");
+    expect(clearDayKn.description).toBe("ಸ್ಪಷ್ಟ ಆಕಾಶ");
+
+    const clearDayHi = getWeatherInfo(0, true, "hi");
+    expect(clearDayHi.description).toBe("साफ आसमान");
+
+    const thunderKn = getWeatherInfo(95, true, "kn");
+    expect(thunderKn.description).toBe("ಗುಡುಗು ಸಹಿತ ಮಳೆ");
+  });
 });
+

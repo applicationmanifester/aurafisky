@@ -24,6 +24,7 @@ import { Style, Stroke } from "ol/style.js";
 import { fromLonLat, toLonLat } from "ol/proj.js";
 import { HtmlMarker } from "../modules/ol-marker.js";
 import { wakeLockManager } from "../modules/wake-lock.js";
+import { translateDOM } from "../modules/i18n.js";
 
 const OSRM_BASE = "https://router.project-osrm.org/route/v1/driving";
 const EARTH_RADIUS_M = 6371000;
@@ -2528,6 +2529,10 @@ function showPanel() {
     panelEl.classList.remove("hidden");
     panelEl.style.display = "flex";
     isPanelOpen = true;
+    const curLang = appRef?.language || (typeof localStorage !== "undefined" ? localStorage.getItem("aurafisky_lang") : "en") || "en";
+    if (curLang && curLang !== "en") {
+      translateDOM(panelEl, curLang);
+    }
     if (isMobileLayout()) {
       snapRouteSheet(pts.length < 2 ? "half" : (routeSheetState || "half"));
     }
@@ -2665,6 +2670,11 @@ function renderEmptyRoutePanel() {
   });
 
   bindRouteSearchAddEvents(bodyEl);
+
+  const curLang = appRef?.language || (typeof localStorage !== "undefined" ? localStorage.getItem("aurafisky_lang") : "en") || "en";
+  if (curLang && curLang !== "en" && panelEl) {
+    translateDOM(panelEl, curLang);
+  }
 }
 
 /**
@@ -3464,6 +3474,11 @@ function renderRoutePanelContent(stops, units) {
 
   // Bind autocomplete search input inside the Stops tab
   bindRouteSearchAddEvents(bodyEl);
+
+  const curLang = appRef?.language || (typeof localStorage !== "undefined" ? localStorage.getItem("aurafisky_lang") : "en") || "en";
+  if (curLang && curLang !== "en" && panelEl) {
+    translateDOM(panelEl, curLang);
+  }
 }
 
 // ============================================================================

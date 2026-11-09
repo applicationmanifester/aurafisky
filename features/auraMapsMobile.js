@@ -5,6 +5,7 @@
 
 import { shortPlaceName } from '../modules/geo.js';
 import { isMobileLayout } from './breakpoints.js';
+import { translateDOM } from '../modules/i18n.js';
 
 export function init(app) {
   const controller = new AuraMobileController(app);
@@ -1126,6 +1127,12 @@ export class AuraMobileController {
         shareBtn?.click();
       });
     });
+
+    const currentLang = this.app?.language || (typeof localStorage !== 'undefined' ? localStorage.getItem('aurafisky_lang') : 'en') || 'en';
+    if (currentLang && currentLang !== 'en') {
+      const section = document.getElementById('discoveriesSection') || container;
+      translateDOM(section, currentLang);
+    }
   }
 
   // ── Voice Search (SpeechRecognition) ──────────────────────────────

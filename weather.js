@@ -487,6 +487,16 @@ const WeatherService = (() => {
     });
   }
 
+  function _getUserLocale() {
+    if (typeof window !== "undefined") {
+      try {
+        const lang = localStorage.getItem("aurafisky_lang") || window.aurafiskyI18n?.detectLocale?.();
+        if (lang && lang !== "en") return lang;
+      } catch (_) {}
+    }
+    return "en-US";
+  }
+
   /**
    * Maps a WMO weather code to a description and icon.
    *
@@ -494,10 +504,20 @@ const WeatherService = (() => {
    * @param {boolean} isDay - Whether it's daytime
    * @returns {{ description: string, icon: string }}
    */
-  function getWeatherInfo(code, isDay = true) {
+  function getWeatherInfo(code, isDay = true, overrideLang = null) {
     const entry = WMO_CODES[code] || WMO_CODES[0];
+    let desc = entry.description;
+    const lang = overrideLang || (typeof localStorage !== "undefined" ? localStorage.getItem("aurafisky_lang") : null) || "en";
+    if (lang && lang !== "en") {
+      if (typeof window !== "undefined" && window.aurafiskyI18n?.translateText) {
+        try {
+          desc = window.aurafiskyI18n.translateText(entry.description, lang);
+        } catch (_) {}
+      }
+    }
     return {
-      description: entry.description,
+      description: desc,
+      rawDescription: entry.description,
       icon: isDay ? entry.dayIcon : entry.nightIcon,
       modelSrc: "ECMWF + GFS blended",
     };
@@ -936,10 +956,13 @@ const WeatherService = (() => {
     const targetDay = new Date(date.getFullYear(), date.getMonth(), date.getDate());
     const diff = Math.round((targetDay - today) / 86400000);
 
-    if (diff === 0) return "Today";
-    if (diff === 1) return "Tomorrow";
-    if (diff === -1) return "Yesterday";
-    return date.toLocaleDateString("en-US", { weekday: "short" });
+    const lang = (typeof window !== "undefined" && localStorage.getItem("aurafisky_lang")) || "en";
+    const i18n = typeof window !== "undefined" ? window.aurafiskyI18n : null;
+
+    if (diff === 0) return (i18n ? i18n.t("today", lang) : "Today") || "Today";
+    if (diff === 1) return (i18n ? i18n.t("tomorrow", lang) : "Tomorrow") || "Tomorrow";
+    if (diff === -1) return (i18n ? i18n.t("yesterday", lang) : "Yesterday") || "Yesterday";
+    return date.toLocaleDateString(_getUserLocale(), { weekday: "short" });
   }
 
   /**
@@ -989,14 +1012,15 @@ const WeatherService = (() => {
       parseInt(timeParts[1], 10)
     );
     
+    const locale = _getUserLocale();
     return (
-      localDate.toLocaleDateString("en-US", {
+      localDate.toLocaleDateString(locale, {
         weekday: "short",
         month: "short",
         day: "numeric",
       }) +
       " · " +
-      localDate.toLocaleTimeString("en-US", {
+      localDate.toLocaleTimeString(locale, {
         hour: "numeric",
         minute: "2-digit",
       })
@@ -1085,15 +1109,16 @@ const WeatherService = (() => {
    */
   function getFormattedLocationCurrentDateTime(timezone, utcOffsetSeconds = 0) {
     const now = new Date();
+    const locale = _getUserLocale();
     if (timezone) {
       try {
-        const dStr = now.toLocaleDateString("en-US", {
+        const dStr = now.toLocaleDateString(locale, {
           timeZone: timezone,
           weekday: "short",
           month: "short",
           day: "numeric",
         });
-        const tStr = now.toLocaleTimeString("en-US", {
+        const tStr = now.toLocaleTimeString(locale, {
           timeZone: timezone,
           hour: "numeric",
           minute: "2-digit",
@@ -1109,12 +1134,12 @@ const WeatherService = (() => {
       (utcOffsetSeconds || 0) * 1000 +
       now.getTimezoneOffset() * 60 * 1000;
     const locDate = new Date(locMs);
-    const dStr = locDate.toLocaleDateString("en-US", {
+    const dStr = locDate.toLocaleDateString(locale, {
       weekday: "short",
       month: "short",
       day: "numeric",
     });
-    const tStr = locDate.toLocaleTimeString("en-US", {
+    const tStr = locDate.toLocaleTimeString(locale, {
       hour: "numeric",
       minute: "2-digit",
       hour12: true,

@@ -349,8 +349,13 @@ async function updatePredictiveArrival(weather, hourIndex) {
         );
         if (upwindWeather) {
           const travelHours = 2;
-          const predHTML = `<span class="text-[10px] font-bold text-teal-500 uppercase tracking-wider">🌬️ Coming your way</span><span class="text-xs text-slate-600 dark:text-slate-300">${upwindWeather.icon} ${upwindWeather.description}, ${WeatherService.formatTemp(upwindWeather.temperature)} arriving in ~${travelHours}h from the ${WeatherService.getWindDirection(windDir)}</span>`;
+          const lang = (typeof window !== "undefined" && localStorage.getItem("aurafisky_lang")) || "en";
+          const comingWay = (typeof window !== "undefined" && window.aurafiskyI18n?.t) ? (window.aurafiskyI18n.t("coming_your_way", lang) || "Coming your way") : "Coming your way";
+          const arrivingIn = (typeof window !== "undefined" && window.aurafiskyI18n?.t) ? (window.aurafiskyI18n.t("arriving_in", lang) || "arriving in") : "arriving in";
+          const fromThe = (typeof window !== "undefined" && window.aurafiskyI18n?.t) ? (window.aurafiskyI18n.t("from_the", lang) || "from the") : "from the";
+          const predHTML = `<span class="text-[10px] font-bold text-teal-500 uppercase tracking-wider">🌬️ ${comingWay}</span><span class="text-xs text-slate-600 dark:text-slate-300">${upwindWeather.icon} ${upwindWeather.description}, ${WeatherService.formatTemp(upwindWeather.temperature)} ${arrivingIn} ~${travelHours}h ${fromThe} ${WeatherService.getWindDirection(windDir)}</span>`;
           this.setSafeHTML(this.$.predictiveArrival, predHTML);
+          if (lang !== "en" && typeof window !== "undefined") window.aurafiskyI18n?.translateDOM(this.$.predictiveArrival, lang);
           this.$.predictiveArrival.classList.remove("hidden");
           return;
         }
@@ -382,8 +387,13 @@ async function updatePredictiveArrival(weather, hourIndex) {
     }
 
     const travelHours = 2;
-    const predHTML = `<span class="text-[10px] font-bold text-teal-500 uppercase tracking-wider">🌬️ Coming your way</span><span class="text-xs text-slate-600 dark:text-slate-300">${upwindWeather.icon} ${upwindWeather.description}, ${WeatherService.formatTemp(upwindWeather.temperature)} arriving in ~${travelHours}h from the ${WeatherService.getWindDirection(windDir)}</span>`;
+    const lang = (typeof window !== "undefined" && localStorage.getItem("aurafisky_lang")) || "en";
+    const comingWay = (typeof window !== "undefined" && window.aurafiskyI18n?.t) ? (window.aurafiskyI18n.t("coming_your_way", lang) || "Coming your way") : "Coming your way";
+    const arrivingIn = (typeof window !== "undefined" && window.aurafiskyI18n?.t) ? (window.aurafiskyI18n.t("arriving_in", lang) || "arriving in") : "arriving in";
+    const fromThe = (typeof window !== "undefined" && window.aurafiskyI18n?.t) ? (window.aurafiskyI18n.t("from_the", lang) || "from the") : "from the";
+    const predHTML = `<span class="text-[10px] font-bold text-teal-500 uppercase tracking-wider">🌬️ ${comingWay}</span><span class="text-xs text-slate-600 dark:text-slate-300">${upwindWeather.icon} ${upwindWeather.description}, ${WeatherService.formatTemp(upwindWeather.temperature)} ${arrivingIn} ~${travelHours}h ${fromThe} ${WeatherService.getWindDirection(windDir)}</span>`;
     this.setSafeHTML(this.$.predictiveArrival, predHTML);
+    if (lang !== "en" && typeof window !== "undefined") window.aurafiskyI18n?.translateDOM(this.$.predictiveArrival, lang);
     this.$.predictiveArrival.classList.remove("hidden");
   }
 
@@ -432,8 +442,15 @@ function updateTrustScore(trust) {
         : trust.overall >= 60
           ? "text-amber-500"
           : "text-red-500";
-    this.$.trustScore.textContent = `🎯 ${trust.overall}% trust (temp ${trust.temp}%, wind ${trust.wind}%, precip ${trust.precip}%)`;
+    const lang = (typeof window !== "undefined" && localStorage.getItem("aurafisky_lang")) || "en";
+    const i18n = typeof window !== "undefined" ? window.aurafiskyI18n : null;
+    const trustTxt = (i18n ? i18n.t("trust", lang) : "trust") || "trust";
+    const tempTxt = (i18n ? i18n.t("temperature", lang) : "temp") || "temp";
+    const windTxt = (i18n ? i18n.t("wind", lang) : "wind") || "wind";
+    const precipTxt = (i18n ? i18n.t("precipitation", lang) : "precip") || "precip";
+    this.$.trustScore.textContent = `🎯 ${trust.overall}% ${trustTxt} (${tempTxt} ${trust.temp}%, ${windTxt} ${trust.wind}%, ${precipTxt} ${trust.precip}%)`;
     this.$.trustScore.className = `text-[9px] font-semibold ${color}`;
+    if (lang !== "en" && i18n?.translateDOM) i18n.translateDOM(this.$.trustScore, lang);
   }
 
 function updateParamImportance(importance) {
@@ -441,16 +458,20 @@ function updateParamImportance(importance) {
       this.$.paramImportance.textContent = "";
       return;
     }
+    const lang = (typeof window !== "undefined" && localStorage.getItem("aurafisky_lang")) || "en";
+    const i18n = typeof window !== "undefined" ? window.aurafiskyI18n : null;
+    const limitTxt = (i18n ? i18n.t("limiting_comfort", lang) : "limiting comfort") || "limiting comfort";
     this.$.paramImportance.innerHTML =
       "🔍 " +
       importance
         .map(
           (p) =>
-            `<span class="font-bold ${p.impact > 10 ? "text-red-500" : "text-amber-500"}">${p.key}</span>`,
+            `<span class="font-bold ${p.impact > 10 ? "text-red-500" : "text-amber-500"}">${(i18n ? i18n.translateText(p.key, lang) : p.key)}</span>`,
         )
         .join(" > ") +
-      " limiting comfort";
+      " " + limitTxt;
     this.$.paramImportance.className = "text-[10px] text-slate-400";
+    if (lang !== "en" && i18n?.translateDOM) i18n.translateDOM(this.$.paramImportance, lang);
   }
 
 function toggleSignalNoiseView() {

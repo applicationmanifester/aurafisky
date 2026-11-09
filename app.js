@@ -57,7 +57,7 @@ import {
 } from "./modules/geo.js";
 import { reverseUrls, labelFromReverse, reverseGeocode } from "./modules/reverseGeocode.js";
 import { applyViewportHeight, watchViewport } from "./modules/viewport.js";
-import { t, detectLocale, setLocale, supportedLocales } from "./modules/i18n.js";
+import { t, detectLocale, setLocale, supportedLocales, translateText, translateDOM } from "./modules/i18n.js";
 import { isMobileLayout } from "./features/breakpoints.js";
 import localforage from "localforage";
 import DOMPurify from "dompurify";
@@ -5135,6 +5135,12 @@ class AurafiskyApp {
     // Keep mobile header badge & real-time cards in exact sync with current weather & AQI
     if (this.googleMapsMobile) {
       this.googleMapsMobile.syncCurrentLocationInfo(weather, this.selectedName, this.weatherData);
+    }
+
+    // Immediately translate cards into active language
+    if (this.language && this.language !== "en" && typeof translateDOM === "function") {
+      const card = document.getElementById("weatherCard");
+      if (card) translateDOM(card, this.language);
     }
   }
 
@@ -11377,6 +11383,11 @@ class AurafiskyApp {
       document.documentElement.dir = "ltr";
     }
 
+    // Automatically synchronize MapLibre vector basemap labels:
+    // If native language is selected, show native script labels (e.g. Kannada, Hindi, etc.);
+    // If English is selected, revert to English.
+    this.setMapLanguage(lang === 'en' ? 'en' : 'native');
+
     const title = document.querySelector("title");
     if (title) title.textContent = `${t("app_name")} — ${t("app_tagline")}`;
     if (this.$.searchInput) {
@@ -11419,23 +11430,49 @@ class AurafiskyApp {
     const appLangSub = document.getElementById("settingsAppLanguageSub");
     if (appLangSub) appLangSub.textContent = t("settings_app_language_sub") || "All features & tabs";
 
-    // 5. Sync Settings dropdown value
+    // 5. Update Weather Card Actions and Header Titles
+    const copyBtn = document.getElementById("copyAddressBtnText");
+    if (copyBtn) copyBtn.textContent = t("copy") || "Copy";
+    const detailsBtn = document.getElementById("toggleAddressCardText");
+    if (detailsBtn) detailsBtn.textContent = t("details") || "Details";
+    const briefingBtn = document.getElementById("briefingBtn");
+    if (briefingBtn) briefingBtn.textContent = `📡 ${t("generate_briefing") || "Generate Briefing"}`;
+    const discHeader = document.getElementById("discoveriesHeaderTitle");
+    if (discHeader) discHeader.textContent = t("live_weather_intelligence_safety") || "Live Weather Intelligence & Safety";
+
+    // 6. Sync Settings dropdown value
     const langSelect = this.$.settingsAppLanguageSelect || document.getElementById("settingsAppLanguageSelect");
     if (langSelect && langSelect.value !== lang) {
       langSelect.value = lang;
     }
 
-    // 6. Re-render active tab if Farm so crop guide updates
+    // 7. Re-render active tab if Farm so crop guide updates
     if (this.activeWeatherTab === "farm" && typeof this.renderFarmTab === "function") {
       this.renderFarmTab(this);
     }
 
-    // 7. Re-render weather display if forecast data is present
+    // 8. Re-render weather display if forecast data is present
     if (this.weatherData && typeof this.updateWeatherDisplay === "function") {
       this.updateWeatherDisplay(this.weatherData);
     }
 
-    // 8. Reset Aura if open
+    // 9. Re-render timeline if initialized
+    if (this.weatherData && typeof this.initTimeline === "function") {
+      this.initTimeline();
+    }
+
+    // 10. Run deep recursive DOM translation across the full active document
+    if (typeof translateDOM === "function") {
+      translateDOM(document.body, lang);
+    }
+
+    // 11. Re-translate Route Studio if open
+    const routePanel = document.getElementById("routePanel");
+    if (routePanel && typeof translateDOM === "function") {
+      translateDOM(routePanel, lang);
+    }
+
+    // 12. Reset Aura if open
     if (this.aura && this.aura.isOpen) {
       this.aura.reset();
     }

@@ -57,7 +57,7 @@ import {
 } from "./modules/geo.js";
 import { reverseUrls, labelFromReverse, reverseGeocode } from "./modules/reverseGeocode.js";
 import { applyViewportHeight, watchViewport } from "./modules/viewport.js";
-import { t, detectLocale, setLocale, supportedLocales, translateText, translateDOM } from "./modules/i18n.js";
+import { t, detectLocale, setLocale, supportedLocales, translateText, translateDOM, refreshExternalTranslation } from "./modules/i18n.js";
 import { isMobileLayout } from "./features/breakpoints.js";
 import localforage from "localforage";
 import DOMPurify from "dompurify";
@@ -9810,6 +9810,20 @@ class AurafiskyApp {
       p.classList.toggle("hidden", !isTarget);
     });
 
+    // Feature panels render parts of their content from live data. Translate
+    // the selected panel on entry, then ask the full-page fallback to pick up
+    // any labels that do not have a first-party phrase yet.
+    if (tabName === "astronomy" && typeof this.updateCelestialBodies === "function") {
+      try { this.updateCelestialBodies(new Date()); } catch (_) {}
+    }
+    if (tabName === "farm" && typeof this.renderFarmTab === "function") {
+      try { this.renderFarmTab(this); } catch (_) {}
+    }
+
+    const activePanel = document.getElementById(targetPanelId);
+    if (activePanel) translateDOM(activePanel, this.language || detectLocale());
+    refreshExternalTranslation(this.language || detectLocale());
+
     const activeBtn = document.querySelector(`.weather-tab-btn[data-tab="${tabName}"]`);
     if (activeBtn) {
       activeBtn.scrollIntoView({ behavior: "smooth", block: "nearest", inline: "center" });
@@ -11491,9 +11505,14 @@ class AurafiskyApp {
       langSelect.value = lang;
     }
 
+    // 6b. Re-render Astronomy tab if initialized
+    if (typeof this.updateCelestialBodies === "function") {
+      try { this.updateCelestialBodies(new Date()); } catch (_) {}
+    }
+
     // 7. Re-render active tab if Farm so crop guide updates
-    if (this.activeWeatherTab === "farm" && typeof this.renderFarmTab === "function") {
-      this.renderFarmTab(this);
+    if (typeof this.renderFarmTab === "function") {
+      try { this.renderFarmTab(this); } catch (_) {}
     }
 
     // 8. Re-render weather display if forecast data is present

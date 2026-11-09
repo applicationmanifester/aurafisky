@@ -18352,6 +18352,1712 @@ export function t(key, locale = detectLocale()) {
  * Universal text translation for any string in the UI.
  * Handles direct dictionary matches, phrase lookups, reverse key lookups, and regex patterns.
  */
+export const EXTENDED_FEATURE_PHRASES = {
+  "Sirius": {
+    "kn": "ಸಿರಿಯಸ್ (ಲುಬ್ಧಕ)",
+    "hi": "सीरियस (व्याध)",
+    "zh-CN": "天狼星",
+    "zh-TW": "天狼星",
+    "ja": "シリウス",
+    "es": "Sirio",
+    "fr": "Sirius",
+    "de": "Sirius",
+    "ta": "சிரியஸ்",
+    "te": "సిరియస్"
+  },
+  "Vega": {
+    "kn": "ವೇಗಾ (ಅಭಿಜಿತ್)",
+    "hi": "वेगा (अभिजित)",
+    "zh-CN": "织女一",
+    "zh-TW": "織女一",
+    "ja": "ベガ",
+    "es": "Vega",
+    "fr": "Véga",
+    "de": "Wega",
+    "ta": "வேகா",
+    "te": "వేగా"
+  },
+  "Arcturus": {
+    "kn": "ಆರ್ಕ್ಟುರಸ್ (ಸ್ವಾತಿ)",
+    "hi": "स्वाति (आर्कटुरस)",
+    "zh-CN": "大角星",
+    "zh-TW": "大角星",
+    "ja": "アークトゥルス",
+    "es": "Arturo",
+    "fr": "Arcturus",
+    "de": "Arktur",
+    "ta": "சுவாதி",
+    "te": "స్వాతి"
+  },
+  "Rigel": {
+    "kn": "ರೈಜೆಲ್ (ಬಾಣರಾಜ)",
+    "hi": "रिगेल (बाणराज)",
+    "zh-CN": "参宿七",
+    "zh-TW": "參宿七",
+    "ja": "リゲル",
+    "es": "Rigel",
+    "fr": "Rigel",
+    "de": "Rigel",
+    "ta": "ரிஜெல்",
+    "te": "రిజెల్"
+  },
+  "Betelgeuse": {
+    "kn": "ಬೆಟಲ್‌ಗ್ಯೂಸ್ (ಆರ್ದ್ರಾ)",
+    "hi": "आर्द्रा (बेटेलगेयूज़)",
+    "zh-CN": "参宿四",
+    "zh-TW": "參宿四",
+    "ja": "ベテルギウス",
+    "es": "Betelgeuse",
+    "fr": "Bételgeuse",
+    "de": "Beteigeuze",
+    "ta": "திருவாதிரை",
+    "te": "ఆర్ద్ర"
+  },
+  "Aldebaran": {
+    "kn": "ಆಲ್ಡೆಬರಾನ್ (ರೋಹಿಣಿ)",
+    "hi": "रोहिणी (अल्डेबरन)",
+    "zh-CN": "毕宿五",
+    "zh-TW": "畢宿五",
+    "ja": "アルデバラン",
+    "es": "Aldebarán",
+    "fr": "Aldébaran",
+    "de": "Aldebaran",
+    "ta": "ரோகிணி",
+    "te": "రోహిణి"
+  },
+  "Antares": {
+    "kn": "ಆಂಟಾರೆಸ್ (ಜ್ಯೇಷ್ಠಾ)",
+    "hi": "ज्येष्ठा (अंटारेस)",
+    "zh-CN": "心宿二",
+    "zh-TW": "心宿二",
+    "ja": "アンタレス",
+    "es": "Antares",
+    "fr": "Antarès",
+    "de": "Antares",
+    "ta": "கேட்டை",
+    "te": "జ్యేష్ఠ"
+  },
+  "Polaris": {
+    "kn": "ಧ್ರುವ ತಾರೆ (ಪೋಲಾರಿಸ್)",
+    "hi": "ध्रुव तारा (पोलारिस)",
+    "zh-CN": "北极星 (勾陈一)",
+    "zh-TW": "北極星 (勾陳一)",
+    "ja": "ポラリス (北極星)",
+    "es": "Polaris (Estrella Polar)",
+    "fr": "Polaris (Étoile polaire)",
+    "de": "Polarstern",
+    "ta": "துருவ நட்சத்திரம்",
+    "te": "ధ్రువ తార"
+  },
+  "Altair": {
+    "kn": "ಆಲ್ಟೇರ್ (ಶ್ರವಣ)",
+    "hi": "श्रवण (अल्टेयर)",
+    "zh-CN": "牛郎星 (河鼓二)",
+    "zh-TW": "牛郎星 (河鼓二)",
+    "ja": "アルタイル (彦星)",
+    "es": "Altair",
+    "fr": "Altaïr",
+    "de": "Altair",
+    "ta": "திருவோணம்",
+    "te": "శ్రవణ"
+  },
+  "Spica": {
+    "kn": "ಸ್ಪೈಕಾ (ಚಿತ್ರಾ)",
+    "hi": "चित्रा (स्पाइका)",
+    "zh-CN": "角宿一",
+    "zh-TW": "角宿一",
+    "ja": "スピカ",
+    "es": "Espiga",
+    "fr": "Spica",
+    "de": "Spica",
+    "ta": "சித்திரை",
+    "te": "చిత్ర"
+  },
+  "Canis Major": {
+    "kn": "ಕ್ಯಾನಿಸ್ ಮೇಜರ್ (ಮಹಾಶ್ವಾನ)",
+    "hi": "मृगव्याध (कैनिस मेजर)",
+    "zh-CN": "大犬座",
+    "zh-TW": "大犬座",
+    "ja": "おおいぬ座",
+    "es": "Can Mayor",
+    "fr": "Grand Chien",
+    "de": "Großer Hund"
+  },
+  "Lyra": {
+    "kn": "ಲೈರಾ (ವೀಣಾಮಂಡಲ)",
+    "hi": "वीणा (लाइरा)",
+    "zh-CN": "天琴座",
+    "zh-TW": "天琴座",
+    "ja": "こと座",
+    "es": "Lira",
+    "fr": "Lyre",
+    "de": "Leier"
+  },
+  "Boötes": {
+    "kn": "ಬೂಟೆಸ್ (ಗೋಪಾಲಕ)",
+    "hi": "भूतप (बूटीज़)",
+    "zh-CN": "牧夫座",
+    "zh-TW": "牧夫座",
+    "ja": "うしかい座",
+    "es": "Boyero",
+    "fr": "Bouvier",
+    "de": "Bärenhüter"
+  },
+  "Bootes": {
+    "kn": "ಬೂಟೆಸ್ (ಗೋಪಾಲಕ)",
+    "hi": "भूतप (बूटीज़)",
+    "zh-CN": "牧夫座",
+    "zh-TW": "牧夫座",
+    "ja": "うしかい座",
+    "es": "Boyero",
+    "fr": "Bouvier",
+    "de": "Bärenhüter"
+  },
+  "Orion": {
+    "kn": "ಓರಿಯನ್ (ಮೃಗಶಿರ)",
+    "hi": "कालपुरुष (ओरियन)",
+    "zh-CN": "猎户座",
+    "zh-TW": "獵戶座",
+    "ja": "オリオン座",
+    "es": "Orión",
+    "fr": "Orion",
+    "de": "Orion"
+  },
+  "Taurus": {
+    "kn": "ಟಾರಸ್ (ವೃಷಭ)",
+    "hi": "वृषभ (टॉरस)",
+    "zh-CN": "金牛座",
+    "zh-TW": "金牛座",
+    "ja": "おうし座",
+    "es": "Tauro",
+    "fr": "Taureau",
+    "de": "Stier"
+  },
+  "Scorpius": {
+    "kn": "ಸ್ಕಾರ್ಪಿಯಸ್ (ವೃಶ್ಚಿಕ)",
+    "hi": "वृश्चिक (स्कॉर्पियस)",
+    "zh-CN": "天蝎座",
+    "zh-TW": "天蝎座",
+    "ja": "さそり座",
+    "es": "Escorpio",
+    "fr": "Scorpion",
+    "de": "Skorpion"
+  },
+  "Ursa Minor (North Star)": {
+    "kn": "ಉರ್ಸಾ ಮೈನರ್ (ಧ್ರುವ ತಾರೆ)",
+    "hi": "लघु सप्तर्षि (ध्रुव तारा)",
+    "zh-CN": "小熊座 (北极星)",
+    "zh-TW": "小熊座 (北極星)",
+    "ja": "こぐま座 (北極星)",
+    "es": "Osa Menor (Estrella Polar)",
+    "fr": "Petite Ourse (Étoile polaire)",
+    "de": "Kleiner Bär (Polarstern)"
+  },
+  "Ursa Minor": {
+    "kn": "ಉರ್ಸಾ ಮೈನರ್ (ಲಘು ಸಪ್ತರ್ಷಿ)",
+    "hi": "लघु सप्तर्षि",
+    "zh-CN": "小熊座",
+    "zh-TW": "小熊座",
+    "ja": "こぐま座",
+    "es": "Osa Menor",
+    "fr": "Petite Ourse",
+    "de": "Kleiner Bär"
+  },
+  "Ursa Major": {
+    "kn": "ಉರ್ಸಾ ಮೇಜರ್ (ಸಪ್ತರ್ಷಿ)",
+    "hi": "सप्तर्षि",
+    "zh-CN": "大熊座",
+    "zh-TW": "大熊座",
+    "ja": "おおぐま座",
+    "es": "Osa Mayor",
+    "fr": "Grande Ourse",
+    "de": "Großer Bär"
+  },
+  "Cassiopeia": {
+    "kn": "ಕ್ಯಾಸಿಯೋಪಿಯಾ",
+    "hi": "शर्मिष्ठा (कैसिओपिया)",
+    "zh-CN": "仙后座",
+    "zh-TW": "仙后座",
+    "ja": "カシオペヤ座",
+    "es": "Casiopea",
+    "fr": "Cassiopée",
+    "de": "Kassiopeia"
+  },
+  "Cygnus": {
+    "kn": "ಸಿಗ್ನಸ್ (ಹಂಸ)",
+    "hi": "हंस (सिग्नस)",
+    "zh-CN": "天鹅座",
+    "zh-TW": "天鵝座",
+    "ja": "はくちょう座",
+    "es": "Cisne",
+    "fr": "Cygne",
+    "de": "Schwan"
+  },
+  "Aquila": {
+    "kn": "ಅಕ್ವಿಲಾ (ಗರುಡ)",
+    "hi": "गरुड़ (अक्विला)",
+    "zh-CN": "天鹰座",
+    "zh-TW": "天鷹座",
+    "ja": "わし座",
+    "es": "Águila",
+    "fr": "Aigle",
+    "de": "Adler"
+  },
+  "Virgo": {
+    "kn": "ವರ್ಗೋ (ಕನ್ಯಾ)",
+    "hi": "कन्या (वर्गो)",
+    "zh-CN": "室女座",
+    "zh-TW": "室女座",
+    "ja": "おとめ座",
+    "es": "Virgo",
+    "fr": "Vierge",
+    "de": "Jungfrau"
+  },
+  "Leo": {
+    "kn": "ಲಿಯೋ (ಸಿಂಹ)",
+    "hi": "सिंह (लियो)",
+    "zh-CN": "狮子座",
+    "zh-TW": "獅子座",
+    "ja": "しし座",
+    "es": "Leo",
+    "fr": "Lion",
+    "de": "Löwe"
+  },
+  "Pegasus": {
+    "kn": "ಪೆಗಾಸಸ್",
+    "hi": "पेगासस",
+    "zh-CN": "飞马座",
+    "zh-TW": "飛馬座",
+    "ja": "ペガスス座",
+    "es": "Pegaso",
+    "fr": "Pégase",
+    "de": "Pegasus"
+  },
+  "Gemini": {
+    "kn": "ಜೆಮಿನಿ (ಮಿಥುನ)",
+    "hi": "मिथुन",
+    "zh-CN": "双子座",
+    "zh-TW": "雙子座",
+    "ja": "ふたご座",
+    "es": "Géminis",
+    "fr": "Gémeaux",
+    "de": "Zwillinge"
+  },
+  "Sun": {
+    "kn": "ಸೂರ್ಯ",
+    "hi": "सूर्य",
+    "zh-CN": "太阳",
+    "zh-TW": "太陽",
+    "ja": "太陽",
+    "es": "Sol",
+    "fr": "Soleil",
+    "de": "Sonne"
+  },
+  "Moon": {
+    "kn": "ಚಂದ್ರ",
+    "hi": "चंद्रमा",
+    "zh-CN": "月球",
+    "zh-TW": "月球",
+    "ja": "月",
+    "es": "Luna",
+    "fr": "Lune",
+    "de": "Mond"
+  },
+  "Venus": {
+    "kn": "ಶುಕ್ರ",
+    "hi": "शुक्र",
+    "zh-CN": "金星",
+    "zh-TW": "金星",
+    "ja": "金星",
+    "es": "Venus",
+    "fr": "Vénus",
+    "de": "Venus"
+  },
+  "Jupiter": {
+    "kn": "ಗುರು (ಬೃಹಸ್ಪತಿ)",
+    "hi": "बृहस्पति",
+    "zh-CN": "木星",
+    "zh-TW": "木星",
+    "ja": "木星",
+    "es": "Júpiter",
+    "fr": "Jupiter",
+    "de": "Jupiter"
+  },
+  "Mars": {
+    "kn": "ಮಂಗಳ",
+    "hi": "मंगल",
+    "zh-CN": "火星",
+    "zh-TW": "火星",
+    "ja": "火星",
+    "es": "Marte",
+    "fr": "Mars",
+    "de": "Mars"
+  },
+  "Saturn": {
+    "kn": "ಶನಿ",
+    "hi": "शनि",
+    "zh-CN": "土星",
+    "zh-TW": "土星",
+    "ja": "土星",
+    "es": "Saturno",
+    "fr": "Saturne",
+    "de": "Saturn"
+  },
+  "Mercury": {
+    "kn": "ಬುಧ",
+    "hi": "बुध",
+    "zh-CN": "水星",
+    "zh-TW": "水星",
+    "ja": "水星",
+    "es": "Mercurio",
+    "fr": "Mercure",
+    "de": "Merkur"
+  },
+  "ISS (Space Station)": {
+    "kn": "ಐಎಸ್ಎಸ್ (ಬಾಹ್ಯಾಕಾಶ ನಿಲ್ದಾಣ)",
+    "hi": "आईएसएस (अंतरिक्ष स्टेशन)",
+    "zh-CN": "国际空间站 (ISS)",
+    "zh-TW": "國際太空站 (ISS)",
+    "ja": "国際宇宙ステーション (ISS)",
+    "es": "ISS (Estación Espacial)",
+    "fr": "ISS (Station spatiale)",
+    "de": "ISS (Raumstation)"
+  },
+  "Tiangong (CSS)": {
+    "kn": "ತಿಯಾಂಗಾಂಗ್ (ಬಾಹ್ಯಾಕಾಶ ನಿಲ್ದಾಣ)",
+    "hi": "तियांगोंग (अंतरिक्ष स्टेशन)",
+    "zh-CN": "天宫空间站",
+    "zh-TW": "天宮太空站",
+    "ja": "天宮宇宙ステーション",
+    "es": "Tiangong (CSS)",
+    "fr": "Tiangong (CSS)",
+    "de": "Tiangong (CSS)"
+  },
+  "Hubble Space Telescope": {
+    "kn": "ಹಬಲ್ ಬಾಹ್ಯಾಕಾಶ ದೂರದರ್ಶಕ",
+    "hi": "हबल अंतरिक्ष दूरबीन",
+    "zh-CN": "哈勃空间望远镜",
+    "zh-TW": "哈伯太空望遠鏡",
+    "ja": "ハッブル宇宙望遠鏡",
+    "es": "Telescopio Espacial Hubble",
+    "fr": "Télescope spatial Hubble",
+    "de": "Hubble-Weltraumteleskop"
+  },
+  "Visible": {
+    "kn": "ಗೋಚರ",
+    "hi": "दृश्यमान",
+    "zh-CN": "可见",
+    "zh-TW": "可見",
+    "ja": "観測可能",
+    "es": "Visible",
+    "fr": "Visible",
+    "de": "Sichtbar"
+  },
+  "Set": {
+    "kn": "ಅಸ್ತ",
+    "hi": "अस्त",
+    "zh-CN": "已落下",
+    "zh-TW": "已落下",
+    "ja": "没",
+    "es": "Puesto",
+    "fr": "Couché",
+    "de": "Untergegangen"
+  },
+  "Day": {
+    "kn": "ಹಗಲು",
+    "hi": "दिन",
+    "zh-CN": "白昼",
+    "zh-TW": "白晝",
+    "ja": "昼間",
+    "es": "Día",
+    "fr": "Jour",
+    "de": "Tag"
+  },
+  "Daylight": {
+    "kn": "ಹಗಲು",
+    "hi": "दिन का प्रकाश",
+    "zh-CN": "白昼",
+    "zh-TW": "白晝",
+    "ja": "昼光",
+    "es": "Luz de día",
+    "fr": "Lumière du jour",
+    "de": "Tageslicht"
+  },
+  "In Sky": {
+    "kn": "ಆಕಾಶದಲ್ಲಿದೆ",
+    "hi": "आकाश में",
+    "zh-CN": "天空可见",
+    "zh-TW": "天空可見",
+    "ja": "空に見える",
+    "es": "En el cielo",
+    "fr": "Dans le ciel",
+    "de": "Am Himmel"
+  },
+  "Below": {
+    "kn": "ಕ್ಷಿತಿಜದ ಕೆಳಗೆ",
+    "hi": "क्षितिज के नीचे",
+    "zh-CN": "地平线下",
+    "zh-TW": "地平線下",
+    "ja": "地平線下",
+    "es": "Bajo el horizonte",
+    "fr": "Sous l'horizon",
+    "de": "Unter Horizont"
+  },
+  "Optimal viewing": {
+    "kn": "ಉತ್ತಮ ವೀಕ್ಷಣೆಗೆ ಯೋಗ್ಯ",
+    "hi": "उत्कृष्ट अवलोकन समय",
+    "zh-CN": "极佳观星条件",
+    "zh-TW": "極佳觀星條件",
+    "ja": "絶好の観測日和",
+    "es": "Condiciones óptimas",
+    "fr": "Conditions optimales",
+    "de": "Optimale Bedingungen"
+  },
+  "Good viewing": {
+    "kn": "ಉತ್ತಮ ವೀಕ್ಷಣೆ",
+    "hi": "अच्छा अवलोकन",
+    "zh-CN": "良好观星条件",
+    "zh-TW": "良好觀星條件",
+    "ja": "良好な観測条件",
+    "es": "Buena observación",
+    "fr": "Bonne observation",
+    "de": "Gute Beobachtung"
+  },
+  "Fair viewing": {
+    "kn": "ಸಾಧಾರಣ ವೀಕ್ಷಣೆ",
+    "hi": "मध्यम अवलोकन",
+    "zh-CN": "一般观星条件",
+    "zh-TW": "一般觀星條件",
+    "ja": "普通の観測条件",
+    "es": "Condiciones moderadas",
+    "fr": "Conditions moyennes",
+    "de": "Mäßige Bedingungen"
+  },
+  "Poor viewing": {
+    "kn": "ಕಳಪೆ ವೀಕ್ಷಣೆ",
+    "hi": "खराब अवलोकन",
+    "zh-CN": "较差观星条件",
+    "zh-TW": "較差觀星條件",
+    "ja": "悪条件",
+    "es": "Condiciones malas",
+    "fr": "Mauvaises conditions",
+    "de": "Schlechte Bedingungen"
+  },
+  "Moon Phase": {
+    "kn": "ಚಂದ್ರನ ಕಲೆ",
+    "hi": "चंद्र कला",
+    "zh-CN": "月相",
+    "zh-TW": "月相",
+    "ja": "月相",
+    "es": "Fase lunar",
+    "fr": "Phase lunaire",
+    "de": "Mondphase"
+  },
+  "Stargazing": {
+    "kn": "ಖಗೋಳ ವೀಕ್ಷಣೆ",
+    "hi": "तारादर्शन",
+    "zh-CN": "观星",
+    "zh-TW": "觀星",
+    "ja": "天体観測",
+    "es": "Observación de estrellas",
+    "fr": "Observation astronomique",
+    "de": "Sternbeobachtung"
+  },
+  "Rice (Paddy)": {
+    "kn": "ಭತ್ತ (ಅಕ್ಕಿ)",
+    "hi": "चावल (धान)",
+    "zh-CN": "水稻 (水稻)",
+    "zh-TW": "水稻 (水稻)",
+    "es": "Arroz (Paddy)"
+  },
+  "Wheat": {
+    "kn": "ಗೋಧಿ",
+    "hi": "गेहूं",
+    "zh-CN": "小麦",
+    "zh-TW": "小麥",
+    "es": "Trigo"
+  },
+  "Maize (Corn)": {
+    "kn": "ಮೆಕ್ಕೆಜೋಳ",
+    "hi": "मक्का",
+    "zh-CN": "玉米",
+    "zh-TW": "玉米",
+    "es": "Maíz"
+  },
+  "Sorghum (Jowar)": {
+    "kn": "ಜೋಳ",
+    "hi": "ज्वार",
+    "zh-CN": "高粱",
+    "zh-TW": "高粱",
+    "es": "Sorgo"
+  },
+  "Pearl Millet (Bajra)": {
+    "kn": "ಸಜ್ಜೆ",
+    "hi": "बाजरा",
+    "zh-CN": "珍珠粟",
+    "zh-TW": "珍珠粟",
+    "es": "Mijo perla"
+  },
+  "Finger Millet (Ragi)": {
+    "kn": "ರಾಗಿ",
+    "hi": "रागी (मंडुआ)",
+    "zh-CN": "䅟子 (龙爪稷)",
+    "zh-TW": "䅟子 (龍爪稷)",
+    "es": "Mijo africano (Ragi)"
+  },
+  "Chickpea (Chana)": {
+    "kn": "ಕಡಲೆ",
+    "hi": "चना",
+    "zh-CN": "鹰嘴豆",
+    "zh-TW": "鷹嘴豆",
+    "es": "Garbanzo"
+  },
+  "Pigeon Pea (Tur/Arhar)": {
+    "kn": "ತೊಗರಿ ಬೇಳೆ",
+    "hi": "अरहर / तुअर",
+    "zh-CN": "木豆",
+    "zh-TW": "木豆",
+    "es": "Gandul"
+  },
+  "Green Gram (Moong)": {
+    "kn": "ಹೆಸರು ಕಾಳು",
+    "hi": "मूंग",
+    "zh-CN": "绿豆",
+    "zh-TW": "綠豆",
+    "es": "Judía mungo"
+  },
+  "Black Gram (Urad)": {
+    "kn": "ಉದ್ದಿನ ಕಾಳು",
+    "hi": "उड़द",
+    "zh-CN": "黑吉豆",
+    "zh-TW": "黑吉豆",
+    "es": "Lenteja negra (Urad)"
+  },
+  "Lentil (Masur)": {
+    "kn": "ಮಸೂರ ಬೇಳೆ",
+    "hi": "मसूर",
+    "zh-CN": "小扁豆",
+    "zh-TW": "小扁豆",
+    "es": "Lenteja"
+  },
+  "Groundnut (Peanut)": {
+    "kn": "ಕಡಲೆಕಾಯಿ",
+    "hi": "मूंगफली",
+    "zh-CN": "花生",
+    "zh-TW": "花生",
+    "es": "Cacahuete"
+  },
+  "Mustard (Sarson)": {
+    "kn": "ಸಾಸಿವೆ",
+    "hi": "सरसों",
+    "zh-CN": "芥菜 / 芥子",
+    "zh-TW": "芥菜 / 芥子",
+    "es": "Mostaza"
+  },
+  "Soybean": {
+    "kn": "ಸೋಯಾಬೀನ್",
+    "hi": "सोयाबीन",
+    "zh-CN": "大豆",
+    "zh-TW": "大豆",
+    "es": "Soja"
+  },
+  "Sunflower": {
+    "kn": "ಸೂರ್ಯಕಾಂತಿ",
+    "hi": "सूरजमुखी",
+    "zh-CN": "向日葵",
+    "zh-TW": "向日葵",
+    "es": "Girasol"
+  },
+  "Cotton": {
+    "kn": "ಹತ್ತಿ",
+    "hi": "कपास",
+    "zh-CN": "棉花",
+    "zh-TW": "棉花",
+    "es": "Algodón"
+  },
+  "Sugarcane": {
+    "kn": "ಕಬ್ಬು",
+    "hi": "गन्ना",
+    "zh-CN": "甘蔗",
+    "zh-TW": "甘蔗",
+    "es": "Caña de azúcar"
+  },
+  "Tomato": {
+    "kn": "ಟೊಮೆಟೊ",
+    "hi": "टमाटर",
+    "zh-CN": "番茄",
+    "zh-TW": "番茄",
+    "es": "Tomate"
+  },
+  "Onion": {
+    "kn": "ಈರುಳ್ಳಿ",
+    "hi": "प्याज",
+    "zh-CN": "洋葱",
+    "zh-TW": "洋蔥",
+    "es": "Cebolla"
+  },
+  "Potato": {
+    "kn": "ಆಲೂಗಡ್ಡೆ",
+    "hi": "आलू",
+    "zh-CN": "土豆",
+    "zh-TW": "馬鈴薯",
+    "es": "Patata"
+  },
+  "Brinjal (Eggplant)": {
+    "kn": "ಬದನೆಕಾಯಿ",
+    "hi": "बैंगन",
+    "zh-CN": "茄子",
+    "zh-TW": "茄子",
+    "es": "Berenjena"
+  },
+  "Okra (Bhindi)": {
+    "kn": "ಬೆಂಡೆಕಾಯಿ",
+    "hi": "भिंडी",
+    "zh-CN": "秋葵",
+    "zh-TW": "秋葵",
+    "es": "Okra"
+  },
+  "Chilli": {
+    "kn": "ಮೆಣಸಿನಕಾಯಿ",
+    "hi": "मिर्च",
+    "zh-CN": "辣椒",
+    "zh-TW": "辣椒",
+    "es": "Chile"
+  },
+  "Mango": {
+    "kn": "ಮಾವಿನಹಣ್ಣು",
+    "hi": "आम",
+    "zh-CN": "芒果",
+    "zh-TW": "芒果",
+    "es": "Mango"
+  },
+  "Banana": {
+    "kn": "ಬಾಳೆಹಣ್ಣು",
+    "hi": "केला",
+    "zh-CN": "香蕉",
+    "zh-TW": "香蕉",
+    "es": "Plátano"
+  },
+  "Papaya": {
+    "kn": "ಪರಂಗಿ / ಪಪ್ಪಾಯಿ",
+    "hi": "पपीता",
+    "zh-CN": "木瓜",
+    "zh-TW": "木瓜",
+    "es": "Papaya"
+  },
+  "Guava": {
+    "kn": "ಸೀಬೆಹಣ್ಣು",
+    "hi": "अमरूद",
+    "zh-CN": "番石榴",
+    "zh-TW": "芭樂",
+    "es": "Guayaba"
+  },
+  "Watermelon": {
+    "kn": "ಕಲ್ಲಂಗಡಿ",
+    "hi": "तरबूज",
+    "zh-CN": "西瓜",
+    "zh-TW": "西瓜",
+    "es": "Sandía"
+  },
+  "Cabbage": {
+    "kn": "ಎಲೆಕೋಸು",
+    "hi": "पत्ता गोभी",
+    "zh-CN": "卷心菜",
+    "zh-TW": "高麗菜",
+    "es": "Repollo"
+  },
+  "Carrot": {
+    "kn": "ಕ್ಯಾರೆಟ್ (ಗಜ್ಜರಿ)",
+    "hi": "गाजर",
+    "zh-CN": "胡萝卜",
+    "zh-TW": "胡蘿蔔",
+    "es": "Zanahoria"
+  },
+  "Spinach": {
+    "kn": "ಪಾಲಕ್",
+    "hi": "पालक",
+    "zh-CN": "菠菜",
+    "zh-TW": "菠菜",
+    "es": "Espinaca"
+  },
+  "Green Peas": {
+    "kn": "ಹಸಿರು ಬಟಾಣಿ",
+    "hi": "हरी मटर",
+    "zh-CN": "青豆",
+    "zh-TW": "青豆",
+    "es": "Guisantes verdes"
+  },
+  "Garlic": {
+    "kn": "ಬೆಳ್ಳುಳ್ಳಿ",
+    "hi": "लहसुन",
+    "zh-CN": "大蒜",
+    "zh-TW": "大蒜",
+    "es": "Ajo"
+  },
+  "Lettuce": {
+    "kn": "ಲೆಟಿಸ್",
+    "hi": "सलाद पत्ता (लेट्यूस)",
+    "zh-CN": "生菜",
+    "zh-TW": "生菜",
+    "es": "Lechuga"
+  },
+  "Apple": {
+    "kn": "ಸೇಬು",
+    "hi": "सेब",
+    "zh-CN": "苹果",
+    "zh-TW": "蘋果",
+    "es": "Manzana"
+  },
+  "Strawberry": {
+    "kn": "ಸ್ಟ್ರಾಬೆರಿ",
+    "hi": "स्ट्रॉबेरी",
+    "zh-CN": "草莓",
+    "zh-TW": "草莓",
+    "es": "Fresa"
+  },
+  "Grape": {
+    "kn": "ದ್ರಾಕ್ಷಿ",
+    "hi": "अंगूर",
+    "zh-CN": "葡萄",
+    "zh-TW": "葡萄",
+    "es": "Uva"
+  },
+  "Barley": {
+    "kn": "ಬಾರ್ಲಿ",
+    "hi": "जौ",
+    "zh-CN": "大麦",
+    "zh-TW": "大麥",
+    "es": "Cebada"
+  },
+  "Tulsi (Holy Basil)": {
+    "kn": "ತುಳಸಿ",
+    "hi": "तुलसी",
+    "zh-CN": "罗勒 (圣罗勒)",
+    "zh-TW": "聖羅勒",
+    "es": "Albahaca morada"
+  },
+  "Aloe Vera": {
+    "kn": "ಲೋಳೆಸರ (ಅಲೋವೆರಾ)",
+    "hi": "एलोवेरा (घृतकुमारी)",
+    "zh-CN": "芦荟",
+    "zh-TW": "蘆薈",
+    "es": "Aloe vera"
+  },
+  "Mint (Pudina)": {
+    "kn": "ಪುದೀನಾ",
+    "hi": "पुदीना",
+    "zh-CN": "薄荷",
+    "zh-TW": "薄荷",
+    "es": "Menta"
+  },
+  "Lavender": {
+    "kn": "ಲ್ಯಾವೆಂಡರ್",
+    "hi": "लैवेंडर",
+    "zh-CN": "薰衣草",
+    "zh-TW": "薰衣草",
+    "es": "Lavanda"
+  },
+  "Moringa (Drumstick Tree)": {
+    "kn": "ನುಗ್ಗೆಕಾಯಿ ಮರ",
+    "hi": "सहजन (मोरिंगा)",
+    "zh-CN": "辣木",
+    "zh-TW": "辣木",
+    "es": "Moringa"
+  },
+  "Bamboo": {
+    "kn": "ಬಿದಿರು",
+    "hi": "बांस",
+    "zh-CN": "竹子",
+    "zh-TW": "竹子",
+    "es": "Bambú"
+  },
+  "Neem": {
+    "kn": "ಬೇವು",
+    "hi": "नीम",
+    "zh-CN": "印楝",
+    "zh-TW": "印楝",
+    "es": "Nim"
+  },
+  "Teak": {
+    "kn": "ತೇಗದ ಮರ",
+    "hi": "सागौन",
+    "zh-CN": "柚木",
+    "zh-TW": "柚木",
+    "es": "Teca"
+  },
+  "Marigold": {
+    "kn": "ಚೆಂಡು ಹೂವು",
+    "hi": "गेंदा",
+    "zh-CN": "万寿菊",
+    "zh-TW": "萬壽菊",
+    "es": "Caléndula"
+  },
+  "Hibiscus": {
+    "kn": "ದಾಸವಾಳ",
+    "hi": "गुड़हल",
+    "zh-CN": "木槿 / 扶桑",
+    "zh-TW": "朱槿",
+    "es": "Hibisco"
+  },
+  "Red Clover": {
+    "kn": "ಕೆಂಪು ಕ್ಲೋವರ್",
+    "hi": "लाल तिपतिया",
+    "zh-CN": "红三叶草",
+    "zh-TW": "紅三葉草",
+    "es": "Trébol rojo"
+  },
+  "Alfalfa (Lucerne)": {
+    "kn": "ಕುದುರೆ ಮೆಂತ್ಯ (ಲುಸರ್ನ್)",
+    "hi": "अल्फ़ाल्फ़ा (ल्यूसर्न)",
+    "zh-CN": "紫花苜蓿",
+    "zh-TW": "紫花苜蓿",
+    "es": "Alfalfa"
+  },
+  "Cover & Forage": {
+    "kn": "ಹೊದಿಕೆ ಮತ್ತು ಮೇವು",
+    "hi": "कवर व चारा",
+    "zh-CN": "覆盖与饲料",
+    "zh-TW": "覆蓋與飼料",
+    "es": "Cobertura y forraje"
+  },
+  "Cereal": {
+    "kn": "ಧಾನ್ಯ",
+    "hi": "अनाज",
+    "zh-CN": "谷物",
+    "zh-TW": "穀物",
+    "es": "Cereal"
+  },
+  "Vegetable": {
+    "kn": "ತರಕಾರಿ",
+    "hi": "सब्जी",
+    "zh-CN": "蔬菜",
+    "zh-TW": "蔬菜",
+    "es": "Verdura"
+  },
+  "Pulse": {
+    "kn": "ದ್ವಿದಳ ಧಾನ್ಯ / ಬೇಳೆಕಾಳು",
+    "hi": "दाल / दलहन",
+    "zh-CN": "豆类",
+    "zh-TW": "豆類",
+    "es": "Legumbre"
+  },
+  "Oilseed": {
+    "kn": "ಎಣ್ಣೆಕಾಳು",
+    "hi": "तिलहन",
+    "zh-CN": "油料作物",
+    "zh-TW": "油料作物",
+    "es": "Semillas oleaginosas"
+  },
+  "Cash crop": {
+    "kn": "ವಾಣಿಜ್ಯ ಬೆಳೆ",
+    "hi": "नकदी फसल",
+    "zh-CN": "经济作物",
+    "zh-TW": "經濟作物",
+    "es": "Cultivo comercial"
+  },
+  "Fruit": {
+    "kn": "ಹಣ್ಣು",
+    "hi": "फल",
+    "zh-CN": "水果",
+    "zh-TW": "水果",
+    "es": "Fruta"
+  },
+  "Herb & Medicinal": {
+    "kn": "ಮೂಲಿಕೆ ಮತ್ತು ಔಷಧಿ",
+    "hi": "जड़ी-बूटी व औषधीय",
+    "zh-CN": "草药与药用",
+    "zh-TW": "草藥與藥用",
+    "es": "Hierbas y medicinales"
+  },
+  "Tree & Agroforestry": {
+    "kn": "ಮರ ಮತ್ತು ಕೃಷಿ ಅರಣ್ಯ",
+    "hi": "वृक्ष व कृषि वानिकी",
+    "zh-CN": "树木与农林",
+    "zh-TW": "樹木與農林",
+    "es": "Árboles y agroforestería"
+  },
+  "Flower & Ornamental": {
+    "kn": "ಹೂವು ಮತ್ತು ಅಲಂಕಾರಿಕ",
+    "hi": "फूल व सजावटी",
+    "zh-CN": "花卉与观赏",
+    "zh-TW": "花卉與觀賞",
+    "es": "Flores y ornamentales"
+  },
+  "Sandy": {
+    "kn": "ಮರಳು ಮಣ್ಣು",
+    "hi": "बलुई मिट्टी",
+    "zh-CN": "沙质土",
+    "es": "Arenoso"
+  },
+  "Sandy loam": {
+    "kn": "ಮರಳು ಗೋಡು ಮಣ್ಣು",
+    "hi": "बलुई दोमट",
+    "zh-CN": "砂质壤土",
+    "es": "Franco arenoso"
+  },
+  "Loam": {
+    "kn": "ಗೋಡು ಮಣ್ಣು",
+    "hi": "दोमट मिट्टी",
+    "zh-CN": "壤土",
+    "es": "Franco"
+  },
+  "Clay loam": {
+    "kn": "ಜೇಡಿ ಗೋಡು ಮಣ್ಣು",
+    "hi": "मटियार दोमट",
+    "zh-CN": "黏壤土",
+    "es": "Franco arcilloso"
+  },
+  "Clay": {
+    "kn": "ಜೇಡಿ ಮಣ್ಣು",
+    "hi": "चिकनी मिट्टी",
+    "zh-CN": "黏土",
+    "es": "Arcilla"
+  },
+  "Alluvial (river)": {
+    "kn": "ಮೆಕ್ಕಲು ಮಣ್ಣು (ನದಿ)",
+    "hi": "जलोढ़ मिट्टी (नदी)",
+    "zh-CN": "冲积土 (河流)",
+    "es": "Aluvial (río)"
+  },
+  "Black / regur": {
+    "kn": "ಕಪ್ಪು / ರೆಗೂರ್ ಮಣ್ಣು",
+    "hi": "काली / रेगुर मिट्टी",
+    "zh-CN": "黑土 / 黑棉土",
+    "es": "Negra / regur"
+  },
+  "Red / lateritic": {
+    "kn": "ಕೆಂಪು / ಲ್ಯಾಟರೈಟ್ ಮಣ್ಣು",
+    "hi": "लाल / लेटराइट मिट्टी",
+    "zh-CN": "红土 / 砖红壤",
+    "es": "Roja / laterítica"
+  },
+  "Trees": {
+    "kn": "ಮರಗಳು",
+    "hi": "पेड़",
+    "zh-CN": "树木",
+    "es": "Árboles"
+  },
+  "Wildflowers": {
+    "kn": "ಕಾಡು ಹೂವುಗಳು",
+    "hi": "जंगली फूल",
+    "zh-CN": "野花",
+    "es": "Flores silvestres"
+  },
+  "Herbs": {
+    "kn": "ಮೂಲಿಕೆಗಳು",
+    "hi": "जड़ी-बूटियाँ",
+    "zh-CN": "草药",
+    "es": "Hierbas"
+  },
+  "Grasses": {
+    "kn": "ಹುಲ್ಲುಗಳು",
+    "hi": "घास",
+    "zh-CN": "禾草",
+    "es": "Hierbas / Pastos"
+  },
+  "Flora": {
+    "kn": "ಸಸ್ಯವರ್ಗ",
+    "hi": "वनस्पति",
+    "zh-CN": "植物群",
+    "es": "Flora"
+  },
+  "Tree / Woody": {
+    "kn": "ಮರ / ಕಾಂಡ",
+    "hi": "पेड़ / काष्ठीय",
+    "zh-CN": "树木 / 木本",
+    "es": "Árbol / Leñoso"
+  },
+  "Grass / Fern": {
+    "kn": "ಹುಲ್ಲು / ಜರೀಗಿಡ",
+    "hi": "घास / फर्न",
+    "zh-CN": "草 / 蕨类",
+    "es": "Hierba / Helecho"
+  },
+  "Herb / Medicinal": {
+    "kn": "ಮೂಲಿಕೆ / ಔಷಧಿ",
+    "hi": "जड़ी-बूटी / औषधीय",
+    "zh-CN": "草药 / 药用",
+    "es": "Hierba / Medicinal"
+  },
+  "Wildflower / Floral": {
+    "kn": "ಕಾಡುಹೂವು / ಪುಷ್ಪ",
+    "hi": "जंगली फूल / पुष्पीय",
+    "zh-CN": "野花 / 花卉",
+    "es": "Flor silvestre / Floral"
+  },
+  "Native Flora": {
+    "kn": "ಸ್ಥಳೀಯ ಸಸ್ಯವರ್ಗ",
+    "hi": "देशी वनस्पति",
+    "zh-CN": "原生植物",
+    "es": "Flora nativa"
+  },
+  "Sow now": {
+    "kn": "ಈಗ ಬಿತ್ತಿ",
+    "hi": "अभी बोएं",
+    "zh-CN": "适时播种",
+    "es": "Sembrar ahora"
+  },
+  "Off-season / Wrong climate": {
+    "kn": "ಋತುವಲ್ಲ / ಹೊಂದದ ಹವಾಮಾನ",
+    "hi": "ऑफ-सीजन / गलत जलवायु",
+    "zh-CN": "非当季 / 气候不符",
+    "es": "Fuera de temporada / Clima inadecuado"
+  },
+  "Window opens next month": {
+    "kn": "ಮುಂದಿನ ತಿಂಗಳು ಬಿತ್ತನೆ ಆರಂಭ",
+    "hi": "अगले महीने बुवाई खिड़की खुलेगी",
+    "zh-CN": "播种窗口下月开启",
+    "es": "La ventana se abre el próximo mes"
+  },
+  "Window just closed": {
+    "kn": "ಬಿತ್ತನೆ ಅವಧಿ ಮುಕ್ತಾಯವಾಗಿದೆ",
+    "hi": "बुवाई खिड़की अभी बंद हुई",
+    "zh-CN": "播种窗口刚刚关闭",
+    "es": "La ventana acaba de cerrarse"
+  },
+  "outside seasonal envelope": {
+    "kn": "ಋತುಮಾನಕ್ಕೆ ಹೊರಗಿದೆ",
+    "hi": "मौसम के बाहर",
+    "zh-CN": "超出季节范围",
+    "es": "Fuera del marco estacional"
+  },
+  "Excellent match for this field right now.": {
+    "kn": "ಈ ಜಮೀನಿಗೆ ಪ್ರಸ್ತುತ ಅತ್ಯುತ್ತಮ ಹೊಂದಾಣಿಕೆಯಾಗಿದೆ.",
+    "hi": "इस खेत के लिए अभी बिल्कुल उपयुक्त।",
+    "zh-CN": "当前非常适宜此农田种植。",
+    "es": "Excelente combinación para este campo ahora mismo."
+  },
+  "High water": {
+    "kn": "ಹೆಚ್ಚು ನೀರು",
+    "hi": "अधिक जल",
+    "zh-CN": "高需水量",
+    "es": "Alta necesidad de agua"
+  },
+  "Medium water": {
+    "kn": "ಮಧ್ಯಮ ನೀರು",
+    "hi": "मध्यम जल",
+    "zh-CN": "中等需水量",
+    "es": "Media necesidad de agua"
+  },
+  "Low water": {
+    "kn": "ಕಡಿಮೆ ನೀರು",
+    "hi": "कम जल",
+    "zh-CN": "低需水量",
+    "es": "Baja necesidad de agua"
+  },
+  "frost limit": {
+    "kn": "ಹಿಮ ಮಿತಿ",
+    "hi": "पाला सीमा",
+    "zh-CN": "抗霜极限",
+    "es": "Límite de heladas"
+  },
+  "Spray windows · next 24h": {
+    "kn": "ಸಿಂಪಡಣೆ ಅವಧಿಗಳು · ಮುಂದಿನ 24 ಗಂಟೆ",
+    "hi": "छिड़काव समय · अगले 24 घंटे",
+    "zh-CN": "适宜喷洒窗口 · 未来 24 小时",
+    "es": "Ventanas de pulverización · próximas 24h"
+  },
+  "Best window:": {
+    "kn": "ಉತ್ತಮ ಅವಧಿ:",
+    "hi": "सर्वोत्तम समय:",
+    "zh-CN": "最佳窗口:",
+    "es": "Mejor ventana:"
+  },
+  "average": {
+    "kn": "ಸರಾಸರಿ",
+    "hi": "औसत",
+    "zh-CN": "平均",
+    "es": "promedio"
+  },
+  "long.": {
+    "kn": "ಅವಧಿ.",
+    "hi": "लंबा।",
+    "zh-CN": "时长。",
+    "es": "de duración."
+  },
+  "Show fewer": {
+    "kn": "ಕಡಿಮೆ ತೋರಿಸು",
+    "hi": "कम दिखाएं",
+    "zh-CN": "收起",
+    "es": "Mostrar menos"
+  },
+  "Show all": {
+    "kn": "ಎಲ್ಲವನ್ನೂ ತೋರಿಸು",
+    "hi": "सभी दिखाएं",
+    "zh-CN": "查看全部",
+    "es": "Mostrar todo"
+  },
+  "Drive": {
+    "kn": "ಡ್ರೈವ್",
+    "hi": "ड्राइव",
+    "zh-CN": "自驾",
+    "zh-TW": "自駕",
+    "es": "Conducir"
+  },
+  "Bike": {
+    "kn": "ಬೈಕ್",
+    "hi": "बाइक",
+    "zh-CN": "骑行",
+    "zh-TW": "騎行",
+    "es": "Bicicleta"
+  },
+  "Walk": {
+    "kn": "ನಡಿಗೆ",
+    "hi": "पैदल",
+    "zh-CN": "步行",
+    "zh-TW": "步行",
+    "es": "Caminar"
+  },
+  "Flight": {
+    "kn": "ವಿಮಾನ",
+    "hi": "उड़ान",
+    "zh-CN": "飞行",
+    "zh-TW": "飛行",
+    "es": "Vuelo"
+  },
+  "Add stop by city, address or landmark": {
+    "kn": "ನಗರ, ವಿಳಾಸ ಅಥವಾ ಹೆಗ್ಗುರುತು ಸೇರಿಸಿ...",
+    "hi": "शहर, पता या स्थान द्वारा स्टॉप जोड़ें",
+    "zh-CN": "按城市、地址或地标添加经停点",
+    "zh-TW": "按城市、地址或地標新增經停點",
+    "es": "Añadir parada por ciudad, dirección o punto de interés"
+  },
+  "Add from Map": {
+    "kn": "ನಕ್ಷೆಯಿಂದ ಸೇರಿಸಿ",
+    "hi": "मानचित्र से जोड़ें",
+    "zh-CN": "在地图上选取",
+    "zh-TW": "在地圖上選取",
+    "es": "Añadir desde mapa"
+  },
+  "GPS": {
+    "kn": "ಜಿಪಿಎಸ್",
+    "hi": "जीपीएस",
+    "zh-CN": "GPS定位",
+    "zh-TW": "GPS定位",
+    "es": "GPS"
+  },
+  "Reverse": {
+    "kn": "ಹಿಮ್ಮುಖ",
+    "hi": "उलटें",
+    "zh-CN": "调换起终点",
+    "zh-TW": "調換起終點",
+    "es": "Invertir"
+  },
+  "Start Navigation": {
+    "kn": "ನ್ಯಾವಿಗೇಷನ್ ಪ್ರಾರಂಭಿಸಿ",
+    "hi": "नेविगेशन शुरू करें",
+    "zh-CN": "开始导航",
+    "zh-TW": "開始導航",
+    "es": "Iniciar navegación"
+  },
+  "GPX": {
+    "kn": "ಜಿಪಿಎಕ್ಸ್",
+    "hi": "जीपीएक्स",
+    "zh-CN": "导出 GPX",
+    "zh-TW": "導出 GPX",
+    "es": "GPX"
+  },
+  "Share": {
+    "kn": "ಹಂಚಿಕೊಳ್ಳಿ",
+    "hi": "साझा करें",
+    "zh-CN": "分享",
+    "zh-TW": "分享",
+    "es": "Compartir"
+  },
+  "Save": {
+    "kn": "ಉಳಿಸಿ",
+    "hi": "सहेजें",
+    "zh-CN": "保存",
+    "zh-TW": "保存",
+    "es": "Guardar"
+  },
+  "Mainly clear": {
+    "kn": "ಹೆಚ್ಚಾಗಿ ಸ್ಪಷ್ಟ",
+    "hi": "मुख्य रूप से साफ़",
+    "zh-CN": "大部晴朗",
+    "zh-TW": "大部晴朗",
+    "es": "Mayormente despejado"
+  },
+  "Overcast": {
+    "kn": "ಮೋಡಕವಿದ",
+    "hi": "बादल छाए रहेंगे",
+    "zh-CN": "阴天",
+    "zh-TW": "陰天",
+    "es": "Nublado"
+  },
+  "Settings": {
+    "kn": "ಸೆಟ್ಟಿಂಗ್‌ಗಳು",
+    "hi": "सेटिंग्स",
+    "zh-CN": "设置",
+    "zh-TW": "設定",
+    "es": "Configuración"
+  },
+  "Units (Metric)": {
+    "kn": "ಘಟಕಗಳು (ಮೆಟ್ರಿಕ್)",
+    "hi": "इकाइयाँ (मीट्रिक)",
+    "zh-CN": "单位 (公制)",
+    "zh-TW": "單位 (公制)",
+    "es": "Unidades (métrico)"
+  },
+  "Dark mode": {
+    "kn": "ಡಾರ್ಕ್ ಮೋಡ್",
+    "hi": "डार्क मोड",
+    "zh-CN": "深色模式",
+    "zh-TW": "深色模式",
+    "es": "Modo oscuro"
+  },
+  "24h timeline": {
+    "kn": "24 ಗಂಟೆ ಕಾಲರೇಖೆ",
+    "hi": "24 घंटे की समयरेखा",
+    "zh-CN": "24小时时间轴",
+    "zh-TW": "24小時時間軸",
+    "es": "Línea de tiempo 24h"
+  },
+  "Map style": {
+    "kn": "ನಕ್ಷೆಯ ಶೈಲಿ",
+    "hi": "मानचित्र शैली",
+    "zh-CN": "地图样式",
+    "zh-TW": "地圖樣式",
+    "es": "Estilo de mapa"
+  },
+  "Default, Satellite, Terrain, Dark": {
+    "kn": "ಡೀಫಾಲ್ಟ್, ಉಪಗ್ರಹ, ಭೂಪ್ರದೇಶ, ಡಾರ್ಕ್",
+    "hi": "डिफ़ॉल्ट, उपग्रह, भूभाग, डार्क",
+    "zh-CN": "默认、卫星、地形、深色",
+    "zh-TW": "預設、衛星、地形、深色",
+    "es": "Predeterminado, Satélite, Terreno, Oscuro"
+  },
+  "App Language": {
+    "kn": "ಅಪ್ಲಿಕೇಶನ್ ಭಾಷೆ",
+    "hi": "ऐप भाषा",
+    "zh-CN": "应用语言",
+    "zh-TW": "應用語言",
+    "es": "Idioma de la aplicación"
+  },
+  "Translate all features & tabs": {
+    "kn": "ಎಲ್ಲಾ ವೈಶಿಷ್ಟ್ಯಗಳು ಮತ್ತು ಟ್ಯಾಬ್‌ಗಳನ್ನು ಅನುವಾದಿಸಿ",
+    "hi": "सभी सुविधाएं व टैब अनुवाद करें",
+    "zh-CN": "翻译所有功能与标签页",
+    "zh-TW": "翻譯所有功能與標籤頁",
+    "es": "Traducir todas las funciones y pestañas"
+  },
+  "Map language": {
+    "kn": "ನಕ್ಷೆಯ ಭಾಷೆ",
+    "hi": "मानचित्र भाषा",
+    "zh-CN": "地图语言",
+    "zh-TW": "地圖語言",
+    "es": "Idioma del mapa"
+  },
+  "Ambient sounds": {
+    "kn": "ನೈಸರ್ಗಿಕ ಶಬ್ದಗಳು",
+    "hi": "परिवेश ध्वनियाँ",
+    "zh-CN": "环境音效",
+    "zh-TW": "環境白噪音",
+    "es": "Sonidos ambientales"
+  },
+  "Sync history": {
+    "kn": "ಇತಿಹಾಸ ಸಿಂಕ್",
+    "hi": "इतिहास सिंक",
+    "zh-CN": "同步历史",
+    "zh-TW": "同步歷史",
+    "es": "Sincronizar historial"
+  },
+  "Default location": {
+    "kn": "ಡೀಫಾಲ್ಟ್ ಸ್ಥಳ",
+    "hi": "डिफ़ॉल्ट स्थान",
+    "zh-CN": "默认位置",
+    "zh-TW": "預設位置",
+    "es": "Ubicación predeterminada"
+  },
+  "Set here": {
+    "kn": "ಇಲ್ಲಿ ಹೊಂದಿಸಿ",
+    "hi": "यहाँ सेट करें",
+    "zh-CN": "设在此处",
+    "zh-TW": "設為預設",
+    "es": "Establecer aquí"
+  },
+  "Search local plants, trees, herbs...": {
+    "kn": "ಸ್ಥಳೀಯ ಸಸ್ಯಗಳು, ಮರಗಳು, ಮೂಲಿಕೆಗಳನ್ನು ಹುಡುಕಿ...",
+    "hi": "स्थानीय पौधे, पेड़, जड़ी-बूटियाँ खोजें...",
+    "zh-CN": "搜索本地植物、树木、草药...",
+    "zh-TW": "搜尋本地植物、樹木、草藥...",
+    "es": "Buscar plantas locales, árboles, hierbas..."
+  },
+  "Observed within ~25 km. Shows what naturally survives here.": {
+    "kn": "~25 ಕಿಮೀ ವ್ಯಾಪ್ತಿಯಲ್ಲಿ ದಾಖಲಾಗಿವೆ. ಇಲ್ಲಿ ನೈಸರ್ಗಿಕವಾಗಿ ಬೆಳೆಯುವ ಸಸ್ಯಗಳನ್ನು ತೋರಿಸುತ್ತದೆ.",
+    "hi": "~25 किमी के दायरे में दर्ज। यह दर्शाता है कि यहाँ स्वाभाविक रूप से क्या पनपता है।",
+    "zh-CN": "周边约 25 公里范围内观测记录。显示该地适宜自然生长的植物。",
+    "zh-TW": "週邊約 25 公里範圍內觀測記錄。顯示該地適宜自然生長的植物。",
+    "es": "Observado en ~25 km. Muestra lo que sobrevive naturalmente aquí."
+  },
+  "Balanced sand/silt/clay — suits the widest range of crops.": {
+    "kn": "ಸಮತೋಲಿತ ಮರಳು/ಹೂಳು/ಜೇಡಿಮಣ್ಣು — ಹೆಚ್ಚಿನ ಬೆಳೆಗಳಿಗೆ ಸೂಕ್ತವಾಗಿದೆ.",
+    "hi": "संतुलित रेत/गाद/चिकनी मिट्टी — अधिकांश फसलों के लिए उपयुक्त।",
+    "zh-CN": "沙质/粉砂/黏土平衡 — 适宜绝大多数作物。",
+    "zh-TW": "沙質/粉砂/黏土平衡 — 適宜絕大多數作物。",
+    "es": "Arena/limo/arcilla equilibrada — adecuada para la mayor variedad de cultivos."
+  },
+  "Local Plants & Wild Flora (GBIF)": {
+    "kn": "ಸ್ಥಳೀಯ ಸಸ್ಯಗಳು ಮತ್ತು ಕಾಡು ಸಸ್ಯವರ್ಗ (GBIF)",
+    "hi": "स्थानीय पौधे और वनस्पति (GBIF)",
+    "zh-CN": "本地植物与野生花草 (GBIF)",
+    "zh-TW": "本地植物與野生花草 (GBIF)",
+    "es": "Plantas locales y flora silvestre (GBIF)"
+  },
+  "Good day to wash the car": {
+    "kn": "ಕಾರು ತೊಳೆಯಲು ಉತ್ತಮ ದಿನ",
+    "hi": "गाड़ी धोने के लिए अच्छा दिन",
+    "zh-CN": "适宜洗车",
+    "zh-TW": "適宜洗車",
+    "es": "Buen día para lavar el auto"
+  },
+  "Dry and calm through tomorrow — it will stay clean": {
+    "kn": "ನಾಳೆಯವರೆಗೂ ಒಣ ಮತ್ತು ಶಾಂತ ಹವಾಮಾನ — ಸ್ವಚ್ಛವಾಗಿರುತ್ತದೆ",
+    "hi": "कल तक सूखा और शांत मौसम — गाड़ी साफ रहेगी",
+    "zh-CN": "至明天天气晴朗干燥 — 可长时间保持洁净",
+    "zh-TW": "至明天天氣晴朗乾燥 — 可長時間保持潔淨",
+    "es": "Seco y tranquilo hasta mañana — se mantendrá limpio"
+  },
+  "from today's forecast": {
+    "kn": "ಇಂದಿನ ಮುನ್ಸೂಚನೆಯಿಂದ",
+    "hi": "आज के पूर्वानुमान से",
+    "zh-CN": "来自今日预报",
+    "zh-TW": "來自今日預報",
+    "es": "del pronóstico de hoy"
+  },
+  "SMART TO-DOS": {
+    "kn": "ಸ್ಮಾರ್ಟ್ ಕಾರ್ಯಗಳು",
+    "hi": "स्मार्ट कार्य",
+    "zh-CN": "智能出行建议",
+    "zh-TW": "智能出行建議",
+    "es": "Tareas inteligentes"
+  },
+  "Today at a Glance": {
+    "kn": "ಇಂದಿನ ಒಂದು ನೋಟ",
+    "hi": "आज की मुख्य बातें",
+    "zh-CN": "今日概览",
+    "zh-TW": "今日概覽",
+    "es": "Hoy de un vistazo"
+  },
+  "Map": {
+    "kn": "ನಕ್ಷೆ",
+    "hi": "मानचित्र",
+    "zh-CN": "地图",
+    "zh-TW": "地圖",
+    "es": "Mapa"
+  },
+  "Weather": {
+    "kn": "ಹವಾಮಾನ",
+    "hi": "मौसम",
+    "zh-CN": "天气",
+    "zh-TW": "天氣",
+    "es": "Clima"
+  },
+  "Analytics": {
+    "kn": "ವಿಶ್ಲೇಷಣೆ",
+    "hi": "विश्लेषण",
+    "zh-CN": "数据分析",
+    "zh-TW": "數據分析",
+    "es": "Análisis"
+  },
+  "Stops": {
+    "kn": "ನಿಲುಗಡೆಗಳು",
+    "hi": "स्टॉप",
+    "zh-CN": "经停点",
+    "zh-TW": "經停點",
+    "es": "Paradas"
+  },
+  "Tailwind": {
+    "kn": "ಅನುಕೂಲಕರ ಗಾಳಿ",
+    "hi": "अनुकूल हवा (टेलविंड)",
+    "zh-CN": "顺风",
+    "zh-TW": "順風",
+    "es": "Viento a favor"
+  },
+  "Headwind": {
+    "kn": "ಪ್ರತಿಕೂಲ ಗಾಳಿ",
+    "hi": "प्रतिकूल हवा (हेडविंड)",
+    "zh-CN": "逆风",
+    "zh-TW": "逆風",
+    "es": "Viento en contra"
+  },
+  "Crosswind": {
+    "kn": "ಅಡ್ಡಗಾಳಿ",
+    "hi": "क्रॉसविंड (तिरछी हवा)",
+    "zh-CN": "侧风",
+    "zh-TW": "側風",
+    "es": "Viento lateral"
+  },
+  "N": {
+    "kn": "ಉತ್ತರ",
+    "hi": "उत्तर",
+    "zh-CN": "北",
+    "zh-TW": "北",
+    "es": "N"
+  },
+  "S": {
+    "kn": "ದಕ್ಷಿಣ",
+    "hi": "दक्षिण",
+    "zh-CN": "南",
+    "zh-TW": "南",
+    "es": "S"
+  },
+  "E": {
+    "kn": "ಪೂರ್ವ",
+    "hi": "पूर्व",
+    "zh-CN": "东",
+    "zh-TW": "東",
+    "es": "E"
+  },
+  "W": {
+    "kn": "ಪಶ್ಚಿಮ",
+    "hi": "पश्चिम",
+    "zh-CN": "西",
+    "zh-TW": "西",
+    "es": "O"
+  },
+  "NE": {
+    "kn": "ಈಶಾನ್ಯ",
+    "hi": "उत्तर-पूर्व",
+    "zh-CN": "东北",
+    "zh-TW": "東北",
+    "es": "NE"
+  },
+  "NW": {
+    "kn": "ವಾಯುವ್ಯ",
+    "hi": "उत्तर-पश्चिम",
+    "zh-CN": "西北",
+    "zh-TW": "西北",
+    "es": "NO"
+  },
+  "SE": {
+    "kn": "ಆಗ್ನೇಯ",
+    "hi": "दक्षिण-पूर्व",
+    "zh-CN": "东南",
+    "zh-TW": "東南",
+    "es": "SE"
+  },
+  "SW": {
+    "kn": "ನೈಋತ್ಯ",
+    "hi": "दक्षिण-पश्चिम",
+    "zh-CN": "西南",
+    "zh-TW": "西南",
+    "es": "SO"
+  },
+  "NNE": {
+    "kn": "ಉ-ಈಶಾನ್ಯ",
+    "hi": "उत्तर-उत्तर-पूर्व",
+    "zh-CN": "北微东",
+    "zh-TW": "北微東",
+    "es": "NNE"
+  },
+  "ENE": {
+    "kn": "ಪೂ-ಈಶಾನ್ಯ",
+    "hi": "पूर्व-उत्तर-पूर्व",
+    "zh-CN": "东微北",
+    "zh-TW": "東微北",
+    "es": "ENE"
+  },
+  "ESE": {
+    "kn": "ಪೂ-ಆಗ್ನೇಯ",
+    "hi": "पूर्व-दक्षिण-पूर्व",
+    "zh-CN": "东微南",
+    "zh-TW": "東微南",
+    "es": "ESE"
+  },
+  "SSE": {
+    "kn": "ದ-ಆಗ್ನೇಯ",
+    "hi": "दक्षिण-दक्षिण-पूर्व",
+    "zh-CN": "南微东",
+    "zh-TW": "南微東",
+    "es": "SSE"
+  },
+  "SSW": {
+    "kn": "ದ-ನೈಋತ್ಯ",
+    "hi": "दक्षिण-दक्षिण-पश्चिम",
+    "zh-CN": "南微西",
+    "zh-TW": "南微西",
+    "es": "SSW"
+  },
+  "WSW": {
+    "kn": "ಪ-ನೈಋತ್ಯ",
+    "hi": "पश्चिम-दक्षिण-पश्चिम",
+    "zh-CN": "西微南",
+    "zh-TW": "西微南",
+    "es": "OSO"
+  },
+  "WNW": {
+    "kn": "ಪ-ವಾಯುವ್ಯ",
+    "hi": "पश्चिम-उत्तर-पश्चिम",
+    "zh-CN": "西微北",
+    "zh-TW": "西微北",
+    "es": "ONO"
+  },
+  "NNW": {
+    "kn": "ಉ-ವಾಯುವ್ಯ",
+    "hi": "उत्तर-उत्तर-पश्चिम",
+    "zh-CN": "北微西",
+    "zh-TW": "北微西",
+    "es": "NNO"
+  },
+  "Indian Languages": {
+    "kn": "ಭಾರತೀಯ ಭಾಷೆಗಳು",
+    "hi": "भारतीय भाषाएं",
+    "zh-CN": "印度语言",
+    "zh-TW": "印度語言",
+    "es": "Idiomas de la India"
+  },
+  "World Languages": {
+    "kn": "ವಿಶ್ವ ಭಾಷೆಗಳು",
+    "hi": "विश्व भाषाएं",
+    "zh-CN": "全球语言",
+    "zh-TW": "全球語言",
+    "es": "Idiomas del mundo"
+  },
+  "App language": {
+    "kn": "ಅಪ್ಲಿಕೇಶನ್ ಭಾಷೆ",
+    "hi": "ऐप भाषा",
+    "zh-CN": "应用语言",
+    "zh-TW": "應用語言",
+    "es": "Idioma de la aplicación"
+  },
+  "All features & tabs": {
+    "kn": "ಎಲ್ಲಾ ವೈಶಿಷ್ಟ್ಯಗಳು ಮತ್ತು ಟ್ಯಾಬ್‌ಗಳು",
+    "hi": "सभी सुविधाएं व टैब",
+    "zh-CN": "所有功能和标签页",
+    "zh-TW": "所有功能與標籤頁",
+    "es": "Todas las funciones y pestañas"
+  },
+  "Notify on default": {
+    "kn": "ಡೀಫಾಲ್ಟ್ ಸ್ಥಳದ ಅಧಿಸೂಚನೆ",
+    "hi": "डिफ़ॉल्ट स्थान पर सूचना",
+    "zh-CN": "在默认位置提醒",
+    "zh-TW": "預設位置通知",
+    "es": "Notificar en ubicación predeterminada"
+  },
+  "Default": {
+    "kn": "ಡೀಫಾಲ್ಟ್",
+    "hi": "डिफ़ॉल्ट",
+    "zh-CN": "默认",
+    "zh-TW": "預設",
+    "es": "Predeterminado"
+  },
+  "Satellite": {
+    "kn": "ಉಪಗ್ರಹ",
+    "hi": "उपग्रह",
+    "zh-CN": "卫星",
+    "zh-TW": "衛星",
+    "es": "Satélite"
+  },
+  "Terrain": {
+    "kn": "ಭೂಪ್ರದೇಶ",
+    "hi": "भूभाग",
+    "zh-CN": "地形",
+    "zh-TW": "地形",
+    "es": "Terreno"
+  },
+  "Hillshade": {
+    "kn": "ಬೆಟ್ಟದ ನೆರಳು",
+    "hi": "हिलशेड",
+    "zh-CN": "山体阴影",
+    "zh-TW": "山體陰影",
+    "es": "Sombreado de colinas"
+  },
+  "OpenTopoMap": {
+    "kn": "ಓಪನ್‌ಟೋಪೋಮ್ಯಾಪ್",
+    "hi": "ओपनटोपोमैप",
+    "zh-CN": "OpenTopo地形图",
+    "zh-TW": "OpenTopo地形圖",
+    "es": "OpenTopoMap"
+  },
+  "Ocean": {
+    "kn": "ಸಾಗರ",
+    "hi": "महासागर",
+    "zh-CN": "海洋",
+    "zh-TW": "海洋",
+    "es": "Océano"
+  },
+  "National Geographic": {
+    "kn": "ನ್ಯಾಷನಲ್ ಜಿಯಾಗ್ರಫಿಕ್",
+    "hi": "नेशनल ज्योग्राफिक",
+    "zh-CN": "国家地理",
+    "zh-TW": "國家地理",
+    "es": "National Geographic"
+  },
+  "Dark": {
+    "kn": "ಡಾರ್ಕ್",
+    "hi": "डार्क",
+    "zh-CN": "深色",
+    "zh-TW": "深色",
+    "es": "Oscuro"
+  },
+  "New Moon": {
+    "kn": "ಅಮಾವಾಸ್ಯೆ",
+    "hi": "अमावस्या",
+    "zh-CN": "新月",
+    "zh-TW": "新月",
+    "es": "Luna nueva"
+  },
+  "Waxing Crescent": {
+    "kn": "ಶುಕ್ಲ ಪಕ್ಷದ ಬಾಲಚಂದ್ರ",
+    "hi": "वैक्सिंग क्रिसेंट",
+    "zh-CN": "娥眉月",
+    "zh-TW": "蛾眉月",
+    "es": "Luna creciente"
+  },
+  "First Quarter": {
+    "kn": "ಶುಕ್ಲ ಪಕ್ಷದ ಅರ್ಧಚಂದ್ರ",
+    "hi": "प्रथम चतुर्थांश",
+    "zh-CN": "上弦月",
+    "zh-TW": "上弦月",
+    "es": "Cuarto creciente"
+  },
+  "Waxing Gibbous": {
+    "kn": "ಶುಕ್ಲ ಪಕ್ಷದ ವೃದ್ಧಿಚಂದ್ರ",
+    "hi": "वैक्सिंग गिबस",
+    "zh-CN": "盈凸月",
+    "zh-TW": "盈凸月",
+    "es": "Gibosa creciente"
+  },
+  "Full Moon": {
+    "kn": "ಹುಣ್ಣಿಮೆ",
+    "hi": "पूर्णिमा",
+    "zh-CN": "满月",
+    "zh-TW": "滿月",
+    "es": "Luna llena"
+  },
+  "Waning Gibbous": {
+    "kn": "ಕೃಷ್ಣ ಪಕ್ಷದ ಕ್ಷೀಣಚಂದ್ರ",
+    "hi": "वेनिंग गिबस",
+    "zh-CN": "亏凸月",
+    "zh-TW": "虧凸月",
+    "es": "Gibosa menguante"
+  },
+  "Third Quarter": {
+    "kn": "ಕೃಷ್ಣ ಪಕ್ಷದ ಅರ್ಧಚಂದ್ರ",
+    "hi": "तृतीय चतुर्थांश",
+    "zh-CN": "下弦月",
+    "zh-TW": "下弦月",
+    "es": "Cuarto menguante"
+  },
+  "Waning Crescent": {
+    "kn": "ಕೃಷ್ಣ ಪಕ್ಷದ ಬಾಲಚಂದ್ರ",
+    "hi": "वेनिंग क्रिसेंट",
+    "zh-CN": "残月",
+    "zh-TW": "殘月",
+    "es": "Luna menguante"
+  }
+};
+
+// Populate PHRASES for all supported locales from EXTENDED_FEATURE_PHRASES
+for (const [englishText, langMap] of Object.entries(EXTENDED_FEATURE_PHRASES)) {
+  for (const [loc, trans] of Object.entries(langMap)) {
+    if (!PHRASES[loc]) PHRASES[loc] = {};
+    if (!PHRASES[loc][englishText]) PHRASES[loc][englishText] = trans;
+    if (!PHRASES[loc][englishText.toLowerCase()]) PHRASES[loc][englishText.toLowerCase()] = trans;
+  }
+}
+
 export function translateText(rawText, locale = detectLocale()) {
   if (!rawText || typeof rawText !== "string") return rawText;
   if (!locale || locale === "en") return rawText;
@@ -18365,6 +20071,17 @@ export function translateText(rawText, locale = detectLocale()) {
     const transColon = translateText(withoutColon, locale);
     if (transColon && transColon !== withoutColon) {
       return rawText.replace(trimmed, `${transColon}:`);
+    }
+  }
+
+  // Direct extended vocabulary check
+  if (EXTENDED_FEATURE_PHRASES[trimmed]?.[locale]) {
+    return rawText.replace(trimmed, EXTENDED_FEATURE_PHRASES[trimmed][locale]);
+  }
+  const normLower = trimmed.toLowerCase();
+  for (const [phrase, langMap] of Object.entries(EXTENDED_FEATURE_PHRASES)) {
+    if (phrase.toLowerCase() === normLower && langMap[locale]) {
+      return rawText.replace(trimmed, langMap[locale]);
     }
   }
 
@@ -18427,6 +20144,88 @@ export function translateText(rawText, locale = detectLocale()) {
   }
 
   // 4. Dynamic patterns
+  // Pattern: Sowing schedules (compound or single)
+  // e.g. "· sow Sep-Oct-Nov · ~80 days" or "sow Jan-Feb-Mar-Oct-Nov · ~360 days"
+  // or "Next window in ~7 months · sow Jun-Jul-Sep-Oct · ~110 days"
+  // or "⏳ Next window in ~7 months"
+  if (/\b(?:sow\s+[A-Za-z-]+|Next window in\s*~\d+\s*months?)\b/i.test(trimmed)) {
+    let result = rawText;
+    const nextMatch = trimmed.match(/^(?:⏳\s*)?Next window in ~(\d+)\s*months?/i);
+    if (nextMatch) {
+      const m = nextMatch[1];
+      let transNext = `⏳ Next window in ~${m} months`;
+      if (locale === "kn") transNext = `⏳ ಮುಂದಿನ ಬಿತ್ತನೆ ~${m} ತಿಂಗಳಲ್ಲಿ`;
+      else if (locale === "hi") transNext = `⏳ ~${m} महीनों में अगली खिड़की`;
+      else if (locale === "zh-CN") transNext = `⏳ 下个播种期约 ${m} 个月后`;
+      else if (locale === "zh-TW") transNext = `⏳ 下個播種期約 ${m} 個月後`;
+      else if (locale === "es") transNext = `⏳ Próxima ventana en ~${m} meses`;
+      result = result.replace(nextMatch[0], transNext);
+    }
+
+    const sowMatch = trimmed.match(/\bsow\s+((?:(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)-?)+)(?:\s*·\s*~(\d+)\s*days)?/i);
+    if (sowMatch) {
+      const monthsStr = sowMatch[1];
+      const days = sowMatch[2];
+      const MONTH_MAP = {
+        kn: { Jan: "ಜನ", Feb: "ಫೆಬ್ರ", Mar: "ಮಾರ್ಚ್", Apr: "ಏಪ್ರಿ", May: "ಮೇ", Jun: "ಜೂನ್", Jul: "ಜುಲೈ", Aug: "ಆಗಸ್ಟ್", Sep: "ಸೆಪ್ಟೆ", Oct: "ಅಕ್ಟೋ", Nov: "ನವೆಂ", Dec: "ಡಿಸೆಂ" },
+        hi: { Jan: "जन", Feb: "फ़र", Mar: "मार्च", Apr: "अप्रैल", May: "मई", Jun: "जून", Jul: "जुलाई", Aug: "अगस्त", Sep: "सित", Oct: "अक्तू", Nov: "नवं", Dec: "दिसं" },
+        "zh-CN": { Jan: "1月", Feb: "2月", Mar: "3月", Apr: "4月", May: "5月", Jun: "6月", Jul: "7月", Aug: "8月", Sep: "9月", Oct: "10月", Nov: "11月", Dec: "12月" },
+        "zh-TW": { Jan: "1月", Feb: "2月", Mar: "3月", Apr: "4月", May: "5月", Jun: "6月", Jul: "7月", Aug: "8月", Sep: "9月", Oct: "10月", Nov: "11月", Dec: "12月" },
+        es: { Jan: "Ene", Feb: "Feb", Mar: "Mar", Apr: "Abr", May: "May", Jun: "Jun", Jul: "Jul", Aug: "Ago", Sep: "Sep", Oct: "Oct", Nov: "Nov", Dec: "Dic" }
+      };
+      const SOW_LABEL = { kn: "ಬಿತ್ತನೆ", hi: "बुवाई", "zh-CN": "播种期", "zh-TW": "播種期", es: "siembra" };
+      const DAYS_LABEL = { kn: "ದಿನಗಳು", hi: "दिन", "zh-CN": "天", "zh-TW": "天", es: "días" };
+
+      const mTrans = monthsStr.split('-').map(m => (MONTH_MAP[locale] && MONTH_MAP[locale][m]) || m).join('-');
+      const sowLbl = SOW_LABEL[locale] || "sow";
+      let replacement = `${sowLbl} ${mTrans}`;
+      if (days) {
+        const daysLbl = DAYS_LABEL[locale] || "days";
+        replacement += ` · ~${days} ${daysLbl}`;
+      }
+      result = result.replace(sowMatch[0], replacement);
+    }
+
+    if (result.includes("Sow now")) {
+      const sowNowLbl = EXTENDED_FEATURE_PHRASES["Sow now"]?.[locale] || "Sow now";
+      result = result.replace("Sow now", sowNowLbl);
+    }
+
+    if (result !== rawText) return result;
+  }
+
+  // Pattern: N visible (celestial badges e.g. "4 visible")
+  const visibleBadgeMatch = trimmed.match(/^(\d+)\s+visible$/i);
+  if (visibleBadgeMatch) {
+    const num = visibleBadgeMatch[1];
+    if (locale === "kn") return rawText.replace(trimmed, `${num} ಗೋಚರಿಸುತ್ತವೆ`);
+    if (locale === "hi") return rawText.replace(trimmed, `${num} दृश्य`);
+    if (locale === "zh-CN") return rawText.replace(trimmed, `${num} 颗可见`);
+    if (locale === "zh-TW") return rawText.replace(trimmed, `${num} 顆可見`);
+    if (locale === "es") return rawText.replace(trimmed, `${num} visible${num === "1" ? "" : "s"}`);
+    if (locale === "fr") return rawText.replace(trimmed, `${num} visible${num === "1" ? "" : "s"}`);
+    if (locale === "de") return rawText.replace(trimmed, `${num} sichtbar`);
+  }
+
+  // Pattern: Direction with altitude e.g. "SE (39°)"
+  const dirAltMatch = trimmed.match(/^([A-Z]{1,3})\s*\(([+-]?\d+°)\)$/);
+  if (dirAltMatch) {
+    const dir = dirAltMatch[1];
+    const alt = dirAltMatch[2];
+    const dirTrans = EXTENDED_FEATURE_PHRASES[dir]?.[locale] || pMap[dir] || dir;
+    if (dirTrans && dirTrans !== dir) {
+      return rawText.replace(trimmed, `${dirTrans} (${alt})`);
+    }
+  }
+
+  // Pattern: Alt: N° or Alt N°
+  const altMatch = trimmed.match(/^Alt:?\s*([+-]?\d+°)$/i);
+  if (altMatch) {
+    if (locale === "kn") return rawText.replace(trimmed, `ಎತ್ತರ: ${altMatch[1]}`);
+    if (locale === "hi") return rawText.replace(trimmed, `ऊंचाई: ${altMatch[1]}`);
+    if (locale === "zh-CN" || locale === "zh-TW") return rawText.replace(trimmed, `仰角: ${altMatch[1]}`);
+    if (locale === "es") return rawText.replace(trimmed, `Alt: ${altMatch[1]}`);
+  }
   // Pattern: Show All (N)
   const showAllMatch = trimmed.match(/^Show All\s*\((\d+)\)$/i);
   if (showAllMatch) {
@@ -18585,7 +20384,7 @@ export function translateText(rawText, locale = detectLocale()) {
   }
 
   // Pattern: Category (N) e.g. Trees (26), Wildflowers (8), Herbs (7), Stops (2), All (92)
-  const countMatch = trimmed.match(/^([A-Za-z\s]+)\s*\((\d+)\)$/i);
+  const countMatch = trimmed.match(/^([A-Za-z\s/&·-]+)\s*\((\d+)\)$/i);
   if (countMatch) {
     const cat = countMatch[1].trim();
     const num = countMatch[2];
@@ -18872,6 +20671,24 @@ export function translateDOM(root = (typeof document !== "undefined" ? document.
   } catch (_) {}
 }
 
+let externalTranslationRefreshTimer = null;
+
+/** Reapply the page translator after a feature replaces its live DOM. */
+export function refreshExternalTranslation(locale = detectLocale()) {
+  if (!locale || locale === "en" || typeof document === "undefined") return false;
+  if (externalTranslationRefreshTimer !== null) {
+    clearTimeout(externalTranslationRefreshTimer);
+  }
+  externalTranslationRefreshTimer = setTimeout(() => {
+    externalTranslationRefreshTimer = null;
+    const combo = document.querySelector(".goog-te-combo");
+    if (!combo) return;
+    if (combo.value !== locale) combo.value = locale;
+    combo.dispatchEvent(new Event("change"));
+  }, 120);
+  return true;
+}
+
 // ── Aura intent keywords per locale ────────────────────────────────
 const AURA_KEYWORDS = {
   kn: {
@@ -18955,9 +20772,11 @@ if (typeof window !== "undefined") {
     t,
     translateText,
     translateDOM,
+    refreshExternalTranslation,
     auraKeywords,
     DICT,
     PHRASES,
+    EXTENDED_FEATURE_PHRASES,
     BASE_EN
   };
 }

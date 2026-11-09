@@ -55,7 +55,7 @@ import {
   cleanBotanicalName,
   resolveIndianFloraName,
 } from "../modules/indianFloraNames.js";
-import { t } from "../modules/i18n.js";
+import { t, detectLocale, translateDOM, refreshExternalTranslation } from "../modules/i18n.js";
 
 // ────────────────── constants ──────────────────
 
@@ -2021,8 +2021,15 @@ export function renderFarmTab(app) {
   const a = app || appRef;
   if (!a) return;
 
+  const syncFarmLanguage = () => {
+    const locale = a.language || detectLocale();
+    translateDOM(panel, locale);
+    if (a.activeWeatherTab === "farm") refreshExternalTranslation(locale);
+  };
+
   if (a.selectedLat == null || a.selectedLng == null) {
     panel.innerHTML = farmEmptyState();
+    syncFarmLanguage();
     return;
   }
 
@@ -2053,12 +2060,14 @@ export function renderFarmTab(app) {
           Waiting for this location's weather to load — the cropping plan appears here the moment it does.
         </p>
       </div>`;
+    syncFarmLanguage();
     return;
   }
 
   const waterCheck = ctx.waterInfo || isWaterBodyLocation(ctx, a);
   if (waterCheck.isWater) {
     panel.innerHTML = renderMarineWaterState(ctx, waterCheck);
+    syncFarmLanguage();
     return;
   }
 
@@ -2190,6 +2199,7 @@ export function renderFarmTab(app) {
   }
 
   wireFarmControls(a);
+  syncFarmLanguage();
 }
 
 /** Binds the soil picker, category filter chips, search input, and refresh button after each render. */

@@ -1,5 +1,6 @@
 // -- ASTRONOMY & DAY CYCLES --
 import { calculateCelestialSky, projectToSkyDome } from "./celestial.js";
+import { detectLocale, translateDOM, refreshExternalTranslation } from "../modules/i18n.js";
 
 function updateAstronomyWidget(weather, _hourIndex) {
     if (!this.weatherData) return;
@@ -521,6 +522,24 @@ function updateCelestialBodies(currentTime) {
 
       // 8. Render Fullscreen Topdown Side Panels (Left: Planets/Satellites/Meteors, Right: Constellations/Stars)
       renderFullscreenSkyPanels(sky);
+
+      const locale = this.language || detectLocale();
+      const astronomyPanel = document.getElementById("weatherTabAstronomy");
+      if (astronomyPanel) translateDOM(astronomyPanel, locale);
+      for (const id of [
+        "skyFullscreenPlanetsList",
+        "skyFullscreenSatellitesList",
+        "skyFullscreenMeteorsList",
+        "skyFullscreenConstellationsList",
+        "skyFullscreenStarsList",
+        "skyFullscreenQualityContent",
+      ]) {
+        const panel = document.getElementById(id);
+        if (panel) translateDOM(panel, locale);
+      }
+      if (this.activeWeatherTab === "astronomy" || document.body.classList.contains("sky-radar-fullscreen-active")) {
+        refreshExternalTranslation(locale);
+      }
     } catch (err) {
       console.warn("Celestial calculation error:", err);
     }

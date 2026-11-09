@@ -337,5 +337,102 @@ describe("Internationalisation (i18n) Engine & Language Support", () => {
     expect(card.querySelector("#freshnessLabel").textContent).toBe("📡 Just now");
     expect(card.querySelector("#mapLegendPill").textContent).toBe("Map Key");
   });
+
+  it("translates all Astronomy tab stars, constellations, badges and directions across languages", () => {
+    // Kannada
+    expect(translateText("Sirius", "kn")).toBe("ಸಿರಿಯಸ್ (ಲುಬ್ಧಕ)");
+    expect(translateText("Vega", "kn")).toBe("ವೇಗಾ (ಅಭಿಜಿತ್)");
+    expect(translateText("Canis Major", "kn")).toBe("ಕ್ಯಾನಿಸ್ ಮೇಜರ್ (ಮಹಾಶ್ವಾನ)");
+    expect(translateText("Orion", "kn")).toBe("ಓರಿಯನ್ (ಮೃಗಶಿರ)");
+    expect(translateText("Visible", "kn")).toBe("ಗೋಚರ");
+    expect(translateText("Set", "kn")).toBe("ಅಸ್ತ");
+    expect(translateText("4 visible", "kn")).toBe("4 ಗೋಚರಿಸುತ್ತವೆ");
+    expect(translateText("Alt: 39°", "kn")).toBe("ಎತ್ತರ: 39°");
+    expect(translateText("SE (39°)", "kn")).toBe("ಆಗ್ನೇಯ (39°)");
+
+    // Chinese (zh-CN)
+    expect(translateText("Sirius", "zh-CN")).toBe("天狼星");
+    expect(translateText("Vega", "zh-CN")).toBe("织女一");
+    expect(translateText("Canis Major", "zh-CN")).toBe("大犬座");
+    expect(translateText("Visible", "zh-CN")).toBe("可见");
+    expect(translateText("Set", "zh-CN")).toBe("已落下");
+    expect(translateText("4 visible", "zh-CN")).toBe("4 颗可见");
+    expect(translateText("Alt: 39°", "zh-CN")).toBe("仰角: 39°");
+    expect(translateText("SE (39°)", "zh-CN")).toBe("东南 (39°)");
+
+    // Hindi (hi)
+    expect(translateText("Sirius", "hi")).toBe("सीरियस (व्याध)");
+    expect(translateText("Visible", "hi")).toBe("दृश्यमान");
+    expect(translateText("Set", "hi")).toBe("अस्त");
+    expect(translateText("4 visible", "hi")).toBe("4 दृश्य");
+
+    // Astronomy card DOM translation
+    const astroCard = document.createElement("div");
+    astroCard.innerHTML = `
+      <span id="starName">Sirius</span>
+      <span id="starConst">Canis Major</span>
+      <span id="starStatus">Visible</span>
+      <span id="badge">4 visible</span>
+    `;
+    translateDOM(astroCard, "kn");
+    expect(astroCard.querySelector("#starName").textContent).toBe("ಸಿರಿಯಸ್ (ಲುಬ್ಧಕ)");
+    expect(astroCard.querySelector("#starConst").textContent).toBe("ಕ್ಯಾನಿಸ್ ಮೇಜರ್ (ಮಹಾಶ್ವಾನ)");
+    expect(astroCard.querySelector("#starStatus").textContent).toBe("ಗೋಚರ");
+    expect(astroCard.querySelector("#badge").textContent).toBe("4 ಗೋಚರಿಸುತ್ತವೆ");
+
+    // Revert to English
+    translateDOM(astroCard, "en");
+    expect(astroCard.querySelector("#starName").textContent).toBe("Sirius");
+    expect(astroCard.querySelector("#starConst").textContent).toBe("Canis Major");
+    expect(astroCard.querySelector("#starStatus").textContent).toBe("Visible");
+  });
+
+  it("translates all Farm tab crops, categories, sowing schedules and advice across languages", () => {
+    // Kannada
+    expect(translateText("Alfalfa (Lucerne)", "kn")).toBe("ಕುದುರೆ ಮೆಂತ್ಯ (ಲುಸರ್ನ್)");
+    expect(translateText("Finger Millet (Ragi)", "kn")).toBe("ರಾಗಿ");
+    expect(translateText("Cabbage", "kn")).toBe("ಎಲೆಕೋಸು");
+    expect(translateText("Green Peas", "kn")).toBe("ಹಸಿರು ಬಟಾಣಿ");
+    expect(translateText("Spinach", "kn")).toBe("ಪಾಲಕ್");
+    expect(translateText("Cover & Forage", "kn")).toBe("ಹೊದಿಕೆ ಮತ್ತು ಮೇವು");
+    expect(translateText("Cereal", "kn")).toBe("ಧಾನ್ಯ");
+    expect(translateText("Pulse", "kn")).toBe("ದ್ವಿದಳ ಧಾನ್ಯ / ಬೇಳೆಕಾಳು");
+    expect(translateText("Vegetable", "kn")).toBe("ತರಕಾರಿ");
+    expect(translateText("· sow Sep-Oct-Nov · ~80 days", "kn")).toBe("· ಬಿತ್ತನೆ ಸೆಪ್ಟೆ-ಅಕ್ಟೋ-ನವೆಂ · ~80 ದಿನಗಳು");
+    expect(translateText("Next window in ~7 months · sow Jun-Jul-Sep-Oct · ~110 days", "kn")).toBe("⏳ ಮುಂದಿನ ಬಿತ್ತನೆ ~7 ತಿಂಗಳಲ್ಲಿ · ಬಿತ್ತನೆ ಜೂನ್-ಜುಲೈ-ಸೆಪ್ಟೆ-ಅಕ್ಟೋ · ~110 ದಿನಗಳು");
+    expect(translateText("Sow now", "kn")).toBe("ಈಗ ಬಿತ್ತಿ");
+    expect(translateText("High water", "kn")).toBe("ಹೆಚ್ಚು ನೀರು");
+    expect(translateText("frost limit", "kn")).toBe("ಹಿಮ ಮಿತಿ");
+
+    // Chinese (zh-CN)
+    expect(translateText("Finger Millet (Ragi)", "zh-CN")).toBe("䅟子 (龙爪稷)");
+    expect(translateText("Cover & Forage", "zh-CN")).toBe("覆盖与饲料");
+    expect(translateText("Cereal", "zh-CN")).toBe("谷物");
+    expect(translateText("· sow Sep-Oct-Nov · ~80 days", "zh-CN")).toBe("· 播种期 9月-10月-11月 · ~80 天");
+    expect(translateText("Sow now", "zh-CN")).toBe("适时播种");
+
+    // Farm card DOM translation
+    const farmCard = document.createElement("div");
+    farmCard.innerHTML = `
+      <span id="cropName">Finger Millet (Ragi)</span>
+      <span id="cropCat">Cereal</span>
+      <div id="cropTiming">· sow Sep-Oct-Nov · ~80 days</div>
+      <span id="whereHeader">Where</span>
+      <span id="needsHeader">Needs</span>
+      <span id="howHeader">How to grow</span>
+    `;
+    translateDOM(farmCard, "kn");
+    expect(farmCard.querySelector("#cropName").textContent).toBe("ರಾಗಿ");
+    expect(farmCard.querySelector("#cropCat").textContent).toBe("ಧಾನ್ಯ");
+    expect(farmCard.querySelector("#cropTiming").textContent).toBe("· ಬಿತ್ತನೆ ಸೆಪ್ಟೆ-ಅಕ್ಟೋ-ನವೆಂ · ~80 ದಿನಗಳು");
+    expect(farmCard.querySelector("#howHeader").textContent).toBe("ಬೆಳೆಯುವುದು ಹೇಗೆ");
+
+    // Revert to English
+    translateDOM(farmCard, "en");
+    expect(farmCard.querySelector("#cropName").textContent).toBe("Finger Millet (Ragi)");
+    expect(farmCard.querySelector("#cropCat").textContent).toBe("Cereal");
+    expect(farmCard.querySelector("#cropTiming").textContent).toBe("· sow Sep-Oct-Nov · ~80 days");
+    expect(farmCard.querySelector("#howHeader").textContent).toBe("How to grow");
+  });
 });
 

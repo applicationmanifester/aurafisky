@@ -1268,6 +1268,7 @@ class AurafiskyApp {
     // i18n: detect and apply the user's preferred language.
     this.language = detectLocale();
     this.applyLanguage(this.language);
+    this.applyUniversalTranslation(this.language);
 
       // Map style preference: 'street' | 'satellite' | 'terrain' | 'dark'
       const savedMapStyle = localStorage.getItem("aurafisky_map_style");
@@ -3045,11 +3046,18 @@ class AurafiskyApp {
       const query = this.$.searchInput.value.trim();
       if (query.length < 2) {
         this.showSearchHistory();
-      } else if (this.$.searchResults.children.length > 0) {
+      } else {
         this.$.searchDropdown.classList.add("open");
+        if (this.$.searchSpinner.classList.contains("hidden")) {
+          this.performSearch(query);
+        }
       }
     };
     this.$.searchInput.addEventListener("focus", this._boundSearchFocus);
+    this._boundSearchClick = () => {
+      if (!this.$.searchDropdown.classList.contains("open")) this._boundSearchFocus();
+    };
+    this.$.searchInput.addEventListener("click", this._boundSearchClick);
 
     // ── Network status tracking ──────────────────────────────
     this._boundOnline = () => this.updateOnlineStatus(true);
@@ -4990,14 +4998,18 @@ class AurafiskyApp {
     // 9. Freshness
     if (this.freshnessTimestamp && this.$.freshnessLabel) {
       const fresh = WeatherService.getFreshnessLabel(this.freshnessTimestamp);
-      this.$.freshnessLabel.textContent = `📡 ${fresh.label}`;
+      const activeLang = this.language || detectLocale();
+      const localizedFresh = translateText(fresh.label, activeLang);
+      this.$.freshnessLabel.textContent = `📡 ${localizedFresh}`;
       this.$.freshnessLabel.style.opacity = fresh.opacity;
       if (this.$.panelCardFreshness) {
-        this.$.panelCardFreshness.textContent = `Forecast updated ${fresh.label}`;
+        const fUpdated = t("forecast_updated", activeLang) || "Forecast updated";
+        this.$.panelCardFreshness.textContent = `${fUpdated} ${localizedFresh}`;
         this.$.panelCardFreshness.className = `text-[10px] mt-0.5 ${fresh.isStale ? "text-amber-600 dark:text-amber-400" : "text-slate-400 dark:text-slate-500"}`;
       }
     } else if (this.$.panelCardFreshness) {
-      this.$.panelCardFreshness.textContent = "Forecast update time unavailable";
+      const activeLang = this.language || detectLocale();
+      this.$.panelCardFreshness.textContent = t("forecast_update_unavailable", activeLang) || "Forecast update time unavailable";
       this.$.panelCardFreshness.className = "text-[10px] mt-0.5 text-slate-400 dark:text-slate-500";
     }
 
@@ -5296,6 +5308,11 @@ class AurafiskyApp {
       } else {
         stripSection.classList.add("hidden");
       }
+    }
+
+    if (this.language && this.language !== "en" && typeof translateDOM === "function") {
+      const p = this.$.weatherPanel || document.getElementById("weatherPanel");
+      if (p) translateDOM(p, this.language);
     }
   }
 
@@ -6538,6 +6555,12 @@ class AurafiskyApp {
     const history = this.getSearchHistory();
     const { createElement, clearElement } = window.domUtils;
     const container = this.$.searchResults;
+    this.searchActiveFilter = "all";
+    this.$.searchDropdown?.querySelectorAll(".search-filter-chip").forEach((chip) => {
+      const active = chip.dataset.filter === "all";
+      chip.classList.toggle("active", active);
+      chip.setAttribute("aria-selected", active ? "true" : "false");
+    });
     clearElement(container);
 
     // 1. Top Quick Shortcuts (My GPS, Home, Saved)
@@ -9237,6 +9260,9 @@ class AurafiskyApp {
     document.removeEventListener("visibilitychange", this._boundRefocus);
     window.removeEventListener("focus", this._boundRefocus);
     this.$.searchInput?.removeEventListener("focus", this._boundSearchFocus);
+    this.$.searchInput?.removeEventListener("click", this._boundSearchClick);
+    this._languageMutationObserver?.disconnect();
+    this._languageMutationObserver = null;
     this.audioContext?.close().catch(() => {});
     if (this.animationFrameId) {
       cancelAnimationFrame(this.animationFrameId);
@@ -11340,37 +11366,49 @@ class AurafiskyApp {
       }
     } catch (_) {}
 
+    const syncWidgetLocale = (attempt = 0) => {
+      const combo = document.querySelector(".goog-te-combo");
+      if (combo) {
+        // Read the latest selection here instead of capturing the language
+        // from the first call while the translation widget is still loading.
+        const activeLocale = detectLocale();
+        if (combo.value !== activeLocale) {
+          combo.value = activeLocale;
+          combo.dispatchEvent(new Event("change"));
+        }
+      } else if (attempt < 40) {
+        window.setTimeout(() => syncWidgetLocale(attempt + 1), 150);
+      }
+    };
+
     const combo = document.querySelector(".goog-te-combo");
     if (combo) {
       if (combo.value !== target) {
         combo.value = target;
         combo.dispatchEvent(new Event("change"));
       }
-    } else {
-      // Lazy load Google translation script for full-page long text translation if non-English
-      if (target !== "en" && !window.__googleTranslateInitialized) {
-        window.__googleTranslateInitialized = true;
-        window.googleTranslateElementInit = () => {
-          try {
-            new window.google.translate.TranslateElement({
-              pageLanguage: "en",
-              autoDisplay: false,
-              includedLanguages: "en,kn,hi,ta,te,mr,bn,gu,ml,pa,ur,es,fr,de,it,pt,ru,ja,ko,zh-CN,ar,id,tr,vi,th,nl,pl,uk,el,he,sv,sw,tl,ms,fa,ne,si",
-            }, "google_translate_element");
-            setTimeout(() => {
-              const c = document.querySelector(".goog-te-combo");
-              if (c) {
-                c.value = target;
-                c.dispatchEvent(new Event("change"));
-              }
-            }, 600);
-          } catch (_) {}
-        };
-        const s = document.createElement("script");
-        s.src = "https://translate.google.com/translate_a/element.js?cb=googleTranslateElementInit";
-        s.async = true;
-        document.head.appendChild(s);
-      }
+    } else if (target !== "en" && !window.__googleTranslateInitialized) {
+      // Lazy load Google translation for prose and feature output that does
+      // not yet have a first-party translation string.
+      window.__googleTranslateInitialized = true;
+      window.googleTranslateElementInit = () => {
+        try {
+          new window.google.translate.TranslateElement({
+            pageLanguage: "en",
+            autoDisplay: false,
+            includedLanguages: supportedLocales().join(","),
+          }, "google_translate_element");
+          syncWidgetLocale();
+        } catch (_) {}
+      };
+      const s = document.createElement("script");
+      s.src = "https://translate.google.com/translate_a/element.js?cb=googleTranslateElementInit";
+      s.async = true;
+      document.head.appendChild(s);
+    } else if (window.__googleTranslateInitialized) {
+      // A prior language selection may have started loading the widget. Keep
+      // polling briefly so rapid locale changes cannot leave it on an old one.
+      syncWidgetLocale();
     }
   }
 
@@ -11394,6 +11432,10 @@ class AurafiskyApp {
     const title = document.querySelector("title");
     if (title) title.textContent = `${t("app_name")} — ${t("app_tagline")}`;
     if (this.$.searchInput) {
+      // Keep the source placeholder stable across language switches. Without
+      // this, translateDOM can remember the first selected locale as the source
+      // and leave the search field stuck in that language on later changes.
+      this.$.searchInput.setAttribute("data-orig-placeholder", "Search a city...");
       this.$.searchInput.placeholder = t("search_placeholder");
     }
 
@@ -11456,7 +11498,17 @@ class AurafiskyApp {
 
     // 8. Re-render weather display if forecast data is present
     if (this.weatherData && typeof this.updateWeatherDisplay === "function") {
-      this.updateWeatherDisplay(this.weatherData);
+      this.updateWeatherDisplay(typeof this.currentHourIndex === "number" ? this.currentHourIndex : 0);
+    }
+
+    // 8b. Re-render Smart To-dos with fresh translations
+    if (typeof this.renderSmartTodos === "function") {
+      try { this.renderSmartTodos(); } catch (_) {}
+    }
+
+    // 8c. Update Map Key & Legend UI
+    if (typeof this.updateMapLegendUI === "function") {
+      try { this.updateMapLegendUI(); } catch (_) {}
     }
 
     // 9. Re-render timeline if initialized
@@ -11480,6 +11532,51 @@ class AurafiskyApp {
       translateDOM(routePanel, lang);
     }
 
+    // UI panels and form fields are rendered lazily after startup. Translate
+    // newly inserted content with the active app locale so fields stay in sync
+    // without each feature needing its own language-change hook.
+    if (!this._languageMutationObserver && typeof MutationObserver !== "undefined" && document.body) {
+      this._languageMutationObserver = new MutationObserver((records) => {
+        const addedNodes = new Set();
+        const changedAttributes = new Set();
+        for (const record of records) {
+          if (record.type === "childList") {
+            for (const node of record.addedNodes) addedNodes.add(node);
+          } else if (record.type === "attributes") {
+            changedAttributes.add(record.target);
+          }
+        }
+        if (!this.language || typeof translateDOM !== "function") return;
+        for (const node of addedNodes) {
+          if (node.isConnected) translateDOM(node, this.language);
+        }
+        for (const node of changedAttributes) {
+          if (!node.isConnected) continue;
+          // App code can replace a field's source placeholder/title after it was
+          // first translated. Refresh the saved source only when the new value
+          // is not the active locale's translation of the saved source.
+          for (const attr of ["placeholder", "title", "aria-label", "aria-description", "aria-placeholder", "alt", "value"]) {
+            const current = node.getAttribute?.(attr);
+            if (!current) continue;
+            if (attr === "value" && !/^(button|submit)$/i.test(node.type || "")) continue;
+            const originalKey = `data-orig-${attr}`;
+            const savedSource = node.getAttribute(originalKey);
+            if (savedSource && current !== translateText(savedSource, this.language)) {
+              node.setAttribute(originalKey, current);
+            }
+          }
+          translateDOM(node, this.language);
+        }
+      });
+      this._languageMutationObserver.observe(document.body, {
+        childList: true,
+        subtree: true,
+        attributes: true,
+        attributeOldValue: true,
+        attributeFilter: ["placeholder", "title", "aria-label", "aria-description", "aria-placeholder", "alt", "value"],
+      });
+    }
+
     // 12. Reset Aura if open
     if (this.aura && this.aura.isOpen) {
       this.aura.reset();
@@ -11501,7 +11598,8 @@ class AurafiskyApp {
       es: "Español", fr: "Français", de: "Deutsch", ja: "日本語", ar: "العربية",
       pt: "Português", ru: "Русский", "zh-CN": "简体中文"
     };
-    this.showToast?.(`Language: ${langNames[lang] || lang.toUpperCase()}`, "info");
+    const selectedLanguageName = this.$.settingsAppLanguageSelect?.selectedOptions?.[0]?.textContent?.trim();
+    this.showToast?.(`Language: ${langNames[lang] || selectedLanguageName || lang.toUpperCase()}`, "info");
     return true;
   }
 
@@ -12044,6 +12142,10 @@ class AurafiskyApp {
       }
       if (switchModeIcon) switchModeIcon.textContent = "🌡️";
       if (switchModeText) switchModeText.textContent = "Show Live Temperature Grid";
+    }
+
+    if (this.language && this.language !== "en" && typeof translateDOM === "function") {
+      translateDOM(widget, this.language);
     }
   }
 }

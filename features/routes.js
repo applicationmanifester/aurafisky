@@ -2760,7 +2760,7 @@ function routeEndpointSearchFieldsHtml() {
         <label for="routeOriginSearchInput" class="block mb-1.5 text-sm font-bold text-slate-700 dark:text-slate-200">Starting point</label>
         <div class="flex items-center gap-2 px-3 min-h-12 rounded-2xl bg-white/80 dark:bg-slate-800/80 border border-slate-200/80 dark:border-slate-700/80 focus-within:ring-2 focus-within:ring-indigo-500/50 transition-all shadow-xs">
           <span class="text-emerald-600 text-base" aria-hidden="true">A</span>
-          <input type="search" id="routeOriginSearchInput" data-route-role="origin" class="route-location-search w-full bg-transparent text-base text-slate-800 dark:text-slate-100 placeholder-slate-400 outline-none" aria-label="Starting point" placeholder="Search city, address, or landmark" value="${escapeXml(originName)}" autocomplete="off" />
+          <input type="search" id="routeOriginSearchInput" data-route-role="origin" class="route-location-search w-full bg-transparent text-base text-slate-800 dark:text-slate-100 placeholder-slate-400 outline-none" aria-label="Starting point" aria-autocomplete="list" aria-controls="routeOriginSearchDropdown" placeholder="Search city, address, or landmark" value="${escapeXml(originName)}" autocomplete="off" />
           <div id="routeOriginSearchSpinner" class="hidden w-4 h-4 border-2 border-indigo-500/30 border-t-indigo-500 rounded-full animate-spin flex-shrink-0"></div>
         </div>
         <div id="routeOriginSearchDropdown" class="route-search-dropdown hidden mt-2 bg-white dark:bg-slate-800 rounded-2xl shadow-xl border border-slate-200/80 dark:border-slate-700/80 p-1.5 overflow-y-auto custom-scrollbar" role="listbox"></div>
@@ -2772,7 +2772,7 @@ function routeEndpointSearchFieldsHtml() {
         <label for="routeDestinationSearchInput" class="block mb-1.5 text-sm font-bold text-slate-700 dark:text-slate-200">Destination</label>
         <div class="flex items-center gap-2 px-3 min-h-12 rounded-2xl bg-white/80 dark:bg-slate-800/80 border border-slate-200/80 dark:border-slate-700/80 focus-within:ring-2 focus-within:ring-indigo-500/50 transition-all shadow-xs">
           <span class="text-rose-600 text-base" aria-hidden="true">B</span>
-          <input type="search" id="routeDestinationSearchInput" data-route-role="destination" class="route-location-search w-full bg-transparent text-base text-slate-800 dark:text-slate-100 placeholder-slate-400 outline-none" aria-label="Destination" placeholder="Search city, address, or landmark" value="${escapeXml(destinationName)}" autocomplete="off" />
+          <input type="search" id="routeDestinationSearchInput" data-route-role="destination" class="route-location-search w-full bg-transparent text-base text-slate-800 dark:text-slate-100 placeholder-slate-400 outline-none" aria-label="Destination" aria-autocomplete="list" aria-controls="routeDestinationSearchDropdown" placeholder="Search city, address, or landmark" value="${escapeXml(destinationName)}" autocomplete="off" />
           <div id="routeDestinationSearchSpinner" class="hidden w-4 h-4 border-2 border-indigo-500/30 border-t-indigo-500 rounded-full animate-spin flex-shrink-0"></div>
         </div>
         <div id="routeDestinationSearchDropdown" class="route-search-dropdown hidden mt-2 bg-white dark:bg-slate-800 rounded-2xl shadow-xl border border-slate-200/80 dark:border-slate-700/80 p-1.5 overflow-y-auto custom-scrollbar" role="listbox"></div>
@@ -2806,15 +2806,45 @@ function rememberRecentRoutePlace(place) {
   } catch (_) {}
 }
 
-function renderRecentRoutePlaces(dropdownEl, onSelect) {
+function prepareRouteSuggestionList(inputEl, dropdownEl) {
+  const suggestions = dropdownEl.querySelectorAll(".route-search-result-item, .route-recent-place-item");
+  inputEl.setAttribute("aria-expanded", suggestions.length || !dropdownEl.classList.contains("hidden") ? "true" : "false");
+  inputEl.removeAttribute("aria-activedescendant");
+  suggestions.forEach((item, index) => {
+    item.id = `${inputEl.id}-suggestion-${index}`;
+    item.setAttribute("aria-selected", "false");
+    item.classList.remove("route-suggestion-active");
+  });
+}
+
+function activateRouteSuggestion(inputEl, dropdownEl, index) {
+  const suggestions = [...dropdownEl.querySelectorAll(".route-search-result-item, .route-recent-place-item")];
+  if (!suggestions.length) return -1;
+  const activeIndex = (index + suggestions.length) % suggestions.length;
+  suggestions.forEach((item, itemIndex) => {
+    const active = itemIndex === activeIndex;
+    item.classList.toggle("route-suggestion-active", active);
+    item.setAttribute("aria-selected", active ? "true" : "false");
+  });
+  inputEl.setAttribute("aria-activedescendant", suggestions[activeIndex].id);
+  suggestions[activeIndex].scrollIntoView?.({ block: "nearest" });
+  return activeIndex;
+}
+
+function renderRecentRoutePlaces(dropdownEl, inputEl, onSelect) {
   const recent = readRecentRoutePlaces();
   if (!recent.length) {
     dropdownEl.classList.add("hidden");
     dropdownEl.innerHTML = "";
+    inputEl.setAttribute("aria-expanded", "false");
+    inputEl.removeAttribute("aria-activedescendant");
     return;
   }
   dropdownEl.innerHTML = `
-    <div class="px-3 pt-2 pb-1 text-xs font-bold uppercase tracking-wide text-slate-500 dark:text-slate-400">Recent places</div>
+    <div class="flex items-center justify-between px-3 pt-2 pb-1">
+      <span class="text-xs font-bold uppercase tracking-wide text-slate-500 dark:text-slate-400">Recent places</span>
+      <button type="button" class="route-clear-recents min-h-11 px-2 rounded-lg text-xs font-semibold text-indigo-600 dark:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-950/40">Clear</button>
+    </div>
     ${recent.map((place, index) => `
       <button type="button" role="option" data-recent-idx="${index}" class="route-recent-place-item min-h-12 w-full text-left px-3 py-2 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-700/60 flex items-center gap-3">
         <span class="text-slate-400" aria-hidden="true">◷</span>
@@ -2826,6 +2856,13 @@ function renderRecentRoutePlaces(dropdownEl, onSelect) {
     `).join("")}
   `;
   dropdownEl.classList.remove("hidden");
+  prepareRouteSuggestionList(inputEl, dropdownEl);
+  dropdownEl.querySelector(".route-clear-recents")?.addEventListener("click", (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    try { localStorage.removeItem(ROUTE_RECENTS_KEY); } catch (_) {}
+    renderRecentRoutePlaces(dropdownEl, inputEl, onSelect);
+  });
   dropdownEl.querySelectorAll(".route-recent-place-item").forEach((button) => {
     button.addEventListener("click", (event) => {
       event.preventDefault();
@@ -2859,10 +2896,13 @@ function bindRouteSearchAddEvents(containerEl) {
     const dropdownEl = field?.querySelector(".route-search-dropdown, #routeSearchAddDropdown");
     const spinnerEl = field?.querySelector("[id$='SearchSpinner'], #routeSearchAddSpinner");
     if (!dropdownEl) return;
+    let activeSuggestionIndex = -1;
 
     const choosePlace = async (item) => {
       rememberRecentRoutePlace(item);
       dropdownEl.classList.add("hidden");
+      inputEl.setAttribute("aria-expanded", "false");
+      inputEl.removeAttribute("aria-activedescendant");
       if (role) {
         await setRouteEndpoint(role, item);
         if (pts.length < 2) {
@@ -2888,7 +2928,7 @@ function bindRouteSearchAddEvents(containerEl) {
         panelEl?.classList.add("route-search-focused");
       }
       if (role && inputEl.value.trim()) inputEl.select();
-      renderRecentRoutePlaces(dropdownEl, choosePlace);
+      renderRecentRoutePlaces(dropdownEl, inputEl, choosePlace);
     });
 
     let debounceTimer = null;
@@ -2897,13 +2937,16 @@ function bindRouteSearchAddEvents(containerEl) {
       const val = e.target.value.trim();
       if (debounceTimer) clearTimeout(debounceTimer);
       const requestSequence = ++searchSequence;
+      activeSuggestionIndex = -1;
       if (val.length < 2) {
-        renderRecentRoutePlaces(dropdownEl, choosePlace);
+        renderRecentRoutePlaces(dropdownEl, inputEl, choosePlace);
         if (spinnerEl) spinnerEl.classList.add("hidden");
         return;
       }
 
       dropdownEl.classList.add("hidden");
+      inputEl.setAttribute("aria-expanded", "false");
+      inputEl.removeAttribute("aria-activedescendant");
       if (spinnerEl) spinnerEl.classList.remove("hidden");
       debounceTimer = setTimeout(async () => {
         try {
@@ -2913,6 +2956,7 @@ function bindRouteSearchAddEvents(containerEl) {
           if (!results || results.length === 0) {
             dropdownEl.innerHTML = '<div class="p-3 text-center text-sm text-slate-500">No matching places found</div>';
             dropdownEl.classList.remove("hidden");
+            inputEl.setAttribute("aria-expanded", "true");
             return;
           }
 
@@ -2926,6 +2970,8 @@ function bindRouteSearchAddEvents(containerEl) {
             </button>
           `).join("");
           dropdownEl.classList.remove("hidden");
+          prepareRouteSuggestionList(inputEl, dropdownEl);
+          activeSuggestionIndex = -1;
 
           dropdownEl.querySelectorAll(".route-search-result-item").forEach((resultBtn) => {
             resultBtn.addEventListener("click", (event) => {
@@ -2939,7 +2985,9 @@ function bindRouteSearchAddEvents(containerEl) {
         } catch (err) {
           if (requestSequence !== searchSequence) return;
           if (spinnerEl) spinnerEl.classList.add("hidden");
-          dropdownEl.classList.add("hidden");
+          dropdownEl.innerHTML = '<div class="p-3 text-center text-sm text-slate-500">Couldn’t search places. Check your connection and try again.</div>';
+          dropdownEl.classList.remove("hidden");
+          inputEl.setAttribute("aria-expanded", "true");
         }
       }, 280);
     });
@@ -2947,13 +2995,26 @@ function bindRouteSearchAddEvents(containerEl) {
     inputEl.addEventListener("keydown", (event) => {
       if (event.key === "Escape") {
         dropdownEl.classList.add("hidden");
+        inputEl.setAttribute("aria-expanded", "false");
+        inputEl.removeAttribute("aria-activedescendant");
         panelEl?.classList.remove("route-search-focused");
         inputEl.blur();
-      } else if (event.key === "Enter" && !event.isComposing) {
-        const firstSuggestion = dropdownEl.querySelector(".route-search-result-item, .route-recent-place-item");
-        if (firstSuggestion) {
+      } else if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+        const suggestionCount = dropdownEl.querySelectorAll(".route-search-result-item, .route-recent-place-item").length;
+        if (suggestionCount) {
           event.preventDefault();
-          firstSuggestion.click();
+          const step = event.key === "ArrowDown" ? 1 : -1;
+          const nextIndex = activeSuggestionIndex < 0
+            ? (step > 0 ? 0 : suggestionCount - 1)
+            : activeSuggestionIndex + step;
+          activeSuggestionIndex = activateRouteSuggestion(inputEl, dropdownEl, nextIndex);
+        }
+      } else if (event.key === "Enter" && !event.isComposing) {
+        const suggestions = dropdownEl.querySelectorAll(".route-search-result-item, .route-recent-place-item");
+        const selectedSuggestion = activeSuggestionIndex >= 0 ? suggestions[activeSuggestionIndex] : suggestions[0];
+        if (selectedSuggestion) {
+          event.preventDefault();
+          selectedSuggestion.click();
         }
       }
     });
@@ -2961,7 +3022,12 @@ function bindRouteSearchAddEvents(containerEl) {
 
   document.addEventListener("click", (event) => {
     if (!containerEl.contains(event.target)) {
-      containerEl.querySelectorAll(".route-search-dropdown, #routeSearchAddDropdown").forEach((dropdown) => dropdown.classList.add("hidden"));
+      containerEl.querySelectorAll(".route-search-dropdown, #routeSearchAddDropdown").forEach((dropdown) => {
+        dropdown.classList.add("hidden");
+        const input = dropdown.closest(".route-endpoint-search, .route-stop-search")?.querySelector("input");
+        input?.setAttribute("aria-expanded", "false");
+        input?.removeAttribute("aria-activedescendant");
+      });
     }
   }, { capture: true });
 }
@@ -3464,7 +3530,7 @@ function renderRoutePanelContent(stops, units) {
         <label for="routeSearchAddInput" class="block mb-1.5 text-sm font-bold text-slate-700 dark:text-slate-200">Add a stop</label>
         <div class="flex items-center gap-2 px-3 min-h-12 rounded-2xl bg-white/70 dark:bg-slate-800/70 border border-slate-200/80 dark:border-slate-700/80 focus-within:ring-2 focus-within:ring-indigo-500/50 transition-all shadow-xs">
           <span class="text-slate-400 text-base" aria-hidden="true">🔍</span>
-          <input type="search" id="routeSearchAddInput" placeholder="Search a city, address, or landmark" class="w-full bg-transparent text-base text-slate-800 dark:text-slate-100 placeholder-slate-400 outline-none" autocomplete="off" />
+          <input type="search" id="routeSearchAddInput" aria-label="Add a route stop" aria-autocomplete="list" aria-controls="routeSearchAddDropdown" placeholder="Search a city, address, or landmark" class="w-full bg-transparent text-base text-slate-800 dark:text-slate-100 placeholder-slate-400 outline-none" autocomplete="off" />
           <div id="routeSearchAddSpinner" class="hidden w-4 h-4 border-2 border-indigo-500/30 border-t-indigo-500 rounded-full animate-spin flex-shrink-0"></div>
         </div>
         <div id="routeSearchAddDropdown" class="route-search-dropdown hidden mt-2 bg-white dark:bg-slate-800 rounded-2xl shadow-xl border border-slate-200/80 dark:border-slate-700/80 p-1.5 overflow-y-auto custom-scrollbar"></div>

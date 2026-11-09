@@ -257,5 +257,85 @@ describe("Internationalisation (i18n) Engine & Language Support", () => {
     expect(panel.querySelector("#settingsAppLanguageSub").textContent).toBe("Translate all features & tabs");
     expect(panel.querySelector("#setDefaultLocationBtn").textContent).toBe("Set here");
   });
+
+  it("translates Today at a Glance, Smart To-Dos, Map Key and Freshness into Kannada", () => {
+    // Today at a Glance & Emoji-prefixed items
+    expect(translateText("Today at a Glance", "kn")).toBe("ಇಂದಿನ ಒಂದು ನೋಟ");
+    expect(translateText("TODAY AT A GLANCE", "kn")).toBe("ಇಂದಿನ ಒಂದು ನೋಟ");
+    expect(translateText("🌅 Sunrise", "kn")).toBe("🌅 ಸೂರ್ಯೋದಯ");
+    expect(translateText("🌇 Sunset", "kn")).toBe("🌇 ಸೂರ್ಯಾಸ್ತ");
+    expect(translateText("🌧️ Rain Chance", "kn")).toBe("🌧️ ಮಳೆ ಸಂಭವ");
+    expect(translateText("☀️ Max UV", "kn")).toBe("☀️ ಗರಿಷ್ಠ UV");
+    expect(translateText("💨 Max Wind", "kn")).toBe("💨 ಗರಿಷ್ಠ ಗಾಳಿ");
+    expect(translateText("💧 Precip Total", "kn")).toBe("💧 ಒಟ್ಟು ಮಳೆ");
+
+    // Freshness & Badges
+    expect(translateText("Just now", "kn")).toBe("ಈಗಷ್ಟೇ");
+    expect(translateText("📡 Just now", "kn")).toBe("📡 ಈಗಷ್ಟೇ");
+    expect(translateText("Updated just now", "kn")).toBe("ಈಗಷ್ಟೇ ನವೀಕರಿಸಲಾಗಿದೆ");
+    expect(translateText("Forecast updated just now", "kn")).toBe("ಮುನ್ಸೂಚನೆ ನವೀಕರಿಸಲಾಗಿದೆ ಈಗಷ್ಟೇ");
+    expect(translateText("5 min ago", "kn")).toBe("5 ನಿಮಿಷಗಳ ಹಿಂದೆ");
+
+    // Smart To-Dos
+    expect(translateText("SMART TO-DOS", "kn")).toBe("ಸ್ಮಾರ್ಟ್ ಕಾರ್ಯಗಳು");
+    expect(translateText("Smart to-dos", "kn")).toBe("ಸ್ಮಾರ್ಟ್ ಕಾರ್ಯಗಳು");
+    expect(translateText("from today's forecast", "kn")).toBe("ಇಂದಿನ ಮುನ್ಸೂಚನೆಯಿಂದ");
+    expect(translateText("Good day to wash the car", "kn")).toBe("ಕಾರು ತೊಳೆಯಲು ಉತ್ತಮ ದಿನ");
+    expect(translateText("Dry and calm through tomorrow — it will stay clean", "kn")).toBe("ನಾಳೆಯವರೆಗೂ ಒಣ ಮತ್ತು ಶಾಂತ ಹವಾಮಾನ — ಸ್ವಚ್ಛವಾಗಿರುತ್ತದೆ");
+    expect(translateText("Carry an umbrella", "kn")).toBe("ಛತ್ರಿ ಜೊತೆಯಲ್ಲಿಡಿ");
+    expect(translateText("Sunscreen before you head out", "kn")).toBe("ಹೊರಡುವ ಮುನ್ನ ಸನ್‌ಸ್ಕ್ರೀನ್ ಬಳಸಿ");
+    expect(translateText("🔔 Alert me", "kn")).toBe("🔔 ನನಗೆ ತಿಳಿಸಿ");
+
+    // Map Key & Legend
+    expect(translateText("Map Key", "kn")).toBe("ನಕ್ಷೆಯ ವಿವರಣೆ");
+    expect(translateText("Map Color Legend", "kn")).toBe("ನಕ್ಷೆಯ ವಿವರಣೆ ಮತ್ತು ಸೂಚಿ");
+    expect(translateText("Show Live Temperature Grid", "kn")).toBe("ಲೈವ್ ತಾಪಮಾನ ಗ್ರಿಡ್ ತೋರಿಸು");
+
+    // Farm tab patterns
+    expect(translateText("Trees (26)", "kn")).toBe("ಮರಗಳು (26)");
+    expect(translateText("Wildflowers (8)", "kn")).toBe("ಕಾಡು ಹೂವುಗಳು (8)");
+    expect(translateText("92 observed nearby", "kn")).toBe("92 ಸಮೀಪದಲ್ಲಿ ದಾಖಲಾದವು");
+    expect(translateText("Sowing:", "kn")).toBe("ಬಿತ್ತನೆ:");
+  });
+
+  it("translates weather panel DOM subtrees to Kannada and back to English idempotently", () => {
+    const card = document.createElement("div");
+    card.innerHTML = `
+      <div id="todaySummarySection">
+        <h4>Today at a Glance</h4>
+        <div>🌅 Sunrise</div>
+        <div>🌇 Sunset</div>
+        <div>🌧️ Rain Chance</div>
+        <div>☀️ Max UV</div>
+        <div>💨 Max Wind</div>
+        <div>💧 Precip Total</div>
+      </div>
+      <div id="smartTodosCard">
+        <h4>SMART TO-DOS</h4>
+        <span>from today's forecast</span>
+        <div>Good day to wash the car</div>
+        <div>Dry and calm through tomorrow — it will stay clean</div>
+        <button>🔔 Alert me</button>
+      </div>
+      <div id="freshnessLabel">📡 Just now</div>
+      <div id="mapLegendPill">Map Key</div>
+    `;
+
+    translateDOM(card, "kn");
+
+    expect(card.querySelector("#todaySummarySection h4").textContent).toBe("ಇಂದಿನ ಒಂದು ನೋಟ");
+    expect(card.querySelector("#smartTodosCard h4").textContent).toBe("ಸ್ಮಾರ್ಟ್ ಕಾರ್ಯಗಳು");
+    expect(card.querySelector("#smartTodosCard span").textContent).toBe("ಇಂದಿನ ಮುನ್ಸೂಚನೆಯಿಂದ");
+    expect(card.querySelector("#freshnessLabel").textContent).toBe("📡 ಈಗಷ್ಟೇ");
+    expect(card.querySelector("#mapLegendPill").textContent).toBe("ನಕ್ಷೆಯ ವಿವರಣೆ");
+
+    // Revert back
+    translateDOM(card, "en");
+    expect(card.querySelector("#todaySummarySection h4").textContent).toBe("Today at a Glance");
+    expect(card.querySelector("#smartTodosCard h4").textContent).toBe("SMART TO-DOS");
+    expect(card.querySelector("#smartTodosCard span").textContent).toBe("from today's forecast");
+    expect(card.querySelector("#freshnessLabel").textContent).toBe("📡 Just now");
+    expect(card.querySelector("#mapLegendPill").textContent).toBe("Map Key");
+  });
 });
 

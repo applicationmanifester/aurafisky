@@ -3859,7 +3859,47 @@ button, a, input, select, textarea, [role="button"] {
 
   /* Keep search dropdown from being cut by notch */
   .search-dropdown.open {
-    max-height: calc(50vh - env(safe-area-inset-top, 0px));
+    left: -0.625rem !important;
+    right: -0.625rem !important;
+    width: auto !important;
+    height: calc(var(--visual-viewport-height, 100vh) - 160px) !important;
+    max-height: calc(var(--visual-viewport-height, 100vh) - 160px) !important;
+    border-radius: 0 0 1.25rem 1.25rem !important;
+  }
+
+  body:has(#searchDropdown.open) #searchDropdown.search-dropdown.open {
+    height: calc(var(--visual-viewport-height, 100vh) - 160px) !important;
+    max-height: calc(var(--visual-viewport-height, 100vh) - 160px) !important;
+  }
+
+  .search-filter-bar {
+    position: sticky;
+    top: 0;
+    z-index: 2;
+  }
+
+  /* The search category tabs replace the regular quick chips while searching. */
+  body:has(#searchDropdown.open) #mobileQuickChips {
+    display: none !important;
+  }
+
+  body #googleMapsSearchPill:focus-within {
+    z-index: 1060 !important;
+    border-color: rgba(203, 213, 225, 0.85) !important;
+    box-shadow: 0 8px 24px -8px rgba(0, 0, 0, 0.22) !important;
+  }
+
+  body.dark #googleMapsSearchPill:focus-within {
+    border-color: rgba(71, 85, 105, 0.8) !important;
+    box-shadow: 0 8px 24px -8px rgba(0, 0, 0, 0.55) !important;
+  }
+
+  body:has(#searchInput:focus) #map {
+    background: #f8fafc !important;
+  }
+
+  body.dark:has(#searchInput:focus) #map {
+    background: #0f172a !important;
   }
 
   /* Route Studio on mobile: sits neatly above bottom navigation */
@@ -3970,6 +4010,17 @@ button, a, input, select, textarea, [role="button"] {
 
   #routePanel.route-search-focused .route-search-result-item {
     min-height: 52px;
+  }
+
+  #routePanel .route-suggestion-active {
+    background: rgba(99, 102, 241, 0.12);
+    outline: 2px solid rgba(99, 102, 241, 0.45);
+    outline-offset: -2px;
+  }
+
+  .dark #routePanel .route-suggestion-active {
+    background: rgba(129, 140, 248, 0.18);
+    outline-color: rgba(129, 140, 248, 0.55);
   }
 
   /* Favorites / Bookmarks dropdown on mobile: anchor above bottom nav */

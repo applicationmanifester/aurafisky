@@ -1325,7 +1325,10 @@ export class AuraMobileController {
       // Update discoveries header
       const discHeader = document.getElementById('discoveriesHeaderTitle');
       if (discHeader) {
-        discHeader.textContent = `Live Weather Intelligence • ${shortName}`;
+        const lwiPrefix = (typeof window !== "undefined" && window.aurafiskyI18n?.t)
+          ? (window.aurafiskyI18n.t("live_weather_intelligence", this.app?.language) || "Live Weather Intelligence")
+          : "Live Weather Intelligence";
+        discHeader.textContent = `${lwiPrefix} • ${shortName}`;
       }
 
       // Weather & AQI badge

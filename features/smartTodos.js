@@ -236,6 +236,12 @@ function renderTodos(app) {
   }
 
   card.classList.remove("hidden");
+
+  // Localize newly created smart-todo DOM nodes for the active app locale
+  const curLang = app?.language || (typeof localStorage !== "undefined" ? localStorage.getItem("aurafisky_lang") : null) || "en";
+  if (curLang && curLang !== "en" && typeof window !== "undefined" && window.aurafiskyI18n?.translateDOM) {
+    window.aurafiskyI18n.translateDOM(card, curLang);
+  }
 }
 
 export function init(app) {

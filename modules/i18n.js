@@ -11,6 +11,7 @@
 
 const STORAGE_KEY = "aurafisky_lang";
 const LANG_KEY = "aurafisky_lang";
+let activeLocale = null;
 
 const SUPPORTED = [
   "en", "kn", "hi", "ta", "te", "mr", "bn", "gu", "ml", "pa", "or", "sa", "as", "ur",
@@ -260,7 +261,59 @@ export const BASE_EN = {
   "heavy_snow_showers": "Heavy snow showers",
   "thunderstorm": "Thunderstorm",
   "thunderstorm_slight_hail": "Thunderstorm with slight hail",
-  "thunderstorm_heavy_hail": "Thunderstorm with heavy hail"
+  "thunderstorm_heavy_hail": "Thunderstorm with heavy hail",
+  "today_at_a_glance": "Today at a Glance",
+  "sunrise": "Sunrise",
+  "sunset": "Sunset",
+  "rain_chance": "Rain Chance",
+  "max_uv": "Max UV",
+  "max_wind": "Max Wind",
+  "precip_total": "Precip Total",
+  "smart_todos": "Smart to-dos",
+  "from_todays_forecast": "from today's forecast",
+  "wash_car": "Good day to wash the car",
+  "wash_car_why": "Dry and calm through tomorrow — it will stay clean",
+  "carry_umbrella": "Carry an umbrella",
+  "sunscreen_before_out": "Sunscreen before you head out",
+  "cover_plants_tonight": "Cover the plants tonight",
+  "cover_plants_why": "Near-freezing air — frost-sensitive plants need cover",
+  "great_laundry_day": "Great laundry day",
+  "great_laundry_day_why": "Dry air with a light breeze — clothes will dry fast outside",
+  "water_plants_today": "Water the plants today",
+  "water_plants_why": "No meaningful rain in the next 24 hours",
+  "secure_loose_objects": "Secure loose objects outside",
+  "limit_hard_effort": "Limit hard outdoor effort",
+  "alert_me": "Alert me",
+  "map_key": "Map Key",
+  "map_color_legend": "Map Color Legend",
+  "elevation_temp_keys": "Elevation & Temperature Keys",
+  "on_map_color_indication": "On-map color indication",
+  "show_live_temp_grid": "Show Live Temperature Grid",
+  "show_elevation_key": "Show Elevation / Basemap Key",
+  "green": "Green",
+  "orange": "Orange",
+  "red": "Red",
+  "coastal_plains": "Coastal plains & lowlands (0-200m)",
+  "plateaus_tablelands": "Plateaus & tablelands (500-1000m)",
+  "high_mountain_peaks": "High mountain peaks (>1000m)",
+  "starting_point": "Starting point",
+  "destination": "Destination",
+  "search_city_address_landmark": "Search city, address, or landmark",
+  "local_plants_wild_flora": "Local Plants & Wild Flora (GBIF)",
+  "observed_within_25km": "Observed within ~25 km. Shows what naturally survives here.",
+  "tree_woody": "Tree / Woody",
+  "wildflower": "Wildflower",
+  "herb": "Herb",
+  "updated_just_now": "Updated just now",
+  "forecast_updated": "Forecast updated",
+  "forecast_update_unavailable": "Forecast update time unavailable",
+  "sowing": "Sowing",
+  "spacing": "Spacing",
+  "irrigation": "Irrigation",
+  "fertiliser": "Fertiliser",
+  "care": "Care",
+  "harvest": "Harvest",
+  "all": "All"
 };
 
 export const BASE_KN = {
@@ -503,7 +556,59 @@ export const BASE_KN = {
   "watch_out": "ಎಚ್ಚರಿಕೆ",
   "precipitation": "ಮಳೆ ಪ್ರಮಾಣ",
   "cloud_cover": "ಮೋಡ ಮುಸುಕಿದ ವಾತಾವರಣ",
-  "dew_point": "ಇಬ್ಬನಿ ಬಿಂದು"
+  "dew_point": "ಇಬ್ಬನಿ ಬಿಂದು",
+  "today_at_a_glance": "ಇಂದಿನ ಒಂದು ನೋಟ",
+  "sunrise": "ಸೂರ್ಯೋದಯ",
+  "sunset": "ಸೂರ್ಯಾಸ್ತ",
+  "rain_chance": "ಮಳೆ ಸಂಭವ",
+  "max_uv": "ಗರಿಷ್ಠ UV",
+  "max_wind": "ಗರಿಷ್ಠ ಗಾಳಿ",
+  "precip_total": "ಒಟ್ಟು ಮಳೆ",
+  "smart_todos": "ಸ್ಮಾರ್ಟ್ ಕಾರ್ಯಗಳು",
+  "from_todays_forecast": "ಇಂದಿನ ಮುನ್ಸೂಚನೆಯಿಂದ",
+  "wash_car": "ಕಾರು ತೊಳೆಯಲು ಉತ್ತಮ ದಿನ",
+  "wash_car_why": "ನಾಳೆಯವರೆಗೂ ಒಣ ಮತ್ತು ಶಾಂತ ಹವಾಮಾನ — ಸ್ವಚ್ಛವಾಗಿರುತ್ತದೆ",
+  "carry_umbrella": "ಛತ್ರಿ ಜೊತೆಯಲ್ಲಿಡಿ",
+  "sunscreen_before_out": "ಹೊರಡುವ ಮುನ್ನ ಸನ್‌ಸ್ಕ್ರೀನ್ ಬಳಸಿ",
+  "cover_plants_tonight": "ಇಂದು ರಾತ್ರಿ ಸಸ್ಯಗಳನ್ನು ಮುಚ್ಚಿ",
+  "cover_plants_why": "ಹಿಮಗಟ್ಟುವ ಚಳಿ — ಸೂಕ್ಷ್ಮ ಸಸ್ಯಗಳನ್ನು ಮುಚ್ಚಿ ರಕ್ಷಿಸಿ",
+  "great_laundry_day": "ಬಟ್ಟೆ ಒಗೆಯಲು ಅತ್ಯುತ್ತಮ ದಿನ",
+  "great_laundry_day_why": "ಒಣ ಗಾಳಿ ಮತ್ತು ತಿಳಿಯಾದ ತಂಗಾಳಿ — ಬಟ್ಟೆಗಳು ಬೇಗನೆ ಒಣಗುತ್ತವೆ",
+  "water_plants_today": "ಇಂದು ಗಿಡಗಳಿಗೆ ನೀರು ಹಾಕಿ",
+  "water_plants_why": "ಮುಂದಿನ 24 ಗಂಟೆಗಳಲ್ಲಿ ಯಾವುದೇ ಗಣನೀಯ ಮಳೆಯಿಲ್ಲ",
+  "secure_loose_objects": "ಹೊರಗಿರುವ ವಸ್ತುಗಳನ್ನು ಭದ್ರಪಡಿಸಿ",
+  "limit_hard_effort": "ಕಠಿಣ ಹೊರಾಂಗಣ ಶ್ರಮವನ್ನು ಮಿತಿಗೊಳಿಸಿ",
+  "alert_me": "ನನಗೆ ತಿಳಿಸಿ",
+  "map_key": "ನಕ್ಷೆಯ ವಿವರಣೆ",
+  "map_color_legend": "ನಕ್ಷೆಯ ವಿವರಣೆ ಮತ್ತು ಸೂಚಿ",
+  "elevation_temp_keys": "ಎತ್ತರ ಮತ್ತು ತಾಪಮಾನದ ಸೂಚಿ",
+  "on_map_color_indication": "ನಕ್ಷೆಯಲ್ಲಿ ಬಣ್ಣದ ಸೂಚನೆ",
+  "show_live_temp_grid": "ಲೈವ್ ತಾಪಮಾನ ಗ್ರಿಡ್ ತೋರಿಸು",
+  "show_elevation_key": "ಭೂಪ್ರದೇಶ ಎತ್ತರದ ಸೂಚಿ ತೋರಿಸು",
+  "green": "ಹಸಿರು",
+  "orange": "ಕಿತ್ತಳೆ",
+  "red": "ಕೆಂಪು",
+  "coastal_plains": "ಕರಾವಳಿ ಬಯಲು ಮತ್ತು ತಗ್ಗು ಪ್ರದೇಶಗಳು (0-200 ಮೀ)",
+  "plateaus_tablelands": "ಪ್ರಸ್ಥಭೂಮಿಗಳು ಮತ್ತು ಎತ್ತರದ ಬಯಲು ಪ್ರದೇಶಗಳು (500-1000 ಮೀ)",
+  "high_mountain_peaks": "ಎತ್ತರದ ಪರ್ವತ ಶಿಖರಗಳು (>1000 ಮೀ)",
+  "starting_point": "ಪ್ರಾರಂಭದ ಸ್ಥಳ",
+  "destination": "ತಲುಪುವ ಸ್ಥಳ",
+  "search_city_address_landmark": "ನಗರ, ವಿಳಾಸ ಅಥವಾ ಹೆಗ್ಗುರುತು ಹುಡುಕಿ",
+  "local_plants_wild_flora": "ಸ್ಥಳೀಯ ಸಸ್ಯಗಳು ಮತ್ತು ಕಾಡು ಸಸ್ಯವರ್ಗ (GBIF)",
+  "observed_within_25km": "~25 ಕಿಮೀ ವ್ಯಾಪ್ತಿಯಲ್ಲಿ ದಾಖಲಾಗಿವೆ. ಇಲ್ಲಿ ನೈಸರ್ಗಿಕವಾಗಿ ಬೆಳೆಯುವ ಸಸ್ಯಗಳನ್ನು ತೋರಿಸುತ್ತದೆ.",
+  "tree_woody": "ಮರ / ಕಾಂಡ",
+  "wildflower": "ಕಾಡುಹೂವು",
+  "herb": "ಮೂಲಿಕೆ",
+  "updated_just_now": "ಈಗಷ್ಟೇ ನವೀಕರಿಸಲಾಗಿದೆ",
+  "forecast_updated": "ಮುನ್ಸೂಚನೆ ನವೀಕರಿಸಲಾಗಿದೆ",
+  "forecast_update_unavailable": "ಮುನ್ಸೂಚನೆ ನವೀಕರಣ ಸಮಯ ಲಭ್ಯವಿಲ್ಲ",
+  "sowing": "ಬಿತ್ತನೆ",
+  "spacing": "ಅಂತರ",
+  "irrigation": "ನೀರಾವರಿ",
+  "fertiliser": "ಗೊಬ್ಬರ",
+  "care": "ಆರೈಕೆ",
+  "harvest": "ಕೊಯ್ಲು",
+  "all": "ಎಲ್ಲವೂ"
 };
 
 export const BASE_HI = {
@@ -746,7 +851,59 @@ export const BASE_HI = {
   "watch_out": "चेतावनी",
   "precipitation": "वर्षा",
   "cloud_cover": "बादलों का आवरण",
-  "dew_point": "ओस बिंदु"
+  "dew_point": "ओस बिंदु",
+  "today_at_a_glance": "आज का सारांश",
+  "sunrise": "सूर्योदय",
+  "sunset": "सूर्यास्त",
+  "rain_chance": "बारिश की संभावना",
+  "max_uv": "अधिकतम यूवी",
+  "max_wind": "अधिकतम हवा",
+  "precip_total": "कुल वर्षा",
+  "smart_todos": "स्मार्ट कार्य",
+  "from_todays_forecast": "आज के पूर्वानुमान से",
+  "wash_car": "कार धोने के लिए अच्छा दिन",
+  "wash_car_why": "कल तक मौसम सूखा और शांत रहेगा — साफ रहेगी",
+  "carry_umbrella": "छाता साथ रखें",
+  "sunscreen_before_out": "बाहर निकलने से पहले सनस्क्रीन लगाएं",
+  "cover_plants_tonight": "आज रात पौधों को ढकें",
+  "cover_plants_why": "जमाने वाली ठंड — संवेदनशील पौधों को ढकने की जरूरत है",
+  "great_laundry_day": "कपड़े धोने का बेहतरीन दिन",
+  "great_laundry_day_why": "हल्की हवा के साथ शुष्क मौसम — कपड़े जल्दी सूखेंगे",
+  "water_plants_today": "आज पौधों को पानी दें",
+  "water_plants_why": "अगले 24 घंटों में कोई खास बारिश नहीं",
+  "secure_loose_objects": "बाहर रखी वस्तुओं को सुरक्षित करें",
+  "limit_hard_effort": "कठिन बाहरी श्रम सीमित करें",
+  "alert_me": "मुझे सूचित करें",
+  "map_key": "मानचित्र विवरण",
+  "map_color_legend": "मानचित्र रंग सूची",
+  "elevation_temp_keys": "ऊंचाई व तापमान संकेत",
+  "on_map_color_indication": "मानचित्र पर रंग संकेत",
+  "show_live_temp_grid": "लाइव तापमान ग्रिड दिखाएं",
+  "show_elevation_key": "ऊंचाई कुंजी दिखाएं",
+  "green": "हरा",
+  "orange": "नारंगी",
+  "red": "लाल",
+  "coastal_plains": "तटीय मैदान और निचले इलाके (0-200 मी)",
+  "plateaus_tablelands": "पठार और उच्च भूमि (500-1000 मी)",
+  "high_mountain_peaks": "ऊंची पर्वत चोटियां (>1000 मी)",
+  "starting_point": "आरंभ स्थल",
+  "destination": "गंतव्य",
+  "search_city_address_landmark": "शहर, पता या स्थान खोजें",
+  "local_plants_wild_flora": "स्थानीय पौधे और वनस्पति (GBIF)",
+  "observed_within_25km": "~25 किमी के दायरे में दर्ज। यह दर्शाता है कि यहाँ स्वाभाविक रूप से क्या पनपता है।",
+  "tree_woody": "पेड़ / काष्ठीय",
+  "wildflower": "जंगली फूल",
+  "herb": "जड़ी-बूटी",
+  "updated_just_now": "अभी-अभी अपडेट किया गया",
+  "forecast_updated": "पूर्वानुमान अपडेट किया गया",
+  "forecast_update_unavailable": "पूर्वानुमान अपडेट समय अनुपलब्ध",
+  "sowing": "बुवाई",
+  "spacing": "दूरी",
+  "irrigation": "सिंचाई",
+  "fertiliser": "खाद",
+  "care": "देखभाल",
+  "harvest": "कटाई",
+  "all": "सभी"
 };
 
 function makeLocaleDict(overrides) {
@@ -997,7 +1154,55 @@ export const DICT = {
   "heavy_snow_showers": "强阵雪",
   "thunderstorm": "雷暴",
   "thunderstorm_slight_hail": "雷暴伴轻度冰雹",
-  "thunderstorm_heavy_hail": "雷暴伴大冰雹"
+  "thunderstorm_heavy_hail": "雷暴伴大冰雹",
+  "today_at_a_glance": "今日概览",
+  "sunrise": "日出",
+  "sunset": "日落",
+  "rain_chance": "降雨概率",
+  "max_uv": "最高紫外线",
+  "max_wind": "最大风速",
+  "precip_total": "总降水量",
+  "smart_todos": "智能待办",
+  "from_todays_forecast": "源自今日天气预报",
+  "wash_car": "今天适合洗车",
+  "wash_car_why": "明天之前干燥平静 — 车辆能保持洁净",
+  "carry_umbrella": "记得带伞",
+  "sunscreen_before_out": "出门前涂抹防晒霜",
+  "cover_plants_tonight": "今晚为植物遮盖保暖",
+  "cover_plants_why": "气温接近冰点 — 敏感植物需要覆盖",
+  "great_laundry_day": "晾晒衣物的好天气",
+  "great_laundry_day_why": "空气干燥且有微风 — 衣物会迅速晾干",
+  "water_plants_today": "今天给植物浇水",
+  "water_plants_why": "未来 24 小时无有效降水",
+  "secure_loose_objects": "妥善固定室外松散物品",
+  "limit_hard_effort": "减少高强度户外活动",
+  "alert_me": "提醒我",
+  "map_key": "地图图例",
+  "map_color_legend": "地图颜色图例",
+  "elevation_temp_keys": "海拔与气温图例",
+  "on_map_color_indication": "地图颜色提示",
+  "show_live_temp_grid": "显示实时气温网格",
+  "show_elevation_key": "显示海拔/底图图例",
+  "green": "绿色",
+  "orange": "橙色",
+  "red": "红色",
+  "starting_point": "起点",
+  "destination": "终点",
+  "search_city_address_landmark": "搜索城市、地址或地标",
+  "local_plants_wild_flora": "本土植物与野生植物群 (GBIF)",
+  "tree_woody": "乔木/木本",
+  "wildflower": "野花",
+  "herb": "草本",
+  "updated_just_now": "刚刚更新",
+  "forecast_updated": "预报已更新",
+  "forecast_update_unavailable": "预报更新时间不可用",
+  "sowing": "播种",
+  "spacing": "间距",
+  "irrigation": "灌溉",
+  "fertiliser": "施肥",
+  "care": "养护",
+  "harvest": "收获",
+  "all": "全部"
 },
   "zh-TW": {
   "app_name": "極光天氣 (Aurafisky)",
@@ -8509,7 +8714,66 @@ export const EN_PHRASE_TO_KEY = {
   "elevation relief": "elevation_relief",
   "search a city...": "search_placeholder",
   "search local plants, trees, herbs…": "search_flora_placeholder",
-  "plan a route": "nav_route"
+  "plan a route": "nav_route",
+  "today at a glance": "today_at_a_glance",
+  "sunrise": "sunrise",
+  "sunset": "sunset",
+  "rain chance": "rain_chance",
+  "max uv": "max_uv",
+  "max wind": "max_wind",
+  "precip total": "precip_total",
+  "smart to-dos": "smart_todos",
+  "smart to-do": "smart_todos",
+  "smart todos": "smart_todos",
+  "from today's forecast": "from_todays_forecast",
+  "good day to wash the car": "wash_car",
+  "dry and calm through tomorrow — it will stay clean": "wash_car_why",
+  "dry and calm through tomorrow -- it will stay clean": "wash_car_why",
+  "carry an umbrella": "carry_umbrella",
+  "sunscreen before you head out": "sunscreen_before_out",
+  "cover the plants tonight": "cover_plants_tonight",
+  "near-freezing air — frost-sensitive plants need cover": "cover_plants_why",
+  "near-freezing air -- frost-sensitive plants need cover": "cover_plants_why",
+  "great laundry day": "great_laundry_day",
+  "dry air with a light breeze — clothes will dry fast outside": "great_laundry_day_why",
+  "dry air with a light breeze -- clothes will dry fast outside": "great_laundry_day_why",
+  "water the plants today": "water_plants_today",
+  "no meaningful rain in the next 24 hours": "water_plants_why",
+  "secure loose objects outside": "secure_loose_objects",
+  "limit hard outdoor effort": "limit_hard_effort",
+  "alert me": "alert_me",
+  "map key": "map_key",
+  "map color legend": "map_color_legend",
+  "elevation & temperature keys": "elevation_temp_keys",
+  "on-map color indication": "on_map_color_indication",
+  "show live temperature grid": "show_live_temp_grid",
+  "show elevation / basemap key": "show_elevation_key",
+  "green": "green",
+  "orange": "orange",
+  "red": "red",
+  "coastal plains & lowlands (0-200m)": "coastal_plains",
+  "plateaus & tablelands (500-1000m)": "plateaus_tablelands",
+  "high mountain peaks (>1000m)": "high_mountain_peaks",
+  "starting point": "starting_point",
+  "destination": "destination",
+  "search city, address, or landmark": "search_city_address_landmark",
+  "local plants & wild flora (gbif)": "local_plants_wild_flora",
+  "local plants & wild flora": "local_plants_wild_flora",
+  "observed within ~25 km. shows what naturally survives here.": "observed_within_25km",
+  "tree / woody": "tree_woody",
+  "tree/woody": "tree_woody",
+  "wildflower": "wildflower",
+  "herb": "herb",
+  "updated just now": "updated_just_now",
+  "forecast updated": "forecast_updated",
+  "forecast update time unavailable": "forecast_update_unavailable",
+  "sowing": "sowing",
+  "spacing": "spacing",
+  "irrigation": "irrigation",
+  "fertiliser": "fertiliser",
+  "care": "care",
+  "harvest": "harvest",
+  "all": "all"
 };
 
 // Universal phrases dictionary for instant text-node translations
@@ -9270,7 +9534,136 @@ export const PHRASES = {
   "🌾 农事气象": "🌾 ಕೃಷಿ",
   "🌾 ಕೃಷಿ": "🌾 ಕೃಷಿ",
   "Elevation Relief": "ಭೂಪ್ರದೇಶದ ಎತ್ತರ ಪರಿಹಾರ",
-  "°C, km/h, mm": "°C, km/h, mm"
+  "°C, km/h, mm": "°C, km/h, mm",
+  "Today at a Glance": "ಇಂದಿನ ಒಂದು ನೋಟ",
+  "today at a glance": "ಇಂದಿನ ಒಂದು ನೋಟ",
+  "TODAY AT A GLANCE": "ಇಂದಿನ ಒಂದು ನೋಟ",
+  "Sunrise": "ಸೂರ್ಯೋದಯ",
+  "sunrise": "ಸೂರ್ಯೋದಯ",
+  "SUNRISE": "ಸೂರ್ಯೋದಯ",
+  "Sunset": "ಸೂರ್ಯಾಸ್ತ",
+  "sunset": "ಸೂರ್ಯಾಸ್ತ",
+  "SUNSET": "ಸೂರ್ಯಾಸ್ತ",
+  "Rain Chance": "ಮಳೆ ಸಂಭವ",
+  "rain chance": "ಮಳೆ ಸಂಭವ",
+  "RAIN CHANCE": "ಮಳೆ ಸಂಭವ",
+  "Max UV": "ಗರಿಷ್ಠ UV",
+  "max uv": "ಗರಿಷ್ಠ UV",
+  "MAX UV": "ಗರಿಷ್ಠ UV",
+  "Max Wind": "ಗರಿಷ್ಠ ಗಾಳಿ",
+  "max wind": "ಗರಿಷ್ಠ ಗಾಳಿ",
+  "MAX WIND": "ಗರಿಷ್ಠ ಗಾಳಿ",
+  "Precip Total": "ಒಟ್ಟು ಮಳೆ",
+  "precip total": "ಒಟ್ಟು ಮಳೆ",
+  "PRECIP TOTAL": "ಒಟ್ಟು ಮಳೆ",
+  "Smart to-dos": "ಸ್ಮಾರ್ಟ್ ಕಾರ್ಯಗಳು",
+  "smart to-dos": "ಸ್ಮಾರ್ಟ್ ಕಾರ್ಯಗಳು",
+  "SMART TO-DOS": "ಸ್ಮಾರ್ಟ್ ಕಾರ್ಯಗಳು",
+  "from today's forecast": "ಇಂದಿನ ಮುನ್ಸೂಚನೆಯಿಂದ",
+  "FROM TODAY'S FORECAST": "ಇಂದಿನ ಮುನ್ಸೂಚನೆಯಿಂದ",
+  "Good day to wash the car": "ಕಾರು ತೊಳೆಯಲು ಉತ್ತಮ ದಿನ",
+  "good day to wash the car": "ಕಾರು ತೊಳೆಯಲು ಉತ್ತಮ ದಿನ",
+  "GOOD DAY TO WASH THE CAR": "ಕಾರು ತೊಳೆಯಲು ಉತ್ತಮ ದಿನ",
+  "Dry and calm through tomorrow — it will stay clean": "ನಾಳೆಯವರೆಗೂ ಒಣ ಮತ್ತು ಶಾಂತ ಹವಾಮಾನ — ಸ್ವಚ್ಛವಾಗಿರುತ್ತದೆ",
+  "Dry and calm through tomorrow -- it will stay clean": "ನಾಳೆಯವರೆಗೂ ಒಣ ಮತ್ತು ಶಾಂತ ಹವಾಮಾನ — ಸ್ವಚ್ಛವಾಗಿರುತ್ತದೆ",
+  "dry and calm through tomorrow — it will stay clean": "ನಾಳೆಯವರೆಗೂ ಒಣ ಮತ್ತು ಶಾಂತ ಹವಾಮಾನ — ಸ್ವಚ್ಛವಾಗಿರುತ್ತದೆ",
+  "Carry an umbrella": "ಛತ್ರಿ ಜೊತೆಯಲ್ಲಿಡಿ",
+  "carry an umbrella": "ಛತ್ರಿ ಜೊತೆಯಲ್ಲಿಡಿ",
+  "CARRY AN UMBRELLA": "ಛತ್ರಿ ಜೊತೆಯಲ್ಲಿಡಿ",
+  "Sunscreen before you head out": "ಹೊರಡುವ ಮುನ್ನ ಸನ್‌ಸ್ಕ್ರೀನ್ ಬಳಸಿ",
+  "sunscreen before you head out": "ಹೊರಡುವ ಮುನ್ನ ಸನ್‌ಸ್ಕ್ರೀನ್ ಬಳಸಿ",
+  "Cover the plants tonight": "ಇಂದು ರಾತ್ರಿ ಸಸ್ಯಗಳನ್ನು ಮುಚ್ಚಿ",
+  "cover the plants tonight": "ಇಂದು ರಾತ್ರಿ ಸಸ್ಯಗಳನ್ನು ಮುಚ್ಚಿ",
+  "Near-freezing air — frost-sensitive plants need cover": "ಹಿಮಗಟ್ಟುವ ಚಳಿ — ಸೂಕ್ಷ್ಮ ಸಸ್ಯಗಳನ್ನು ಮುಚ್ಚಿ ರಕ್ಷಿಸಿ",
+  "Great laundry day": "ಬಟ್ಟೆ ಒಗೆಯಲು ಅತ್ಯುತ್ತಮ ದಿನ",
+  "great laundry day": "ಬಟ್ಟೆ ಒಗೆಯಲು ಅತ್ಯುತ್ತಮ ದಿನ",
+  "Dry air with a light breeze — clothes will dry fast outside": "ಒಣ ಗಾಳಿ ಮತ್ತು ತಿಳಿಯಾದ ತಂಗಾಳಿ — ಬಟ್ಟೆಗಳು ಬೇಗನೆ ಒಣಗುತ್ತವೆ",
+  "Water the plants today": "ಇಂದು ಗಿಡಗಳಿಗೆ ನೀರು ಹಾಕಿ",
+  "water the plants today": "ಇಂದು ಗಿಡಗಳಿಗೆ ನೀರು ಹಾಕಿ",
+  "No meaningful rain in the next 24 hours": "ಮುಂದಿನ 24 ಗಂಟೆಗಳಲ್ಲಿ ಯಾವುದೇ ಗಣನೀಯ ಮಳೆಯಿಲ್ಲ",
+  "Secure loose objects outside": "ಹೊರಗಿರುವ ವಸ್ತುಗಳನ್ನು ಭದ್ರಪಡಿಸಿ",
+  "secure loose objects outside": "ಹೊರಗಿರುವ ವಸ್ತುಗಳನ್ನು ಭದ್ರಪಡಿಸಿ",
+  "Limit hard outdoor effort": "ಕಠಿಣ ಹೊರಾಂಗಣ ಶ್ರಮವನ್ನು ಮಿತಿಗೊಳಿಸಿ",
+  "limit hard outdoor effort": "ಕಠಿಣ ಹೊರಾಂಗಣ ಶ್ರಮವನ್ನು ಮಿತಿಗೊಳಿಸಿ",
+  "Alert me": "ನನಗೆ ತಿಳಿಸಿ",
+  "alert me": "ನನಗೆ ತಿಳಿಸಿ",
+  "ALERT ME": "ನನಗೆ ತಿಳಿಸಿ",
+  "Map Key": "ನಕ್ಷೆಯ ವಿವರಣೆ",
+  "map key": "ನಕ್ಷೆಯ ವಿವರಣೆ",
+  "MAP KEY": "ನಕ್ಷೆಯ ವಿವರಣೆ",
+  "Map Color Legend": "ನಕ್ಷೆಯ ವಿವರಣೆ ಮತ್ತು ಸೂಚಿ",
+  "map color legend": "ನಕ್ಷೆಯ ವಿವರಣೆ ಮತ್ತು ಸೂಚಿ",
+  "MAP COLOR LEGEND": "ನಕ್ಷೆಯ ವಿವರಣೆ ಮತ್ತು ಸೂಚಿ",
+  "Elevation & Temperature Keys": "ಎತ್ತರ ಮತ್ತು ತಾಪಮಾನದ ಸೂಚಿ",
+  "elevation & temperature keys": "ಎತ್ತರ ಮತ್ತು ತಾಪಮಾನದ ಸೂಚಿ",
+  "On-map color indication": "ನಕ್ಷೆಯಲ್ಲಿ ಬಣ್ಣದ ಸೂಚನೆ",
+  "on-map color indication": "ನಕ್ಷೆಯಲ್ಲಿ ಬಣ್ಣದ ಸೂಚನೆ",
+  "Show Live Temperature Grid": "ಲೈವ್ ತಾಪಮಾನ ಗ್ರಿಡ್ ತೋರಿಸು",
+  "show live temperature grid": "ಲೈವ್ ತಾಪಮಾನ ಗ್ರಿಡ್ ತೋರಿಸು",
+  "Show Elevation / Basemap Key": "ಭೂಪ್ರದೇಶ ಎತ್ತರದ ಸೂಚಿ ತೋರಿಸು",
+  "show elevation / basemap key": "ಭೂಪ್ರದೇಶ ಎತ್ತರದ ಸೂಚಿ ತೋರಿಸು",
+  "Green": "ಹಸಿರು",
+  "green": "ಹಸಿರು",
+  "Orange": "ಕಿತ್ತಳೆ",
+  "orange": "ಕಿತ್ತಳೆ",
+  "Red": "ಕೆಂಪು",
+  "red": "ಕೆಂಪು",
+  "Coastal plains & lowlands (0-200m)": "ಕರಾವಳಿ ಬಯಲು ಮತ್ತು ತಗ್ಗು ಪ್ರದೇಶಗಳು (0-200 ಮೀ)",
+  "Plateaus & tablelands (500-1000m)": "ಪ್ರಸ್ಥಭೂಮಿಗಳು ಮತ್ತು ಎತ್ತರದ ಬಯಲು ಪ್ರದೇಶಗಳು (500-1000 ಮೀ)",
+  "High mountain peaks (>1000m)": "ಎತ್ತರದ ಪರ್ವತ ಶಿಖರಗಳು (>1000 ಮೀ)",
+  "Starting point": "ಪ್ರಾರಂಭದ ಸ್ಥಳ",
+  "starting point": "ಪ್ರಾರಂಭದ ಸ್ಥಳ",
+  "Destination": "ತಲುಪುವ ಸ್ಥಳ",
+  "destination": "ತಲುಪುವ ಸ್ಥಳ",
+  "Search city, address, or landmark": "ನಗರ, ವಿಳಾಸ ಅಥವಾ ಹೆಗ್ಗುರುತು ಹುಡುಕಿ",
+  "search city, address, or landmark": "ನಗರ, ವಿಳಾಸ ಅಥವಾ ಹೆಗ್ಗುರುತು ಹುಡುಕಿ",
+  "Local Plants & Wild Flora (GBIF)": "ಸ್ಥಳೀಯ ಸಸ್ಯಗಳು ಮತ್ತು ಕಾಡು ಸಸ್ಯವರ್ಗ (GBIF)",
+  "LOCAL PLANTS & WILD FLORA (GBIF)": "ಸ್ಥಳೀಯ ಸಸ್ಯಗಳು ಮತ್ತು ಕಾಡು ಸಸ್ಯವರ್ಗ (GBIF)",
+  "Observed within ~25 km. Shows what naturally survives here.": "~25 ಕಿಮೀ ವ್ಯಾಪ್ತಿಯಲ್ಲಿ ದಾಖಲಾಗಿವೆ. ಇಲ್ಲಿ ನೈಸರ್ಗಿಕವಾಗಿ ಬೆಳೆಯುವ ಸಸ್ಯಗಳನ್ನು ತೋರಿಸುತ್ತದೆ.",
+  "Tree / Woody": "ಮರ / ಕಾಂಡ",
+  "tree / woody": "ಮರ / ಕಾಂಡ",
+  "Wildflower": "ಕಾಡುಹೂವು",
+  "wildflower": "ಕಾಡುಹೂವು",
+  "Herb": "ಮೂಲಿಕೆ",
+  "herb": "ಮೂಲಿಕೆ",
+  "All": "ಎಲ್ಲವೂ",
+  "all": "ಎಲ್ಲವೂ",
+  "Sowing": "ಬಿತ್ತನೆ",
+  "sowing": "ಬಿತ್ತನೆ",
+  "Spacing": "ಅಂತರ",
+  "spacing": "ಅಂತರ",
+  "Irrigation": "ನೀರಾವರಿ",
+  "irrigation": "ನೀರಾವರಿ",
+  "Fertiliser": "ಗೊಬ್ಬರ",
+  "fertiliser": "ಗೊಬ್ಬರ",
+  "Care": "ಆರೈಕೆ",
+  "care": "ಆರೈಕೆ",
+  "Harvest": "ಕೊಯ್ಲು",
+  "harvest": "ಕೊಯ್ಲು",
+  "Where": "ಸ್ಥಳ / ಮಣ್ಣು",
+  "where": "ಸ್ಥಳ / ಮಣ್ಣು",
+  "WHERE": "ಸ್ಥಳ / ಮಣ್ಣು",
+  "Needs": "ಅವಶ್ಯಕತೆಗಳು",
+  "needs": "ಅವಶ್ಯಕತೆಗಳು",
+  "NEEDS": "ಅವಶ್ಯಕತೆಗಳು",
+  "How to grow": "ಬೆಳೆಯುವುದು ಹೇಗೆ",
+  "how to grow": "ಬೆಳೆಯುವುದು ಹೇಗೆ",
+  "HOW TO GROW": "ಬೆಳೆಯುವುದು ಹೇಗೆ",
+  "Just now": "ಈಗಷ್ಟೇ",
+  "just now": "ಈಗಷ್ಟೇ",
+  "Updated just now": "ಈಗಷ್ಟೇ ನವೀಕರಿಸಲಾಗಿದೆ",
+  "updated just now": "ಈಗಷ್ಟೇ ನವೀಕರಿಸಲಾಗಿದೆ",
+  "Forecast updated": "ಮುನ್ಸೂಚನೆ ನವೀಕರಿಸಲಾಗಿದೆ",
+  "Forecast update time unavailable": "ಮುನ್ಸೂಚನೆ ನವೀಕರಣ ಸಮಯ ಲಭ್ಯವಿಲ್ಲ",
+  "🌅 Sunrise": "🌅 ಸೂರ್ಯೋದಯ",
+  "🌇 Sunset": "🌇 ಸೂರ್ಯಾಸ್ತ",
+  "🌧️ Rain Chance": "🌧️ ಮಳೆ ಸಂಭವ",
+  "☀️ Max UV": "☀️ ಗರಿಷ್ಠ UV",
+  "💨 Max Wind": "💨 ಗರಿಷ್ಠ ಗಾಳಿ",
+  "💧 Precip Total": "💧 ಒಟ್ಟು ಮಳೆ",
+  "📡 Just now": "📡 ಈಗಷ್ಟೇ",
+  "🔔 Alert me": "🔔 ನನಗೆ ತಿಳಿಸಿ",
+  "🚗 Plan a route": "🚗 ಮಾರ್ಗ ಹವಾಮಾನ"
 },
   "hi": {
   "Aurafisky": "ऑराफिस्की",
@@ -17893,6 +18286,9 @@ export const PHRASES = {
 
 /** Detects the active locale from localStorage, URL query, navigator, or fallback. */
 export function detectLocale() {
+  // Once the user changes language in Settings, use that choice everywhere in
+  // this page, even when the original URL supplied a startup locale.
+  if (activeLocale && SUPPORTED.includes(activeLocale)) return activeLocale;
   try {
     if (typeof window !== "undefined") {
       const url = new URL(window.location.href);
@@ -17917,6 +18313,7 @@ export function detectLocale() {
 /** Sets and persists the user locale. */
 export function setLocale(locale) {
   if (!SUPPORTED.includes(locale)) return false;
+  activeLocale = locale;
   try {
     if (typeof localStorage !== "undefined") {
       localStorage.setItem(STORAGE_KEY, locale);
@@ -17961,6 +18358,29 @@ export function translateText(rawText, locale = detectLocale()) {
 
   const trimmed = rawText.trim();
   if (!trimmed) return rawText;
+
+  // Colon suffix handler (e.g. "Sowing:", "Spacing:", "Irrigation:", "Fertiliser:", "Care:", "Harvest:")
+  if (trimmed.endsWith(":")) {
+    const withoutColon = trimmed.slice(0, -1).trim();
+    const transColon = translateText(withoutColon, locale);
+    if (transColon && transColon !== withoutColon) {
+      return rawText.replace(trimmed, `${transColon}:`);
+    }
+  }
+
+  // Emoji prefix handler (e.g. "🌅 Sunrise", "📡 Just now", "🔔 Alert me", "🌧️ Rain Chance")
+  const emojiPrefixMatch = trimmed.match(/^((?:[\p{Extended_Pictographic}\u2000-\u3300\uFE00-\uFE0F\u200D\s])+)\s+([A-Za-z0-9\p{L}].*)$/u);
+  if (emojiPrefixMatch) {
+    const prefix = emojiPrefixMatch[1].trim();
+    const rest = emojiPrefixMatch[2];
+    const transRest = translateText(rest, locale);
+    if (transRest && transRest !== rest) {
+      if (transRest.startsWith(prefix)) {
+        return rawText.replace(trimmed, transRest);
+      }
+      return rawText.replace(trimmed, `${prefix} ${transRest}`);
+    }
+  }
 
   // 1. Direct phrase lookup
   const pMap = PHRASES[locale] || {};
@@ -18164,6 +18584,127 @@ export function translateText(rawText, locale = detectLocale()) {
     return res;
   }
 
+  // Pattern: Category (N) e.g. Trees (26), Wildflowers (8), Herbs (7), Stops (2), All (92)
+  const countMatch = trimmed.match(/^([A-Za-z\s]+)\s*\((\d+)\)$/i);
+  if (countMatch) {
+    const cat = countMatch[1].trim();
+    const num = countMatch[2];
+    const transCat = translateText(cat, locale);
+    if (transCat && transCat !== cat) {
+      return rawText.replace(trimmed, `${transCat} (${num})`);
+    }
+  }
+
+  // Pattern: Forecast updated ...
+  const fUpdMatch = trimmed.match(/^Forecast updated\s+(.+)$/i);
+  if (fUpdMatch) {
+    const fLbl = t("forecast_updated", locale) || "Forecast updated";
+    const sub = translateText(fUpdMatch[1], locale);
+    return rawText.replace(trimmed, `${fLbl} ${sub}`);
+  }
+
+  // Pattern: N min ago / Updated N min ago
+  const minAgoMatch = trimmed.match(/^(?:Updated\s+)?(\d+)\s*(?:m|min|mins|minutes?)\s*ago$/i);
+  if (minAgoMatch) {
+    const mins = minAgoMatch[1];
+    const isUpdated = /^Updated/i.test(trimmed);
+    if (locale === "kn") return rawText.replace(trimmed, isUpdated ? `${mins} ನಿಮಿಷಗಳ ಹಿಂದೆ ನವೀಕರಿಸಲಾಗಿದೆ` : `${mins} ನಿಮಿಷಗಳ ಹಿಂದೆ`);
+    if (locale === "hi") return rawText.replace(trimmed, isUpdated ? `${mins} मिनट पहले अपडेट किया गया` : `${mins} मिनट पहले`);
+    if (locale === "zh-CN") return rawText.replace(trimmed, isUpdated ? `${mins} 分钟前更新` : `${mins} 分钟前`);
+    if (locale === "zh-TW") return rawText.replace(trimmed, isUpdated ? `${mins} 分鐘前更新` : `${mins} 分鐘前`);
+    if (locale === "es") return rawText.replace(trimmed, isUpdated ? `actualizado hace ${mins} min` : `hace ${mins} min`);
+    if (locale === "fr") return rawText.replace(trimmed, isUpdated ? `mis à jour il y a ${mins} min` : `il y a ${mins} min`);
+    if (locale === "de") return rawText.replace(trimmed, isUpdated ? `vor ${mins} Min. aktualisiert` : `vor ${mins} Min.`);
+  }
+
+  // Pattern: N observed nearby
+  const obsNearbyMatch = trimmed.match(/^(\d+)\s+observed nearby$/i);
+  if (obsNearbyMatch) {
+    const count = obsNearbyMatch[1];
+    if (locale === "kn") return rawText.replace(trimmed, `${count} ಸಮೀಪದಲ್ಲಿ ದಾಖಲಾದವು`);
+    if (locale === "hi") return rawText.replace(trimmed, `${count} आस-पास देखे गए`);
+    if (locale === "zh-CN") return rawText.replace(trimmed, `周边记录 ${count} 种`);
+    if (locale === "zh-TW") return rawText.replace(trimmed, `週邊記錄 ${count} 種`);
+    if (locale === "es") return rawText.replace(trimmed, `${count} observados cerca`);
+    if (locale === "fr") return rawText.replace(trimmed, `${count} observés à proximité`);
+    if (locale === "de") return rawText.replace(trimmed, `${count} in der Nähe beobachtet`);
+  }
+
+  // Pattern: N% rain risk in the next 6 hours
+  const rainRiskMatch = trimmed.match(/^(\d+)%\s*rain risk in the next 6 hours$/i);
+  if (rainRiskMatch) {
+    const pct = rainRiskMatch[1];
+    if (locale === "kn") return rawText.replace(trimmed, `ಮುಂದಿನ 6 ಗಂಟೆಗಳಲ್ಲಿ ${pct}% ಮಳೆಯ ಸಾಧ್ಯತೆ`);
+    if (locale === "hi") return rawText.replace(trimmed, `अगले 6 घंटों में ${pct}% बारिश का जोखिम`);
+    if (locale === "zh-CN") return rawText.replace(trimmed, `未来 6 小时内降雨概率 ${pct}%`);
+    if (locale === "zh-TW") return rawText.replace(trimmed, `未來 6 小時內降雨機率 ${pct}%`);
+    if (locale === "es") return rawText.replace(trimmed, `${pct}% de riesgo de lluvia en las próximas 6 horas`);
+  }
+
+  // Pattern: Gusts up to N km/h — ...
+  const gustsMatch = trimmed.match(/^Gusts up to (\d+)\s*km\/h\s*[—-]\s*(.+)$/i);
+  if (gustsMatch) {
+    const spd = gustsMatch[1];
+    if (locale === "kn") return rawText.replace(trimmed, `ಗಂಟೆಗೆ ${spd} ಕಿಮೀ ವೇಗದ ಬಿರುಗಾಳಿ — ಕುರ್ಚಿಗಳು, ಛತ್ರಿಗಳು`);
+    if (locale === "hi") return rawText.replace(trimmed, `${spd} किमी/घंटा तक के झोंके — कुर्सियां, छाते सुरक्षित करें`);
+    if (locale === "zh-CN") return rawText.replace(trimmed, `阵风高达 ${spd} 公里/小时 — 妥善固定室外物品`);
+    if (locale === "es") return rawText.replace(trimmed, `Rachas de hasta ${spd} km/h — asegurar objetos sueltos`);
+  }
+
+  // Pattern: Air quality is N AQI — ...
+  const aqiTodoMatch = trimmed.match(/^Air quality is (\d+)\s*AQI\s*[—-]\s*(.+)$/i);
+  if (aqiTodoMatch) {
+    const aqi = aqiTodoMatch[1];
+    if (locale === "kn") return rawText.replace(trimmed, `ಗಾಳಿಯ ಗುಣಮಟ್ಟ ${aqi} AQI — ತೀವ್ರ ವ್ಯಾಯಾಮಗಳನ್ನು ಒಳಾಂಗಣದಲ್ಲಿ ಮಾಡಿ`);
+    if (locale === "hi") return rawText.replace(trimmed, `वायु गुणवत्ता ${aqi} AQI है — व्यायाम घर के अंदर करें`);
+    if (locale === "zh-CN") return rawText.replace(trimmed, `空气质量指数 ${aqi} AQI — 请在室内锻炼`);
+    if (locale === "es") return rawText.replace(trimmed, `Calidad del aire ${aqi} AQI — ejercitarse en interiores`);
+  }
+
+  // Pattern: UV N — ...
+  const uvTodoMatch = trimmed.match(/^UV\s*(\d+)\s*[—-]\s*(.+)$/i);
+  if (uvTodoMatch) {
+    const uvVal = uvTodoMatch[1];
+    if (locale === "kn") return rawText.replace(trimmed, `ಯುವಿ ${uvVal} — ಮಧ್ಯಾಹ್ನದ ವೇಳೆ SPF 30+ ಮತ್ತು ಟೋಪಿ ಧರಿಸಿ`);
+    if (locale === "hi") return rawText.replace(trimmed, `यूवी ${uvVal} — धूप से बचाव के लिए सनस्क्रीन और टोपी पहनें`);
+    if (locale === "zh-CN") return rawText.replace(trimmed, `紫外线 ${uvVal} — 中午注意涂防晒霜并佩戴遮阳帽`);
+    if (locale === "es") return rawText.replace(trimmed, `UV ${uvVal} — protector solar SPF 30+ y sombrero cerca del mediodía`);
+  }
+
+  // Pattern: Leg N: ...
+  const legMatch = trimmed.match(/^Leg\s*(\d+):\s*(.+)$/i);
+  if (legMatch) {
+    const legNum = legMatch[1];
+    const restLeg = legMatch[2];
+    if (locale === "kn") return rawText.replace(trimmed, `ಹಂತ ${legNum}: ${restLeg}`);
+    if (locale === "hi") return rawText.replace(trimmed, `चरण ${legNum}: ${restLeg}`);
+    if (locale === "zh-CN") return rawText.replace(trimmed, `航段 ${legNum}: ${restLeg}`);
+    if (locale === "es") return rawText.replace(trimmed, `Etapa ${legNum}: ${restLeg}`);
+  }
+
+  // Pattern: START (A) / DESTINATION (B)
+  if (/^START\s*\(A\)$/i.test(trimmed)) {
+    if (locale === "kn") return rawText.replace(trimmed, "ಪ್ರಾರಂಭದ ಸ್ಥಳ (A)");
+    if (locale === "hi") return rawText.replace(trimmed, "आरंभ (A)");
+    if (locale === "zh-CN") return rawText.replace(trimmed, "起点 (A)");
+    if (locale === "es") return rawText.replace(trimmed, "Inicio (A)");
+  }
+  if (/^DESTINATION\s*\(B\)$/i.test(trimmed)) {
+    if (locale === "kn") return rawText.replace(trimmed, "ತಲುಪುವ ಸ್ಥಳ (B)");
+    if (locale === "hi") return rawText.replace(trimmed, "गंतव्य (B)");
+    if (locale === "zh-CN") return rawText.replace(trimmed, "终点 (B)");
+    if (locale === "es") return rawText.replace(trimmed, "Destino (B)");
+  }
+
+  // Pattern: ETA ...
+  const etaMatch = trimmed.match(/^ETA\s+(.+)$/i);
+  if (etaMatch) {
+    if (locale === "kn") return rawText.replace(trimmed, `ತಲುಪುವ ಸಮಯ ${etaMatch[1]}`);
+    if (locale === "hi") return rawText.replace(trimmed, `आगमन ${etaMatch[1]}`);
+    if (locale === "zh-CN") return rawText.replace(trimmed, `预计到达 ${etaMatch[1]}`);
+    if (locale === "es") return rawText.replace(trimmed, `Llegada ${etaMatch[1]}`);
+  }
+
   return rawText;
 }
 
@@ -18174,6 +18715,16 @@ export function translateText(rawText, locale = detectLocale()) {
 export function translateDOM(root = (typeof document !== "undefined" ? document.body : null), locale = detectLocale()) {
   if (!root || typeof document === "undefined") return;
   if (!locale) locale = detectLocale();
+
+  // Mutation observers and callers that translate a newly-rendered field pass
+  // that field as the root. Include the root itself as well as its descendants.
+  const rootElement = root.nodeType === Node.ELEMENT_NODE ? root : null;
+  const elementsMatching = (selector) => {
+    const matches = [];
+    if (rootElement?.matches(selector)) matches.push(rootElement);
+    if (root.querySelectorAll) matches.push(...root.querySelectorAll(selector));
+    return matches;
+  };
 
   // 1. Direct explicit translations for known key UI targets
   const targetMap = {
@@ -18187,15 +18738,25 @@ export function translateDOM(root = (typeof document !== "undefined" ? document.
     elevationLegendTitle: "elevation_key"
   };
   for (const [id, key] of Object.entries(targetMap)) {
-    const el = root.querySelector ? root.querySelector("#" + id) : document.getElementById(id);
-    if (el) el.textContent = t(key, locale) || el.textContent;
+    const el = rootElement?.id === id
+      ? rootElement
+      : (root.querySelector ? root.querySelector("#" + id) : null);
+    if (el) {
+      const translated = t(key, locale) || el.textContent;
+      if (el.textContent !== translated) el.textContent = translated;
+    }
   }
-  const briefingBtn = root.querySelector ? root.querySelector("#briefingBtn") : document.getElementById("briefingBtn");
-  if (briefingBtn) briefingBtn.textContent = `📡 ${t("generate_briefing", locale) || "Generate Briefing"}`;
+  const briefingBtn = rootElement?.id === "briefingBtn"
+    ? rootElement
+    : (root.querySelector ? root.querySelector("#briefingBtn") : null);
+  if (briefingBtn) {
+    const translated = `📡 ${t("generate_briefing", locale) || "Generate Briefing"}`;
+    if (briefingBtn.textContent !== translated) briefingBtn.textContent = translated;
+  }
 
   // 2. Translate <select> options (except settingsAppLanguageSelect)
   try {
-    const selects = root.querySelectorAll ? root.querySelectorAll("select:not(#settingsAppLanguageSelect)") : [];
+    const selects = elementsMatching("select:not(#settingsAppLanguageSelect)");
     selects.forEach(sel => {
       for (const opt of sel.options) {
         if (!opt.getAttribute("data-orig-text")) {
@@ -18203,17 +18764,45 @@ export function translateDOM(root = (typeof document !== "undefined" ? document.
         }
         const orig = opt.getAttribute("data-orig-text");
         const trans = translateText(orig, locale);
-        if (trans && trans !== orig) {
+        if (trans && trans !== orig && opt.text !== trans) {
           opt.text = trans;
-        } else if (locale === "en" && orig) {
+        } else if (locale === "en" && orig && opt.text !== orig) {
           opt.text = orig;
         }
       }
+    });
+
+    elementsMatching("option").forEach(opt => {
+      if (opt.closest("#settingsAppLanguageSelect")) return;
+      if (!opt.hasAttribute("data-orig-text")) opt.setAttribute("data-orig-text", opt.text);
+      const original = opt.getAttribute("data-orig-text");
+      const translated = translateText(original, locale);
+      if (translated && translated !== original && opt.text !== translated) opt.text = translated;
+      else if (locale === "en" && opt.text !== original) opt.text = original;
+    });
+
+    // Group names are part of the visible language picker and should follow
+    // the selected app language too. Keep their source text for language flips.
+    elementsMatching("optgroup[label]").forEach(group => {
+      if (!group.hasAttribute("data-orig-label")) {
+        group.setAttribute("data-orig-label", group.label);
+      }
+      const original = group.getAttribute("data-orig-label");
+      const translated = translateText(original, locale);
+      if (translated && translated !== original && group.label !== translated) group.label = translated;
+      else if (locale === "en" && group.label !== original) group.label = original;
     });
   } catch (_) {}
 
   // 3. TreeWalker for all text nodes
   try {
+    if (root.nodeType === Node.TEXT_NODE && root.nodeValue?.trim()) {
+      if (root._origText == null) root._origText = root.nodeValue;
+      const translated = translateText(root._origText, locale);
+      if (translated && translated !== root._origText) root.nodeValue = translated;
+      else if (locale === "en") root.nodeValue = root._origText;
+    }
+
     const walker = document.createTreeWalker(
       root,
       NodeFilter.SHOW_TEXT,
@@ -18255,22 +18844,27 @@ export function translateDOM(root = (typeof document !== "undefined" ? document.
     /* ignore tree walker error */
   }
 
-  // 4. Attributes: placeholder, title, aria-label
+  // 4. Attributes used by form fields and accessible controls. Keep a stable
+  // source value so changing languages never translates an already translated
+  // string or loses the English text when switching back.
   try {
-    const attrElements = root.querySelectorAll ? root.querySelectorAll("[placeholder], [title], [aria-label]") : [];
+    const attrElements = elementsMatching("[placeholder], [title], [aria-label], [aria-description], [aria-placeholder], [alt], input[type='button'][value], input[type='submit'][value]");
     attrElements.forEach(el => {
       if (el.id === "settingsAppLanguageSelect") return;
-      ["placeholder", "title", "aria-label"].forEach(attr => {
+      ["placeholder", "title", "aria-label", "aria-description", "aria-placeholder", "alt", "value"].forEach(attr => {
+        if (attr === "value" && !/^(button|submit)$/i.test(el.type || "")) return;
         const val = el.getAttribute(attr);
         if (val && val.trim()) {
           const origKey = `data-orig-${attr}`;
           const origVal = el.getAttribute(origKey) || val;
           if (!el.hasAttribute(origKey)) el.setAttribute(origKey, origVal);
           const transVal = translateText(origVal, locale);
-          if (transVal && transVal !== origVal) {
+          if (transVal && transVal !== origVal && val !== transVal) {
             el.setAttribute(attr, transVal);
-          } else if (locale === "en") {
+            if (attr === "value") el.value = transVal;
+          } else if (locale === "en" && val !== origVal) {
             el.setAttribute(attr, origVal);
+            if (attr === "value") el.value = origVal;
           }
         }
       });

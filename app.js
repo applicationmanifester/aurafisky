@@ -793,6 +793,7 @@ class AurafiskyApp {
       settingsCloseBtn: document.getElementById("settingsCloseBtn"),
       settingsUnitsToggle: document.getElementById("settingsUnitsToggle"),
       settingsThemeToggle: document.getElementById("settingsThemeToggle"),
+      settingsAppLanguageSelect: document.getElementById("settingsAppLanguageSelect"),
       settingsMapLanguageToggle: document.getElementById("settingsMapLanguageToggle"),
       settingsSyncHistoryToggle: document.getElementById(
         "settingsSyncHistoryToggle",
@@ -2220,6 +2221,15 @@ class AurafiskyApp {
         const newLang = e.target.checked ? 'native' : 'en';
         this.setMapLanguage(newLang);
         this._haptic('selection');
+      });
+    }
+    if (this.$.settingsAppLanguageSelect) {
+      const currentLang = localStorage.getItem("aurafisky_lang") || this.language || "en";
+      this.$.settingsAppLanguageSelect.value = currentLang;
+      this.$.settingsAppLanguageSelect.addEventListener("change", (e) => {
+        const selected = e.target.value;
+        this.setLanguage(selected);
+        this._haptic?.('selection');
       });
     }
 
@@ -11308,17 +11318,124 @@ class AurafiskyApp {
     }
   }
 
+  applyUniversalTranslation(lang) {
+    if (!lang || typeof document === "undefined") return;
+    const target = lang === "zh-CN" ? "zh-CN" : lang;
+
+    // Set standard googtrans cookie so page and dynamic content are translated
+    try {
+      const host = window.location.hostname;
+      document.cookie = `googtrans=/en/${target}; path=/;`;
+      if (host && host !== "localhost") {
+        document.cookie = `googtrans=/en/${target}; path=/; domain=.${host};`;
+      }
+    } catch (_) {}
+
+    const combo = document.querySelector(".goog-te-combo");
+    if (combo) {
+      if (combo.value !== target) {
+        combo.value = target;
+        combo.dispatchEvent(new Event("change"));
+      }
+    } else {
+      // Lazy load Google translation script for full-page long text translation if non-English
+      if (target !== "en" && !window.__googleTranslateInitialized) {
+        window.__googleTranslateInitialized = true;
+        window.googleTranslateElementInit = () => {
+          try {
+            new window.google.translate.TranslateElement({
+              pageLanguage: "en",
+              autoDisplay: false,
+              includedLanguages: "en,kn,hi,ta,te,mr,bn,gu,ml,pa,ur,es,fr,de,it,pt,ru,ja,ko,zh-CN,ar,id,tr,vi,th,nl,pl,uk,el,he,sv,sw,tl,ms,fa,ne,si",
+            }, "google_translate_element");
+            setTimeout(() => {
+              const c = document.querySelector(".goog-te-combo");
+              if (c) {
+                c.value = target;
+                c.dispatchEvent(new Event("change"));
+              }
+            }, 600);
+          } catch (_) {}
+        };
+        const s = document.createElement("script");
+        s.src = "https://translate.google.com/translate_a/element.js?cb=googleTranslateElementInit";
+        s.async = true;
+        document.head.appendChild(s);
+      }
+    }
+  }
+
   applyLanguage(lang) {
     if (!lang) return;
     try {
       localStorage.setItem("aurafisky_lang", lang);
     } catch (_) { /* ignore */ }
     document.documentElement.lang = lang;
+    if (lang === "ar" || lang === "he" || lang === "fa" || lang === "ur") {
+      document.documentElement.dir = "rtl";
+    } else {
+      document.documentElement.dir = "ltr";
+    }
+
     const title = document.querySelector("title");
     if (title) title.textContent = `${t("app_name")} — ${t("app_tagline")}`;
     if (this.$.searchInput) {
       this.$.searchInput.placeholder = t("search_placeholder");
     }
+
+    // 1. Update Weather Tab Labels
+    const tabMap = {
+      overview: t("tab_overview") || "Overview",
+      hourly: t("tab_hourly") || "Hourly",
+      daily: t("tab_daily") || "7-Day",
+      metrics: t("tab_metrics") || "Details & AQI",
+      astronomy: t("tab_astronomy") || "Astronomy",
+      farm: t("tab_farm") || "🌾 Farm",
+    };
+    document.querySelectorAll(".weather-tab-btn").forEach((btn) => {
+      const tab = btn.dataset.tab;
+      if (tabMap[tab]) btn.textContent = tabMap[tab];
+    });
+
+    // 2. Update Bottom Navigation Labels
+    const homeLabel = document.querySelector("#mobileNavHomeBtn span.text-\\[11px\\]");
+    if (homeLabel) homeLabel.textContent = t("nav_home") || "Set Home";
+    const routeLabel = document.querySelector("#mobileNavRouteBtn span.text-\\[11px\\]");
+    if (routeLabel) routeLabel.textContent = t("nav_route") || "Route Weather";
+    const favLabel = document.querySelector("#mobileNavFavsBtn span.text-\\[11px\\]");
+    if (favLabel) favLabel.textContent = t("nav_favs") || "Favourites";
+
+    // 3. Update Header quick chip pills
+    const chipAskAura = document.querySelector('.mobile-quick-chip[data-category="aura"] span:last-child');
+    if (chipAskAura) chipAskAura.textContent = t("chip_ask_aura") || "Ask Aura";
+    const chipRadar = document.querySelector('.mobile-quick-chip[data-category="radar"] span:last-child');
+    if (chipRadar) chipRadar.textContent = t("chip_rain_radar") || "Rain Radar";
+    const chipRoute = document.querySelector('.mobile-quick-chip[data-category="route-weather"] span:last-child');
+    if (chipRoute) chipRoute.textContent = t("chip_route_weather") || "Route Weather";
+
+    // 4. Update Settings Labels
+    const appLangLabel = document.getElementById("settingsAppLanguageLabel");
+    if (appLangLabel) appLangLabel.textContent = t("settings_app_language") || "App language";
+    const appLangSub = document.getElementById("settingsAppLanguageSub");
+    if (appLangSub) appLangSub.textContent = t("settings_app_language_sub") || "All features & tabs";
+
+    // 5. Sync Settings dropdown value
+    const langSelect = this.$.settingsAppLanguageSelect || document.getElementById("settingsAppLanguageSelect");
+    if (langSelect && langSelect.value !== lang) {
+      langSelect.value = lang;
+    }
+
+    // 6. Re-render active tab if Farm so crop guide updates
+    if (this.activeWeatherTab === "farm" && typeof this.renderFarmTab === "function") {
+      this.renderFarmTab(this);
+    }
+
+    // 7. Re-render weather display if forecast data is present
+    if (this.weatherData && typeof this.updateWeatherDisplay === "function") {
+      this.updateWeatherDisplay(this.weatherData);
+    }
+
+    // 8. Reset Aura if open
     if (this.aura && this.aura.isOpen) {
       this.aura.reset();
     }
@@ -11328,10 +11445,18 @@ class AurafiskyApp {
     if (!setLocale(lang)) return false;
     this.language = lang;
     this.applyLanguage(lang);
+    this.applyUniversalTranslation(lang);
     if (typeof this.saveUserDataToCloud === "function") {
       this.saveUserDataToCloud();
     }
-    this.showToast?.(`Language: ${lang.toUpperCase()}`, "info");
+    const langNames = {
+      en: "English", kn: "ಕನ್ನಡ (Kannada)", hi: "हिन्दी (Hindi)",
+      ta: "தமிழ் (Tamil)", te: "తెలుగు (Telugu)", mr: "मराठी (Marathi)",
+      bn: "বাংলা (Bengali)", gu: "ગુજરાતી (Gujarati)", ml: "മലയാളം (Malayalam)",
+      es: "Español", fr: "Français", de: "Deutsch", ja: "日本語", ar: "العربية",
+      pt: "Português", ru: "Русский", "zh-CN": "简体中文"
+    };
+    this.showToast?.(`Language: ${langNames[lang] || lang.toUpperCase()}`, "info");
     return true;
   }
 

@@ -4988,4 +4988,28 @@ button, a, input, select, textarea, [role="button"] {
   }
 }
 
+/* Seamless Universal Auto-Translation Integration */
+.goog-te-banner-frame.skiptranslate,
+.goog-te-banner-frame {
+  display: none !important;
+  visibility: hidden !important;
+  height: 0 !important;
+}
+body {
+  top: 0px !important;
+  position: static !important;
+}
+#goog-gt-tt, .goog-te-balloon-frame {
+  display: none !important;
+}
+.goog-text-highlight {
+  background: transparent !important;
+  box-shadow: none !important;
+}
+font {
+  background: transparent !important;
+  box-shadow: none !important;
+}
+
+
 

@@ -55,6 +55,7 @@ import {
   cleanBotanicalName,
   resolveIndianFloraName,
 } from "../modules/indianFloraNames.js";
+import { t } from "../modules/i18n.js";
 
 // ────────────────── constants ──────────────────
 
@@ -1757,13 +1758,22 @@ function renderCropCard(ctx, rec) {
   const timing = !window.length
     ? `<span class="text-rose-600 dark:text-rose-400 font-semibold">Off-season / Wrong climate</span>`
     : inWindow
-      ? `<span class="text-emerald-700 dark:text-emerald-400 font-bold">✅ Sow now</span>`
+      ? `<span class="text-emerald-700 dark:text-emerald-400 font-bold">✅ ${esc(t("farm_sow_now") || "Sow now")}</span>`
       : until <= 1
         ? `<span class="text-amber-600 dark:text-amber-400 font-bold">🕐 Window ${until === 1 ? "opens next month" : "just closed"}</span>`
         : `<span class="text-slate-500 dark:text-slate-400 font-semibold">⏳ Next window in ~${until} months</span>`;
   const clim = classifyClimate(ctx.lat, ctx.elevation);
   const soils = crop.soils.map((s) => getSoil(s)?.name).filter(Boolean).join(" / ");
   const gdd = Number.isFinite(crop.duration) ? crop.duration : null;
+
+  const howKeys = [
+    [t("farm_sowing") || "Sowing", crop.how.sow],
+    [t("farm_spacing") || "Spacing", crop.how.spacing],
+    [t("farm_irrigation") || "Irrigation", crop.how.irrigation],
+    [t("farm_fertiliser") || "Fertiliser", crop.how.fert],
+    [t("farm_care") || "Care", crop.how.care],
+    [t("farm_harvest") || "Harvest", crop.how.harvest],
+  ];
 
   return `
     <details class="group rounded-xl border border-slate-200/70 dark:border-slate-700/60 bg-white/80 dark:bg-slate-800/50 overflow-hidden">
@@ -1783,35 +1793,28 @@ function renderCropCard(ctx, rec) {
         <p class="text-[10px] text-slate-600 dark:text-slate-300 leading-relaxed pt-2">${esc(rec.verdict)}.</p>
         ${rec.constraints.length ? `
           <div class="rounded-lg bg-amber-50 dark:bg-amber-950/40 border border-amber-200/60 dark:border-amber-800/50 p-2">
-            <div class="text-[10px] font-bold text-amber-700 dark:text-amber-400 uppercase tracking-wider mb-1">Watch-outs</div>
+            <div class="text-[10px] font-bold text-amber-700 dark:text-amber-400 uppercase tracking-wider mb-1">${esc(t("farm_watch_outs") || "Watch-outs")}</div>
             <ul class="text-[10px] text-amber-800 dark:text-amber-300 leading-relaxed space-y-0.5 list-disc pl-3">
               ${rec.constraints.map((c) => `<li>${esc(c)}</li>`).join("")}
             </ul>
           </div>` : ""}
         <div class="grid grid-cols-2 gap-2">
           <div class="rounded-lg bg-slate-100/70 dark:bg-slate-800/60 p-2">
-            <div class="text-[9px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Where</div>
+            <div class="text-[9px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">${esc(t("farm_where") || "Where")}</div>
             <div class="text-[10px] text-slate-700 dark:text-slate-200 leading-relaxed mt-0.5">
               ${esc(soils || "Adaptive")} · ${esc(clim.band)} · to ~${crop.altitude?.max ?? "?"} m
             </div>
           </div>
           <div class="rounded-lg bg-slate-100/70 dark:bg-slate-800/60 p-2">
-            <div class="text-[9px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Needs</div>
+            <div class="text-[9px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">${esc(t("farm_needs") || "Needs")}</div>
             <div class="text-[10px] text-slate-700 dark:text-slate-200 leading-relaxed mt-0.5">
               ${crop.waterNeed === "high" ? "High" : crop.waterNeed === "medium" ? "Medium" : "Low"} water · ${crop.rainfall.min}-${crop.rainfall.max} mm/season${Number.isFinite(crop.frost) ? ` · frost limit ${crop.frost > 0 ? "+" : ""}${crop.frost}°C` : ""}
             </div>
           </div>
         </div>
         <div class="rounded-lg border border-emerald-200/60 dark:border-emerald-800/50 bg-emerald-50/60 dark:bg-emerald-950/30 p-2 space-y-1.5">
-          <div class="text-[9px] font-bold text-emerald-700 dark:text-emerald-400 uppercase tracking-wider">How to grow</div>
-          ${[
-            ["Sowing", crop.how.sow],
-            ["Spacing", crop.how.spacing],
-            ["Irrigation", crop.how.irrigation],
-            ["Fertiliser", crop.how.fert],
-            ["Care", crop.how.care],
-            ["Harvest", crop.how.harvest],
-          ].map(([k, v]) => `
+          <div class="text-[9px] font-bold text-emerald-700 dark:text-emerald-400 uppercase tracking-wider">${esc(t("farm_how_to_grow") || "How to grow")}</div>
+          ${howKeys.map(([k, v]) => `
             <div class="text-[10px] leading-relaxed">
               <span class="font-bold text-emerald-800 dark:text-emerald-300">${esc(k)}:</span>
               <span class="text-slate-700 dark:text-slate-200">${esc(v)}</span>

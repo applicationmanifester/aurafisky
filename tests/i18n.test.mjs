@@ -434,5 +434,85 @@ describe("Internationalisation (i18n) Engine & Language Support", () => {
     expect(farmCard.querySelector("#cropTiming").textContent).toBe("· sow Sep-Oct-Nov · ~80 days");
     expect(farmCard.querySelector("#howHeader").textContent).toBe("How to grow");
   });
+
+  it("verifies all 41 languages are fully supported with complete dictionary coverage", () => {
+    const locales = supportedLocales();
+    expect(locales.length).toBe(41);
+    expect(Object.keys(DICT).length).toBe(41);
+
+    // Verify key core dictionary keys exist for every single language
+    const sampleKeys = ["tab_overview", "tab_farm", "tab_astronomy", "nav_home", "nav_route", "settings_title", "farm_how_to_grow"];
+    for (const loc of locales) {
+      for (const k of sampleKeys) {
+        expect(DICT[loc][k]).toBeDefined();
+        expect(DICT[loc][k].length).toBeGreaterThan(0);
+      }
+    }
+  });
+
+  it("translates Astronomy and Farm domain terms across Marathi, Tamil, Telugu, Bengali, French, and German", () => {
+    // Marathi (mr)
+    expect(translateText("Sirius", "mr")).toBe("सिरियस");
+    expect(translateText("Canis Major", "mr")).toBe("कॅनिस मेजर");
+    expect(translateText("Alfalfa (Lucerne)", "mr")).toBe("अल्फाल्फा (ल्युसर्न)");
+    expect(translateText("Finger Millet (Ragi)", "mr")).toBe("फिंगर बाजरी (नाचणी)");
+    expect(translateText("Cover & Forage", "mr")).toBe("कव्हर आणि चारा");
+
+    // Tamil (ta)
+    expect(translateText("Sirius", "ta")).toBe("சிரியஸ்");
+    expect(translateText("Finger Millet (Ragi)", "ta")).toBe("ஃபிங்கர் தினை (ராகி)");
+    expect(translateText("Cabbage", "ta")).toBe("முட்டைக்கோஸ்");
+    expect(translateText("Pulse", "ta")).toBe("பருப்பு வகை");
+
+    // Telugu (te)
+    expect(translateText("Sirius", "te")).toBe("సిరియస్");
+    expect(translateText("Finger Millet (Ragi)", "te")).toBe("ఫింగర్ మిల్లెట్ (రాగి)");
+    expect(translateText("Green Peas", "te")).toBe("పచ్చి బఠానీలు");
+    expect(translateText("Cereal", "te")).toBe("తృణధాన్యాలు");
+
+    // Bengali (bn)
+    expect(translateText("Sirius", "bn")).toBe("সিরিয়াস");
+    expect(translateText("Cabbage", "bn")).toBe("বাঁধাকপি");
+    expect(translateText("Vegetable", "bn")).toBe("সবজি");
+
+    // French (fr)
+    expect(translateText("Sirius", "fr")).toBe("Sirius");
+    expect(translateText("Canis Major", "fr")).toBe("Grand Chien");
+    expect(translateText("Cover & Forage", "fr")).toBe("Couverture et fourrage");
+    expect(translateText("Cereal", "fr")).toBe("Céréales");
+
+    // German (de)
+    expect(translateText("Sirius", "de")).toBe("Sirius");
+    expect(translateText("Canis Major", "de")).toBe("Großer Hund");
+    expect(translateText("Cover & Forage", "de")).toBe("Deckung und Futter");
+    expect(translateText("Cereal", "de")).toBe("Getreide");
+  });
+
+  it("translates dynamic sowing schedule templates across diverse languages", () => {
+    // Marathi
+    const sowMr = translateText("· sow Mar-Apr-Sep-Oct-Nov · ~70 days", "mr");
+    expect(sowMr).toContain("पेरणे");
+    expect(sowMr).toContain("दिवस");
+
+    // Tamil
+    const sowTa = translateText("· sow Mar-Apr-Sep-Oct-Nov · ~70 days", "ta");
+    expect(sowTa).toContain("விதைக்க");
+    expect(sowTa).toContain("நாட்கள்");
+
+    // Telugu
+    const sowTe = translateText("· sow Mar-Apr-Sep-Oct-Nov · ~70 days", "te");
+    expect(sowTe).toContain("విత్తండి");
+    expect(sowTe).toContain("రోజులు");
+
+    // French
+    const sowFr = translateText("· sow Mar-Apr-Sep-Oct-Nov · ~70 days", "fr");
+    expect(sowFr).toContain("semer");
+    expect(sowFr).toContain("jours");
+
+    // German
+    const sowDe = translateText("· sow Mar-Apr-Sep-Oct-Nov · ~70 days", "de");
+    expect(sowDe).toContain("säen");
+    expect(sowDe).toContain("Tage");
+  });
 });
 

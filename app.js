@@ -1263,7 +1263,7 @@ class AurafiskyApp {
         this._updateCompass();
       });
 
-      // Language preference: 'en' for English, 'native' for each place's local name
+      // Map label locale is synchronized with the app language below.
       this.mapLanguage = this.getSavedMapLanguage() || 'en';
     // i18n: detect and apply the user's preferred language.
     this.language = detectLocale();
@@ -1686,7 +1686,9 @@ class AurafiskyApp {
 
     // Map Language Toggle
     this.$.mapLanguageToggle?.addEventListener("click", () => {
-      const newLang = this.mapLanguage === 'en' ? 'native' : 'en';
+      const newLang = this.mapLanguage === 'en'
+        ? this.getNativeMapLanguage()
+        : 'en';
       this.setMapLanguage(newLang);
       this._haptic('selection');
     });
@@ -2219,7 +2221,7 @@ class AurafiskyApp {
     }
     if (this.$.settingsMapLanguageToggle) {
       this.$.settingsMapLanguageToggle.addEventListener("change", (e) => {
-        const newLang = e.target.checked ? 'native' : 'en';
+        const newLang = e.target.checked ? this.getNativeMapLanguage() : 'en';
         this.setMapLanguage(newLang);
         this._haptic('selection');
       });
@@ -11338,6 +11340,10 @@ class AurafiskyApp {
     return null;
   }
 
+  getNativeMapLanguage() {
+    return this.language && this.language !== 'en' ? this.language : 'native';
+  }
+
   setMapLanguage(lang) {
     this.mapLanguage = lang;
     try {
@@ -11352,18 +11358,38 @@ class AurafiskyApp {
 
   updateMapLanguageUI() {
     const isEnglish = this.mapLanguage === 'en';
+    const langNames = {
+      native: 'Native',
+      kn: 'Kannada', hi: 'Hindi', ta: 'Tamil', te: 'Telugu', mr: 'Marathi',
+      bn: 'Bengali', gu: 'Gujarati', ml: 'Malayalam', pa: 'Punjabi', or: 'Odia',
+      sa: 'Sanskrit', as: 'Assamese', ur: 'Urdu', ne: 'Nepali', si: 'Sinhala',
+      zh: 'Chinese', 'zh-CN': 'Chinese', 'zh-TW': 'Chinese', ja: 'Japanese',
+      ko: 'Korean', ar: 'Arabic', es: 'Spanish', fr: 'French', de: 'German',
+      it: 'Italian', pt: 'Portuguese', ru: 'Russian', id: 'Indonesian', tr: 'Turkish',
+      vi: 'Vietnamese', th: 'Thai', nl: 'Dutch', pl: 'Polish', uk: 'Ukrainian',
+      el: 'Greek', he: 'Hebrew', sv: 'Swedish', sw: 'Swahili', tl: 'Filipino',
+      ms: 'Malay', fa: 'Persian',
+    };
+    const mapLanguageName = isEnglish
+      ? 'English'
+      : (langNames[this.mapLanguage] || langNames[this.mapLanguage?.split(/[-_]/)[0]] || this.mapLanguage || 'Native');
     
     // Update settings panel checkbox
     if (this.$.settingsMapLanguageToggle) {
-      this.$.settingsMapLanguageToggle.checked = !isEnglish; // checked = native
+      this.$.settingsMapLanguageToggle.checked = !isEnglish; // checked = app locale or local names
+      this.$.settingsMapLanguageToggle.setAttribute(
+        'aria-label',
+        `Map labels in ${isEnglish ? 'English' : mapLanguageName}`,
+      );
+      this.$.settingsMapLanguageToggle.title = `Map labels in ${isEnglish ? 'English' : mapLanguageName}`;
     }
 
     // Also update the legacy top bar button if it exists (for backwards compat)
     const btn = document.getElementById("mapLanguageToggle");
     if (btn) {
-      btn.textContent = isEnglish ? '🌐 EN' : '🌐 Native';
-      btn.setAttribute('aria-label', isEnglish ? 'Switch to native language labels' : 'Switch to English labels');
-      btn.title = isEnglish ? 'Map labels: English (click for native)' : 'Map labels: Native (click for English)';
+      btn.textContent = isEnglish ? '🌐 EN' : `🌐 ${mapLanguageName}`;
+      btn.setAttribute('aria-label', isEnglish ? `Switch map labels to ${this.language && this.language !== 'en' ? mapLanguageName : 'native'}` : 'Switch map labels to English');
+      btn.title = isEnglish ? `Map labels: English (click for ${mapLanguageName})` : `Map labels: ${mapLanguageName} (click for English)`;
     }
   }
 
@@ -11438,10 +11464,10 @@ class AurafiskyApp {
       document.documentElement.dir = "ltr";
     }
 
-    // Automatically synchronize MapLibre vector basemap labels:
-    // If native language is selected, show native script labels (e.g. Kannada, Hindi, etc.);
-    // If English is selected, revert to English.
-    this.setMapLanguage(lang === 'en' ? 'en' : 'native');
+    // Keep vector-map labels in the selected app locale. Tiles that do not
+    // carry that locale's translated name fall back to their local name and
+    // then English (see modules/map-language.js).
+    this.setMapLanguage(lang);
 
     const title = document.querySelector("title");
     if (title) title.textContent = `${t("app_name")} — ${t("app_tagline")}`;
@@ -11893,14 +11919,11 @@ class AurafiskyApp {
   }
 
   /**
-   * Real map-language switching. OpenFreeMap's vector tiles (OpenMapTiles
-   * schema) carry both a local `name` field and an English `name_en` field
-   * per feature — confirmed by inspecting the live liberty/dark style JSON's
-   * label layers, all of which build text-field as a "case"/"coalesce"
-   * expression over exactly those two fields (see localizeGlStyle in
-   * modules/map-language.js). Re-styling the vector-tile layer for the
-   * `openmaptiles` source re-labels the whole map (cities, roads, POIs,
-   * water) instantly, client-side — no new tile requests.
+   * Re-style OpenFreeMap's OpenMapTiles vector labels for the selected app
+   * locale. Where a requested-language field exists it is preferred, then
+   * local and English names are used as fallbacks. See localizeGlStyle in
+   * modules/map-language.js. This updates cities, roads, POIs and water
+   * client-side without fetching new tiles.
    */
   _applyMapLanguage() {
     const theme = this.isDark ? "dark" : "light";

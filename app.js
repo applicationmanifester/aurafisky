@@ -11098,11 +11098,15 @@ class AurafiskyApp {
     }
     if (this.$.defaultLocationNotifyHint) {
       if (this.defaultLocation) {
-        this.$.defaultLocationNotifyHint.textContent = `Sending hourly updates for ${this.defaultLocation.name}.`;
+        const sendingTpl = t("sending_hourly_updates", this.language) || "Sending hourly updates for %s.";
+        this.$.defaultLocationNotifyHint.textContent = sendingTpl.includes("%s")
+          ? sendingTpl.replace("%s", this.defaultLocation.name)
+          : `${sendingTpl} ${this.defaultLocation.name}.`;
         this.$.defaultLocationNotifyHint.classList.remove("text-slate-500", "dark:text-slate-400");
         this.$.defaultLocationNotifyHint.classList.add("text-primary");
       } else {
         this.$.defaultLocationNotifyHint.textContent =
+          t("set_home_to_enable_notifications", this.language) ||
           "Set a home location first to enable hourly weather notifications.";
         this.$.defaultLocationNotifyHint.classList.add("text-slate-500", "dark:text-slate-400");
         this.$.defaultLocationNotifyHint.classList.remove("text-primary");
@@ -11119,8 +11123,8 @@ class AurafiskyApp {
           `<span class="text-emerald-500">📍</span> <strong>${this.defaultLocation.name}</strong> <span class="opacity-60">(${this.defaultLocation.lat.toFixed(2)}, ${this.defaultLocation.lng.toFixed(2)})</span>${hasUser ? "" : ' <span class="opacity-60">(local)</span>'}`,
         );
       } else {
-        this.$.defaultLocationStatus.textContent =
-          "📍 No default location set. Click map and set current.";
+        const noDefText = t("no_default_location_status", this.language) || "No default location set. Click map and set current.";
+        this.$.defaultLocationStatus.textContent = `📍 ${noDefText.replace(/^📍\s*/, "")}`;
       }
     }
   }
@@ -11590,8 +11594,24 @@ class AurafiskyApp {
     if (this.$.settingsPanel && typeof translateDOM === "function") {
       translateDOM(this.$.settingsPanel, lang);
     }
+    if (this.$.setDefaultLocationBtn) {
+      this.$.setDefaultLocationBtn.textContent = t("set_here", lang) || "Set here";
+    }
+    const installBtnLabel = document.getElementById("installBtnLabel");
+    if (installBtnLabel) {
+      installBtnLabel.textContent = t("install_app", lang) || "Install Aurafisky App";
+    }
+    const termsTitle = document.getElementById("termsTitle");
+    if (termsTitle) {
+      termsTitle.textContent = t("terms_privacy", lang) || "Terms & Privacy";
+    }
 
-    // 11. Re-translate Route Studio if open
+    // 11b. Update Settings UI local status and hints
+    if (typeof this.updateSettingsUIFromLocal === "function") {
+      this.updateSettingsUIFromLocal();
+    }
+
+    // 11c. Re-translate Route Studio if open
     const routePanel = document.getElementById("routePanel");
     if (routePanel && typeof translateDOM === "function") {
       translateDOM(routePanel, lang);

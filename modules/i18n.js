@@ -1,4 +1,5 @@
 import { ALL_DICTIONARIES } from "./i18n-data.js";
+import { COMPREHENSIVE_TRANSLATIONS } from "./i18n-extended.js";
 // modules/i18n.js
 // ── Internationalisation & Multi-Language Translation ────────────────
 //
@@ -913,6 +914,7 @@ function makeLocaleDict(overrides) {
 
 
 export const DICT = ALL_DICTIONARIES;
+Object.assign(BASE_EN, ALL_DICTIONARIES.en);
 
 // Reverse lookup: lowercase English text -> dictionary key
 export const EN_PHRASE_TO_KEY = {};
@@ -10391,6 +10393,11 @@ export const EXTENDED_FEATURE_PHRASES = {
   }
 };
 
+for (const [key, langMap] of Object.entries(COMPREHENSIVE_TRANSLATIONS)) {
+  if (!EXTENDED_FEATURE_PHRASES[key]) EXTENDED_FEATURE_PHRASES[key] = {};
+  Object.assign(EXTENDED_FEATURE_PHRASES[key], langMap);
+}
+
 // ── Universal Translation Cache & Auto-Translation Engine ───────────
 const TRANSLATION_CACHE = {};
 let _cacheDirty = {};
@@ -11615,9 +11622,14 @@ export function translateText(rawText, locale = detectLocale()) {
 
   return rawText;
 }
+let _lastDOMTranslateLocale = null;
 export function translateDOM(root = (typeof document !== "undefined" ? document.body : null), locale = detectLocale()) {
   if (!root || typeof document === "undefined") return;
   if (!locale) locale = detectLocale();
+  if (_lastDOMTranslateLocale !== locale) {
+    _pendingQueue = [];
+    _lastDOMTranslateLocale = locale;
+  }
 
   const rootElement = root.nodeType === Node.ELEMENT_NODE ? root : null;
   const elementsMatching = (selector) => {
@@ -11636,7 +11648,10 @@ export function translateDOM(root = (typeof document !== "undefined" ? document.
     settingsUnitsSub: "units_metric_sub",
     settingsAppLanguageLabel: "settings_app_language",
     settingsAppLanguageSub: "settings_app_language_sub",
-    elevationLegendTitle: "elevation_key"
+    elevationLegendTitle: "elevation_key",
+    installBtnLabel: "install_aurafisky_app",
+    termsTitle: "terms_privacy",
+    setDefaultLocationBtn: "set_here"
   };
   for (const [id, key] of Object.entries(targetMap)) {
     const el = rootElement?.id === id
@@ -11664,9 +11679,10 @@ export function translateDOM(root = (typeof document !== "undefined" ? document.
       const translated = translateText(original, locale);
       if (translated && translated !== original && opt.text !== translated) {
         opt.text = translated;
-      } else if (locale === "en" && opt.text !== original) {
+      } else if (original && opt.text !== original) {
         opt.text = original;
-      } else if (locale !== "en" && hasTranslatableText(original)) {
+      }
+      if (locale !== "en" && (!translated || translated === original) && hasTranslatableText(original)) {
         queueForTranslation({
           type: "option",
           element: opt,
@@ -11684,9 +11700,10 @@ export function translateDOM(root = (typeof document !== "undefined" ? document.
       const translated = translateText(original, locale);
       if (translated && translated !== original && group.label !== translated) {
         group.label = translated;
-      } else if (locale === "en" && group.label !== original) {
+      } else if (original && group.label !== original) {
         group.label = original;
-      } else if (locale !== "en" && hasTranslatableText(original)) {
+      }
+      if (locale !== "en" && (!translated || translated === original) && hasTranslatableText(original)) {
         queueForTranslation({
           type: "optgroup",
           element: group,
@@ -11704,9 +11721,10 @@ export function translateDOM(root = (typeof document !== "undefined" ? document.
       const translated = translateText(root._origText, locale);
       if (translated && translated !== root._origText) {
         root.nodeValue = translated;
-      } else if (locale === "en") {
+      } else if (root._origText) {
         root.nodeValue = root._origText;
-      } else if (hasTranslatableText(root._origText)) {
+      }
+      if (locale !== "en" && (!translated || translated === root._origText) && hasTranslatableText(root._origText)) {
         queueForTranslation({
           type: "text",
           node: root,
@@ -11749,9 +11767,10 @@ export function translateDOM(root = (typeof document !== "undefined" ? document.
       const translated = translateText(orig, locale);
       if (translated && translated !== orig) {
         node.nodeValue = translated;
-      } else if (locale === "en" && orig) {
+      } else if (orig) {
         node.nodeValue = orig;
-      } else if (locale !== "en" && hasTranslatableText(orig)) {
+      }
+      if (locale !== "en" && (!translated || translated === orig) && hasTranslatableText(orig)) {
         queueForTranslation({
           type: "text",
           node,
@@ -11780,10 +11799,11 @@ export function translateDOM(root = (typeof document !== "undefined" ? document.
           if (transVal && transVal !== origVal && val !== transVal) {
             el.setAttribute(attr, transVal);
             if (attr === "value") el.value = transVal;
-          } else if (locale === "en" && val !== origVal) {
+          } else if (origVal && val !== origVal) {
             el.setAttribute(attr, origVal);
             if (attr === "value") el.value = origVal;
-          } else if (locale !== "en" && hasTranslatableText(origVal)) {
+          }
+          if (locale !== "en" && (!transVal || transVal === origVal) && hasTranslatableText(origVal)) {
             queueForTranslation({
               type: "attr",
               element: el,

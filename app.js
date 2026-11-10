@@ -7957,7 +7957,7 @@ class AurafiskyApp {
         if (points[i]) {
           const span = document.createElement("span");
           const t = new Date(points[i].time);
-          span.textContent = t.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false });
+          span.textContent = WeatherService.formatTimeOnly(t);
           this.$.wallpaperPrecipTimelineLabels.appendChild(span);
         }
       });
@@ -8033,7 +8033,7 @@ class AurafiskyApp {
       this.$.wallpaperOverlay?.appendChild(tip);
     }
     const t = new Date(point.time);
-    const timeLabel = t.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false });
+    const timeLabel = WeatherService.formatTimeOnly(t);
     const prob = Math.round(point.prob);
     const mm = point.precip.toFixed(1);
     tip.textContent = `${timeLabel} · ${prob}% · ${mm} mm`;
@@ -10818,7 +10818,12 @@ class AurafiskyApp {
           }
 
           if (prefs.mapLanguage != null) {
-            this.mapLanguage = prefs.mapLanguage;
+            // A cloud-synced map preference must not undo the app locale
+            // already selected on this device. Keep map labels aligned with
+            // that locale; otherwise restore the separately saved map mode.
+            this.mapLanguage = this.language && this.language !== "en"
+              ? this.language
+              : prefs.mapLanguage;
             this.updateMapLanguageUI();
             this._applyMapLanguage();
           }
@@ -10874,7 +10879,7 @@ class AurafiskyApp {
         this.updateSettingsUIFromLocal();
 
         if (this.$.syncStatusTime) {
-          this.$.syncStatusTime.textContent = new Date().toLocaleTimeString();
+          this.$.syncStatusTime.textContent = new Date().toLocaleTimeString(this.language || "en");
         }
         if (showToast) {
           this.showToast("Cloud settings synchronized.", "success");
@@ -10976,7 +10981,7 @@ class AurafiskyApp {
       const userDocRef = this._fb.doc(this._fb.db, "users", this.user.uid);
       await this._fb.setDoc(userDocRef, dataToSave, { merge: true });
       if (this.$.syncStatusTime) {
-        this.$.syncStatusTime.textContent = new Date().toLocaleTimeString();
+        this.$.syncStatusTime.textContent = new Date().toLocaleTimeString(this.language || "en");
       }
     } catch (e) {
       console.error("Error writing settings to cloud:", e);

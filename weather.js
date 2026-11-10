@@ -973,22 +973,23 @@ const WeatherService = (() => {
    */
   function formatHourLabel(timeStr, utcOffsetSeconds = 0) {
     if (!timeStr) return "";
+    const locale = _getUserLocale();
     const tIndex = timeStr.indexOf("T");
     if (tIndex !== -1) {
       const hourStr = timeStr.substring(tIndex + 1, tIndex + 3);
       const hours = parseInt(hourStr, 10);
       if (!isNaN(hours)) {
-        if (hours === 0) return "12 AM";
-        if (hours === 12) return "12 PM";
-        return hours > 12 ? `${hours - 12} PM` : `${hours} AM`;
+        return new Date(2000, 0, 1, hours).toLocaleTimeString(locale, {
+          hour: "numeric",
+          hour12: true,
+        });
       }
     }
     // Fallback if structure changes
     const date = new Date(timeStr);
-    const hours = date.getHours();
-    if (hours === 0) return "12 AM";
-    if (hours === 12) return "12 PM";
-    return hours > 12 ? `${hours - 12} PM` : `${hours} AM`;
+    return isNaN(date.getTime())
+      ? ""
+      : date.toLocaleTimeString(locale, { hour: "numeric", hour12: true });
   }
 
   /**
@@ -1035,10 +1036,11 @@ const WeatherService = (() => {
    */
   function formatTimeOnly(timeStr) {
     if (!timeStr) return "";
+    const locale = _getUserLocale();
     if (timeStr instanceof Date) {
       if (isNaN(timeStr.getTime())) return "";
       try {
-        return timeStr.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
+        return timeStr.toLocaleTimeString(locale, { hour: "numeric", minute: "2-digit", hour12: true });
       } catch {
         return "";
       }
@@ -1054,15 +1056,16 @@ const WeatherService = (() => {
       const hours = parseInt(timeParts[0], 10);
       const minutes = parseInt(timeParts[1], 10);
       if (!isNaN(hours) && !isNaN(minutes)) {
-        const ampm = hours >= 12 ? "PM" : "AM";
-        const displayHours = hours % 12 === 0 ? 12 : hours % 12;
-        const displayMinutes = String(minutes).padStart(2, "0");
-        return `${displayHours}:${displayMinutes} ${ampm}`;
+        return new Date(2000, 0, 1, hours, minutes).toLocaleTimeString(locale, {
+          hour: "numeric",
+          minute: "2-digit",
+          hour12: true,
+        });
       }
     }
     const d = new Date(str);
     if (!isNaN(d.getTime())) {
-      return d.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
+      return d.toLocaleTimeString(locale, { hour: "numeric", minute: "2-digit", hour12: true });
     }
     return str;
   }
@@ -1076,9 +1079,10 @@ const WeatherService = (() => {
    */
   function getFormattedLocationCurrentTime(timezone, utcOffsetSeconds = 0) {
     const now = new Date();
+    const locale = _getUserLocale();
     if (timezone) {
       try {
-        return now.toLocaleTimeString("en-US", {
+        return now.toLocaleTimeString(locale, {
           timeZone: timezone,
           hour: "numeric",
           minute: "2-digit",
@@ -1093,7 +1097,7 @@ const WeatherService = (() => {
       (utcOffsetSeconds || 0) * 1000 +
       now.getTimezoneOffset() * 60 * 1000;
     const locDate = new Date(locMs);
-    return locDate.toLocaleTimeString("en-US", {
+    return locDate.toLocaleTimeString(locale, {
       hour: "numeric",
       minute: "2-digit",
       hour12: true,

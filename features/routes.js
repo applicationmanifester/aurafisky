@@ -24,7 +24,7 @@ import { Style, Stroke } from "ol/style.js";
 import { fromLonLat, toLonLat } from "ol/proj.js";
 import { HtmlMarker } from "../modules/ol-marker.js";
 import { wakeLockManager } from "../modules/wake-lock.js";
-import { translateDOM } from "../modules/i18n.js";
+import { translateDOM, refreshExternalTranslation } from "../modules/i18n.js";
 
 const OSRM_BASE = "https://router.project-osrm.org/route/v1/driving";
 const EARTH_RADIUS_M = 6371000;
@@ -2603,6 +2603,7 @@ function showPanel() {
     const curLang = appRef?.language || (typeof localStorage !== "undefined" ? localStorage.getItem("aurafisky_lang") : "en") || "en";
     if (curLang && curLang !== "en") {
       translateDOM(panelEl, curLang);
+      refreshExternalTranslation(curLang);
     }
     if (isMobileLayout()) {
       snapRouteSheet(pts.length < 2 ? "half" : (routeSheetState || "half"));
@@ -2748,6 +2749,7 @@ function renderEmptyRoutePanel() {
   const curLang = appRef?.language || (typeof localStorage !== "undefined" ? localStorage.getItem("aurafisky_lang") : "en") || "en";
   if (curLang && curLang !== "en" && panelEl) {
     translateDOM(panelEl, curLang);
+    refreshExternalTranslation(curLang);
   }
 }
 
@@ -3734,6 +3736,7 @@ function renderRoutePanelContent(stops, units) {
   const curLang = appRef?.language || (typeof localStorage !== "undefined" ? localStorage.getItem("aurafisky_lang") : "en") || "en";
   if (curLang && curLang !== "en" && panelEl) {
     translateDOM(panelEl, curLang);
+    refreshExternalTranslation(curLang);
   }
 }
 

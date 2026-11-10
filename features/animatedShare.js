@@ -412,7 +412,7 @@ function buildModelFromApp(app) {
 
   return {
     placeName: app.selectedName,
-    timeLabel: new Date().toLocaleString([], { weekday: "short", hour: "numeric", minute: "2-digit" }),
+    timeLabel: new Date().toLocaleString(app.language || "en", { weekday: "short", hour: "numeric", minute: "2-digit" }),
     emoji: conditionEmoji(w.weatherCode, w.isDay),
     tempText: WS.formatTemp(w.temperature),
     descText: w.description,

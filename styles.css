@@ -3555,6 +3555,9 @@ button, a, input, select, textarea, [role="button"] {
   #panelLocationName {
     font-size: 1rem;
     line-height: 1.25rem;
+    word-break: keep-all;
+    overflow-wrap: normal;
+    hyphens: none;
   }
 
   /* Minimum 44px touch targets for panel action buttons */

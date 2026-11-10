@@ -931,7 +931,10 @@ function fmtClock(iso) {
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return '--:--';
   try {
-    return d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+    return globalThis.WeatherService?.formatTimeOnly(d) || d.toLocaleTimeString(
+      localStorage.getItem('aurafisky_lang') || 'en',
+      { hour: 'numeric', minute: '2-digit' },
+    );
   } catch {
     return '--:--';
   }
@@ -939,10 +942,12 @@ function fmtClock(iso) {
 
 function fmtDay(iso, i) {
   if (i === 0) return 'Today';
+  const weatherDay = globalThis.WeatherService?.formatDayLabel(iso);
+  if (weatherDay) return weatherDay;
   const d = new Date(`${iso}T12:00:00`);
   if (Number.isNaN(d.getTime())) return '--';
   try {
-    return d.toLocaleDateString([], { weekday: 'short' });
+    return d.toLocaleDateString(localStorage.getItem('aurafisky_lang') || 'en', { weekday: 'short' });
   } catch {
     return '--';
   }

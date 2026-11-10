@@ -52,14 +52,8 @@ function updateAstronomyWidget(weather, _hourIndex) {
       const diffMins = Math.floor((diffMs % 3600000) / 60000);
       this.$.sunDayLength.textContent = `${diffHours}h ${diffMins}m`;
 
-      this.$.sunSunrise.textContent = sunriseTime.toLocaleTimeString([], {
-        hour: "2-digit",
-        minute: "2-digit",
-      });
-      this.$.sunSunset.textContent = sunsetTime.toLocaleTimeString([], {
-        hour: "2-digit",
-        minute: "2-digit",
-      });
+      this.$.sunSunrise.textContent = WeatherService.formatTimeOnly(sunriseTime);
+      this.$.sunSunset.textContent = WeatherService.formatTimeOnly(sunsetTime);
 
       // Live sunrise/sunset countdown.
       //

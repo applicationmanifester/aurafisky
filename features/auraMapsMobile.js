@@ -5,7 +5,51 @@
 
 import { shortPlaceName } from '../modules/geo.js';
 import { isMobileLayout } from './breakpoints.js';
-import { translateDOM } from '../modules/i18n.js';
+import { translateDOM, detectLocale, translateText } from '../modules/i18n.js';
+
+const BCP47_SPEECH_MAP = {
+  kn: "kn-IN",
+  hi: "hi-IN",
+  ta: "ta-IN",
+  te: "te-IN",
+  mr: "mr-IN",
+  bn: "bn-IN",
+  gu: "gu-IN",
+  ml: "ml-IN",
+  pa: "pa-IN",
+  or: "or-IN",
+  sa: "sa-IN",
+  as: "as-IN",
+  ur: "ur-IN",
+  ne: "ne-NP",
+  si: "si-LK",
+  "zh-CN": "zh-CN",
+  "zh-TW": "zh-TW",
+  ja: "ja-JP",
+  ko: "ko-KR",
+  es: "es-ES",
+  fr: "fr-FR",
+  de: "de-DE",
+  it: "it-IT",
+  pt: "pt-BR",
+  ru: "ru-RU",
+  ar: "ar-SA",
+  id: "id-ID",
+  tr: "tr-TR",
+  vi: "vi-VN",
+  th: "th-TH",
+  nl: "nl-NL",
+  pl: "pl-PL",
+  uk: "uk-UA",
+  el: "el-GR",
+  he: "he-IL",
+  sv: "sv-SE",
+  sw: "sw-TZ",
+  tl: "fil-PH",
+  ms: "ms-MY",
+  fa: "fa-IR",
+  en: "en-US",
+};
 
 export function init(app) {
   const controller = new AuraMobileController(app);
@@ -1167,18 +1211,19 @@ export class AuraMobileController {
 
     try {
       const recognition = new SpeechRecognition();
-      recognition.lang = 'en-US';
+      const loc = detectLocale();
+      recognition.lang = BCP47_SPEECH_MAP[loc] || 'en-US';
       recognition.interimResults = true;
       recognition.maxAlternatives = 1;
       this._activeRecognition = recognition;
 
       if (input) {
         this._savedPlaceholder = input.placeholder || 'Search here';
-        input.placeholder = '🎙️ Listening... speak clearly';
+        input.placeholder = translateText('🎙️ Listening... speak clearly', loc);
       }
 
       voiceBtn?.classList.add('animate-pulse', 'text-rose-500', 'ring-2', 'ring-rose-500/40', 'bg-rose-500/10');
-      this.app.showToast?.('🎙️ Listening... Say any city or location', 'info', 3000);
+      this.app.showToast?.(translateText('🎙️ Listening... Say any city or location', loc), 'info', 3000);
 
       const cleanup = () => {
         this._activeRecognition = null;

@@ -3796,13 +3796,15 @@ button, a, input, select, textarea, [role="button"] {
     top: auto !important;
     bottom: calc(4.2rem + env(safe-area-inset-bottom, 0px)) !important;
     transform: translateX(-50%) !important;
-    width: min(300px, calc(100vw - 2rem)) !important;
-    max-width: 300px !important;
-    max-height: calc(72vh - env(safe-area-inset-bottom, 0px)) !important;
+    width: min(320px, calc(100vw - 1.5rem)) !important;
+    max-width: min(320px, calc(100vw - 1.5rem)) !important;
+    max-height: calc(100dvh - 5.5rem - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px)) !important;
+    max-height: calc(var(--app-height, 100vh) - 5.5rem) !important;
     margin: 0 !important;
     z-index: 1250 !important;
     overflow-y: auto !important;
     -webkit-overflow-scrolling: touch;
+    overscroll-behavior: contain !important;
     box-shadow: 0 20px 50px rgba(0, 0, 0, 0.5) !important;
     border-radius: 1.25rem !important;
   }
@@ -3815,13 +3817,15 @@ button, a, input, select, textarea, [role="button"] {
     top: auto !important;
     bottom: calc(4.2rem + env(safe-area-inset-bottom, 0px)) !important;
     transform: translateX(-50%) !important;
-    width: min(290px, calc(100vw - 2rem)) !important;
-    max-width: 290px !important;
-    max-height: calc(72vh - env(safe-area-inset-bottom, 0px)) !important;
+    width: min(320px, calc(100vw - 1.5rem)) !important;
+    max-width: min(320px, calc(100vw - 1.5rem)) !important;
+    max-height: calc(100dvh - 5.5rem - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px)) !important;
+    max-height: calc(var(--app-height, 100vh) - 5.5rem) !important;
     margin: 0 !important;
     z-index: 1250 !important;
     overflow-y: auto !important;
     -webkit-overflow-scrolling: touch;
+    overscroll-behavior: contain !important;
     box-shadow: 0 20px 50px rgba(0, 0, 0, 0.5) !important;
     border-radius: 1.25rem !important;
   }
@@ -4294,10 +4298,20 @@ button, a, input, select, textarea, [role="button"] {
 
 /* ── Map Mode & Terrain Switcher Cards ────────────────────────── */
 #mapLayersFlyout {
+  max-height: min(88vh, calc(var(--app-height, 100vh) - 4rem));
+  max-height: calc(100dvh - 4rem);
+  overflow-y: auto;
+  overscroll-behavior: contain;
   transition: width 0.2s cubic-bezier(0.16, 1, 0.3, 1),
               padding 0.2s cubic-bezier(0.16, 1, 0.3, 1),
               box-shadow 0.2s ease,
               transform 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+#radarExpandedPanel {
+  max-height: min(88vh, calc(var(--app-height, 100vh) - 4rem));
+  max-height: calc(100dvh - 4rem);
+  overflow-y: auto;
+  overscroll-behavior: contain;
 }
 #mapLayersFlyout.minimized {
   width: auto !important;

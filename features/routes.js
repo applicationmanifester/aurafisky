@@ -1549,7 +1549,7 @@ function showWaypointPopover(index) {
   const popoverEl = document.createElement("div");
   popoverEl.className =
     "route-studio-popover glass p-3 rounded-2xl shadow-2xl border border-slate-200/80 dark:border-slate-700/80 " +
-    "text-xs min-w-[210px] space-y-2 pointer-events-auto backdrop-blur-2xl animate-fade-in";
+    "text-xs min-w-[210px] max-w-[calc(100vw-1.5rem)] max-h-[calc(100dvh-5.5rem)] overflow-y-auto overscroll-contain custom-scrollbar space-y-2 pointer-events-auto backdrop-blur-2xl animate-fade-in";
   popoverEl.style.zIndex = "2500";
 
   popoverEl.innerHTML = `

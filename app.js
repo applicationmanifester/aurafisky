@@ -2832,6 +2832,7 @@ class AurafiskyApp {
       this.$.radarCollapsedBtn.addEventListener("click", () => {
         this.$.radarCollapsedBtn.classList.add("hidden");
         this.$.radarExpandedPanel.classList.remove("hidden");
+        this.$.radarExpandedPanel.scrollTop = 0;
         document.getElementById("radarBackdrop")?.classList.remove("hidden");
         this.pushHistoryOverlay?.("radar");
         this._haptic('selection');
@@ -11899,6 +11900,7 @@ class AurafiskyApp {
     }
     if (open) {
       this.$.mapLayersFlyout.classList.remove("minimized");
+      this.$.mapLayersFlyout.scrollTop = 0;
       this.pushHistoryOverlay("layers");
       this._updateMapStyleUI();
       this._updateMapLayersActiveBadge();

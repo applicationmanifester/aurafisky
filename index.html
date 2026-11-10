@@ -1768,7 +1768,7 @@
     </button>
 
     <!-- Expanded Glass Detail Card -->
-    <div id="mapLegendCard" class="hidden mt-2 w-72 max-w-[calc(100vw-2rem)] glass-card backdrop-blur-xl bg-white/95 dark:bg-slate-900/95 border border-slate-200/80 dark:border-slate-700/80 rounded-2xl shadow-2xl p-3.5 space-y-2.5 animate-in fade-in zoom-in-95 duration-200 select-text">
+    <div id="mapLegendCard" class="hidden mt-2 w-72 max-w-[calc(100vw-1.5rem)] max-h-[calc(100dvh-7.5rem)] overflow-y-auto overscroll-contain custom-scrollbar glass-card backdrop-blur-xl bg-white/95 dark:bg-slate-900/95 border border-slate-200/80 dark:border-slate-700/80 rounded-2xl shadow-2xl p-3.5 space-y-2.5 animate-in fade-in zoom-in-95 duration-200 select-text">
       <!-- Header -->
       <div class="flex items-start justify-between gap-2 border-b border-slate-200/60 dark:border-slate-700/60 pb-2">
         <div class="flex items-center gap-1.5">
@@ -1915,9 +1915,9 @@
   <div id="radarBackdrop" class="hidden fixed inset-0 z-[1240] bg-black/40 backdrop-blur-[2px] sm:hidden transition-opacity"></div>
 
   <!-- Radar Expanded Flyout (appears to the left of radar button on desktop, floating modal on mobile) -->
-  <div id="radarExpandedPanel" class="hidden fixed right-16 top-1/2 -translate-y-1/2 flex flex-col gap-1 pointer-events-auto z-[1250]">
-    <div class="glass-no-border rounded-2xl p-3 sm:p-3.5 shadow-2xl space-y-2.5 w-full sm:w-[210px] bg-white/95 dark:bg-slate-900/95 backdrop-blur-xl border border-slate-200/70 dark:border-slate-700/60">
-      <div class="flex items-center justify-between gap-1.5 pb-1 border-b border-slate-200/40 dark:border-slate-700/30">
+  <div id="radarExpandedPanel" class="hidden fixed right-4 sm:right-16 top-1/2 -translate-y-1/2 flex flex-col gap-1 pointer-events-auto z-[1250] w-[min(320px,calc(100vw-1.5rem))] sm:w-[210px] max-h-[calc(100dvh-5.5rem)] sm:max-h-[calc(100dvh-4rem)] overflow-y-auto overscroll-contain custom-scrollbar">
+    <div class="glass-no-border rounded-2xl p-3 sm:p-3.5 shadow-2xl space-y-2.5 w-full bg-white/95 dark:bg-slate-900/95 backdrop-blur-xl border border-slate-200/70 dark:border-slate-700/60">
+      <div class="sticky -top-3 sm:-top-3.5 -mx-3 sm:-mx-3.5 px-3 sm:px-3.5 pt-3 sm:pt-3.5 pb-2 bg-white/95 dark:bg-slate-900/95 backdrop-blur-xl z-10 flex items-center justify-between gap-1.5 border-b border-slate-200/60 dark:border-slate-700/50 rounded-t-2xl">
         <span class="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider block">Weather Radar</span>
         <div class="flex items-center gap-1.5">
           <select id="layerTypeSelect" class="bg-slate-100 hover:bg-slate-200/80 dark:bg-slate-800 dark:hover:bg-slate-700/80 text-slate-800 dark:text-slate-200 rounded-lg px-2 py-1 text-[11px] font-bold cursor-pointer outline-none transition-colors border border-slate-200/60 dark:border-slate-700/60" aria-label="Radar layer type">
@@ -1970,15 +1970,15 @@
   <div id="mapLayersBackdrop" class="hidden fixed inset-0 z-[1240] bg-black/40 backdrop-blur-[2px] sm:hidden transition-opacity"></div>
 
   <!-- Floating Map Style Flyout Menu -->
-  <div id="mapLayersFlyout" class="hidden fixed right-16 top-1/2 -translate-y-1/2 z-[1250] p-3.5 rounded-2xl glass-no-border bg-white/95 dark:bg-slate-900/95 shadow-2xl border border-slate-200/70 dark:border-slate-700/60 w-[280px] animate-in fade-in zoom-in-95 duration-150 backdrop-blur-xl">
+  <div id="mapLayersFlyout" class="hidden fixed right-4 sm:right-16 top-1/2 -translate-y-1/2 z-[1250] p-3.5 rounded-2xl glass-no-border bg-white/95 dark:bg-slate-900/95 shadow-2xl border border-slate-200/70 dark:border-slate-700/60 w-[min(320px,calc(100vw-1.5rem))] sm:w-[280px] max-h-[calc(100dvh-5.5rem)] sm:max-h-[calc(100dvh-4rem)] overflow-y-auto overscroll-contain custom-scrollbar animate-in fade-in zoom-in-95 duration-150 backdrop-blur-xl">
     <!-- Hidden compatibility elements for state & tests -->
     <span id="mapLayersActiveBadge" class="hidden text-[10px] font-bold px-2 py-0.5 rounded-lg bg-primary/15 text-primary dark:bg-primary/25 dark:text-primary-light">Default</span>
     <button id="minimizeMapLayersBtn" type="button" class="hidden" aria-hidden="true"></button>
 
     <!-- Map Layers Body -->
     <div id="mapLayersBody" class="space-y-3">
-      <!-- Primary Map Mode Dropdown with Stepper Controls -->
-      <div>
+      <!-- Primary Map Mode Dropdown with Stepper Controls (Sticky Header) -->
+      <div class="sticky -top-3.5 -mx-3.5 px-3.5 pt-3.5 pb-2.5 bg-white/95 dark:bg-slate-900/95 backdrop-blur-xl z-10 border-b border-slate-200/60 dark:border-slate-700/50 rounded-t-2xl shadow-xs">
         <div class="flex items-center justify-between mb-1.5" id="mapLayersHeaderTitle">
           <label for="mapModeSelectDropdown" class="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider block">Map Mode</label>
           <div class="flex items-center gap-1">
@@ -2011,6 +2011,7 @@
             <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7"/></svg>
           </button>
         </div>
+      </div>
 
         <!-- Live mode hint / indication badge -->
         <div id="mapModeElevationHint" class="mt-2 p-2 rounded-xl bg-slate-100/90 dark:bg-slate-800/90 border border-slate-200/60 dark:border-slate-700/60 text-[10px] space-y-1">
@@ -2687,7 +2688,7 @@
   <!-- ============================================================ -->
   <!-- SAVED FAVORITES DROPDOWN (Mobile & Desktop)                  -->
   <!-- ============================================================ -->
-  <div id="bookmarksDropdown" class="hidden fixed bottom-16 left-3 sm:left-auto sm:top-14 sm:right-4 sm:bottom-auto w-[320px] sm:w-88 glass rounded-2xl overflow-hidden shadow-2xl border border-slate-200/80 dark:border-slate-700/80 p-2 z-[1150] pointer-events-auto" role="menu" aria-label="Favorites">
+  <div id="bookmarksDropdown" class="hidden fixed bottom-16 left-3 sm:left-auto sm:top-14 sm:right-4 sm:bottom-auto w-[min(320px,calc(100vw-1.5rem))] sm:w-88 max-h-[calc(100dvh-5.5rem)] sm:max-h-[min(80vh,550px)] overflow-y-auto overscroll-contain custom-scrollbar glass rounded-2xl shadow-2xl border border-slate-200/80 dark:border-slate-700/80 p-2 z-[1150] pointer-events-auto" role="menu" aria-label="Favorites">
     <div class="px-3 py-2 flex items-center justify-between border-b border-slate-200/50 dark:border-slate-700/50">
       <div class="flex items-center gap-1.5">
         <span class="text-sm">⭐</span>
@@ -2717,7 +2718,7 @@
   <!-- ============================================================ -->
   <!-- HOME LOCATION DROPDOWN (Mobile & Desktop)                    -->
   <!-- ============================================================ -->
-  <div id="homeDropdown" class="hidden fixed bottom-16 left-3 sm:left-auto sm:top-14 sm:right-28 sm:bottom-auto w-[280px] glass rounded-2xl overflow-hidden shadow-2xl border border-slate-200/80 dark:border-slate-700/80 p-2 z-[1150] pointer-events-auto" role="menu" aria-label="Home Location Options">
+  <div id="homeDropdown" class="hidden fixed bottom-16 left-3 sm:left-auto sm:top-14 sm:right-28 sm:bottom-auto w-[min(280px,calc(100vw-1.5rem))] max-h-[calc(100dvh-5.5rem)] sm:max-h-[min(80vh,550px)] overflow-y-auto overscroll-contain custom-scrollbar glass rounded-2xl shadow-2xl border border-slate-200/80 dark:border-slate-700/80 p-2 z-[1150] pointer-events-auto" role="menu" aria-label="Home Location Options">
     <div class="px-3 py-2 flex items-center justify-between border-b border-slate-200/50 dark:border-slate-700/50">
       <div class="flex items-center gap-1.5">
         <span class="text-sm">🏠</span>
@@ -2760,7 +2761,7 @@
   <!-- ============================================================ -->
   <!-- ROUTE WEATHER DROPDOWN (Mobile & Desktop)                    -->
   <!-- ============================================================ -->
-  <div id="routeDropdown" class="hidden fixed bottom-16 left-3 sm:left-auto sm:top-14 sm:right-16 sm:bottom-auto w-[310px] glass rounded-2xl overflow-hidden shadow-2xl border border-slate-200/80 dark:border-slate-700/80 p-2 z-[1150] pointer-events-auto" role="menu" aria-label="Route Weather Options">
+  <div id="routeDropdown" class="hidden fixed bottom-16 left-3 sm:left-auto sm:top-14 sm:right-16 sm:bottom-auto w-[min(310px,calc(100vw-1.5rem))] max-h-[calc(100dvh-5.5rem)] sm:max-h-[min(80vh,550px)] overflow-y-auto overscroll-contain custom-scrollbar glass rounded-2xl shadow-2xl border border-slate-200/80 dark:border-slate-700/80 p-2 z-[1150] pointer-events-auto" role="menu" aria-label="Route Weather Options">
     <!-- Header -->
     <div class="px-3 py-2 flex items-center justify-between border-b border-slate-200/50 dark:border-slate-700/50">
       <div class="flex items-center gap-1.5 min-w-0">

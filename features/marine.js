@@ -7,6 +7,7 @@
  *   2. Global Flood API (GloFAS river_discharge, river_discharge_max)
  *      Flags river basin surge / flood percentiles against baseline discharge.
  */
+import { translateText, detectLocale } from "../modules/i18n.js";
 
 const MARINE_CACHE = new Map();
 const FLOOD_CACHE = new Map();
@@ -185,8 +186,11 @@ export async function updateMarineFloodUI(app, lat, lng) {
     const marineResult = evaluateMarineHazard(marineData);
     const floodResult = evaluateFloodHazard(floodData);
 
+    const loc = (app && app.language) || (typeof window !== "undefined" && window.app?.language) || detectLocale();
+
     if (marineBadge) {
-      marineBadge.textContent = marineResult.label;
+      const transLabel = translateText(marineResult.label, loc) || marineResult.label;
+      marineBadge.textContent = transLabel;
       marineBadge.className =
         marineResult.tone === 'rose'
           ? 'text-[8px] font-bold px-1.5 py-0.5 rounded-md bg-rose-500/15 text-rose-600 dark:text-rose-400'
@@ -197,11 +201,36 @@ export async function updateMarineFloodUI(app, lat, lng) {
               : 'text-[8px] font-bold px-1.5 py-0.5 rounded-md bg-slate-200 dark:bg-slate-700 text-slate-500 dark:text-slate-400';
     }
     if (marineDetail && marineResult.detail) {
-      marineDetail.textContent = marineResult.detail;
+      let md = marineResult.detail;
+      if (loc !== 'en') {
+        const m1 = md.match(/^([\d.]+)m waves @ (\d+)s swell period$/);
+        if (m1) {
+          const waves = translateText('waves', loc) || 'waves';
+          const period = translateText('swell period', loc) || 'swell period';
+          md = `${m1[1]}m ${waves} @ ${m1[2]}s ${period}`;
+        } else {
+          const m2 = md.match(/^([\d.]+)m significant wave height$/);
+          if (m2) {
+            const swh = translateText('significant wave height', loc) || 'significant wave height';
+            md = `${m2[1]}m ${swh}`;
+          } else {
+            const m3 = md.match(/^([\d.]+)m waves · (\d+)s period$/);
+            if (m3) {
+              const waves = translateText('waves', loc) || 'waves';
+              const period = translateText('period', loc) || 'period';
+              md = `${m3[1]}m ${waves} · ${m3[2]}s ${period}`;
+            } else {
+              md = translateText(md, loc) || md;
+            }
+          }
+        }
+      }
+      marineDetail.textContent = md;
     }
 
     if (floodBadge) {
-      floodBadge.textContent = floodResult.label;
+      const transFloodLabel = translateText(floodResult.label, loc) || floodResult.label;
+      floodBadge.textContent = transFloodLabel;
       floodBadge.className =
         floodResult.tone === 'rose'
           ? 'text-[8px] font-bold px-1.5 py-0.5 rounded-md bg-rose-500/15 text-rose-600 dark:text-rose-400'
@@ -212,7 +241,23 @@ export async function updateMarineFloodUI(app, lat, lng) {
               : 'text-[8px] font-bold px-1.5 py-0.5 rounded-md bg-slate-200 dark:bg-slate-700 text-slate-500 dark:text-slate-400';
     }
     if (floodDetail && floodResult.detail) {
-      floodDetail.textContent = floodResult.detail;
+      let fd = floodResult.detail;
+      if (loc !== 'en') {
+        const mDischarge = fd.match(/^(Current discharge|Current flow|Discharge gauge|Catastrophic discharge|High discharge)[:\s]+(\d+)\s*m³\/s$/i);
+        if (mDischarge) {
+          const prefix = translateText(mDischarge[1], loc);
+          fd = `${prefix} ${mDischarge[2]} m³/s`;
+        } else {
+          const mSurge = fd.match(/^Peak surge to (\d+) m³\/s \(\+(\d+)%\)$/i);
+          if (mSurge) {
+            const peakSurge = translateText('Peak surge', loc) || 'Peak surge';
+            fd = `${peakSurge}: ${mSurge[1]} m³/s (+${mSurge[2]}%)`;
+          } else {
+            fd = translateText(fd, loc) || fd;
+          }
+        }
+      }
+      floodDetail.textContent = fd;
     }
   } catch (e) {
     console.warn('Failed to update marine & flood UI:', e);

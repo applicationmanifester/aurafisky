@@ -1,3 +1,4 @@
+import { t, detectLocale, translateText } from "../modules/i18n.js";
 // -- BEST OUTDOOR WINDOW --
 
 function renderBestOutdoorWindow(startIdx) {
@@ -448,17 +449,17 @@ function updateTrustScore(trust) {
         : trust.overall >= 60
           ? "text-amber-500"
           : "text-red-500";
-    const lang = (typeof window !== "undefined" && localStorage.getItem("aurafisky_lang")) || "en";
-    const i18n = typeof window !== "undefined" ? window.aurafiskyI18n : null;
-    const trustTxt = (i18n ? i18n.t("trust", lang) : "trust") || "trust";
-    const tempTxt = (i18n ? i18n.t("temperature", lang) : "temp") || "temp";
-    const windTxt = (i18n ? i18n.t("wind", lang) : "wind") || "wind";
-    const precipTxt = (i18n ? i18n.t("precipitation", lang) : "precip") || "precip";
-    this.$.trustScore.textContent = `🎯 ${trust.overall}% ${trustTxt} (${tempTxt} ${trust.temp}%, ${windTxt} ${trust.wind}%, ${precipTxt} ${trust.precip}%)`;
+    const lang = this.language || (typeof window !== "undefined" && (window.app?.language || localStorage.getItem("aurafisky_lang"))) || detectLocale();
+    const trustTxt = translateText("trust", lang) || "trust";
+    const tempTxt = translateText("temperature", lang) || "temp";
+    const windTxt = translateText("wind", lang) || "wind";
+    const precipTxt = translateText("precipitation", lang) || "precip";
+    const rawTrust = `🎯 ${trust.overall}% ${trustTxt} (${tempTxt} ${trust.temp}%, ${windTxt} ${trust.wind}%, ${precipTxt} ${trust.precip}%)`;
+    this.$.trustScore.textContent = translateText(rawTrust, lang);
     this.$.trustScore.className = `text-[9px] font-semibold ${color}`;
-    if (lang !== "en" && i18n?.translateDOM) {
-      i18n.translateDOM(this.$.trustScore, lang);
-      i18n.refreshExternalTranslation?.(lang);
+    if (lang !== "en" && typeof window !== "undefined" && window.aurafiskyI18n?.translateDOM) {
+      window.aurafiskyI18n.translateDOM(this.$.trustScore, lang);
+      window.aurafiskyI18n.refreshExternalTranslation?.(lang);
     }
   }
 

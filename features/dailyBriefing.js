@@ -1,3 +1,4 @@
+import { t, detectLocale, translateText } from "../modules/i18n.js";
 // features/dailyBriefing.js
 // ── DAILY BRIEFING ──────────────────────────────────────────────────
 //
@@ -55,85 +56,117 @@ export function shouldFireNotification(lastFiredDateKey, todayKey, hourNow, pref
  *    advisoryTitle|null, aqi, goldenLabel, goldenStart, goldenEnd}
  * @returns {{icon:string, headline:string, bullets:Array, note:string}}
  */
-export function buildBriefingView(d) {
+export function buildBriefingView(d, loc) {
+  const curLang = loc || (typeof window !== "undefined" && (window.app?.language || localStorage.getItem("aurafisky_lang"))) || detectLocale();
   if (!d || d.temperature == null) {
-    return { icon: "🌤️", headline: "Briefing unavailable", bullets: [], note: "" };
+    return {
+      icon: "🌤️",
+      headline: translateText("Briefing unavailable", curLang) || "Briefing unavailable",
+      bullets: [],
+      note: ""
+    };
   }
   const bullets = [];
 
+  const rightNowLabel = translateText("Right now", curLang) || "Right now";
+  const desc = translateText(d.description, curLang) || d.description;
+  const feelsWord = translateText("feels", curLang) || "feels";
   bullets.push({
-    k: "Right now",
-    v: `${d.icon} ${d.description} · ${Math.round(d.temperature)}° (feels ${Math.round(d.feelsLike ?? d.temperature)}°)`,
+    k: rightNowLabel,
+    v: `${d.icon} ${desc} · ${Math.round(d.temperature)}° (${feelsWord} ${Math.round(d.feelsLike ?? d.temperature)}°)`,
   });
 
   if (d.todayMax != null && d.todayMin != null) {
     bullets.push({
-      k: "Today's range",
+      k: translateText("Today's range", curLang) || "Today's range",
       v: `${Math.round(d.todayMin)}° – ${Math.round(d.todayMax)}°`,
     });
   }
 
   if (d.prob24h != null) {
+    const rainLabel = translateText("Rain", curLang) || "Rain";
+    const planAround = translateText("chance within 6 hours — plan around it", curLang) || "chance within 6 hours — plan around it";
+    const lowConcern = translateText("peak over 24h — low concern", curLang) || "peak over 24h — low concern";
     bullets.push({
-      k: "Rain",
+      k: rainLabel,
       v: d.prob6h >= 50
-        ? `${Math.round(d.prob6h)}% chance within 6 hours — plan around it`
-        : `${Math.round(d.prob24h)}% peak over 24h — low concern`,
+        ? `${Math.round(d.prob6h)}% ${planAround}`
+        : `${Math.round(d.prob24h)}% ${lowConcern}`,
       tone: d.prob6h >= 50 ? "warn" : "good",
     });
   }
 
   if (d.bestWindow) {
+    const bestWindowLabel = translateText("Best outdoor window", curLang) || "Best outdoor window";
+    const overnightLabel = translateText("overnight", curLang) || "overnight";
     const span = d.bestWindow.overnight
-      ? `${d.bestWindow.startTime} – ${d.bestWindow.endTime} (overnight)`
+      ? `${d.bestWindow.startTime} – ${d.bestWindow.endTime} (${overnightLabel})`
       : `${d.bestWindow.startTime} – ${d.bestWindow.endTime}`;
     bullets.push({
-      k: "Best outdoor window",
+      k: bestWindowLabel,
       v: `${span} (${d.bestWindow.hours}h)`,
       tone: "good",
     });
   }
 
   if (d.sunrise && d.sunset) {
-    bullets.push({ k: "Daylight", v: `${d.sunrise} – ${d.sunset}` });
+    bullets.push({
+      k: translateText("Daylight", curLang) || "Daylight",
+      v: `${d.sunrise} – ${d.sunset}`
+    });
   }
 
   if (d.goldenLabel && d.goldenStart && d.goldenEnd) {
-    bullets.push({ k: d.goldenLabel, v: `${d.goldenStart} – ${d.goldenEnd}` });
+    bullets.push({
+      k: translateText(d.goldenLabel, curLang) || d.goldenLabel,
+      v: `${d.goldenStart} – ${d.goldenEnd}`
+    });
   }
 
   if (d.advisoryTitle) {
-    bullets.push({ k: "Watch out", v: d.advisoryTitle, tone: "warn" });
+    bullets.push({
+      k: translateText("Watch out", curLang) || "Watch out",
+      v: translateText(d.advisoryTitle, curLang) || d.advisoryTitle,
+      tone: "warn"
+    });
   }
 
   if (d.comfort != null) {
+    const comfortLabel = translateText("Comfort", curLang) || "Comfort";
+    const cValLabel = d.comfortLabel ? ` · ${translateText(d.comfortLabel, curLang) || d.comfortLabel}` : "";
     bullets.push({
-      k: "Comfort",
-      v: `${Math.round(d.comfort)}/100${d.comfortLabel ? ` · ${d.comfortLabel}` : ""}`,
+      k: comfortLabel,
+      v: `${Math.round(d.comfort)}/100${cValLabel}`,
       tone: d.comfort >= 70 ? "good" : "warn",
     });
   }
 
   // Headline: the single most decision-relevant sentence for today.
   let headline;
+  const overnightSuffix = translateText("overnight", curLang) || "overnight";
   const windowSpan = d.bestWindow
     ? d.bestWindow.overnight
-      ? `${d.bestWindow.startTime}–${d.bestWindow.endTime} overnight`
+      ? `${d.bestWindow.startTime}–${d.bestWindow.endTime} ${overnightSuffix}`
       : `${d.bestWindow.startTime}–${d.bestWindow.endTime}`
     : null;
   if (d.firstRainTime) {
-    headline = `Rain expected around ${d.firstRainTime} — keep the umbrella handy.`;
+    const rainExpected = translateText("Rain expected around", curLang) || "Rain expected around";
+    const keepUmbrella = translateText("keep the umbrella handy", curLang) || "keep the umbrella handy";
+    headline = `${rainExpected} ${d.firstRainTime} — ${keepUmbrella}.`;
   } else if (windowSpan) {
-    headline = `Best time to be outside: ${windowSpan}.`;
+    const bestTime = translateText("Best time to be outside", curLang) || "Best time to be outside";
+    headline = `${bestTime}: ${windowSpan}.`;
   } else if (d.advisoryTitle) {
-    headline = `${d.advisoryTitle} — plan accordingly.`;
+    const advTitle = translateText(d.advisoryTitle, curLang) || d.advisoryTitle;
+    const planAcc = translateText("plan accordingly", curLang) || "plan accordingly";
+    headline = `${advTitle} — ${planAcc}.`;
   } else {
     headline = `A calm, ${d.description.toLowerCase()} day ahead.`;
   }
 
   const note = d.aqi != null && d.aqi > 100
-    ? "Air quality is poor today — sensitive groups should take it easy outside."
-    : "Generated from your live forecast — regenerated once a day.";
+    ? (translateText("Air quality is poor today — sensitive groups should take it easy outside.", curLang) || "Air quality is poor today — sensitive groups should take it easy outside.")
+    : (translateText("Generated from your live forecast — regenerated once a day.", curLang) || "Generated from your live forecast — regenerated once a day.");
 
   return { icon: d.icon || "🌤️", headline, bullets, note };
 }
@@ -313,6 +346,8 @@ function renderCard(view) {
   const card = document.getElementById("dailyBriefingCard");
   if (!card) return;
 
+  const curLang = (typeof window !== "undefined" && (window.app?.language || localStorage.getItem("aurafisky_lang"))) || detectLocale();
+
   card.textContent = "";
   const inner = document.createElement("div");
   inner.className =
@@ -326,12 +361,12 @@ function renderCard(view) {
   icon.textContent = view.icon;
   const title = document.createElement("span");
   title.className = "text-[10px] font-bold uppercase tracking-wider text-primary dark:text-primary-light";
-  title.textContent = "Today's briefing";
+  title.textContent = translateText("Today's briefing", curLang) || "Today's briefing";
   head.append(icon, title);
 
   const headline = document.createElement("p");
   headline.className = "text-xs font-bold text-slate-800 dark:text-slate-100 leading-snug";
-  headline.textContent = view.headline;
+  headline.textContent = translateText(view.headline, curLang) || view.headline;
 
   inner.append(head, headline);
 
@@ -343,12 +378,12 @@ function renderCard(view) {
       row.className = "flex items-baseline gap-1.5";
       const k = document.createElement("span");
       k.className = "text-[10px] font-semibold text-slate-400 dark:text-slate-500 flex-shrink-0";
-      k.textContent = b.k;
+      k.textContent = translateText(b.k, curLang) || b.k;
       const v = document.createElement("span");
       v.className = "text-[11px] text-slate-600 dark:text-slate-300 truncate";
       if (b.tone === "warn") v.classList.add("text-amber-600", "dark:text-amber-400");
       if (b.tone === "good") v.classList.add("text-emerald-600", "dark:text-emerald-400");
-      v.textContent = b.v;
+      v.textContent = translateText(b.v, curLang) || b.v;
       row.append(k, v);
       list.appendChild(row);
     }
@@ -358,13 +393,12 @@ function renderCard(view) {
   if (view.note) {
     const note = document.createElement("p");
     note.className = "text-[9px] text-slate-400 dark:text-slate-500 mt-2";
-    note.textContent = view.note;
+    note.textContent = translateText(view.note, curLang) || view.note;
     inner.appendChild(note);
   }
 
   card.appendChild(inner);
   card.classList.remove("hidden");
-  const curLang = (typeof window !== "undefined" && localStorage.getItem("aurafisky_lang")) || "en";
   if (curLang !== "en" && typeof window !== "undefined" && window.aurafiskyI18n?.translateDOM) {
     window.aurafiskyI18n.translateDOM(card, curLang);
     window.aurafiskyI18n.refreshExternalTranslation?.(curLang);
@@ -381,8 +415,9 @@ function renderDailyBriefing(force = false) {
   const data = gatherData();
   if (!data) return;
 
+  const curLang = app.language || (typeof window !== "undefined" && window.app?.language) || detectLocale();
   const dateKey = todayKey();
-  const key = briefingStoreKey(locKey(app.selectedName), dateKey);
+  const key = briefingStoreKey(locKey(app.selectedName), `${dateKey}_${curLang}`);
   let view = null;
   try {
     const raw = localStorage.getItem(key);
@@ -391,7 +426,7 @@ function renderDailyBriefing(force = false) {
     view = null;
   }
   if (!view) {
-    view = buildBriefingView(data);
+    view = buildBriefingView(data, curLang);
     try {
       localStorage.setItem(key, JSON.stringify(view));
     } catch {

@@ -800,7 +800,12 @@ class AurafiskyApp {
       ),
       settingsClearCacheBtn: document.getElementById("settingsClearCacheBtn"),
       settingsDeleteDataBtn: document.getElementById("settingsDeleteDataBtn"),
+      settingsFeatureTourBtn: document.getElementById("settingsFeatureTourBtn"),
       settingsTermsBtn: document.getElementById("settingsTermsBtn"),
+      onboardingTourModal: document.getElementById("onboardingTourModal"),
+      onboardingCloseBtn: document.getElementById("onboardingCloseBtn"),
+      onboardingDismissBtn: document.getElementById("onboardingDismissBtn"),
+      dontShowTourCheckbox: document.getElementById("dontShowTourCheckbox"),
       termsModal: document.getElementById("termsModal"),
       termsAcceptBtn: document.getElementById("termsAcceptBtn"),
       termsCloseBtn: document.getElementById("termsCloseBtn"),
@@ -819,11 +824,11 @@ class AurafiskyApp {
 
     // ── Loading-overlay watchdog ──────────────────────────────
     // Guarantee the overlay never permanently blocks the UI, even if init()
-    // throws before hideLoadingOverlay() runs. Force it gone after 8s.
+    // throws before hideLoadingOverlay() runs. Force it gone after 2.5s.
     setTimeout(() => {
       const ov = this.$.loadingOverlay;
       if (ov && ov.isConnected) this.hideLoadingOverlay();
-    }, 8000);
+    }, 2500);
 
     // ── Initialize ────────────────────────────────────────────
     this.init();
@@ -872,6 +877,7 @@ class AurafiskyApp {
     document.addEventListener("keydown", (e) => {
       if (e.key === "Escape") {
         this.hideTermsModal();
+        this.hideOnboardingTour();
         if (this.toggleAppInfoModal) this.toggleAppInfoModal(false);
         if (this.toggleShortcutsModal) this.toggleShortcutsModal(false);
         if (this.toggleAccountDialog) this.toggleAccountDialog(false);
@@ -953,8 +959,8 @@ class AurafiskyApp {
       initWebVitals(this.analytics);
     }
 
-    // Apply device language
-    this.setLanguage(this.currentLanguage);
+    // Apply device language silently on initial boot
+    this.setLanguage(detectLocale(), true);
 
     // Sync device profile across tabs
     if (this.deviceProfile && this.syncBus?.syncDeviceProfile) {
@@ -2430,6 +2436,35 @@ class AurafiskyApp {
       });
     }
 
+    // ── Onboarding & Feature Discovery Tour ───────────────────
+    if (this.$.settingsFeatureTourBtn) {
+      this.$.settingsFeatureTourBtn.addEventListener("click", () => {
+        this.toggleSettingsPanel(false);
+        this.showOnboardingTour();
+        this._haptic?.('selection');
+      });
+    }
+    if (this.$.onboardingCloseBtn) {
+      this.$.onboardingCloseBtn.addEventListener("click", () => {
+        this.hideOnboardingTour();
+        this._haptic?.('light');
+      });
+    }
+    if (this.$.onboardingDismissBtn) {
+      this.$.onboardingDismissBtn.addEventListener("click", () => {
+        this.hideOnboardingTour();
+        this._haptic?.('selection');
+      });
+    }
+    if (this.$.onboardingTourModal) {
+      this.$.onboardingTourModal.addEventListener("click", (e) => {
+        const dialog = this.$.onboardingTourModal.firstElementChild;
+        if (!dialog || !dialog.contains(e.target)) {
+          this.hideOnboardingTour();
+        }
+      });
+    }
+
     // ── Terms & Privacy Modal Controls ────────────────────────
     if (this.$.settingsTermsBtn) {
       this.$.settingsTermsBtn.addEventListener("click", () =>
@@ -3656,8 +3691,49 @@ class AurafiskyApp {
       return;
     }
 
-    // Fallback runner to restore previous session or default home
-    const restoreFallback = () => {
+    // Resolves an immediate regional city from user's timezone if no prior session exists
+    const getStartupDefaultLocation = () => {
+      try {
+        const tz = Intl.DateTimeFormat().resolvedOptions().timeZone || "";
+        if (tz.includes("Kolkata") || tz.includes("Calcutta") || tz.includes("India")) {
+          return { lat: 12.9716, lng: 77.5946, name: "Bengaluru, Karnataka, India" };
+        }
+        if (tz.includes("London") || tz.includes("Europe/London") || tz.includes("GB")) {
+          return { lat: 51.5074, lng: -0.1278, name: "London, England, UK" };
+        }
+        if (tz.includes("Paris") || tz.includes("Berlin") || tz.includes("Rome") || tz.includes("Madrid") || tz.includes("Amsterdam")) {
+          return { lat: 48.8566, lng: 2.3522, name: "Paris, France" };
+        }
+        if (tz.includes("New_York") || tz.includes("Detroit") || tz.includes("Toronto") || tz.includes("Montreal")) {
+          return { lat: 40.7128, lng: -74.0060, name: "New York, USA" };
+        }
+        if (tz.includes("Los_Angeles") || tz.includes("Vancouver") || tz.includes("San_Francisco")) {
+          return { lat: 34.0522, lng: -118.2437, name: "Los Angeles, USA" };
+        }
+        if (tz.includes("Chicago") || tz.includes("Winnipeg") || tz.includes("Mexico_City")) {
+          return { lat: 41.8781, lng: -87.6298, name: "Chicago, USA" };
+        }
+        if (tz.includes("Tokyo")) {
+          return { lat: 35.6762, lng: 139.6503, name: "Tokyo, Japan" };
+        }
+        if (tz.includes("Shanghai") || tz.includes("Beijing") || tz.includes("Hong_Kong") || tz.includes("Chongqing")) {
+          return { lat: 31.2304, lng: 121.4737, name: "Shanghai, China" };
+        }
+        if (tz.includes("Sydney") || tz.includes("Melbourne") || tz.includes("Brisbane")) {
+          return { lat: -33.8688, lng: 151.2093, name: "Sydney, Australia" };
+        }
+        if (tz.includes("Dubai") || tz.includes("Riyadh") || tz.includes("Qatar")) {
+          return { lat: 25.2048, lng: 55.2708, name: "Dubai, UAE" };
+        }
+        if (tz.includes("Sao_Paulo") || tz.includes("Buenos_Aires")) {
+          return { lat: -23.5505, lng: -46.6333, name: "São Paulo, Brazil" };
+        }
+      } catch (_) {}
+      return { lat: 12.9716, lng: 77.5946, name: "Bengaluru, Karnataka, India" };
+    };
+
+    // Fallback runner to restore previous session or default home, guaranteed never to leave UI blank
+    const restoreFallback = (guaranteed = false) => {
       if (this._restoreSession()) {
         return true;
       }
@@ -3666,6 +3742,11 @@ class AurafiskyApp {
         if (this.defaultLocationNotify) {
           this.setupHourlyNotifications();
         }
+        return true;
+      }
+      if (guaranteed) {
+        const def = getStartupDefaultLocation();
+        this.selectLocation(def.lat, def.lng, def.name);
         return true;
       }
       return false;
@@ -3692,14 +3773,14 @@ class AurafiskyApp {
 
       if (isNativeApp || permissionState === "granted" || permissionState !== "denied" || this._lastKnownGpsCoords) {
         // Instantly render optimistic cached session/home so screen is never blank while GPS locks
-        const restored = restoreFallback();
+        const restored = restoreFallback(true);
 
         // Concurrently get fresh user location and smoothly transition to where the user currently is
         this.getMyLocation({
           silent: true,
           precise: true,
           onFail: () => {
-            if (!restored) restoreFallback();
+            if (!restored) restoreFallback(true);
           },
         });
         return;
@@ -3720,8 +3801,9 @@ class AurafiskyApp {
       return;
     }
 
-    // 5. Geolocation fallback
-    this.getMyLocation();
+    // 5. Geolocation fallback with guaranteed regional fallback location
+    restoreFallback(true);
+    this.getMyLocation({ silent: true });
   }
 
   _restoreSession() {
@@ -4164,6 +4246,14 @@ class AurafiskyApp {
       this.$.panelCardFreshness.textContent = "Forecast update unavailable";
       this.$.panelCardFreshness.className = "text-[10px] mt-0.5 text-amber-600 dark:text-amber-400";
     }
+    if (state === "error") {
+      if (this.$.panelTimeLabel && (this.$.panelTimeLabel.textContent.includes("Fetching") || this.$.panelTimeLabel.textContent.includes("Loading"))) {
+        this.$.panelTimeLabel.textContent = "Unavailable";
+      }
+      if (this.$.mobilePanelTimeLabel && (this.$.mobilePanelTimeLabel.textContent.includes("Fetching") || this.$.mobilePanelTimeLabel.textContent.includes("Loading"))) {
+        this.$.mobilePanelTimeLabel.textContent = "Unavailable";
+      }
+    }
     if (this.$.weatherPanelSkeleton) {
       this.$.weatherPanelSkeleton.classList.toggle("hidden", state !== "loading");
     }
@@ -4336,8 +4426,10 @@ class AurafiskyApp {
         }
         const fl = document.getElementById("freshnessLabel");
         if (fl) {
+          const activeLang = this.language || detectLocale();
           const mins = Math.max(0, Math.round((Date.now() - (cached.ts || 0)) / 60000));
-          fl.textContent = mins === 0 ? "Updated just now" : `Updated ${mins}m ago`;
+          const rawFresh = mins === 0 ? "Updated just now" : `Updated ${mins}m ago`;
+          fl.textContent = `📡 ${translateText(rawFresh, activeLang) || rawFresh}`;
         }
         this.updateOfflineBadge(false);
         weatherPopulated = true;
@@ -4398,7 +4490,10 @@ class AurafiskyApp {
         this._persistWeatherCache(cacheKey, cachePayload);
         saveCachedForecast(lat, lng, cachePayload).catch(() => {});
         const fl = document.getElementById("freshnessLabel");
-        if (fl) fl.textContent = "Updated just now";
+        if (fl) {
+          const activeLang = this.language || detectLocale();
+          fl.textContent = `📡 ${translateText("Updated just now", activeLang) || "Updated just now"}`;
+        }
 
         // If air quality resolves slightly later, update smoothly in background
         if (!airQuality) {
@@ -4495,23 +4590,38 @@ class AurafiskyApp {
             if (this.$.weatherPanelContent) this.$.weatherPanelContent.scrollTop = 0;
           });
         } else {
-          this.showToast(
-            this.isOffline
-              ? "You are offline and no cached data is available for this city."
-              : "Could not fetch weather metrics. Please try again.",
-            "error",
-          );
+          let errorTitle = "Weather Data Unavailable";
+          let errorMessage = "Unable to retrieve live conditions for this point. Tap Retry to reconnect.";
+          let errorIcon = "⚠️";
+
+          if (this.isOffline || !navigator.onLine) {
+            errorTitle = "You are Offline";
+            errorMessage = "No saved forecast found for this location. Reconnect to the internet and tap Retry.";
+            errorIcon = "📶";
+          } else if (error?.isTimeout || error?.name === "TimeoutError") {
+            errorTitle = "Request Timed Out";
+            errorMessage = "The weather service took too long to respond. Tap Retry to try again.";
+            errorIcon = "⏱️";
+          } else if (error?.status === 429 || String(error).includes("429")) {
+            errorTitle = "Server Rate Limited";
+            errorMessage = "Open-Meteo servers are temporarily receiving high traffic. Please wait a moment and tap Retry.";
+            errorIcon = "⏳";
+          } else if (error?.status >= 500) {
+            errorTitle = "Service Temporarily Unavailable";
+            errorMessage = "Forecast servers are currently undergoing maintenance or high traffic. Tap Retry to reconnect.";
+            errorIcon = "☁️";
+          }
+
+          this.showToast(errorMessage, "error");
 
           // Clear prior location's weather data so we NEVER present one city's weather under another!
           this.weatherData = null;
           this.airQualityData = null;
 
           this._setWeatherPanelState("error", {
-            title: this.isOffline ? "You are Offline" : "Weather Data Unavailable",
-            message: this.isOffline
-              ? "No saved forecast found for this location. Reconnect and tap Retry."
-              : "Unable to retrieve live conditions for this point. Tap Retry to reconnect.",
-            icon: this.isOffline ? "📶" : "⚠️",
+            title: errorTitle,
+            message: errorMessage,
+            icon: errorIcon,
             hasCachedData: false,
           });
         }
@@ -10460,6 +10570,23 @@ class AurafiskyApp {
     this.$.termsModal.style.display = "none";
   }
 
+  showOnboardingTour() {
+    if (!this.$.onboardingTourModal) return;
+    this.$.onboardingTourModal.classList.remove("hidden");
+    this.$.onboardingTourModal.style.display = "flex";
+  }
+
+  hideOnboardingTour() {
+    if (!this.$.onboardingTourModal) return;
+    this.$.onboardingTourModal.classList.add("hidden");
+    this.$.onboardingTourModal.style.display = "none";
+    try {
+      if (this.$.dontShowTourCheckbox?.checked) {
+        localStorage.setItem("aurafisky_tour_dismissed", "true");
+      }
+    } catch (_) {}
+  }
+
   // ================================================================
   //  FIREBASE INTEGRATION & SECURITY
   // ================================================================
@@ -11036,6 +11163,7 @@ class AurafiskyApp {
     if (show) {
       this.pushHistoryOverlay("settings");
       this.$.settingsPanel.classList.remove("hidden");
+      this.updateSettingsUIFromLocal?.();
       if (typeof translateDOM === "function") {
         translateDOM(this.$.settingsPanel, this.language || detectLocale());
       }
@@ -11471,6 +11599,9 @@ class AurafiskyApp {
 
   applyLanguage(lang) {
     if (!lang) return;
+    if (this._languageMutationObserver) {
+      this._languageMutationObserver.disconnect();
+    }
     setLocale(lang);
     this.language = lang;
     try {
@@ -11491,12 +11622,11 @@ class AurafiskyApp {
     const title = document.querySelector("title");
     if (title) title.textContent = `${t("app_name", lang)} — ${t("app_tagline", lang)}`;
     if (this.$.searchInput) {
-      // Keep the source placeholder stable across language switches. Without
-      // this, translateDOM can remember the first selected locale as the source
-      // and leave the search field stuck in that language on later changes.
-      this.$.searchInput.setAttribute("data-orig-placeholder", "Search a city...");
-      this.$.searchInput.placeholder = t("search_placeholder", lang);
-      this.$.searchInput.setAttribute("aria-label", t("search_placeholder", lang));
+      const ph = t("search_placeholder", lang) || "Search a city…";
+      this.$.searchInput.setAttribute("data-orig-placeholder", "Search a city…");
+      this.$.searchInput.placeholder = ph;
+      this.$.searchInput.setAttribute("placeholder", ph);
+      this.$.searchInput.setAttribute("aria-label", ph);
     }
     const voiceSearchBtn = document.getElementById("voiceSearchBtn");
     if (voiceSearchBtn) {
@@ -11571,6 +11701,11 @@ class AurafiskyApp {
       this.updateWeatherDisplay(typeof this.currentHourIndex === "number" ? this.currentHourIndex : 0);
     }
 
+    // 8a. Re-render daily briefing if present
+    if (typeof this.renderDailyBriefing === "function") {
+      try { this.renderDailyBriefing(true); } catch (_) {}
+    }
+
     // 8b. Re-render Smart To-dos with fresh translations
     if (typeof this.renderSmartTodos === "function") {
       try { this.renderSmartTodos(); } catch (_) {}
@@ -11586,80 +11721,88 @@ class AurafiskyApp {
       this.initTimeline();
     }
 
-    // 10. Run deep recursive DOM translation across the full active document
-    if (typeof translateDOM === "function") {
-      translateDOM(document.body, lang);
-    }
+    this._isTranslatingDOM = true;
+    try {
+      // 10. Run deep recursive DOM translation across the full active document
+      if (typeof translateDOM === "function") {
+        translateDOM(document.body, lang);
+      }
 
-    // 11. Re-translate Settings Panel if open or present
-    if (this.$.settingsPanel && typeof translateDOM === "function") {
-      translateDOM(this.$.settingsPanel, lang);
-    }
-    if (this.$.setDefaultLocationBtn) {
-      this.$.setDefaultLocationBtn.textContent = t("set_here", lang) || "Set here";
-    }
-    const installBtnLabel = document.getElementById("installBtnLabel");
-    if (installBtnLabel) {
-      installBtnLabel.textContent = t("install_app", lang) || "Install Aurafisky App";
-    }
-    const termsTitle = document.getElementById("termsTitle");
-    if (termsTitle) {
-      termsTitle.textContent = t("terms_privacy", lang) || "Terms & Privacy";
-    }
+      // 11. Re-translate Settings Panel if open or present
+      if (this.$.settingsPanel && typeof translateDOM === "function") {
+        translateDOM(this.$.settingsPanel, lang);
+      }
+      if (this.$.setDefaultLocationBtn) {
+        this.$.setDefaultLocationBtn.textContent = t("set_here", lang) || "Set here";
+      }
+      const installBtnLabel = document.getElementById("installBtnLabel");
+      if (installBtnLabel) {
+        installBtnLabel.textContent = t("install_app", lang) || "Install Aurafisky App";
+      }
+      const termsTitle = document.getElementById("termsTitle");
+      if (termsTitle) {
+        termsTitle.textContent = t("terms_privacy", lang) || "Terms & Privacy";
+      }
 
-    // 11b. Update Settings UI local status and hints
-    if (typeof this.updateSettingsUIFromLocal === "function") {
-      this.updateSettingsUIFromLocal();
-    }
+      // 11b. Update Settings UI local status and hints
+      if (typeof this.updateSettingsUIFromLocal === "function") {
+        this.updateSettingsUIFromLocal();
+      }
 
-    // 11c. Re-translate Route Studio if open
-    const routePanel = document.getElementById("routePanel");
-    if (routePanel && typeof translateDOM === "function") {
-      translateDOM(routePanel, lang);
+      // 11c. Re-translate Route Studio if open
+      const routePanel = document.getElementById("routePanel");
+      if (routePanel && typeof translateDOM === "function") {
+        translateDOM(routePanel, lang);
+      }
+
+      // 11d. Re-translate Map Layers Flyout if present
+      if (this.$.mapLayersFlyout && typeof translateDOM === "function") {
+        translateDOM(this.$.mapLayersFlyout, lang);
+      }
+    } finally {
+      this._isTranslatingDOM = false;
     }
 
     // UI panels and form fields are rendered lazily after startup. Translate
     // newly inserted content with the active app locale so fields stay in sync
-    // without each feature needing its own language-change hook.
+    // without recursive attribute feedback loops.
     if (!this._languageMutationObserver && typeof MutationObserver !== "undefined" && document.body) {
+      let rafId = null;
+      const pendingNodes = new Set();
       this._languageMutationObserver = new MutationObserver((records) => {
-        const addedNodes = new Set();
-        const changedAttributes = new Set();
+        if (this._isTranslatingDOM) return;
         for (const record of records) {
           if (record.type === "childList") {
-            for (const node of record.addedNodes) addedNodes.add(node);
-          } else if (record.type === "attributes") {
-            changedAttributes.add(record.target);
-          }
-        }
-        if (!this.language || typeof translateDOM !== "function") return;
-        for (const node of addedNodes) {
-          if (node.isConnected) translateDOM(node, this.language);
-        }
-        for (const node of changedAttributes) {
-          if (!node.isConnected) continue;
-          // App code can replace a field's source placeholder/title after it was
-          // first translated. Refresh the saved source only when the new value
-          // is not the active locale's translation of the saved source.
-          for (const attr of ["placeholder", "title", "aria-label", "aria-description", "aria-placeholder", "alt", "value"]) {
-            const current = node.getAttribute?.(attr);
-            if (!current) continue;
-            if (attr === "value" && !/^(button|submit)$/i.test(node.type || "")) continue;
-            const originalKey = `data-orig-${attr}`;
-            const savedSource = node.getAttribute(originalKey);
-            if (savedSource && current !== translateText(savedSource, this.language)) {
-              node.setAttribute(originalKey, current);
+            for (const node of record.addedNodes) {
+              if (node.nodeType === Node.ELEMENT_NODE) {
+                if (node.tagName === "SCRIPT" || node.tagName === "STYLE" || node.id === "google_translate_element") continue;
+                if (node._lastI18nLocale === this.language) continue;
+                pendingNodes.add(node);
+              }
             }
           }
-          translateDOM(node, this.language);
         }
+        if (pendingNodes.size === 0 || !this.language || typeof translateDOM !== "function") return;
+        if (rafId) return;
+        rafId = requestAnimationFrame(() => {
+          rafId = null;
+          if (this._isTranslatingDOM) return;
+          const toProcess = Array.from(pendingNodes);
+          pendingNodes.clear();
+          for (const node of toProcess) {
+            if (node.isConnected && node._lastI18nLocale !== this.language) {
+              node._lastI18nLocale = this.language;
+              translateDOM(node, this.language);
+            }
+          }
+        });
       });
+    }
+
+    if (this._languageMutationObserver && document.body) {
       this._languageMutationObserver.observe(document.body, {
         childList: true,
         subtree: true,
-        attributes: true,
-        attributeOldValue: true,
-        attributeFilter: ["placeholder", "title", "aria-label", "aria-description", "aria-placeholder", "alt", "value"],
       });
     }
 
@@ -11669,7 +11812,7 @@ class AurafiskyApp {
     }
   }
 
-  setLanguage(lang) {
+  setLanguage(lang, silent = false) {
     if (!setLocale(lang)) return false;
     this.language = lang;
     this.applyLanguage(lang);
@@ -11685,7 +11828,9 @@ class AurafiskyApp {
       pt: "Português", ru: "Русский", "zh-CN": "简体中文"
     };
     const selectedLanguageName = this.$.settingsAppLanguageSelect?.selectedOptions?.[0]?.textContent?.trim();
-    this.showToast?.(`Language: ${langNames[lang] || selectedLanguageName || lang.toUpperCase()}`, "info");
+    if (!silent) {
+      this.showToast?.(`Language: ${langNames[lang] || selectedLanguageName || lang.toUpperCase()}`, "info");
+    }
     return true;
   }
 
@@ -11904,6 +12049,9 @@ class AurafiskyApp {
       this.pushHistoryOverlay("layers");
       this._updateMapStyleUI();
       this._updateMapLayersActiveBadge();
+      if (typeof translateDOM === "function") {
+        translateDOM(this.$.mapLayersFlyout, this.language || detectLocale());
+      }
       if (this.selectedLat != null && this.selectedLng != null) {
         this.updateMarineFloodUI?.(this.selectedLat, this.selectedLng);
       }
@@ -12080,11 +12228,13 @@ class AurafiskyApp {
     const switchModeIcon = document.getElementById("mapLegendSwitchModeIcon");
     const switchModeText = document.getElementById("mapLegendSwitchModeText");
 
+    const loc = this.language || detectLocale();
+
     if (isTempActive) {
       // ── Temperature Mode ──
       widget.classList.remove("hidden");
       if (pillIcon) pillIcon.textContent = "🌡️";
-      if (pillTitle) pillTitle.textContent = "Temperature Scale";
+      if (pillTitle) pillTitle.textContent = translateText("Temperature Scale", loc) || "Temperature Scale";
       if (pillSwatches) {
         pillSwatches.innerHTML = `
           <span class="w-2.5 h-2.5 rounded-full bg-[#1d4ed8]" title="Cold (<10°C)"></span>
@@ -12095,50 +12245,50 @@ class AurafiskyApp {
         `;
       }
       if (cardIcon) cardIcon.textContent = "🌡️";
-      if (cardTitle) cardTitle.textContent = "Live Temperature Scale";
-      if (cardSubtitle) cardSubtitle.textContent = "Ground Air Temperature (°C)";
+      if (cardTitle) cardTitle.textContent = translateText("Live Temperature Scale", loc) || "Live Temperature Scale";
+      if (cardSubtitle) cardSubtitle.textContent = translateText("Ground Air Temperature (°C)", loc) || "Ground Air Temperature (°C)";
       if (notification) {
         notification.className = "px-2.5 py-1.5 rounded-xl bg-blue-500/10 dark:bg-blue-500/15 border border-blue-500/30 text-[11px] font-medium text-blue-900 dark:text-blue-200 leading-snug";
-        notification.innerHTML = "<span>🌡️ <strong>Active:</strong> Color circles denote <strong>Air Temperature</strong> across the region.</span>";
+        notification.innerHTML = `<span>🌡️ <strong>${translateText("Active", loc) || "Active"}:</strong> ${translateText("Color circles denote Air Temperature across the region.", loc) || "Color circles denote Air Temperature across the region."}</span>`;
       }
       if (gradientBar) {
         gradientBar.style.background = "linear-gradient(90deg, #1d4ed8, #0284c7, #16a34a, #eab308, #ea580c, #dc2626)";
       }
       if (gradientLabels) {
-        gradientLabels.innerHTML = "<span>&lt; 5°C (Cold)</span><span>22°C (Mild)</span><span>&gt; 38°C (Extreme)</span>";
+        gradientLabels.innerHTML = `<span>&lt; 5°C (${translateText("Cold", loc) || "Cold"})</span><span>22°C (${translateText("Mild", loc) || "Mild"})</span><span>&gt; 38°C (${translateText("Extreme", loc) || "Extreme"})</span>`;
       }
       if (swatchesList) {
         swatchesList.innerHTML = `
           <div class="flex items-center gap-2">
             <span class="w-3 h-3 rounded-full bg-[#1d4ed8] flex-shrink-0"></span>
-            <span class="text-slate-600 dark:text-slate-300"><strong class="text-slate-900 dark:text-slate-100">&lt; 10°C</strong> (&lt; 50°F) · Cold / Chilly</span>
+            <span class="text-slate-600 dark:text-slate-300"><strong class="text-slate-900 dark:text-slate-100">&lt; 10°C</strong> (&lt; 50°F) · ${translateText("Cold / Chilly", loc) || "Cold / Chilly"}</span>
           </div>
           <div class="flex items-center gap-2">
             <span class="w-3 h-3 rounded-full bg-[#16a34a] flex-shrink-0"></span>
-            <span class="text-slate-600 dark:text-slate-300"><strong class="text-slate-900 dark:text-slate-100">10°C – 22°C</strong> (50°F – 72°F) · Mild &amp; Pleasant</span>
+            <span class="text-slate-600 dark:text-slate-300"><strong class="text-slate-900 dark:text-slate-100">10°C – 22°C</strong> (50°F – 72°F) · ${translateText("Mild & Pleasant", loc) || "Mild & Pleasant"}</span>
           </div>
           <div class="flex items-center gap-2">
             <span class="w-3 h-3 rounded-full bg-[#eab308] flex-shrink-0"></span>
-            <span class="text-slate-600 dark:text-slate-300"><strong class="text-slate-900 dark:text-slate-100">22°C – 28°C</strong> (72°F – 82°F) · Warm</span>
+            <span class="text-slate-600 dark:text-slate-300"><strong class="text-slate-900 dark:text-slate-100">22°C – 28°C</strong> (72°F – 82°F) · ${translateText("Warm", loc) || "Warm"}</span>
           </div>
           <div class="flex items-center gap-2">
             <span class="w-3 h-3 rounded-full bg-[#ea580c] flex-shrink-0"></span>
-            <span class="text-slate-600 dark:text-slate-300"><strong class="text-slate-900 dark:text-slate-100">28°C – 35°C</strong> (82°F – 95°F) · Hot</span>
+            <span class="text-slate-600 dark:text-slate-300"><strong class="text-slate-900 dark:text-slate-100">28°C – 35°C</strong> (82°F – 95°F) · ${translateText("Hot", loc) || "Hot"}</span>
           </div>
           <div class="flex items-center gap-2">
             <span class="w-3 h-3 rounded-full bg-[#dc2626] flex-shrink-0"></span>
-            <span class="text-slate-600 dark:text-slate-300"><strong class="text-slate-900 dark:text-slate-100">&gt; 35°C</strong> (&gt; 95°F) · Very Hot / Extreme Heat</span>
+            <span class="text-slate-600 dark:text-slate-300"><strong class="text-slate-900 dark:text-slate-100">&gt; 35°C</strong> (&gt; 95°F) · ${translateText("Very Hot / Extreme Heat", loc) || "Very Hot / Extreme Heat"}</span>
           </div>
         `;
       }
       if (switchModeIcon) switchModeIcon.textContent = "🧭";
-      if (switchModeText) switchModeText.textContent = "Switch to Elevation Relief";
+      if (switchModeText) switchModeText.textContent = translateText("Switch to Elevation Relief", loc) || "Switch to Elevation Relief";
 
     } else if (isElevationActive) {
       // ── Elevation Relief Mode ──
       widget.classList.remove("hidden");
       if (pillIcon) pillIcon.textContent = "🧭";
-      if (pillTitle) pillTitle.textContent = "Elevation Key";
+      if (pillTitle) pillTitle.textContent = translateText("Elevation Key", loc) || "Elevation Key";
       if (pillSwatches) {
         pillSwatches.innerHTML = `
           <span class="w-2.5 h-2.5 rounded-full bg-[#388e3c]" title="Lowlands (0-200m)"></span>
@@ -12148,46 +12298,46 @@ class AurafiskyApp {
         `;
       }
       if (cardIcon) cardIcon.textContent = "🧭";
-      if (cardTitle) cardTitle.textContent = "Topographic Elevation";
-      if (cardSubtitle) cardSubtitle.textContent = "Height Above Sea Level (Relief)";
+      if (cardTitle) cardTitle.textContent = translateText("Topographic Elevation", loc) || "Topographic Elevation";
+      if (cardSubtitle) cardSubtitle.textContent = translateText("Height Above Sea Level (Relief)", loc) || "Height Above Sea Level (Relief)";
       if (notification) {
         notification.className = "px-2.5 py-1.5 rounded-xl bg-amber-500/10 dark:bg-amber-500/15 border border-amber-500/30 text-[11px] font-medium text-amber-900 dark:text-amber-200 leading-snug";
-        notification.innerHTML = "<span>⚠️ <strong>Notice:</strong> Red, orange &amp; green shades denote <strong>Elevation</strong> above sea level, not temperature.</span>";
+        notification.innerHTML = `<span>⚠️ <strong>${translateText("Notice", loc) || "Notice"}:</strong> ${translateText("Red, orange & green shades denote Elevation above sea level, not temperature.", loc) || "Red, orange & green shades denote Elevation above sea level, not temperature."}</span>`;
       }
       if (gradientBar) {
         gradientBar.style.background = "linear-gradient(90deg, #388e3c, #8bc34a, #fbc02d, #f57c00, #d32f2f, #795548)";
       }
       if (gradientLabels) {
-        gradientLabels.innerHTML = "<span>0 m (Coast)</span><span>500 m</span><span>1,500 m+ (Peaks)</span>";
+        gradientLabels.innerHTML = `<span>0 m (${translateText("Coast", loc) || "Coast"})</span><span>500 m</span><span>1,500 m+ (${translateText("Peaks", loc) || "Peaks"})</span>`;
       }
       if (swatchesList) {
         swatchesList.innerHTML = `
           <div class="flex items-center gap-2">
             <span class="w-3 h-3 rounded-full bg-[#388e3c] flex-shrink-0"></span>
-            <span class="text-slate-600 dark:text-slate-300"><strong class="text-slate-900 dark:text-slate-100">0 – 200 m</strong> (0 – 650 ft) · Coastal lowlands &amp; plains</span>
+            <span class="text-slate-600 dark:text-slate-300"><strong class="text-slate-900 dark:text-slate-100">0 – 200 m</strong> (0 – 650 ft) · ${translateText("Coastal lowlands & plains", loc) || "Coastal lowlands & plains"}</span>
           </div>
           <div class="flex items-center gap-2">
             <span class="w-3 h-3 rounded-full bg-[#8bc34a] flex-shrink-0"></span>
-            <span class="text-slate-600 dark:text-slate-300"><strong class="text-slate-900 dark:text-slate-100">200 – 500 m</strong> (650 – 1,600 ft) · Foothills &amp; river valleys</span>
+            <span class="text-slate-600 dark:text-slate-300"><strong class="text-slate-900 dark:text-slate-100">200 – 500 m</strong> (650 – 1,600 ft) · ${translateText("Foothills & river valleys", loc) || "Foothills & river valleys"}</span>
           </div>
           <div class="flex items-center gap-2">
             <span class="w-3 h-3 rounded-full bg-[#f57c00] flex-shrink-0"></span>
-            <span class="text-slate-600 dark:text-slate-300"><strong class="text-slate-900 dark:text-slate-100">500 – 1,000 m</strong> (1,600 – 3,300 ft) · Tablelands &amp; plateaus</span>
+            <span class="text-slate-600 dark:text-slate-300"><strong class="text-slate-900 dark:text-slate-100">500 – 1,000 m</strong> (1,600 – 3,300 ft) · ${translateText("Tablelands & plateaus", loc) || "Tablelands & plateaus"}</span>
           </div>
           <div class="flex items-center gap-2">
             <span class="w-3 h-3 rounded-full bg-[#d32f2f] flex-shrink-0"></span>
-            <span class="text-slate-600 dark:text-slate-300"><strong class="text-slate-900 dark:text-slate-100">&gt; 1,000 m</strong> (&gt; 3,300 ft) · Mountain ridges &amp; peaks</span>
+            <span class="text-slate-600 dark:text-slate-300"><strong class="text-slate-900 dark:text-slate-100">&gt; 1,000 m</strong> (&gt; 3,300 ft) · ${translateText("Mountain ridges & peaks", loc) || "Mountain ridges & peaks"}</span>
           </div>
         `;
       }
       if (switchModeIcon) switchModeIcon.textContent = "🌡️";
-      if (switchModeText) switchModeText.textContent = "Show Live Temperature Grid";
+      if (switchModeText) switchModeText.textContent = translateText("Show Live Temperature Grid", loc) || "Show Live Temperature Grid";
 
     } else {
       // ── Standard Basemap (Street/Satellite) ──
       widget.classList.remove("hidden");
       if (pillIcon) pillIcon.textContent = "🗺️";
-      if (pillTitle) pillTitle.textContent = "Map Key";
+      if (pillTitle) pillTitle.textContent = translateText("Map Key", loc) || "Map Key";
       if (pillSwatches) {
         pillSwatches.innerHTML = `
           <span class="w-2.5 h-2.5 rounded-full bg-[#388e3c]" title="Lowlands"></span>
@@ -12196,36 +12346,36 @@ class AurafiskyApp {
         `;
       }
       if (cardIcon) cardIcon.textContent = "🗺️";
-      if (cardTitle) cardTitle.textContent = "Map Color Legend";
-      if (cardSubtitle) cardSubtitle.textContent = "Elevation &amp; Temperature Keys";
+      if (cardTitle) cardTitle.textContent = translateText("Map Color Legend", loc) || "Map Color Legend";
+      if (cardSubtitle) cardSubtitle.textContent = translateText("Elevation & Temperature Keys", loc) || "Elevation & Temperature Keys";
       if (notification) {
         notification.className = "px-2.5 py-1.5 rounded-xl bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-[11px] font-medium text-slate-700 dark:text-slate-300 leading-snug";
-        notification.innerHTML = "<span>Switch between <strong>Topographic Elevation</strong> relief and <strong>Live Temperature Grid</strong> overlays.</span>";
+        notification.innerHTML = `<span>${translateText("Switch between Topographic Elevation relief and Live Temperature Grid overlays.", loc) || "Switch between <strong>Topographic Elevation</strong> relief and <strong>Live Temperature Grid</strong> overlays."}</span>`;
       }
       if (gradientBar) {
         gradientBar.style.background = "linear-gradient(90deg, #388e3c, #8bc34a, #fbc02d, #f57c00, #d32f2f, #795548)";
       }
       if (gradientLabels) {
-        gradientLabels.innerHTML = "<span>0 m (Coast)</span><span>500 m</span><span>1,500 m+ (Peaks)</span>";
+        gradientLabels.innerHTML = `<span>0 m (${translateText("Coast", loc) || "Coast"})</span><span>500 m</span><span>1,500 m+ (${translateText("Peaks", loc) || "Peaks"})</span>`;
       }
       if (swatchesList) {
         swatchesList.innerHTML = `
           <div class="flex items-center gap-2">
             <span class="w-3 h-3 rounded-full bg-[#388e3c] flex-shrink-0"></span>
-            <span class="text-slate-600 dark:text-slate-300"><strong class="text-slate-900 dark:text-slate-100">Green</strong>: Coastal plains &amp; lowlands (0-200m)</span>
+            <span class="text-slate-600 dark:text-slate-300"><strong class="text-slate-900 dark:text-slate-100">${translateText("Green", loc) || "Green"}</strong>: ${translateText("Coastal plains & lowlands (0-200m)", loc) || "Coastal plains & lowlands (0-200m)"}</span>
           </div>
           <div class="flex items-center gap-2">
             <span class="w-3 h-3 rounded-full bg-[#f57c00] flex-shrink-0"></span>
-            <span class="text-slate-600 dark:text-slate-300"><strong class="text-slate-900 dark:text-slate-100">Orange</strong>: Plateaus &amp; tablelands (500-1000m)</span>
+            <span class="text-slate-600 dark:text-slate-300"><strong class="text-slate-900 dark:text-slate-100">${translateText("Orange", loc) || "Orange"}</strong>: ${translateText("Plateaus & tablelands (500-1000m)", loc) || "Plateaus & tablelands (500-1000m)"}</span>
           </div>
           <div class="flex items-center gap-2">
             <span class="w-3 h-3 rounded-full bg-[#d32f2f] flex-shrink-0"></span>
-            <span class="text-slate-600 dark:text-slate-300"><strong class="text-slate-900 dark:text-slate-100">Red</strong>: High mountain peaks (&gt;1000m)</span>
+            <span class="text-slate-600 dark:text-slate-300"><strong class="text-slate-900 dark:text-slate-100">${translateText("Red", loc) || "Red"}</strong>: ${translateText("High mountain peaks (>1000m)", loc) || "High mountain peaks (>1000m)"}</span>
           </div>
         `;
       }
       if (switchModeIcon) switchModeIcon.textContent = "🌡️";
-      if (switchModeText) switchModeText.textContent = "Show Live Temperature Grid";
+      if (switchModeText) switchModeText.textContent = translateText("Show Live Temperature Grid", loc) || "Show Live Temperature Grid";
     }
 
     if (this.language && this.language !== "en" && typeof translateDOM === "function") {
@@ -12241,6 +12391,7 @@ class AurafiskyApp {
 function bootAurafisky() {
   try {
     window.app = new AurafiskyApp();
+    window.aurafiskyApp = window.app;
     window.addEventListener("beforeunload", () => {
       if (window.app?.destroy) window.app.destroy();
     });

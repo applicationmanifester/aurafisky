@@ -10639,6 +10639,206 @@ export const ALT_WORDS = {
   sw: "Mwinuko", tl: "Taas", ms: "Ketinggian", fa: "ارتفاع", ne: "उचाइ", si: "උන්නතාංශය"
 };
 
+
+export const FARM_AND_EXTRA_PHRASES = {
+  "Alt": ALT_WORDS,
+  "Altitude": ALT_WORDS,
+  "mag": {
+    en: "mag", kn: "ಕಾಂತಿ", hi: "परिमाण", ta: "பிரகாசம்", te: "పరిమాణం", mr: "प्रत",
+    gu: "પરિમાણ", bn: "মাত্রা", ml: "മാഗ്", pa: "ਮੈਗ", or: "ମ୍ୟାଗ୍", ur: "شدت",
+    "zh-CN": "星等", "zh-TW": "星等", ja: "等級", ko: "등급", es: "mag", fr: "mag",
+    de: "mag", it: "mag", pt: "mag", ru: "зв. вел.", ar: "قدر", fa: "قدر ظاهری"
+  },
+  "All Plants": {
+    en: "All Plants", kn: "ಎಲ್ಲಾ ಸಸ್ಯಗಳು", hi: "सभी पौधे", ta: "அனைத்து தாவரங்கள்",
+    te: "అన్ని మొక్కలు", gu: "બધા છોડ", mr: "सर्व वनस्पती", bn: "সব উদ্ভিদ",
+    ml: "എല്ലാ സസ്യങ്ങളും", pa: "ਸਾਰੇ ਪੌਦੇ", or: "ସମସ୍ତ ଉଦ୍ଭିଦ", ur: "تمام پودے",
+    "zh-CN": "所有植物", "zh-TW": "所有植物", ja: "すべての植物", ko: "모든 식물",
+    es: "Todas las plantas", fr: "Toutes les plantes", de: "Alle Pflanzen",
+    it: "Tutte le piante", pt: "Todas as plantas", ru: "Все растения",
+    ar: "جميع النباتات", fa: "همه گیاهان", tr: "Tüm Bitkiler", vi: "Tất cả cây trồng",
+    th: "พืชทั้งหมด", id: "Semua Tanaman", ms: "Semua Tumbuhan", nl: "Alle planten",
+    pl: "Wszystkie rośliny", sv: "Alla växter"
+  },
+  "Vegetables": {
+    en: "Vegetables", kn: "ತರಕಾರಿಗಳು", hi: "सब्जियां", ta: "காய்கறிகள்",
+    te: "కూరగాయలు", gu: "શાકભાજી", mr: "भाज्या", bn: "শাকসবজি",
+    ml: "പച്ചക്കറികൾ", pa: "ਸਬਜ਼ੀਆਂ", or: "ପନିପରିବା", ur: "سبزیاں",
+    "zh-CN": "蔬菜", "zh-TW": "蔬菜", ja: "野菜", ko: "채소",
+    es: "Verduras", fr: "Légumes", de: "Gemüse", it: "Verdure",
+    pt: "Vegetais", ru: "Овощи", ar: "خضراوات", fa: "سبزیجات",
+    tr: "Sebzeler", vi: "Rau củ", th: "ผัก", id: "Sayuran",
+    ms: "Sayur-sayuran", nl: "Groenten", pl: "Warzywa", sv: "Grönsaker"
+  },
+  "Fruits": {
+    en: "Fruits", kn: "ಹಣ್ಣುಗಳು", hi: "फल", ta: "பழங்கள்",
+    te: "పండ్లు", gu: "ફળો", mr: "फळे", bn: "ফলমূল",
+    ml: "പഴങ്ങൾ", pa: "ਫਲ", or: "ଫଳ", ur: "پھل",
+    "zh-CN": "水果", "zh-TW": "水果", ja: "果物", ko: "과일",
+    es: "Frutas", fr: "Fruits", de: "Früchte", it: "Frutta",
+    pt: "Frutas", ru: "Фрукты", ar: "فواكه", fa: "میوه‌ها",
+    tr: "Meyveler", vi: "Trái cây", th: "ผลไม้", id: "Buah-buahan",
+    ms: "Buah-buahan", nl: "Fruit", pl: "Owoce", sv: "Frukter"
+  },
+  "Grains & Pulses": {
+    en: "Grains & Pulses", kn: "ಧಾನ್ಯಗಳು & ಬೇಳೆಕಾಳುಗಳು", hi: "अनाज व दालें",
+    ta: "தானியங்கள் & பருப்பு வகைகள்", te: "ధాన్యాలు & పప్పుధాన్యాలు",
+    gu: "અનાજ અને કઠોળ", mr: "धान्य आणि कडधान्ये", bn: "শস্য ও ডাল",
+    ml: "ധാന്യങ്ങളും പയറുവർഗ്ഗങ്ങളും", pa: "ਅਨਾਜ ਅਤੇ ਦਾਲਾਂ", or: "ଶସ୍ୟ ଓ ଡାଲି",
+    ur: "اناج اور دالیں", "zh-CN": "谷物与豆类", "zh-TW": "穀物與豆類",
+    ja: "穀物と豆類", ko: "곡물 및 콩류", es: "Granos y legumbres",
+    fr: "Grains et légumineuses", de: "Getreide & Hülsenfrüchte",
+    it: "Cereali e legumi", pt: "Grãos e leguminosas", ru: "Зерновые и бобовые",
+    ar: "الحبوب والبقوليات", fa: "غلات و حبوبات", tr: "Tahıllar ve Baklagiller",
+    vi: "Ngũ cốc & đậu", th: "ธัญพืชและถั่ว", id: "Biji-bijian & Kacang-kacangan",
+    ms: "Bijirin & Kekacang", nl: "Granen en peulvruchten", pl: "Zboża i rośliny strączkowe",
+    sv: "Spannmål och baljväxter"
+  },
+  "Herbs & Medicinal": {
+    en: "Herbs & Medicinal", kn: "ಮೂಲಿಕೆಗಳು & ಔಷಧೀಯ", hi: "जड़ी-बूटियाँ व औषधीय",
+    ta: "மூலிகைகள் & மருந்துகள்", te: "మూలికలు & ఔషధ", gu: "ઔષધીય વનસ્પતિઓ",
+    mr: "वनौषधी आणि औषधी", bn: "ভেষজ ও ঔষধি", ml: "ഔഷധസസ്യങ്ങൾ",
+    pa: "ਜੜੀ-ਬੂਟੀਆਂ ਅਤੇ ਦਵਾਈਆਂ", or: "ଔଷଧୀୟ ଉଦ୍ଭିଦ", ur: "جڑی بوٹیاں اور ادویاتی",
+    "zh-CN": "草本与药用植物", "zh-TW": "草本與藥用植物", ja: "ハーブと薬用植物",
+    ko: "허브 및 약용 식물", es: "Hierbas y medicinales", fr: "Herbes et plantes médicinales",
+    de: "Kräuter & Heilpflanzen", it: "Erbe e officinali", pt: "Ervas e medicinais",
+    ru: "Травы и лекарственные", ar: "أعشاب ونباتات طبية", fa: "گیاهان دارویی",
+    tr: "Şifalı Otlar ve Bitkiler", vi: "Thảo mộc & dược liệu", th: "สมุนไพรและพืชสมุนไพร",
+    id: "Herba & Obat", ms: "Herba & Ubat-ubatan", nl: "Kruiden en medicinale planten",
+    pl: "Zioła i lecznicze", sv: "Örter och medicinalväxter"
+  },
+  "Trees & Timber": {
+    en: "Trees & Timber", kn: "ಮರಗಳು & ಮರಮುಟ್ಟು", hi: "पेड़ व इमारती लकड़ी",
+    ta: "மரங்கள் & மரக்கட்டைகள்", te: "చెట్లు & కలప", gu: "વૃક્ષો અને લાકડું",
+    mr: "झाडे आणि लाकूड", bn: "গাছ ও কাঠ", ml: "മരങ്ങളും തടികളും",
+    pa: "ਰੁੱਖ ਅਤੇ ਲੱਕੜ", or: "ଗଛ ଓ କାଠ", ur: "درخت اور عمارتی لکڑی",
+    "zh-CN": "树木与木材", "zh-TW": "樹木與木材", ja: "樹木と木材",
+    ko: "나무 및 목재", es: "Árboles y madera", fr: "Arbres et bois d'œuvre",
+    de: "Bäume & Nutzholz", it: "Alberi e legname", pt: "Árvores e madeira",
+    ru: "Деревья и древесина", ar: "أشجار وأخشاب", fa: "درختان و الوار",
+    tr: "Ağaçlar ve Kereste", vi: "Cây thân gỗ & gỗ", th: "ต้นไม้และไม้แปรรูป",
+    id: "Pohon & Kayu", ms: "Pokok & Kayu Balak", nl: "Bomen en timmerhout",
+    pl: "Drzewa i drewno", sv: "Träd och virke"
+  },
+  "Flowers & Cover": {
+    en: "Flowers & Cover", kn: "ಹೂಗಳು & ಹೊದಿಕೆ ಬೆಳೆಗಳು", hi: "फूल व कवर फसलें",
+    ta: "பூக்கள் & மூடுபயிர்", te: "పూలు & కవర్ పంటలు", gu: "ફૂલો અને કવર પાકો",
+    mr: "फुले आणि आच्छादन पिके", bn: "ফুল ও আচ্ছাদন ফসল", ml: "പൂക്കളും മൂടുവിളകളും",
+    pa: "ਫੁੱਲ ਅਤੇ ਕਵਰ ਫਸਲਾਂ", or: "ଫୁଲ ଓ ଆଚ୍ଛାଦନ ଫସଲ", ur: "پھول اور کور فصلیں",
+    "zh-CN": "花卉与地被植物", "zh-TW": "花卉與地被植物", ja: "花と被覆作物",
+    ko: "꽃 및 피복 작물", es: "Flores y cobertura", fr: "Fleurs et plantes de couverture",
+    de: "Blumen & Bodendecker", it: "Fiori e pacciamatura", pt: "Flores e cobertura",
+    ru: "Цветы и почвопокровные", ar: "زهور ونباتات تغطية", fa: "گل‌ها و گیاهان پوششی",
+    tr: "Çiçekler ve Örtü Bitkileri", vi: "Hoa & cây che phủ", th: "ดอกไม้และพืชคลุมดิน",
+    id: "Bunga & Penutup Tanah", ms: "Bunga & Tanaman Penutup", nl: "Bloemen en bodembedekkers",
+    pl: "Kwiaty i rośliny okrywowe", sv: "Blommor och marktäckare"
+  },
+  "Farm Mode": {
+    en: "Farm Mode", kn: "ಕೃಷಿ ವಿಧಾನ", hi: "कृषि मोड", ta: "விவசாய பயன்முறை",
+    te: "వ్యవసాయ మోడ్", gu: "ખેતી મોડ", mr: "शेती मोड", bn: "কৃষি মোড",
+    ml: "കാർഷിക മോഡ്", pa: "ਖੇਤੀ ਮੋਡ", or: "କୃଷି ମୋଡ୍", ur: "زرعی موڈ",
+    "zh-CN": "农场模式", "zh-TW": "農場模式", ja: "ファームモード", ko: "농장 모드",
+    es: "Modo Agrícola", fr: "Mode Agricole", de: "Landwirtschafts-Modus",
+    it: "Modalità Agricola", pt: "Modo Agrícola", ru: "Фермерский режим",
+    ar: "الوضع الزراعي", fa: "حالت مزرعه", tr: "Çiftlik Modu", vi: "Chế độ nông trại",
+    th: "โหมดเกษตรกรรม", id: "Mode Pertanian", ms: "Mod Pertanian",
+    nl: "Boerderijmodus", pl: "Tryb rolniczy", sv: "Jordbruksläge"
+  },
+  "Refresh soil data": {
+    en: "Refresh soil data", kn: "ಮಣ್ಣಿನ ಡೇಟಾ ನವೀಕರಿಸಿ", hi: "मिट्टी का डेटा रीफ़्रेश करें",
+    ta: "மண் தரவைப் புதுப்பிக்கவும்", te: "మట్టి డేటాను రిఫ్రెష్ చేయండి",
+    gu: "જમીનનો ડેટા તાજો કરો", mr: "मातीचा डेटा रीफ्रेश करा", bn: "মাটির ডেটা রিফ্রেশ করুন",
+    ml: "മണ്ണ് വിവരങ്ങൾ പുതുക്കുക", pa: "ਮਿੱਟੀ ਦਾ ਡੇਟਾ ਤਾਜ਼ਾ ਕਰੋ", or: "ମାଟି ଡାଟା ରିଫ୍ରେଶ୍ କରନ୍ତୁ",
+    ur: "مٹی کا ڈیٹا تازہ کریں", "zh-CN": "刷新土壤数据", "zh-TW": "重新整理土壤資料",
+    ja: "土壌データを更新", ko: "토양 데이터 새로고침", es: "Actualizar datos del suelo",
+    fr: "Actualiser les données du sol", de: "Bodendaten aktualisieren",
+    it: "Aggiorna dati del suolo", pt: "Atualizar dados do solo", ru: "Обновить данные почвы",
+    ar: "تحديث بيانات التربة", fa: "به‌روزرسانی داده‌های خاک", tr: "Toprak verilerini yenile",
+    vi: "Làm mới dữ liệu đất", th: "รีเฟรชข้อมูลดิน", id: "Segarkan data tanah",
+    ms: "Muat semula data tanah", nl: "Bodemgegevens vernieuwen", pl: "Odśwież dane glebowe",
+    sv: "Uppdatera markdata"
+  },
+  "What to grow here — ranked for this week": {
+    en: "What to grow here — ranked for this week",
+    kn: "ಇಲ್ಲಿ ಏನು ಬೆಳೆಯಬಹುದು — ಈ ವಾರದ ಶ್ರೇಯಾಂಕ",
+    hi: "यहाँ क्या उगाएं — इस सप्ताह के लिए रैंकिंग",
+    ta: "இங்கு என்ன பயிரிடலாம் — இந்த வாரத்திற்கான தரவரிசை",
+    te: "ఇక్కడ ఏమి పండించాలి — ఈ వారం ర్యాంకింగ్",
+    gu: "અહીં શું ઉગાડવું — આ અઠવાડિયા માટે ક્રમાંકિત",
+    mr: "येथे काय पिकवावे — या आठवड्यासाठी क्रमवारी",
+    bn: "এখানে কী চাষ করবেন — এই সপ্তাহের জন্য ক্রম",
+    ml: "ഇവിടെ എന്ത് വളർത്താം — ഈ ആഴ്ചയിലെ റാങ്കിംഗ്",
+    pa: "ਇੱਥੇ ਕੀ ਉਗਾਇਆ ਜਾਵੇ — ਇਸ ਹਫ਼ਤੇ ਦੀ ਦਰਜਾਬੰਦੀ",
+    or: "ଏଠାରେ କଣ ଚାଷ କରିବେ — ଏହି ସପ୍ତାହ ପାଇଁ ର଼୍ୟାଙ୍କିଙ୍ଗ୍",
+    ur: "یہاں کیا اگائیں — اس ہفتے کے لیے درجہ بندی",
+    "zh-CN": "此地适种作物 — 本周推荐排名",
+    "zh-TW": "此地適種作物 — 本週推薦排名",
+    ja: "ここで育てる作物 — 今週の推奨ランキング",
+    ko: "여기서 재배할 작물 — 이번 주 추천 순위",
+    es: "Qué cultivar aquí — clasificadas para esta semana",
+    fr: "Que cultiver ici — classé pour cette semaine",
+    de: "Was hier anbauen — Rangliste für diese Woche",
+    it: "Cosa coltivare qui — classificate per questa settimana",
+    pt: "O que cultivar aqui — ranqueadas para esta semana",
+    ru: "Что выращивать здесь — рейтинг на эту неделю",
+    ar: "ما يمكن زراعته هنا — مرتبة لهذا الأسبوع",
+    fa: "چه چیزی اینجا بکاریم — رتبه‌بندی شده برای این هفته",
+    tr: "Burada ne yetiştirilir — bu hafta için sıralı",
+    vi: "Trồng gì ở đây — xếp hạng tuần này",
+    th: "ปลูกอะไรที่นี่ — จัดอันดับสำหรับสัปดาห์นี้",
+    id: "Apa yang ditanam di sini — peringkat minggu ini",
+    ms: "Apa yang perlu ditanam di sini — kedudukan minggu ini",
+    nl: "Wat hier te telen — gerangschikt voor deze week",
+    pl: "Co uprawiać tutaj — ranking na ten tydzień",
+    sv: "Vad som kan odlas här — rankat för denna vecka"
+  },
+  "suitable": {
+    en: "suitable", kn: "ಹೊಂದಿಕೆಯಾಗುವ", hi: "उपयुक्त", ta: "பொருத்தமானது",
+    te: "అనుకూలమైనది", gu: "યોગ્ય", mr: "योग्य", bn: "উপযুক্ত", ml: "യോജിച്ചത്",
+    pa: "ਢੁਕਵਾਂ", or: "ଉପଯୁକ୍ତ", ur: "مناسب", "zh-CN": "适宜", "zh-TW": "適宜",
+    ja: "適正", ko: "적합", es: "adecuadas", fr: "adaptées", de: "geeignet",
+    it: "adatte", pt: "adequadas", ru: "подходящих", ar: "مناسب", fa: "مناسب",
+    tr: "uygun", vi: "thích hợp", th: "เหมาะสม", id: "cocok", ms: "sesuai",
+    nl: "geschikt", pl: "odpowiednich", sv: "lämpliga"
+  },
+  "Tap a location on the map (or search your village) and this tab turns it into a cropping plan: what to grow, when to sow, spray windows, and the water balance.": {
+    en: "Tap a location on the map (or search your village) and this tab turns it into a cropping plan: what to grow, when to sow, spray windows, and the water balance.",
+    kn: "ನಕ್ಷೆಯಲ್ಲಿ ಒಂದು ಸ್ಥಳವನ್ನು ಟ್ಯಾಪ್ ಮಾಡಿ (ಅಥವಾ ನಿಮ್ಮ ಊರನ್ನು ಹುಡುಕಿ), ಈ ಟ್ಯಾಬ್ ಬೆಳೆ ಯೋಜನೆಯನ್ನು ನೀಡುತ್ತದೆ: ಏನು ಬೆಳೆಯಬೇಕು, ಯಾವಾಗ ಬಿತ್ತನೆ ಮಾಡಬೇಕು, ಸಿಂಪಡಣೆ ಸಮಯ ಮತ್ತು ನೀರಿನ ಸಮತೋಲನ.",
+    hi: "मानचित्र पर किसी स्थान पर टैप करें (या अपना गाँव खोजें) और यह टैब इसे एक फसल योजना में बदल देगा: क्या उगाएं, कब बोएं, स्प्रे की अवधि और जल संतुलन।",
+    ta: "வரைபடத்தில் ஒரு இடத்தைத் தட்டவும் (அல்லது உங்கள் கிராமத்தைத் தேடவும்), இந்த தாவல் அதை பயிர் திட்டமாக மாற்றும்: என்ன வளர்க்க வேண்டும், எப்போது விதைக்க வேண்டும், தெளிப்பு நேரம் மற்றும் நீர் சமநிலை.",
+    te: "మ్యాప్‌లో ఒక స్థలాన్ని నొక్కండి (లేదా మీ గ్రామాన్ని శోధించండి), ఈ ట్యాబ్ దానిని పంట ప్రణాళికగా మారుస్తుంది: ఏమి పండించాలి, ఎప్పుడు విత్తాలి, పిచికారీ సమయం మరియు నీటి సమతుల్యత.",
+    gu: "નકશા પર સ્થાન પર ટેપ કરો (અથવા તમારા ગામને શોધો) અને આ ટેબ તેને પાક યોજનામાં ફેરવી દેશે: શું ઉગાડવું, ક્યારે વાવણી કરવી, છંટકાવનો સમય અને પાણીનું સંતુલન.",
+    mr: "नਕ्शावर एका ठिकाणावर टॅप करा (किंवा तुमचे गाव शोधा) आणि हा टॅब त्याचे पीक नियोजनात रूपांतर करेल: काय पिकवायचे, कधी पेरायचे, फवारणीच्या वेळा आणि पाण्याचे संतुलन.",
+    bn: "মানচিত্রে একটি স্থানে ট্যাপ করুন (বা আপনার গ্রাম খুঁজুন) এবং এই ট্যাবটি এটিকে একটি ফসল পরিকল্পনায় রূপান্তরিত করবে: কী চাষ করবেন, কখন বপন করবেন, স্প্রে করার সময় এবং জলের ভারসাম্য।",
+    ml: "മാപ്പിൽ ഒരു സ്ഥലം ടാപ്പ് ചെയ്യുക (അല്ലെങ്കിൽ നിങ്ങളുടെ ഗ്രാമം തിരയുക), ഈ ടാബ് അതിനെ ഒരു കൃഷി പ്ലാനാക്കി മാറ്റും: എന്ത് വളർത്തണം, എപ്പോൾ വിതയ്ക്കണം, സ്പ്രേ വിൻഡോകൾ, ജല സന്തുലിതാവസ്ഥ.",
+    pa: "ਨਕਸ਼ੇ 'ਤੇ ਕਿਸੇ ਸਥਾਨ 'ਤੇ ਟੈਪ ਕਰੋ (ਜਾਂ ਆਪਣੇ ਪਿੰਡ ਦੀ ਖੋਜ ਕਰੋ) ਅਤੇ ਇਹ ਟੈਬ ਇਸਨੂੰ ਫਸਲ ਯੋਜਨਾ ਵਿੱਚ ਬਦਲ ਦੇਵੇਗੀ: ਕੀ ਉਗਾਉਣਾ ਹੈ, ਕਦੋਂ ਬੀਜਣਾ ਹੈ, ਸਪਰੇਅ ਦੇ ਸਮੇਂ ਅਤੇ ਪਾਣੀ ਦਾ ਸੰਤੁਲਨ।",
+    or: "ମାନଚିତ୍ରରେ ଏକ ସ୍ଥାନ ଟ୍ୟାପ୍ କରନ୍ତୁ (ବା ଆପଣଙ୍କ ଗ୍ରାମ ଖୋଜନ୍ତୁ) ଏବଂ ଏହି ଟ୍ୟାବ୍ ଏହାକୁ ଏକ ଫସଲ ଯୋଜନାରେ ପରିଣତ କରିବ: କଣ ଚାଷ କରିବେ, କେବେ ବୁଣିବେ, ସ୍ପ୍ରେ ସମୟ ଏବଂ ଜଳ ସନ୍ତୁଳନ।",
+    ur: "نقشے پر کسی مقام پر ٹیپ کریں (یا اپنا گاؤں تلاش کریں) اور یہ ٹیب اسے فصل کے منصوبے میں بدل دے گا: کیا اگانا ہے، کب بویا جائے، اسپرے کا وقت اور پانی کا توازن۔",
+    "zh-CN": "点击地图上的位置（或搜索您的村庄/地点），此标签页将生成作物种植规划：适种作物、播种时间、喷药窗口与水分平衡。",
+    "zh-TW": "點擊地圖上的位置（或搜尋您的村莊/地點），此標籤頁將生成作物種植規劃：適種作物、播種時間、噴藥時機與水分平衡。",
+    ja: "地図上の場所をタップ（または村や町を検索）すると、作物の作付け計画（何を栽培するか、播種時期、散布適期、水収支）が表示されます。",
+    ko: "지도에서 위치를 탭하거나 지역을 검색하면 이 탭이 작물 계획(재배 작물, 파종 시기, 방제 시기, 수분 균형)을 생성합니다.",
+    es: "Toca una ubicación en el mapa (o busca tu localidad) y esta pestaña la convertirá en un plan de cultivo: qué plantar, cuándo sembrar, momentos de pulverización y balance hídrico.",
+    fr: "Appuyez sur un lieu sur la carte (ou recherchez votre village) et cet onglet le transformera en plan de culture : quoi cultiver, quand semer, fenêtres de pulvérisation et bilan hydrique.",
+    de: "Tippen Sie auf einen Ort auf der Karte (oder suchen Sie Ihr Dorf), und dieser Tab erstellt einen Anbauplan: was anbauen, wann säen, Spritzfenster und Wasserbilanz.",
+    it: "Tocca una posizione sulla mappa (o cerca la tua località) e questa scheda la trasformerà in un piano colturale: cosa coltivare, quando seminare, finestre di irrorazione e bilancio idrico.",
+    pt: "Toque em um local no mapa (ou pesquise sua cidade) e esta guia o transformará em um plano de cultivo: o que plantar, quando semear, janelas de pulverização e balanço hídrico.",
+    ru: "Нажмите на место на карте (или найдите свой населенный пункт), и эта вкладка превратит его в план посевов: что выращивать, когда сеять, окна опрыскивания и водный баланс.",
+    ar: "انقر فوق موقع على الخريطة (أو ابحث عن قريتك) وسيقوم هذا التبويب بإنشاء خطة زراعية: ماذا تزرع، متى تبذر، فترات الرش، والميزان المائي.",
+    fa: "مکانی را روی نقشه لمس کنید (یا روستای خود را جستجو کنید) و این برگه آن را به برنامه کشت تبدیل می‌کند: چه چیزی بکارید، چه زمانی بذرپاشی کنید، پنجره‌های سمپاشی و تعادل آب.",
+    tr: "Haritada bir konuma dokunun (veya köyünüzü arayın); bu sekme burayı bir ekim planına dönüştüরেক্ত: ne yetiştirilir, ne zaman ekilir, ilaçlama zamanları ve su dengesi.",
+    vi: "Nhấn vào một vị trí trên bản đồ (hoặc tìm kiếm ngôi làng của bạn) và tab này sẽ tạo kế hoạch mùa vụ: trồng cây gì, khi nào gieo hạt, khung giờ phun thuốc và cân bằng nước.",
+    th: "แตะตำแหน่งบนแผนที่ (หรือค้นหาหมู่บ้านของคุณ) และแท็บนี้จะเปลี่ยนเป็นแผนการเพาะปลูก: ปลูกอะไร เมื่อใดที่ควรหว่านเมล็ด ช่วงเวลาฉีดพ่น และสมดุลของน้ำ",
+    id: "Ketuk lokasi di peta (atau cari desa Anda) dan tab ini akan mengubahnya menjadi rencana tanam: apa yang harus ditanam, kapan menabur, jendela penyemprotan, dan keseimbangan air.",
+    ms: "Ketik lokasi pada peta (atau cari kampung anda) dan tab ini akan menukarkannya kepada pelan tanaman: apa yang perlu ditanam, bila menyemai, masa semburan dan keseimbangan air.",
+    nl: "Tik op een locatie op de kaart (of zoek je dorp) en dit tabblad zet dit om in een teeltplan: wat te verbouwen, wanneer te zaaien, spuitvensters en de waterbalans.",
+    pl: "Dotknij lokalizacji na mapie (lub wyszukaj swoją miejscowość), a ta zakładka utworzy plan upraw: co uprawiać, kiedy siać, okna oprysków i bilans wodny.",
+    sv: "Tryck på en plats på kartan (eller sök efter din by) så förvandlas denna flik till en odlingsplan: vad man ska odla, när man ska så, spruttider och vattenbalans."
+  }
+};
+
+Object.assign(EXTENDED_FEATURE_PHRASES, FARM_AND_EXTRA_PHRASES);
+
 const SOW_LABELS_MAP = {
   "en": {
     "sow": "sow",
@@ -11083,12 +11283,115 @@ for (const [loc, dict] of Object.entries(DICT)) {
 
 }
 
+let _globalReverseMap = null;
+
+function setReverseEntry(trans, enKey) {
+  if (!trans || !enKey) return;
+  const k = trans.trim().toLowerCase();
+  const existing = _globalReverseMap.get(k);
+  if (!existing) {
+    _globalReverseMap.set(k, enKey);
+    return;
+  }
+  const isAllCaps = enKey.length > 4 && enKey === enKey.toUpperCase();
+  const existingAllCaps = existing.length > 4 && existing === existing.toUpperCase();
+  if (existingAllCaps && !isAllCaps) {
+    _globalReverseMap.set(k, enKey);
+    return;
+  }
+  // Prefer the version with capital letters (TitleCase / Proper noun) over all-lowercase
+  if (!existingAllCaps && existing === existing.toLowerCase() && !isAllCaps && enKey !== enKey.toLowerCase()) {
+    _globalReverseMap.set(k, enKey);
+  }
+}
+
+export function getCanonicalEnglish(text) {
+  if (!text || typeof text !== "string") return null;
+  const trimmed = text.trim();
+  if (!trimmed) return null;
+
+  if (!_globalReverseMap) {
+    _globalReverseMap = new Map();
+
+    // 1. Index EXTENDED_FEATURE_PHRASES
+    if (typeof EXTENDED_FEATURE_PHRASES === "object") {
+      for (const [enKey, langMap] of Object.entries(EXTENDED_FEATURE_PHRASES)) {
+        if (!enKey || typeof langMap !== "object") continue;
+        setReverseEntry(enKey, enKey);
+        for (const [loc, trans] of Object.entries(langMap)) {
+          if (typeof trans === "string" && trans.trim()) {
+            setReverseEntry(trans, enKey);
+          }
+        }
+      }
+    }
+
+    // 2. Index PHRASES
+    if (typeof PHRASES === "object") {
+      for (const [loc, map] of Object.entries(PHRASES)) {
+        if (!map || typeof map !== "object") continue;
+        for (const [enKey, trans] of Object.entries(map)) {
+          if (!enKey) continue;
+          setReverseEntry(enKey, enKey);
+          if (typeof trans === "string" && trans.trim()) {
+            setReverseEntry(trans, enKey);
+          }
+        }
+      }
+    }
+
+    // 3. Index DICT & BASE_EN
+    if (typeof DICT === "object" && typeof BASE_EN === "object") {
+      for (const [loc, map] of Object.entries(DICT)) {
+        if (!map || typeof map !== "object") continue;
+        for (const [key, trans] of Object.entries(map)) {
+          const enVal = BASE_EN[key];
+          if (!enVal || typeof enVal !== "string") continue;
+          setReverseEntry(enVal, enVal);
+          if (typeof trans === "string" && trans.trim()) {
+            setReverseEntry(trans, enVal);
+          }
+        }
+      }
+    }
+  }
+
+  const exact = _globalReverseMap.get(trimmed.toLowerCase());
+  if (exact) return exact;
+
+  // Try without leading/trailing emoji / symbols / punctuation
+  const matchLead = trimmed.match(/^([\s\p{Extended_Pictographic}\u2000-\u3300\uFE00-\uFE0F\u200D·•—–:-]+)/u);
+  const matchTrail = trimmed.match(/([\s\p{Extended_Pictographic}\u2000-\u3300\uFE00-\uFE0F\u200D·•—–:-]+)$/u);
+  const lead = matchLead ? matchLead[0] : "";
+  const trail = matchTrail ? matchTrail[0] : "";
+  const clean = trimmed.slice(lead.length, trimmed.length - trail.length).trim();
+
+  if (clean && clean !== trimmed) {
+    const stripped = _globalReverseMap.get(clean.toLowerCase());
+    if (stripped) {
+      return lead + stripped + trail;
+    }
+  }
+
+  return null;
+}
+
 export function translateText(rawText, locale = detectLocale()) {
   if (!rawText || typeof rawText !== "string") return rawText;
-  if (!locale || locale === "en") return rawText;
-
   const trimmed = rawText.trim();
   if (!trimmed) return rawText;
+
+  // If target locale is English, restore canonical English if rawText is translated
+  if (!locale || locale === "en") {
+    if (/[A-Za-z]/.test(trimmed)) {
+      return rawText;
+    }
+    const canonical = getCanonicalEnglish(trimmed);
+    if (canonical && canonical !== trimmed) {
+      return rawText.replace(trimmed, canonical);
+    }
+    return rawText;
+  }
 
   // Trailing colon handler
   if (trimmed.endsWith(":")) {
@@ -11196,17 +11499,18 @@ export function translateText(rawText, locale = detectLocale()) {
       result = result.replace(nextMatch[0], transNext);
     }
 
-    const sowMatch = trimmed.match(/\bsow\s+((?:(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)-?)+)(?:\s*·\s*~(\d+)\s*days)?/i);
+    const sowMatch = trimmed.match(/\bsow\s+((?:(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)-?)+)(?:\s*[·•-]?\s*~(\d+)\s*days)?/i);
     if (sowMatch) {
       const monthsStr = sowMatch[1];
       const days = sowMatch[2];
       const mTrans = monthsStr.split('-').map(m => getLocalizedMonthShort(m, locale)).join('-');
-      const sowLbl = (locale === "kn" ? "ಬಿತ್ತನೆ" : (locale === "hi" ? "बुवाई" : (locale === "zh-CN" ? "播种期" : (locale === "zh-TW" ? "播種期" : (locale === "es" ? "siembra" : (SOW_LABELS_MAP[locale]?.sow || "sow"))))));
-      const daysLbl = (locale === "kn" ? "ದಿನಗಳು" : (locale === "hi" ? "दिन" : (locale === "zh-CN" ? "天" : (locale === "zh-TW" ? "天" : (locale === "es" ? "días" : (SOW_LABELS_MAP[locale]?.days || "days"))))));
+      const sowLbl = translateText("sow", locale) || (locale === "kn" ? "ಬಿತ್ತನೆ" : (locale === "hi" ? "बुवाई" : (locale === "zh-CN" ? "播种期" : (locale === "zh-TW" ? "播種期" : (locale === "es" ? "siembra" : (SOW_LABELS_MAP[locale]?.sow || "sow"))))));
+      const daysLbl = translateText("days", locale) || (locale === "kn" ? "ದಿನಗಳು" : (locale === "hi" ? "दिन" : (locale === "zh-CN" ? "天" : (locale === "zh-TW" ? "天" : (locale === "es" ? "días" : (SOW_LABELS_MAP[locale]?.days || "days"))))));
 
+      const hasBullet = sowMatch[0].includes("·") || sowMatch[0].includes("•");
       let replacement = `${sowLbl} ${mTrans}`;
       if (days) {
-        replacement += ` · ~${days} ${daysLbl}`;
+        replacement += hasBullet ? ` · ~${days} ${daysLbl}` : ` ~${days} ${daysLbl}`;
       }
       result = result.replace(sowMatch[0], replacement);
     }
@@ -11620,16 +11924,32 @@ export function translateText(rawText, locale = detectLocale()) {
     if (locale === "es") return rawText.replace(trimmed, `Llegada ${etaMatch[1]}`);
   }
 
+  // 6. Universal reverse lookup for non-English strings currently in DOM
+  const canonical = getCanonicalEnglish(trimmed);
+  if (canonical && canonical !== trimmed) {
+    const trans = translateText(canonical, locale);
+    if (trans && trans !== canonical) {
+      return rawText.replace(trimmed, trans);
+    }
+  }
+
   return rawText;
 }
 let _lastDOMTranslateLocale = null;
+let _isTranslatingDOM = false;
+export function isTranslatingDOM() {
+  return _isTranslatingDOM;
+}
 export function translateDOM(root = (typeof document !== "undefined" ? document.body : null), locale = detectLocale()) {
   if (!root || typeof document === "undefined") return;
-  if (!locale) locale = detectLocale();
-  if (_lastDOMTranslateLocale !== locale) {
-    _pendingQueue = [];
-    _lastDOMTranslateLocale = locale;
-  }
+  if (_isTranslatingDOM) return;
+  _isTranslatingDOM = true;
+  try {
+    if (!locale) locale = detectLocale();
+    if (_lastDOMTranslateLocale !== locale) {
+      _pendingQueue = [];
+      _lastDOMTranslateLocale = locale;
+    }
 
   const rootElement = root.nodeType === Node.ELEMENT_NODE ? root : null;
   const elementsMatching = (selector) => {
@@ -11641,25 +11961,44 @@ export function translateDOM(root = (typeof document !== "undefined" ? document.
 
   // 1. Direct explicit translations for known key UI targets
   const targetMap = {
+    settingsHeaderTitle: "Settings",
+    settingsUnitsLabel: "units_metric",
+    settingsUnitsSub: "units_metric_sub",
+    settingsThemeLabel: "Dark mode",
+    settingsTimeline24hLabel: "24h timeline",
+    settingsMapStyleLabel: "Map style",
+    settingsMapStyleSub: "Default, Satellite, Terrain, Dark",
+    settingsAppLanguageLabel: "settings_app_language",
+    settingsAppLanguageSub: "settings_app_language_sub",
+    settingsMapLanguageLabel: "Map language",
+    settingsSoundLabel: "Ambient sounds",
+    settingsSyncHistoryLabel: "Sync history",
+    settingsDefaultLocationLabel: "Default location",
+    setDefaultLocationBtn: "set_here",
+    settingsDefaultLocationNotifyLabel: "Notify on default",
+    settingsNotifyIntervalLabel: "Notify interval",
+    installBtnLabel: "install_aurafisky_app",
+    settingsClearCacheLabel: "Clear local cache",
+    settingsDeleteDataLabel: "Delete all cloud data",
+    settingsFeatureTourLabel: "Feature Guide & Tour",
+    settingsTermsLabel: "Terms & Privacy",
     copyAddressBtnText: "copy",
     toggleAddressCardText: "details",
     discoveriesHeaderTitle: "live_weather_intelligence_safety",
-    settingsUnitsLabel: "units_metric",
-    settingsUnitsSub: "units_metric_sub",
-    settingsAppLanguageLabel: "settings_app_language",
-    settingsAppLanguageSub: "settings_app_language_sub",
     elevationLegendTitle: "elevation_key",
-    installBtnLabel: "install_aurafisky_app",
-    termsTitle: "terms_privacy",
-    setDefaultLocationBtn: "set_here"
+    termsTitle: "terms_privacy"
   };
-  for (const [id, key] of Object.entries(targetMap)) {
+  for (const [id, keyOrText] of Object.entries(targetMap)) {
     const el = rootElement?.id === id
       ? rootElement
       : (root.querySelector ? root.querySelector("#" + id) : null);
     if (el) {
-      const translated = t(key, locale) || el.textContent;
-      if (el.textContent !== translated) el.textContent = translated;
+      if (!el.hasAttribute("data-orig-text")) el.setAttribute("data-orig-text", keyOrText);
+      let translated = translateText(keyOrText, locale);
+      if (!translated || translated === keyOrText) {
+        translated = t(keyOrText, locale);
+      }
+      if (translated && el.textContent !== translated) el.textContent = translated;
     }
   }
   const briefingBtn = rootElement?.id === "briefingBtn"
@@ -11674,13 +12013,17 @@ export function translateDOM(root = (typeof document !== "undefined" ? document.
   try {
     elementsMatching("option").forEach(opt => {
       if (opt.closest("#settingsAppLanguageSelect")) return;
-      if (!opt.hasAttribute("data-orig-text")) opt.setAttribute("data-orig-text", opt.text);
+      if (!opt.hasAttribute("data-orig-text")) {
+        const val = opt.text;
+        const canonical = /[A-Za-z]/.test(val) ? val : (getCanonicalEnglish(val) || val);
+        opt.setAttribute("data-orig-text", canonical);
+      }
       const original = opt.getAttribute("data-orig-text");
       const translated = translateText(original, locale);
-      if (translated && translated !== original && opt.text !== translated) {
-        opt.text = translated;
-      } else if (original && opt.text !== original) {
-        opt.text = original;
+      if (locale !== "en" && translated && translated !== original) {
+        if (opt.text !== translated) opt.text = translated;
+      } else if (locale === "en" || !translated || translated === original) {
+        if (original && opt.text !== original) opt.text = original;
       }
       if (locale !== "en" && (!translated || translated === original) && hasTranslatableText(original)) {
         queueForTranslation({
@@ -11694,14 +12037,16 @@ export function translateDOM(root = (typeof document !== "undefined" ? document.
 
     elementsMatching("optgroup[label]").forEach(group => {
       if (!group.hasAttribute("data-orig-label")) {
-        group.setAttribute("data-orig-label", group.label);
+        const val = group.label;
+        const canonical = /[A-Za-z]/.test(val) ? val : (getCanonicalEnglish(val) || val);
+        group.setAttribute("data-orig-label", canonical);
       }
       const original = group.getAttribute("data-orig-label");
       const translated = translateText(original, locale);
-      if (translated && translated !== original && group.label !== translated) {
-        group.label = translated;
-      } else if (original && group.label !== original) {
-        group.label = original;
+      if (locale !== "en" && translated && translated !== original) {
+        if (group.label !== translated) group.label = translated;
+      } else if (locale === "en" || !translated || translated === original) {
+        if (original && group.label !== original) group.label = original;
       }
       if (locale !== "en" && (!translated || translated === original) && hasTranslatableText(original)) {
         queueForTranslation({
@@ -11717,12 +12062,15 @@ export function translateDOM(root = (typeof document !== "undefined" ? document.
   // 3. TreeWalker for all text nodes
   try {
     if (root.nodeType === Node.TEXT_NODE && root.nodeValue?.trim()) {
-      if (root._origText == null) root._origText = root.nodeValue;
+      if (root._origText == null) {
+        const val = root.nodeValue;
+        root._origText = /[A-Za-z]/.test(val) ? val : (getCanonicalEnglish(val) || val);
+      }
       const translated = translateText(root._origText, locale);
-      if (translated && translated !== root._origText) {
-        root.nodeValue = translated;
-      } else if (root._origText) {
-        root.nodeValue = root._origText;
+      if (locale !== "en" && translated && translated !== root._origText) {
+        if (root.nodeValue !== translated) root.nodeValue = translated;
+      } else if (locale === "en" || !translated || translated === root._origText) {
+        if (root._origText && root.nodeValue !== root._origText) root.nodeValue = root._origText;
       }
       if (locale !== "en" && (!translated || translated === root._origText) && hasTranslatableText(root._origText)) {
         queueForTranslation({
@@ -11761,14 +12109,15 @@ export function translateDOM(root = (typeof document !== "undefined" ? document.
 
     for (const node of textNodes) {
       if (node._origText == null) {
-        node._origText = node.nodeValue;
+        const val = node.nodeValue;
+        node._origText = /[A-Za-z]/.test(val) ? val : (getCanonicalEnglish(val) || val);
       }
       const orig = node._origText;
       const translated = translateText(orig, locale);
-      if (translated && translated !== orig) {
-        node.nodeValue = translated;
-      } else if (orig) {
-        node.nodeValue = orig;
+      if (locale !== "en" && translated && translated !== orig) {
+        if (node.nodeValue !== translated) node.nodeValue = translated;
+      } else if (locale === "en" || !translated || translated === orig) {
+        if (orig && node.nodeValue !== orig) node.nodeValue = orig;
       }
       if (locale !== "en" && (!translated || translated === orig) && hasTranslatableText(orig)) {
         queueForTranslation({
@@ -11793,15 +12142,24 @@ export function translateDOM(root = (typeof document !== "undefined" ? document.
         const val = el.getAttribute(attr);
         if (val && val.trim()) {
           const origKey = `data-orig-${attr}`;
-          const origVal = el.getAttribute(origKey) || val;
-          if (!el.hasAttribute(origKey)) el.setAttribute(origKey, origVal);
+          let origVal = el.getAttribute(origKey);
+          if (!origVal) {
+            origVal = /[A-Za-z]/.test(val) ? val : (getCanonicalEnglish(val) || val);
+            el.setAttribute(origKey, origVal);
+          }
           const transVal = translateText(origVal, locale);
-          if (transVal && transVal !== origVal && val !== transVal) {
-            el.setAttribute(attr, transVal);
-            if (attr === "value") el.value = transVal;
-          } else if (origVal && val !== origVal) {
-            el.setAttribute(attr, origVal);
-            if (attr === "value") el.value = origVal;
+          if (locale !== "en" && transVal && transVal !== origVal) {
+            if (val !== transVal) {
+              el.setAttribute(attr, transVal);
+              if (attr === "value") el.value = transVal;
+              if (attr === "placeholder") el.placeholder = transVal;
+            }
+          } else if (locale === "en" || !transVal || transVal === origVal) {
+            if (origVal && val !== origVal) {
+              el.setAttribute(attr, origVal);
+              if (attr === "value") el.value = origVal;
+              if (attr === "placeholder") el.placeholder = origVal;
+            }
           }
           if (locale !== "en" && (!transVal || transVal === origVal) && hasTranslatableText(origVal)) {
             queueForTranslation({
@@ -11816,6 +12174,9 @@ export function translateDOM(root = (typeof document !== "undefined" ? document.
       });
     });
   } catch (_) {}
+  } finally {
+    _isTranslatingDOM = false;
+  }
 }
 
 let externalTranslationRefreshTimer = null;
@@ -11919,6 +12280,7 @@ if (typeof window !== "undefined") {
     t,
     translateText,
     translateDOM,
+    isTranslatingDOM,
     translateAsync,
     getTranslationCache,
     refreshExternalTranslation,

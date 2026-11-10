@@ -13,7 +13,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
-  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; child-src 'self' https://aurafisky.firebaseapp.com https://aurafisky.web.app; worker-src 'self' blob:; frame-src https://aurafisky.firebaseapp.com https://aurafisky.web.app https://translate.google.com; script-src 'self' https://unpkg.com https://cdn.jsdelivr.net https://www.gstatic.com https://apis.google.com https://accounts.google.com https://*.gstatic.com https://*.google.com https://translate.google.com https://translate.googleapis.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://unpkg.com https://cdn.jsdelivr.net https://translate.googleapis.com; font-src 'self' https://fonts.gstatic.com https://cdn.jsdelivr.net; img-src 'self' data: blob: https://tiles.openfreemap.org https://*.tile.openstreetmap.org https://*.openstreetmap.org https://*.rainviewer.com https://*.open-meteo.com https://*.googleusercontent.com https://server.arcgisonline.com https://services.arcgisonline.com https://*.arcgisonline.com https://*.tile.opentopomap.org https://translate.google.com https://translate.googleapis.com https://www.google.com; connect-src 'self' https://tiles.openfreemap.org https://*.tile.openstreetmap.org https://api.open-meteo.com https://air-quality-api.open-meteo.com https://geocoding-api.open-meteo.com https://archive-api.open-meteo.com https://*.open-meteo.com https://nominatim.openstreetmap.org https://router.project-osrm.org https://api.rainviewer.com https://tilecache.rainviewer.com https://*.firebaseio.com https://*.googleapis.com https://www.gstatic.com https://cdn.jsdelivr.net https://server.arcgisonline.com https://services.arcgisonline.com https://*.arcgisonline.com https://*.tile.opentopomap.org https://rest.isric.org https://api.gbif.org https://translate.googleapis.com https://translate.google.com;" />
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; child-src 'self' https://aurafisky.firebaseapp.com https://aurafisky.web.app; worker-src 'self' blob:; frame-src 'self' https://aurafisky.firebaseapp.com https://aurafisky.web.app https://translate.google.com; script-src 'self' 'unsafe-inline' https://unpkg.com https://cdn.jsdelivr.net https://www.gstatic.com https://apis.google.com https://accounts.google.com https://*.gstatic.com https://*.google.com https://translate.google.com https://translate.googleapis.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://unpkg.com https://cdn.jsdelivr.net https://translate.googleapis.com https://www.gstatic.com https://*.gstatic.com; font-src 'self' https://fonts.gstatic.com https://cdn.jsdelivr.net; img-src 'self' data: blob: https://tiles.openfreemap.org https://*.tile.openstreetmap.org https://*.openstreetmap.org https://*.rainviewer.com https://*.open-meteo.com https://*.googleusercontent.com https://server.arcgisonline.com https://services.arcgisonline.com https://*.arcgisonline.com https://*.tile.opentopomap.org https://translate.google.com https://translate.googleapis.com https://www.google.com https://www.gstatic.com https://fonts.gstatic.com https://*.gstatic.com; connect-src 'self' https://tiles.openfreemap.org https://*.tile.openstreetmap.org https://api.open-meteo.com https://air-quality-api.open-meteo.com https://geocoding-api.open-meteo.com https://archive-api.open-meteo.com https://*.open-meteo.com https://nominatim.openstreetmap.org https://router.project-osrm.org https://api.rainviewer.com https://tilecache.rainviewer.com https://*.firebaseio.com https://*.googleapis.com https://www.gstatic.com https://cdn.jsdelivr.net https://server.arcgisonline.com https://services.arcgisonline.com https://*.arcgisonline.com https://*.tile.opentopomap.org https://rest.isric.org https://api.gbif.org https://translate.googleapis.com https://translate.google.com;" />
   <meta name="mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
 
@@ -1751,7 +1751,7 @@
   <!-- ============================================================ -->
   <!-- MAP COLOR INDICATION & LEGEND WIDGET                         -->
   <!-- ============================================================ -->
-  <div id="mapColorLegendWidget" class="fixed bottom-20 sm:bottom-6 left-3 sm:left-4 z-[1040] pointer-events-auto select-none transition-all duration-300 font-sans" role="region" aria-label="Map color legend and key">
+  <div id="mapColorLegendWidget" class="fixed bottom-20 sm:bottom-6 left-3 sm:left-4 z-[1040] pointer-events-auto select-none transition-all duration-300 font-sans flex flex-col-reverse items-start gap-2" role="region" aria-label="Map color legend and key">
     <!-- Compact Pill Button -->
     <button id="mapLegendPillBtn" type="button" class="glass-card backdrop-blur-md bg-white/95 dark:bg-slate-900/95 border border-slate-200/80 dark:border-slate-700/80 shadow-lg rounded-full px-3 py-1.5 flex items-center gap-2 cursor-pointer hover:shadow-xl active:scale-95 transition-all text-xs font-semibold text-slate-800 dark:text-slate-100 group" title="Toggle map color indication key" aria-expanded="false" aria-controls="mapLegendCard">
       <span id="mapLegendPillIcon" class="text-sm">🧭</span>
@@ -1915,7 +1915,7 @@
   <div id="radarBackdrop" class="hidden fixed inset-0 z-[1240] bg-black/40 backdrop-blur-[2px] sm:hidden transition-opacity"></div>
 
   <!-- Radar Expanded Flyout (appears to the left of radar button on desktop, floating modal on mobile) -->
-  <div id="radarExpandedPanel" class="hidden fixed right-4 sm:right-16 top-1/2 -translate-y-1/2 flex flex-col gap-1 pointer-events-auto z-[1250] w-[min(320px,calc(100vw-1.5rem))] sm:w-[210px] max-h-[calc(100dvh-5.5rem)] sm:max-h-[calc(100dvh-4rem)] overflow-y-auto overscroll-contain custom-scrollbar">
+  <div id="radarExpandedPanel" class="hidden fixed flex flex-col gap-1 pointer-events-auto z-[1250] w-[min(320px,calc(100vw-1.5rem))] sm:w-[210px] max-h-[calc(100dvh-5rem)] sm:max-h-[calc(100dvh-4rem)] overflow-y-auto overscroll-contain custom-scrollbar">
     <div class="glass-no-border rounded-2xl p-3 sm:p-3.5 shadow-2xl space-y-2.5 w-full bg-white/95 dark:bg-slate-900/95 backdrop-blur-xl border border-slate-200/70 dark:border-slate-700/60">
       <div class="sticky -top-3 sm:-top-3.5 -mx-3 sm:-mx-3.5 px-3 sm:px-3.5 pt-3 sm:pt-3.5 pb-2 bg-white/95 dark:bg-slate-900/95 backdrop-blur-xl z-10 flex items-center justify-between gap-1.5 border-b border-slate-200/60 dark:border-slate-700/50 rounded-t-2xl">
         <span class="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider block">Weather Radar</span>
@@ -1970,61 +1970,60 @@
   <div id="mapLayersBackdrop" class="hidden fixed inset-0 z-[1240] bg-black/40 backdrop-blur-[2px] sm:hidden transition-opacity"></div>
 
   <!-- Floating Map Style Flyout Menu -->
-  <div id="mapLayersFlyout" class="hidden fixed right-4 sm:right-16 top-1/2 -translate-y-1/2 z-[1250] p-3.5 rounded-2xl glass-no-border bg-white/95 dark:bg-slate-900/95 shadow-2xl border border-slate-200/70 dark:border-slate-700/60 w-[min(320px,calc(100vw-1.5rem))] sm:w-[280px] max-h-[calc(100dvh-5.5rem)] sm:max-h-[calc(100dvh-4rem)] overflow-y-auto overscroll-contain custom-scrollbar animate-in fade-in zoom-in-95 duration-150 backdrop-blur-xl">
+  <div id="mapLayersFlyout" class="hidden fixed z-[1250] p-3.5 rounded-2xl glass-no-border bg-white/95 dark:bg-slate-900/95 shadow-2xl border border-slate-200/70 dark:border-slate-700/60 w-[min(340px,calc(100vw-1.5rem))] sm:w-[280px] max-h-[calc(100dvh-5rem)] sm:max-h-[calc(100dvh-4rem)] flex flex-col min-h-0 overflow-hidden overscroll-contain custom-scrollbar animate-in fade-in zoom-in-95 duration-150 backdrop-blur-xl">
     <!-- Hidden compatibility elements for state & tests -->
     <span id="mapLayersActiveBadge" class="hidden text-[10px] font-bold px-2 py-0.5 rounded-lg bg-primary/15 text-primary dark:bg-primary/25 dark:text-primary-light">Default</span>
     <button id="minimizeMapLayersBtn" type="button" class="hidden" aria-hidden="true"></button>
 
-    <!-- Map Layers Body -->
-    <div id="mapLayersBody" class="space-y-3">
-      <!-- Primary Map Mode Dropdown with Stepper Controls (Sticky Header) -->
-      <div class="sticky -top-3.5 -mx-3.5 px-3.5 pt-3.5 pb-2.5 bg-white/95 dark:bg-slate-900/95 backdrop-blur-xl z-10 border-b border-slate-200/60 dark:border-slate-700/50 rounded-t-2xl shadow-xs">
-        <div class="flex items-center justify-between mb-1.5" id="mapLayersHeaderTitle">
-          <label for="mapModeSelectDropdown" class="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider block">Map Mode</label>
-          <div class="flex items-center gap-1">
-            <span class="text-[10px] text-slate-400 font-mono hidden sm:inline mr-1" id="mapLayersShortcutHint">Press L</span>
-            <button id="closeMapLayersBtn" type="button" class="w-6 h-6 flex items-center justify-center rounded-lg hover:bg-slate-200/60 dark:hover:bg-slate-700/60 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition-colors cursor-pointer" title="Close map modes" aria-label="Close map modes">
-              <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
-            </button>
-          </div>
-        </div>
-        <div class="flex items-center gap-1.5 w-full">
-          <button id="prevMapModeBtn" type="button" class="w-8 h-8 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 flex items-center justify-center text-slate-600 dark:text-slate-300 transition-colors cursor-pointer flex-shrink-0" title="Previous map mode (Shift+S)" aria-label="Previous map mode">
-            <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M15 19l-7-7 7-7"/></svg>
-          </button>
-          <div class="relative flex-1 min-w-0">
-            <select id="mapModeSelectDropdown" class="w-full bg-slate-100 hover:bg-slate-200/80 dark:bg-slate-800 dark:hover:bg-slate-700/80 text-slate-900 dark:text-slate-100 border border-slate-300/80 dark:border-slate-600/80 rounded-xl px-2.5 py-2 text-xs font-bold cursor-pointer outline-none transition-all appearance-none focus:ring-2 focus:ring-primary/40 focus:border-primary shadow-xs" aria-label="Select map mode">
-              <option value="street">🗺️ Default (Street)</option>
-              <option value="satellite">🛰️ Satellite (Aerial)</option>
-              <option value="terrain">🏔️ Terrain (Topographic)</option>
-              <option value="hillshade">⛰️ Hillshade (Elevation)</option>
-              <option value="opentopo">🧭 OpenTopoMap</option>
-              <option value="ocean">🌊 Ocean (Bathymetry)</option>
-              <option value="natgeo">🌍 National Geographic</option>
-              <option value="dark">🌙 Dark Mode</option>
-            </select>
-            <div class="absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none text-slate-400">
-              <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="6 9 12 15 18 9"></polyline></svg>
-            </div>
-          </div>
-          <button id="nextMapModeBtn" type="button" class="w-8 h-8 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 flex items-center justify-center text-slate-600 dark:text-slate-300 transition-colors cursor-pointer flex-shrink-0" title="Next map mode (S)" aria-label="Next map mode">
-            <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7"/></svg>
+    <!-- Map Layers Fixed Header -->
+    <div id="mapLayersHeader" class="flex-shrink-0 pb-2.5 border-b border-slate-200/60 dark:border-slate-700/50">
+      <div class="flex items-center justify-between mb-1.5" id="mapLayersHeaderTitle">
+        <label for="mapModeSelectDropdown" class="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider block">Map Mode</label>
+        <div class="flex items-center gap-1">
+          <span class="text-[10px] text-slate-400 font-mono hidden sm:inline mr-1" id="mapLayersShortcutHint">Press L</span>
+          <button id="closeMapLayersBtn" type="button" class="w-6 h-6 flex items-center justify-center rounded-lg hover:bg-slate-200/60 dark:hover:bg-slate-700/60 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition-colors cursor-pointer" title="Close map modes" aria-label="Close map modes">
+            <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
           </button>
         </div>
       </div>
+      <div class="flex items-center gap-1.5 w-full">
+        <button id="prevMapModeBtn" type="button" class="w-8 h-8 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 flex items-center justify-center text-slate-600 dark:text-slate-300 transition-colors cursor-pointer flex-shrink-0" title="Previous map mode (Shift+S)" aria-label="Previous map mode">
+          <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M15 19l-7-7 7-7"/></svg>
+        </button>
+        <div class="relative flex-1 min-w-0">
+          <select id="mapModeSelectDropdown" class="w-full bg-slate-100 hover:bg-slate-200/80 dark:bg-slate-800 dark:hover:bg-slate-700/80 text-slate-900 dark:text-slate-100 border border-slate-300/80 dark:border-slate-600/80 rounded-xl px-2.5 py-2 text-xs font-bold cursor-pointer outline-none transition-all appearance-none focus:ring-2 focus:ring-primary/40 focus:border-primary shadow-xs" aria-label="Select map mode">
+            <option value="street">🗺️ Default (Street)</option>
+            <option value="satellite">🛰️ Satellite (Aerial)</option>
+            <option value="terrain">🏔️ Terrain (Topographic)</option>
+            <option value="hillshade">⛰️ Hillshade (Elevation)</option>
+            <option value="opentopo">🧭 OpenTopoMap</option>
+            <option value="ocean">🌊 Ocean (Bathymetry)</option>
+            <option value="natgeo">🌍 National Geographic</option>
+            <option value="dark">🌙 Dark Mode</option>
+          </select>
+          <div class="absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none text-slate-400">
+            <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="6 9 12 15 18 9"></polyline></svg>
+          </div>
+        </div>
+        <button id="nextMapModeBtn" type="button" class="w-8 h-8 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 flex items-center justify-center text-slate-600 dark:text-slate-300 transition-colors cursor-pointer flex-shrink-0" title="Next map mode (S)" aria-label="Next map mode">
+          <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7"/></svg>
+        </button>
+      </div>
+    </div>
 
-        <!-- Live mode hint / indication badge -->
-        <div id="mapModeElevationHint" class="mt-2 p-2 rounded-xl bg-slate-100/90 dark:bg-slate-800/90 border border-slate-200/60 dark:border-slate-700/60 text-[10px] space-y-1">
-          <div class="flex items-center justify-between font-bold text-slate-700 dark:text-slate-200">
-            <span>🧭 Elevation Relief</span>
-            <span class="text-[9px] text-amber-600 dark:text-amber-400 font-semibold">Not Temperature</span>
-          </div>
-          <div class="h-1.5 w-full rounded-sm" style="background: linear-gradient(90deg, #388e3c, #8bc34a, #fbc02d, #f57c00, #d32f2f, #795548);"></div>
-          <div class="flex justify-between text-[8px] font-medium text-slate-500 dark:text-slate-400">
-            <span>🟢 0m (Coast)</span>
-            <span>🟠 500m</span>
-            <span>🔴 1000m+</span>
-          </div>
+    <!-- Map Layers Scrollable Body -->
+    <div id="mapLayersBody" class="space-y-3 overflow-y-auto overscroll-contain pt-2.5 flex-1 min-h-0 custom-scrollbar">
+      <!-- Live mode hint / indication badge -->
+      <div id="mapModeElevationHint" class="p-2 rounded-xl bg-slate-100/90 dark:bg-slate-800/90 border border-slate-200/60 dark:border-slate-700/60 text-[10px] space-y-1">
+        <div class="flex items-center justify-between font-bold text-slate-700 dark:text-slate-200">
+          <span>🧭 Elevation Relief</span>
+          <span class="text-[9px] text-amber-600 dark:text-amber-400 font-semibold">Not Temperature</span>
+        </div>
+        <div class="h-1.5 w-full rounded-sm" style="background: linear-gradient(90deg, #388e3c, #8bc34a, #fbc02d, #f57c00, #d32f2f, #795548);"></div>
+        <div class="flex justify-between text-[8px] font-medium text-slate-500 dark:text-slate-400">
+          <span>🟢 0m (Coast)</span>
+          <span>🟠 500m</span>
+          <span>🔴 1000m+</span>
         </div>
       </div>
 
@@ -2228,6 +2227,85 @@
   </div>
 
   <!-- ============================================================ -->
+  <!-- FIRST-RUN FEATURE DISCOVERY / ONBOARDING GUIDE               -->
+  <!-- ============================================================ -->
+  <div id="onboardingTourModal" class="fixed inset-0 z-[9998] hidden items-center justify-center bg-black/50 backdrop-blur-sm pointer-events-auto p-4 transition-opacity animate-in fade-in" role="dialog" aria-modal="true" aria-labelledby="tourTitle">
+    <div class="bg-white dark:bg-slate-900 rounded-3xl shadow-2xl w-full max-w-lg border border-slate-200/80 dark:border-slate-700/80 overflow-hidden animate-in zoom-in-95">
+      <!-- Modal Header -->
+      <div class="p-4 sm:p-5 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between bg-gradient-to-r from-teal-500/10 via-sky-500/10 to-indigo-500/10 dark:from-teal-900/20 dark:via-sky-900/20 dark:to-indigo-900/20">
+        <div class="flex items-center gap-2.5">
+          <span class="text-2xl">✨</span>
+          <div>
+            <h3 id="tourTitle" class="text-base sm:text-lg font-black text-slate-900 dark:text-white">Welcome to Aurafisky</h3>
+            <p class="text-xs text-slate-500 dark:text-slate-400">Essential guide to key weather layers &amp; features</p>
+          </div>
+        </div>
+        <button id="onboardingCloseBtn" type="button" class="w-8 h-8 rounded-full flex items-center justify-center hover:bg-slate-200/60 dark:hover:bg-slate-700/60 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition-colors cursor-pointer" aria-label="Close guide">
+          <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
+        </button>
+      </div>
+
+      <!-- Tour Cards -->
+      <div class="p-4 sm:p-5 space-y-3 max-h-[60vh] overflow-y-auto custom-scrollbar text-xs">
+        <!-- 1. Elevation vs Temperature -->
+        <div class="p-3 rounded-2xl bg-amber-500/10 dark:bg-amber-500/15 border border-amber-500/20 space-y-1">
+          <div class="flex items-center gap-2 font-bold text-amber-900 dark:text-amber-200">
+            <span>🧭</span>
+            <span>Terrain Elevation Relief vs Temperature</span>
+          </div>
+          <p class="text-slate-600 dark:text-slate-300 leading-relaxed">
+            Green, yellow, and red colors on the base map denote <strong>topographic elevation</strong> (sea level to mountain peaks), not heat. Live temperature is shown on the weather card, temperature grid, and timeline scrubber.
+          </p>
+        </div>
+
+        <!-- 2. Live Radar & Scrubber -->
+        <div class="p-3 rounded-2xl bg-sky-500/10 dark:bg-sky-500/15 border border-sky-500/20 space-y-1">
+          <div class="flex items-center gap-2 font-bold text-sky-900 dark:text-sky-200">
+            <span>🌧️</span>
+            <span>Live Radar &amp; 10-Day Timeline Scrubber</span>
+          </div>
+          <p class="text-slate-600 dark:text-slate-300 leading-relaxed">
+            Drag the bottom slider to travel through time: view past 3 days and forecast 7 days in 15-minute intervals. Toggle the Radar button to see precipitation and satellite cloud movement.
+          </p>
+        </div>
+
+        <!-- 3. Route Weather Studio -->
+        <div class="p-3 rounded-2xl bg-indigo-500/10 dark:bg-indigo-500/15 border border-indigo-500/20 space-y-1">
+          <div class="flex items-center gap-2 font-bold text-indigo-900 dark:text-indigo-200">
+            <span>🛣️</span>
+            <span>Route Weather Studio</span>
+          </div>
+          <p class="text-slate-600 dark:text-slate-300 leading-relaxed">
+            Plan trips across multiple waypoints with real-time weather forecasts sampled along your road path. Departure time adjustments show weather when you will actually arrive.
+          </p>
+        </div>
+
+        <!-- 4. Ask Aura AI Intelligence -->
+        <div class="p-3 rounded-2xl bg-emerald-500/10 dark:bg-emerald-500/15 border border-emerald-500/20 space-y-1">
+          <div class="flex items-center gap-2 font-bold text-emerald-900 dark:text-emerald-200">
+            <span>🤖</span>
+            <span>Ask Aura Live Intelligence</span>
+          </div>
+          <p class="text-slate-600 dark:text-slate-300 leading-relaxed">
+            Tap the top Aura button or Generate Briefing to receive atmospheric insights, best outdoor windows, crop sowing guides, and astronomy star visibility.
+          </p>
+        </div>
+      </div>
+
+      <!-- Modal Footer -->
+      <div class="p-4 bg-slate-50 dark:bg-slate-800/60 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between gap-3">
+        <label class="flex items-center gap-2 text-[11px] text-slate-500 dark:text-slate-400 cursor-pointer select-none">
+          <input type="checkbox" id="dontShowTourCheckbox" class="rounded text-primary focus:ring-primary w-3.5 h-3.5" />
+          <span>Don't show again</span>
+        </label>
+        <button id="onboardingDismissBtn" type="button" class="px-5 py-2 rounded-xl bg-primary hover:bg-primary-dark text-white font-bold text-xs shadow-md transition-all active:scale-95 cursor-pointer">
+          Explore Maps
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============================================================ -->
   <!-- ACCOUNT DIALOG & SETTINGS                                    -->
   <!-- ============================================================ -->
   <div id="accountDialog" class="fixed inset-0 z-[9999] hidden items-center justify-center bg-black/40 backdrop-blur-sm pointer-events-auto" role="dialog" aria-modal="true" aria-labelledby="accountTitle">
@@ -2342,7 +2420,7 @@
     <div class="absolute inset-0 bg-black/40 backdrop-blur-sm" aria-hidden="true"></div>
     <div class="fixed right-0 top-0 bottom-0 h-full w-full max-w-sm bg-slate-50/95 dark:bg-slate-950/95 backdrop-blur-md shadow-2xl animate-in slide-in-from-right flex flex-col z-[9999]" style="height:100%;top:0;bottom:0;">
       <div class="p-4 border-b border-slate-200/50 dark:border-slate-800/40 flex items-center justify-between bg-white dark:bg-slate-900">
-        <h3 class="text-lg font-bold bg-gradient-to-r from-slate-900 to-slate-700 dark:from-white dark:to-slate-300 bg-clip-text text-transparent">Settings</h3>
+        <h3 id="settingsHeaderTitle" class="text-lg font-bold bg-gradient-to-r from-slate-900 to-slate-700 dark:from-white dark:to-slate-300 bg-clip-text text-transparent">Settings</h3>
         <button id="settingsCloseBtn" class="p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors" aria-label="Close settings">
           <svg class="w-5 h-5 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
         </button>
@@ -2366,7 +2444,7 @@
           <div class="flex items-center justify-between">
             <div class="flex items-center gap-3">
               <div class="w-8 h-8 rounded-xl bg-indigo-500/10 text-indigo-500 flex items-center justify-center text-sm">🌙</div>
-              <span class="text-sm font-semibold text-slate-700 dark:text-slate-300">Dark mode</span>
+              <span id="settingsThemeLabel" class="text-sm font-semibold text-slate-700 dark:text-slate-300">Dark mode</span>
             </div>
             <label class="relative inline-flex items-center cursor-pointer">
               <input type="checkbox" id="settingsThemeToggle" class="sr-only peer" aria-label="Dark mode">
@@ -2379,7 +2457,7 @@
           <div class="flex items-center justify-between">
             <div class="flex items-center gap-3">
               <div class="w-8 h-8 rounded-xl bg-cyan-500/10 text-cyan-500 flex items-center justify-center text-sm">📅</div>
-              <span class="text-sm font-semibold text-slate-700 dark:text-slate-300">24h timeline</span>
+              <span id="settingsTimeline24hLabel" class="text-sm font-semibold text-slate-700 dark:text-slate-300">24h timeline</span>
             </div>
             <label class="relative inline-flex items-center cursor-pointer">
               <input type="checkbox" id="settingsTimeline24hToggle" class="sr-only peer" aria-label="24-hour timeline mode">
@@ -2391,8 +2469,8 @@
             <div class="flex items-center gap-3">
               <div class="w-8 h-8 rounded-xl bg-blue-500/10 text-blue-500 flex items-center justify-center text-sm">🗺️</div>
               <div class="flex flex-col">
-                <span class="text-sm font-semibold text-slate-700 dark:text-slate-300">Map style</span>
-                <span class="text-xs text-slate-500 dark:text-slate-400">Default, Satellite, Terrain, Dark</span>
+                <span id="settingsMapStyleLabel" class="text-sm font-semibold text-slate-700 dark:text-slate-300">Map style</span>
+                <span id="settingsMapStyleSub" class="text-xs text-slate-500 dark:text-slate-400">Default, Satellite, Terrain, Dark</span>
               </div>
             </div>
             <select id="settingsMapStyleSelect" class="bg-slate-100 dark:bg-slate-800 text-xs font-semibold text-slate-700 dark:text-slate-200 px-2.5 py-1.5 rounded-lg border border-slate-300 dark:border-slate-600 focus:outline-none focus:ring-2 focus:ring-primary/40 cursor-pointer" aria-label="Map style">
@@ -2467,7 +2545,7 @@
           <div class="flex items-center justify-between">
             <div class="flex items-center gap-3">
               <div class="w-8 h-8 rounded-xl bg-teal-500/10 text-teal-500 flex items-center justify-center text-sm">🌐</div>
-              <span class="text-sm font-semibold text-slate-700 dark:text-slate-300">Map language</span>
+              <span id="settingsMapLanguageLabel" class="text-sm font-semibold text-slate-700 dark:text-slate-300">Map language</span>
             </div>
             <label class="relative inline-flex items-center cursor-pointer">
               <input type="checkbox" id="settingsMapLanguageToggle" class="sr-only peer" aria-label="Map labels in English">
@@ -2480,7 +2558,7 @@
           <div class="flex items-center justify-between">
             <div class="flex items-center gap-3">
               <div class="w-8 h-8 rounded-xl bg-violet-500/10 text-violet-500 flex items-center justify-center text-sm">🎵</div>
-              <span class="text-sm font-semibold text-slate-700 dark:text-slate-300">Ambient sounds</span>
+              <span id="settingsSoundLabel" class="text-sm font-semibold text-slate-700 dark:text-slate-300">Ambient sounds</span>
             </div>
             <label class="relative inline-flex items-center cursor-pointer">
               <input type="checkbox" id="settingsSoundToggle" class="sr-only peer" aria-label="Weather soundscapes">
@@ -2498,7 +2576,7 @@
           <div class="flex items-center justify-between">
             <div class="flex items-center gap-3">
               <div class="w-8 h-8 rounded-xl bg-sky-500/10 text-sky-500 flex items-center justify-center text-sm">🔄</div>
-              <span class="text-sm font-semibold text-slate-700 dark:text-slate-300">Sync history</span>
+              <span id="settingsSyncHistoryLabel" class="text-sm font-semibold text-slate-700 dark:text-slate-300">Sync history</span>
             </div>
             <label class="relative inline-flex items-center cursor-pointer">
               <input type="checkbox" id="settingsSyncHistoryToggle" class="sr-only peer" aria-label="Sync search history to cloud">
@@ -2509,7 +2587,7 @@
           <div class="flex items-center justify-between">
             <div class="flex items-center gap-3">
               <div class="w-8 h-8 rounded-xl bg-emerald-500/10 text-emerald-500 flex items-center justify-center text-sm">📍</div>
-              <span class="text-sm font-semibold text-slate-700 dark:text-slate-300">Default location</span>
+              <span id="settingsDefaultLocationLabel" class="text-sm font-semibold text-slate-700 dark:text-slate-300">Default location</span>
             </div>
             <button id="setDefaultLocationBtn" class="px-3 py-1.5 bg-primary/10 text-primary dark:bg-primary-light/15 dark:text-primary-light rounded-lg text-sm font-medium hover:bg-primary/20 transition-colors">Set here</button>
           </div>
@@ -2517,7 +2595,7 @@
           <div class="flex items-center justify-between">
             <div class="flex items-center gap-3">
               <div class="w-8 h-8 rounded-xl bg-amber-500/10 text-amber-500 flex items-center justify-center text-sm">🔔</div>
-              <span class="text-sm font-semibold text-slate-700 dark:text-slate-300">Notify on default</span>
+              <span id="settingsDefaultLocationNotifyLabel" class="text-sm font-semibold text-slate-700 dark:text-slate-300">Notify on default</span>
             </div>
             <label class="relative inline-flex items-center cursor-pointer">
               <input type="checkbox" id="defaultLocationNotifyToggle" class="sr-only peer" aria-label="Notify about weather at my home location">
@@ -2532,7 +2610,7 @@
           <div class="flex items-center justify-between">
             <div class="flex items-center gap-3">
               <div class="w-8 h-8 rounded-xl bg-rose-500/10 text-rose-500 flex items-center justify-center text-sm">⏱️</div>
-              <span class="text-sm font-semibold text-slate-700 dark:text-slate-300">Notify interval</span>
+              <span id="settingsNotifyIntervalLabel" class="text-sm font-semibold text-slate-700 dark:text-slate-300">Notify interval</span>
             </div>
             <select id="notifyIntervalSelect" class="bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg px-2.5 py-1 text-sm font-medium text-slate-700 dark:text-slate-200 focus:ring-2 focus:ring-primary focus:border-transparent">
               <option value="60">1 hour</option>
@@ -2555,21 +2633,28 @@
           <button id="settingsClearCacheBtn" class="w-full flex items-center justify-between p-3 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/60 dark:border-slate-800/50 hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-all group shadow-sm">
             <div class="flex items-center gap-3">
               <span class="w-8 h-8 rounded-xl bg-amber-500/10 text-amber-500 flex items-center justify-center text-sm">🧹</span>
-              <span class="text-sm font-semibold text-slate-700 dark:text-slate-200">Clear local cache</span>
+              <span id="settingsClearCacheLabel" class="text-sm font-semibold text-slate-700 dark:text-slate-200">Clear local cache</span>
             </div>
             <span class="text-slate-400 group-hover:translate-x-0.5 transition-transform text-xs">→</span>
           </button>
           <button id="settingsDeleteDataBtn" class="w-full flex items-center justify-between p-3 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/60 dark:border-slate-800/50 hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-all group shadow-sm">
             <div class="flex items-center gap-3">
               <span class="w-8 h-8 rounded-xl bg-red-500/10 text-red-500 flex items-center justify-center text-sm">🗑️</span>
-              <span class="text-sm font-semibold text-red-600 dark:text-red-400">Delete all cloud data</span>
+              <span id="settingsDeleteDataLabel" class="text-sm font-semibold text-red-600 dark:text-red-400">Delete all cloud data</span>
+            </div>
+            <span class="text-slate-400 group-hover:translate-x-0.5 transition-transform text-xs">→</span>
+          </button>
+          <button id="settingsFeatureTourBtn" class="w-full flex items-center justify-between p-3 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/60 dark:border-slate-800/50 hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-all group shadow-sm">
+            <div class="flex items-center gap-3">
+              <span class="w-8 h-8 rounded-xl bg-teal-500/10 text-teal-500 flex items-center justify-center text-sm">✨</span>
+              <span id="settingsFeatureTourLabel" class="text-sm font-semibold text-slate-700 dark:text-slate-200">Feature Guide & Tour</span>
             </div>
             <span class="text-slate-400 group-hover:translate-x-0.5 transition-transform text-xs">→</span>
           </button>
           <button id="settingsTermsBtn" class="w-full flex items-center justify-between p-3 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/60 dark:border-slate-800/50 hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-all group shadow-sm">
             <div class="flex items-center gap-3">
               <span class="w-8 h-8 rounded-xl bg-primary/10 text-primary flex items-center justify-center text-sm">📄</span>
-              <span class="text-sm font-semibold text-slate-700 dark:text-slate-200">Terms & Privacy</span>
+              <span id="settingsTermsLabel" class="text-sm font-semibold text-slate-700 dark:text-slate-200">Terms & Privacy</span>
             </div>
             <span class="text-slate-400 group-hover:translate-x-0.5 transition-transform text-xs">→</span>
           </button>
@@ -2688,7 +2773,7 @@
   <!-- ============================================================ -->
   <!-- SAVED FAVORITES DROPDOWN (Mobile & Desktop)                  -->
   <!-- ============================================================ -->
-  <div id="bookmarksDropdown" class="hidden fixed bottom-16 left-3 sm:left-auto sm:top-14 sm:right-4 sm:bottom-auto w-[min(320px,calc(100vw-1.5rem))] sm:w-88 max-h-[calc(100dvh-5.5rem)] sm:max-h-[min(80vh,550px)] overflow-y-auto overscroll-contain custom-scrollbar glass rounded-2xl shadow-2xl border border-slate-200/80 dark:border-slate-700/80 p-2 z-[1150] pointer-events-auto" role="menu" aria-label="Favorites">
+  <div id="bookmarksDropdown" class="hidden fixed bottom-16 left-1/2 -translate-x-1/2 sm:translate-x-0 sm:left-auto sm:top-14 sm:right-4 sm:bottom-auto w-[min(340px,calc(100vw-1.5rem))] sm:w-88 max-h-[calc(100dvh-5.5rem)] sm:max-h-[min(80vh,550px)] overflow-y-auto overscroll-contain custom-scrollbar glass rounded-2xl shadow-2xl border border-slate-200/80 dark:border-slate-700/80 p-2 z-[1150] pointer-events-auto" role="menu" aria-label="Favorites">
     <div class="px-3 py-2 flex items-center justify-between border-b border-slate-200/50 dark:border-slate-700/50">
       <div class="flex items-center gap-1.5">
         <span class="text-sm">⭐</span>
@@ -2928,7 +3013,7 @@
   <!-- ============================================================ -->
   <!-- LOADING OVERLAY                                              -->
   <!-- ============================================================ -->
-  <div id="loadingOverlay" class="fixed inset-0 z-[2000] flex items-center justify-center bg-white/95 dark:bg-slate-950/95 backdrop-blur-sm pointer-events-auto"><div class="text-center"><div class="w-16 h-16 border-4 border-primary/30 border-t-primary rounded-full animate-spin mx-auto mb-4"></div><p class="text-slate-600 dark:text-slate-400 font-medium">Loading Aurafisky...</p></div></div>
+  <div id="loadingOverlay" class="fixed inset-0 z-[2000] flex items-center justify-center bg-white/95 dark:bg-slate-950/95 backdrop-blur-sm pointer-events-auto transition-opacity duration-300"><div class="text-center"><div class="w-16 h-16 border-4 border-primary/30 border-t-primary rounded-full animate-spin mx-auto mb-4"></div><p class="text-slate-600 dark:text-slate-400 font-medium">Loading Aurafisky...</p></div></div>
 
   <!-- Universal translation container (programmatically operated by app.js) -->
   <div id="google_translate_element" class="hidden" style="display:none;" aria-hidden="true"></div>

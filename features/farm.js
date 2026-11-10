@@ -55,7 +55,7 @@ import {
   cleanBotanicalName,
   resolveIndianFloraName,
 } from "../modules/indianFloraNames.js";
-import { t, detectLocale, translateDOM, refreshExternalTranslation } from "../modules/i18n.js";
+import { t, detectLocale, translateDOM, refreshExternalTranslation, translateText } from "../modules/i18n.js";
 
 // ────────────────── constants ──────────────────
 
@@ -1413,14 +1413,16 @@ function scoreBadge(score) {
   return `<span class="inline-flex items-center justify-center min-w-[2.4rem] px-1.5 py-0.5 rounded-full text-[10px] font-black text-white" style="background:${color}">${score}%</span>`;
 }
 
-function farmEmptyState() {
+function farmEmptyState(locale) {
+  const loc = locale || (typeof detectLocale === "function" ? detectLocale() : "en");
+  const title = translateText("Farm Mode", loc) || "Farm Mode";
+  const desc = translateText("Tap a location on the map (or search your village) and this tab turns it into a cropping plan: what to grow, when to sow, spray windows, and the water balance.", loc) || "Tap a location on the map (or search your village) and this tab turns it into a cropping plan: what to grow, when to sow, spray windows, and the water balance.";
   return `
     <div class="flex flex-col items-center justify-center text-center py-10 gap-3">
       <div class="text-4xl">🌾</div>
-      <h4 class="text-sm font-bold text-slate-700 dark:text-slate-200">Farm Mode</h4>
+      <h4 class="text-sm font-bold text-slate-700 dark:text-slate-200">${title}</h4>
       <p class="text-xs text-slate-500 dark:text-slate-400 max-w-[260px] leading-relaxed">
-        Tap a location on the map (or search your village) and this tab turns it into a
-        cropping plan: what to grow, when to sow, spray windows, and the water balance.
+        ${desc}
       </p>
     </div>`;
 }
@@ -1752,27 +1754,44 @@ function renderFarmAdvisories(advisories) {
 function renderCropCard(ctx, rec) {
   const crop = CROPS.find((c) => c.id === rec.cropId);
   if (!crop) return "";
+  const locale = (typeof window !== "undefined" && window.app?.language) || detectLocale();
   const window = crop.sowMonthsForSite || getSowMonthsForHemisphere(crop, ctx.hemisphere) || crop.sowMonths;
   const inWindow = isMonthInWindow(ctx.month, window, 0);
   const until = monthsUntilWindow(ctx.month, window);
+  const cropName = translateText(crop.name, locale);
+  const cropCategory = translateText(crop.category, locale);
+  const formattedMonths = Array.isArray(window) && window.length > 0
+    ? window.map((m) => translateText(MONTH_SHORT[m - 1], locale) || MONTH_SHORT[m - 1]).join("-")
+    : (translateText("outside seasonal envelope", locale) || "outside seasonal envelope");
+  const sowWord = translateText("sow", locale) || "sow";
+  const daysWord = translateText("days", locale) || "days";
+  const localizedSowSched = `${sowWord} ${formattedMonths}${Number.isFinite(crop.duration) ? ` · ~${crop.duration} ${daysWord}` : ""}`;
+
+  const offSeasonText = translateText("Off-season / Wrong climate", locale) || "Off-season / Wrong climate";
+  const sowNowText = translateText("Sow now", locale) || t("farm_sow_now", locale) || "Sow now";
+  const nextWindowPrefix = translateText("Next window in", locale) || "Next window in";
+  const monthsWord = translateText("months", locale) || "months";
+  const windowOpensNext = translateText("Window opens next month", locale) || "Window opens next month";
+  const windowJustClosed = translateText("Window just closed", locale) || "Window just closed";
+
   const timing = !window.length
-    ? `<span class="text-rose-600 dark:text-rose-400 font-semibold">Off-season / Wrong climate</span>`
+    ? `<span class="text-rose-600 dark:text-rose-400 font-semibold">${esc(offSeasonText)}</span>`
     : inWindow
-      ? `<span class="text-emerald-700 dark:text-emerald-400 font-bold">✅ ${esc(t("farm_sow_now") || "Sow now")}</span>`
+      ? `<span class="text-emerald-700 dark:text-emerald-400 font-bold">✅ ${esc(sowNowText)}</span>`
       : until <= 1
-        ? `<span class="text-amber-600 dark:text-amber-400 font-bold">🕐 Window ${until === 1 ? "opens next month" : "just closed"}</span>`
-        : `<span class="text-slate-500 dark:text-slate-400 font-semibold">⏳ Next window in ~${until} months</span>`;
+        ? `<span class="text-amber-600 dark:text-amber-400 font-bold">🕐 ${esc(until === 1 ? windowOpensNext : windowJustClosed)}</span>`
+        : `<span class="text-slate-500 dark:text-slate-400 font-semibold">⏳ ${esc(nextWindowPrefix)} ~${until} ${esc(monthsWord)}</span>`;
   const clim = classifyClimate(ctx.lat, ctx.elevation);
   const soils = crop.soils.map((s) => getSoil(s)?.name).filter(Boolean).join(" / ");
   const gdd = Number.isFinite(crop.duration) ? crop.duration : null;
 
   const howKeys = [
-    [t("farm_sowing") || "Sowing", crop.how.sow],
-    [t("farm_spacing") || "Spacing", crop.how.spacing],
-    [t("farm_irrigation") || "Irrigation", crop.how.irrigation],
-    [t("farm_fertiliser") || "Fertiliser", crop.how.fert],
-    [t("farm_care") || "Care", crop.how.care],
-    [t("farm_harvest") || "Harvest", crop.how.harvest],
+    [t("farm_sowing", locale) || "Sowing", crop.how.sow],
+    [t("farm_spacing", locale) || "Spacing", crop.how.spacing],
+    [t("farm_irrigation", locale) || "Irrigation", crop.how.irrigation],
+    [t("farm_fertiliser", locale) || "Fertiliser", crop.how.fert],
+    [t("farm_care", locale) || "Care", crop.how.care],
+    [t("farm_harvest", locale) || "Harvest", crop.how.harvest],
   ];
 
   return `
@@ -1781,11 +1800,11 @@ function renderCropCard(ctx, rec) {
         <span class="text-lg leading-none">${esc(crop.emoji)}</span>
         <div class="min-w-0 flex-1">
           <div class="flex items-center gap-1.5 flex-wrap">
-            <span class="text-xs font-bold text-slate-800 dark:text-slate-100 truncate">${esc(crop.name)}</span>
-            <span class="text-[9px] px-1.5 py-0.2 rounded-full font-medium bg-slate-100 dark:bg-slate-700/80 text-slate-600 dark:text-slate-300 border border-slate-200/60 dark:border-slate-600/60">${esc(crop.category)}</span>
+            <span class="text-xs font-bold text-slate-800 dark:text-slate-100 truncate">${esc(cropName)}</span>
+            <span class="text-[9px] px-1.5 py-0.2 rounded-full font-medium bg-slate-100 dark:bg-slate-700/80 text-slate-600 dark:text-slate-300 border border-slate-200/60 dark:border-slate-600/60">${esc(cropCategory)}</span>
             ${scoreBadge(rec.score)}
           </div>
-          <div class="text-[10px] text-slate-500 dark:text-slate-400 mt-0.5">${timing} · sow ${esc(formatSowWindow(window) || "outside seasonal envelope")}${gdd ? ` · ~${gdd} days` : ""}</div>
+          <div class="text-[10px] text-slate-500 dark:text-slate-400 mt-0.5">${timing} · ${esc(localizedSowSched)}</div>
         </div>
         <svg class="w-3.5 h-3.5 text-slate-400 transition-transform group-open:rotate-180 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path d="M19 9l-7 7-7-7"/></svg>
       </summary>
@@ -2028,7 +2047,7 @@ export function renderFarmTab(app) {
   };
 
   if (a.selectedLat == null || a.selectedLng == null) {
-    panel.innerHTML = farmEmptyState();
+    panel.innerHTML = farmEmptyState(a.language);
     syncFarmLanguage();
     return;
   }
@@ -2097,7 +2116,9 @@ export function renderFarmTab(app) {
     const activeClass = isActive
       ? "bg-teal-600 text-white font-bold shadow-xs"
       : "bg-slate-200/70 hover:bg-slate-300/70 dark:bg-slate-700/60 dark:hover:bg-slate-600/70 text-slate-700 dark:text-slate-200";
-    return `<button type="button" role="tab" aria-selected="${isActive ? "true" : "false"}" class="farm-cat-chip flex-shrink-0 px-2.5 py-1 rounded-full text-[10px] whitespace-nowrap transition-all select-none cursor-pointer ${activeClass}" data-cat="${esc(c.id)}">${c.emoji} ${esc(c.label)}</button>`;
+    const catLoc = (typeof window !== "undefined" && window.app?.language) || detectLocale();
+    const localizedLabel = translateText(c.label, catLoc);
+    return `<button type="button" role="tab" aria-selected="${isActive ? "true" : "false"}" class="farm-cat-chip flex-shrink-0 px-2.5 py-1 rounded-full text-[10px] whitespace-nowrap transition-all select-none cursor-pointer ${activeClass}" data-cat="${esc(c.id)}">${c.emoji} ${esc(localizedLabel)}</button>`;
   }).join("");
 
   let filteredRecs = allRecs;
@@ -2132,10 +2153,10 @@ export function renderFarmTab(app) {
     <div class="space-y-4">
       <div class="flex items-center justify-between">
         <div class="flex items-center gap-2">
-          <h4 class="text-sm font-black text-slate-800 dark:text-white flex items-center gap-1.5">🌾 Farm Mode</h4>
+          <h4 class="text-sm font-black text-slate-800 dark:text-white flex items-center gap-1.5">🌾 ${esc(translateText("Farm Mode", (typeof window !== "undefined" && window.app?.language) || detectLocale()))}</h4>
           ${renderFieldSelector(ctx, a)}
         </div>
-        <button id="farmRefreshBtn" class="text-[10px] font-semibold text-teal-600 dark:text-teal-400 hover:underline cursor-pointer">Refresh soil data</button>
+        <button id="farmRefreshBtn" class="text-[10px] font-semibold text-teal-600 dark:text-teal-400 hover:underline cursor-pointer">${esc(translateText("Refresh soil data", (typeof window !== "undefined" && window.app?.language) || detectLocale()))}</button>
       </div>
       ${renderRegionChip(ctx)}
       ${renderSiteSnapshot(ctx)}
@@ -2143,8 +2164,8 @@ export function renderFarmTab(app) {
       ${renderFarmAdvisories(advisories)}
       <div>
         <div class="flex items-center justify-between mb-1.5">
-          <h4 class="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">What to grow here — ranked for this week</h4>
-          <span class="text-[10px] text-slate-400 font-medium">${filteredRecs.length} suitable</span>
+          <h4 class="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">${esc(translateText("What to grow here — ranked for this week", (typeof window !== "undefined" && window.app?.language) || detectLocale()))}</h4>
+          <span class="text-[10px] text-slate-400 font-medium">${filteredRecs.length} ${esc(translateText("suitable", (typeof window !== "undefined" && window.app?.language) || detectLocale()))}</span>
         </div>
         <div id="farmCropCategoryTabs" role="tablist" aria-label="Crop categories" class="farm-scroll-tabs flex items-center gap-1.5 overflow-x-auto pb-1.5 mb-2">
           ${catPills}

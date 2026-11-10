@@ -76,4 +76,23 @@ describe("Weather Error States & Retry UI (Phase 1 Foundation)", () => {
     expect(icon.textContent).toBe("⚠️");
     expect(viewCached.classList.contains("hidden")).toBe(false);
   });
+
+  it("contains first-run onboarding feature tour modal and trigger in index.html", () => {
+    const tourModal = doc.getElementById("onboardingTourModal");
+    expect(tourModal).not.toBeNull();
+    expect(tourModal.getAttribute("role")).toBe("dialog");
+
+    const tourTitle = doc.getElementById("tourTitle");
+    expect(tourTitle).not.toBeNull();
+    expect(tourTitle.textContent).toContain("Welcome to Aurafisky");
+
+    const closeBtn = doc.getElementById("onboardingCloseBtn");
+    expect(closeBtn).not.toBeNull();
+
+    const dismissBtn = doc.getElementById("onboardingDismissBtn");
+    expect(dismissBtn).not.toBeNull();
+
+    const featureTourBtn = doc.getElementById("settingsFeatureTourBtn");
+    expect(featureTourBtn).not.toBeNull();
+  });
 });

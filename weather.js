@@ -39,6 +39,42 @@ const WeatherService = (() => {
     return url + '|' + JSON.stringify(options);
   }
 
+  /**
+   * Creates a robust AbortSignal combining caller cancellation with an enforced timeout.
+   * Guarantees network operations never hang indefinitely even if caller signal never aborts.
+   */
+  function _createCombinedSignal(externalSignal, timeoutMs = 8000) {
+    const timeoutCtrl = new AbortController();
+    let isTimeout = false;
+    const timer = setTimeout(() => {
+      isTimeout = true;
+      try {
+        timeoutCtrl.abort(new DOMException(`Request timed out after ${timeoutMs}ms`, "TimeoutError"));
+      } catch (_) {
+        timeoutCtrl.abort();
+      }
+    }, timeoutMs);
+
+    let signal = timeoutCtrl.signal;
+    if (externalSignal) {
+      if (typeof AbortSignal !== "undefined" && typeof AbortSignal.any === "function") {
+        signal = AbortSignal.any([externalSignal, timeoutCtrl.signal]);
+      } else {
+        if (externalSignal.aborted) {
+          timeoutCtrl.abort();
+        } else {
+          externalSignal.addEventListener("abort", () => timeoutCtrl.abort(), { once: true });
+        }
+      }
+    }
+
+    return {
+      signal,
+      didTimeout: () => isTimeout,
+      cleanup: () => clearTimeout(timer),
+    };
+  }
+
   async function _cachedFetch(url, fetchFn, ttl = REQUEST_CACHE_TTL, options = {}) {
     const key = _cacheKey(url, options);
     const cached = _requestCache.get(key);
@@ -292,15 +328,22 @@ const WeatherService = (() => {
       let useExtended = true;
 
       for (let attempt = 0; attempt <= retries; attempt++) {
+        const { signal: fetchSignal, didTimeout, cleanup } = _createCombinedSignal(signal, 7500);
         try {
           const url = `${FORECAST_URL}?${params}`;
-          const timeoutCtrl = new AbortController();
-          const timer = setTimeout(() => timeoutCtrl.abort(), 6000);
           let response;
           try {
-            response = await fetch(url, { signal: signal || timeoutCtrl.signal });
+            response = await fetch(url, { signal: fetchSignal });
+          } catch (fetchErr) {
+            if (didTimeout() || fetchErr?.name === "TimeoutError") {
+              const timeoutErr = new Error("Weather request timed out after 7.5s");
+              timeoutErr.isTimeout = true;
+              timeoutErr.name = "TimeoutError";
+              throw timeoutErr;
+            }
+            throw fetchErr;
           } finally {
-            clearTimeout(timer);
+            cleanup();
           }
           if (!response.ok) {
             // Only on 400 (Bad Request): fallback to legacy non-extended parameter set.
@@ -331,6 +374,8 @@ const WeatherService = (() => {
             if (err.status === 429 || String(err).includes("429")) {
               const backoff = 1500 * Math.pow(2, attempt) + Math.random() * 500;
               delay = err.retryAfterMs ? Math.max(err.retryAfterMs, backoff) : backoff;
+            } else if (err.isTimeout) {
+              delay = 500 * Math.pow(2, attempt);
             }
             await new Promise((r) => setTimeout(r, delay));
           } else {
@@ -850,8 +895,9 @@ const WeatherService = (() => {
     let results = [];
 
     for (let attempt = 0; attempt <= retries; attempt++) {
+      const { signal: fetchSignal, cleanup } = _createCombinedSignal(signal, 5000);
       try {
-        const response = await fetch(`${GEOCODING_URL}?${params}`, { signal });
+        const response = await fetch(`${GEOCODING_URL}?${params}`, { signal: fetchSignal });
         if (response.ok) {
           const data = await response.json();
           if (Array.isArray(data.results) && data.results.length > 0) {
@@ -876,15 +922,18 @@ const WeatherService = (() => {
         if (attempt < retries) {
           await new Promise((r) => setTimeout(r, 400 * Math.pow(2, attempt)));
         }
+      } finally {
+        cleanup();
       }
     }
 
     // ── 3. High-Precision Fallback: OpenStreetMap Nominatim ──
     // Enables finding small villages, remote islands, streets, landmarks, and postal codes worldwide
     if (results.length === 0) {
+      const { signal: nomSignal, cleanup: nomCleanup } = _createCombinedSignal(signal, 5000);
       try {
         const nomUrl = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(rawQuery)}&format=jsonv2&addressdetails=1&limit=8&accept-language=${encodeURIComponent(lang)}`;
-        const nomRes = await fetch(nomUrl, { signal });
+        const nomRes = await fetch(nomUrl, { signal: nomSignal });
         if (nomRes.ok) {
           const nomData = await nomRes.json();
           if (Array.isArray(nomData)) {
@@ -917,6 +966,8 @@ const WeatherService = (() => {
         }
       } catch (e) {
         // Quiet fallback if network or rate-limited
+      } finally {
+        nomCleanup();
       }
     }
 
@@ -1195,17 +1246,23 @@ const WeatherService = (() => {
         forecast_days: FORECAST_DAYS,
       });
       for (let attempt = 0; attempt <= retries; attempt++) {
+        const { signal: fetchSignal, didTimeout, cleanup } = _createCombinedSignal(signal, 5000);
         try {
-          const timeoutCtrl = new AbortController();
-          const timer = setTimeout(() => timeoutCtrl.abort(), 5000);
           let response;
           try {
             response = await fetch(
               `https://air-quality-api.open-meteo.com/v1/air-quality?${params}`,
-              { signal: signal || timeoutCtrl.signal }
+              { signal: fetchSignal }
             );
+          } catch (fetchErr) {
+            if (didTimeout() || fetchErr?.name === "TimeoutError") {
+              const timeoutErr = new Error("Air quality request timed out");
+              timeoutErr.isTimeout = true;
+              throw timeoutErr;
+            }
+            throw fetchErr;
           } finally {
-            clearTimeout(timer);
+            cleanup();
           }
           if (!response.ok) {
             if (response.status === 429) {

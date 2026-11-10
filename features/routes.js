@@ -1776,8 +1776,15 @@ async function updateRouteGeometry() {
   try {
     const coordsParam = pts.map((p) => `${p.lng},${p.lat}`).join(";");
     const url = `${OSRM_BASE}/${coordsParam}?overview=full&geometries=geojson&steps=false`;
-    const res = await fetch(url);
-    if (!res.ok) throw new Error("OSRM error");
+    const timeoutCtrl = new AbortController();
+    const timer = setTimeout(() => timeoutCtrl.abort(), 6000);
+    let res;
+    try {
+      res = await fetch(url, { signal: timeoutCtrl.signal });
+    } finally {
+      clearTimeout(timer);
+    }
+    if (!res.ok) throw new Error(`OSRM HTTP ${res.status}`);
     const data = await res.json();
 
     if (data.code === "Ok" && data.routes?.length) {

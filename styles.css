@@ -413,28 +413,6 @@ html, body {
     -webkit-backdrop-filter: blur(20px);
   }
 
-  /* Map Layers Bottom Sheet */
-  #mapLayersFlyout {
-    position: fixed !important;
-    left: 0 !important;
-    right: 0 !important;
-    bottom: calc(3.5rem + env(safe-area-inset-bottom, 0px)) !important;
-    top: auto !important;
-    width: 100% !important;
-    max-width: 100% !important;
-    max-height: 65vh !important;
-    border-radius: 1.5rem 1.5rem 0 0 !important;
-    margin: 0 !important;
-    padding: 1.25rem !important;
-    transform: none !important;
-    z-index: 1200 !important;
-    box-shadow: 0 -10px 40px rgba(0, 0, 0, 0.25) !important;
-    border-bottom: none !important;
-    background: var(--glass-bg);
-    backdrop-filter: blur(20px);
-    -webkit-backdrop-filter: blur(20px);
-  }
-
   /* Route Studio Panel Bottom Sheet (Mobile) */
   #routePanel {
     position: fixed !important;
@@ -3788,18 +3766,19 @@ button, a, input, select, textarea, [role="button"] {
     display: none !important;
   }
 
-  /* Radar expanded panel: on mobile, anchor to bottom above nav bar with z-index 1250 */
+  /* Radar expanded panel: on mobile, centered modal with z-index 1250 */
   #radarExpandedPanel {
     position: fixed !important;
     left: 50% !important;
     right: auto !important;
-    top: auto !important;
-    bottom: calc(4.2rem + env(safe-area-inset-bottom, 0px)) !important;
-    transform: translateX(-50%) !important;
+    top: 50% !important;
+    bottom: auto !important;
+    translate: none !important;
+    transform: translate(-50%, -50%) !important;
     width: min(320px, calc(100vw - 1.5rem)) !important;
     max-width: min(320px, calc(100vw - 1.5rem)) !important;
-    max-height: calc(100dvh - 5.5rem - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px)) !important;
-    max-height: calc(var(--app-height, 100vh) - 5.5rem) !important;
+    max-height: calc(100dvh - 5rem - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px)) !important;
+    max-height: calc(var(--app-height, 100vh) - 5rem) !important;
     margin: 0 !important;
     z-index: 1250 !important;
     overflow-y: auto !important;
@@ -3809,31 +3788,48 @@ button, a, input, select, textarea, [role="button"] {
     border-radius: 1.25rem !important;
   }
 
-  /* Map layers flyout: on mobile, anchor to bottom above nav bar with z-index 1250 */
-  #mapLayersFlyout {
+  /* Map layers flyout: on mobile, centered modal with z-index 1250 */
+  #mapLayersFlyout:not(.minimized) {
     position: fixed !important;
     left: 50% !important;
     right: auto !important;
-    top: auto !important;
-    bottom: calc(4.2rem + env(safe-area-inset-bottom, 0px)) !important;
-    transform: translateX(-50%) !important;
-    width: min(320px, calc(100vw - 1.5rem)) !important;
-    max-width: min(320px, calc(100vw - 1.5rem)) !important;
-    max-height: calc(100dvh - 5.5rem - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px)) !important;
-    max-height: calc(var(--app-height, 100vh) - 5.5rem) !important;
+    top: 50% !important;
+    bottom: auto !important;
+    translate: none !important;
+    transform: translate(-50%, -50%) !important;
+    width: min(340px, calc(100vw - 1.5rem)) !important;
+    max-width: min(340px, calc(100vw - 1.5rem)) !important;
+    max-height: calc(100dvh - 5rem - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px)) !important;
+    max-height: calc(var(--app-height, 100vh) - 5rem) !important;
     margin: 0 !important;
     z-index: 1250 !important;
-    overflow-y: auto !important;
-    -webkit-overflow-scrolling: touch;
+    display: flex !important;
+    flex-direction: column !important;
+    min-height: 0 !important;
+    overflow: hidden !important;
     overscroll-behavior: contain !important;
     box-shadow: 0 20px 50px rgba(0, 0, 0, 0.5) !important;
     border-radius: 1.25rem !important;
+  }
+
+  #mapLayersFlyout #mapLayersHeader {
+    flex-shrink: 0 !important;
+  }
+
+  #mapLayersFlyout #mapLayersBody {
+    flex: 1 1 0% !important;
+    min-height: 0 !important;
+    overflow-y: auto !important;
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior: contain !important;
   }
 
   #mapLayersFlyout.minimized {
     top: auto !important;
     bottom: calc(4.2rem + env(safe-area-inset-bottom, 0px)) !important;
     left: 50% !important;
+    right: auto !important;
+    translate: none !important;
     transform: translateX(-50%) !important;
     width: auto !important;
     min-width: 220px !important;
@@ -4300,12 +4296,22 @@ button, a, input, select, textarea, [role="button"] {
 #mapLayersFlyout {
   max-height: min(88vh, calc(var(--app-height, 100vh) - 4rem));
   max-height: calc(100dvh - 4rem);
-  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  overflow-y: hidden;
   overscroll-behavior: contain;
   transition: width 0.2s cubic-bezier(0.16, 1, 0.3, 1),
               padding 0.2s cubic-bezier(0.16, 1, 0.3, 1),
               box-shadow 0.2s ease,
               transform 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+#mapLayersFlyout #mapLayersHeader {
+  flex-shrink: 0;
+}
+#mapLayersFlyout #mapLayersBody {
+  flex: 1 1 auto;
+  overflow-y: auto;
+  overscroll-behavior: contain;
 }
 #radarExpandedPanel {
   max-height: min(88vh, calc(var(--app-height, 100vh) - 4rem));
@@ -4699,6 +4705,28 @@ button, a, input, select, textarea, [role="button"] {
 @media (min-width: 640px) {
   #restoreSheetPill {
     display: none !important;
+  }
+  #mapLayersFlyout:not(.minimized) {
+    position: fixed !important;
+    top: 50% !important;
+    bottom: auto !important;
+    left: auto !important;
+    right: 4.5rem !important;
+    translate: none !important;
+    transform: translateY(-50%) !important;
+    width: 280px !important;
+    max-width: 280px !important;
+  }
+  #radarExpandedPanel {
+    position: fixed !important;
+    top: 50% !important;
+    bottom: auto !important;
+    left: auto !important;
+    right: 4.5rem !important;
+    translate: none !important;
+    transform: translateY(-50%) !important;
+    width: 210px !important;
+    max-width: 210px !important;
   }
 }
 

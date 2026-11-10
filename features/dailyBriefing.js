@@ -367,6 +367,7 @@ function renderCard(view) {
   const curLang = (typeof window !== "undefined" && localStorage.getItem("aurafisky_lang")) || "en";
   if (curLang !== "en" && typeof window !== "undefined" && window.aurafiskyI18n?.translateDOM) {
     window.aurafiskyI18n.translateDOM(card, curLang);
+    window.aurafiskyI18n.refreshExternalTranslation?.(curLang);
   }
 }
 

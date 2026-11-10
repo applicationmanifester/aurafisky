@@ -15,16 +15,18 @@ function toggleClimateTimeMachine() {
   }
 
 function closeClimateTimeMachine() {
+    this._climateRequestId = (this._climateRequestId || 0) + 1;
     this.$.timeMachineDrawer.classList.add("hidden");
     this.$.timeMachineChevron.classList.remove("rotate-180");
   }
 
 async function loadClimateTimeMachineData() {
+    const requestId = this._climateRequestId = (this._climateRequestId || 0) + 1;
     const activeHourIdx = parseInt(this.$.timelineSlider.value, 10);
-    const weather = WeatherService.getHourlyAtIndex(
-      this.weatherData,
-      activeHourIdx,
-    );
+    const weatherData = this.weatherData;
+    const selectedLat = this.selectedLat;
+    const selectedLng = this.selectedLng;
+    const weather = WeatherService.getHourlyAtIndex(weatherData, activeHourIdx);
     if (!weather) return;
 
     const parts = weather.time.split("T");
@@ -37,12 +39,13 @@ async function loadClimateTimeMachineData() {
     const yearsPast = [5, 10, 20];
     const dates = yearsPast.map((y) => `${year - y}-${month}-${day}`);
 
-    const cacheKey = `climate_${this.selectedLat.toFixed(3)}_${this.selectedLng.toFixed(3)}_${month}-${day}`;
+    const cacheKey = `climate_${selectedLat.toFixed(3)}_${selectedLng.toFixed(3)}_${dates.join("_")}`;
     if (this._climateCache?.key === cacheKey) {
       // Bug fix: this called a nonexistent renderClimateTimeMachineData(),
       // which threw uncaught (outside the try/catch below) and silently
       // broke the cache-hit path. The real renderer is renderClimateTimeMachine,
       // taking (yearsPast, results, currentTemp) — matches the call below.
+      this._historicalResults = this._climateCache.results;
       this.renderClimateTimeMachine(yearsPast, this._climateCache.results, weather.temperature);
       return;
     }
@@ -59,23 +62,31 @@ async function loadClimateTimeMachineData() {
       // Fetch past records in parallel (deduplicated via in-memory cache in WeatherService)
       const results = await Promise.all(
         dates.map((dateStr) =>
-          WeatherService.fetchHistoricalWeather(
-            this.selectedLat,
-            this.selectedLng,
-            dateStr,
-          ).catch((e) => {
+          WeatherService.fetchHistoricalWeather(selectedLat, selectedLng, dateStr).catch((e) => {
             console.warn(`Failed to fetch history for ${dateStr}:`, e);
             return null;
           }),
         ),
       );
 
+      const stillCurrent = requestId === this._climateRequestId
+        && selectedLat === this.selectedLat
+        && selectedLng === this.selectedLng
+        && weatherData === this.weatherData
+        && activeHourIdx === parseInt(this.$.timelineSlider.value, 10);
+      if (!stillCurrent) {
+        if (requestId === this._climateRequestId && !this.$.timeMachineDrawer.classList.contains("hidden")) {
+          this.loadClimateTimeMachineData();
+        }
+        return;
+      }
+
       this._climateCache = { key: cacheKey, results };
       this._historicalResults = results;
       this.renderClimateTimeMachine(yearsPast, results, weather.temperature);
 
       // Find analog year
-      const analog = WeatherService.findAnalogDay(this.weatherData, results);
+      const analog = WeatherService.findAnalogDay(weatherData, results);
       if (analog && this.$.analogLabel) {
         this.$.analogLabel.textContent = `📅 Most like ${analog.year} years ago: ${analog.icon} ${analog.desc}, ${Math.round(analog.temp)}°C`;
         this.$.analogLabel.className =
@@ -83,6 +94,7 @@ async function loadClimateTimeMachineData() {
         this.$.analogLabel.classList.remove("hidden");
       }
     } catch (e) {
+      if (requestId !== this._climateRequestId) return;
       console.error("Time machine load error:", e);
       this.$.timeMachineRows.innerHTML = `<div class="text-[10px] text-red-500 text-center py-2">Failed to load climate history.</div>`;
     }
@@ -244,6 +256,7 @@ function renderClimateTimeMachine(yearsPast, results, currentTemp) {
     const pattern = WeatherService.getHistoricalPattern(
       this.weatherData,
       results,
+      [5, 10, 20],
     );
     if (pattern && this.$.patternLabel) {
       this.$.patternLabel.textContent = `📊 ${pattern.label}`;

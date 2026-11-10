@@ -2227,7 +2227,7 @@ const WeatherService = (() => {
   //  HISTORICAL PATTERN
   //  ================================================================
 
-  function getHistoricalPattern(data, historicalResults) {
+  function getHistoricalPattern(data, historicalResults, yearsPast = [5, 10, 20]) {
     if (!data?.daily || !historicalResults || historicalResults.length === 0)
       return null;
     const daily = data.daily;
@@ -2243,14 +2243,22 @@ const WeatherService = (() => {
     const weekAvg = thisWeek.reduce((a, b) => a + b, 0) / thisWeek.length;
 
     const validHistorical = historicalResults
-      .filter((r) => r?.daily?.temperature_2m_max?.[0] != null)
-      .map(
-        (r) =>
-          (r.daily.temperature_2m_max[0] + r.daily.temperature_2m_min[0]) / 2,
-      );
+      .map((r, index) => ({
+        yearsAgo: yearsPast[index],
+        meanTemperature: r?.daily?.temperature_2m_max?.[0] != null && r?.daily?.temperature_2m_min?.[0] != null
+          ? (r.daily.temperature_2m_max[0] + r.daily.temperature_2m_min[0]) / 2
+          : null,
+      }))
+      .filter((sample) => sample.meanTemperature != null);
     if (validHistorical.length === 0) return null;
     const histAvg =
-      validHistorical.reduce((a, b) => a + b, 0) / validHistorical.length;
+      validHistorical.reduce((sum, sample) => sum + sample.meanTemperature, 0) / validHistorical.length;
+    const sampledYears = validHistorical.map((sample) => sample.yearsAgo).filter(Number.isFinite);
+    const sampleLabel = sampledYears.length === 1
+      ? `the ${sampledYears[0]}-year-ago sample`
+      : sampledYears.length > 1
+        ? `the mean of the ${sampledYears.map((year) => `${year}-year-ago`).join(", ")} samples`
+        : "the available historical samples";
 
     const diff = weekAvg - histAvg;
     return {
@@ -2259,9 +2267,9 @@ const WeatherService = (() => {
       diff,
       label:
         diff > 0
-          ? `This week is ${Math.round(diff)}°C warmer than the ${validHistorical.length * 5}-year average`
+          ? `This week is ${Math.round(diff)}°C warmer than ${sampleLabel}`
           : diff < 0
-            ? `This week is ${Math.round(Math.abs(diff))}°C cooler than the ${validHistorical.length * 5}-year average`
+            ? `This week is ${Math.round(Math.abs(diff))}°C cooler than ${sampleLabel}`
             : "This week matches historical averages",
     };
   }

@@ -149,16 +149,6 @@ export class AuraMobileController {
       }
     });
 
-    clearBtn?.addEventListener('click', () => {
-      if (input) {
-        input.value = '';
-        input.focus();
-        clearBtn.classList.add('hidden');
-        const dropdown = document.getElementById('searchDropdown');
-        if (dropdown) dropdown.classList.add('hidden');
-      }
-    });
-
     // Selecting a search suggestion restores the bottom sheet if dismissed
     input?.addEventListener('focus', () => {
       if (this.sheetState === 'dismissed') {
@@ -1176,6 +1166,7 @@ export class AuraMobileController {
     if (currentLang && currentLang !== 'en') {
       const section = document.getElementById('discoveriesSection') || container;
       translateDOM(section, currentLang);
+      window.aurafiskyI18n?.refreshExternalTranslation?.(currentLang);
     }
   }
 

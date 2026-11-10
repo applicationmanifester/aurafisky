@@ -241,6 +241,7 @@ function renderTodos(app) {
   const curLang = app?.language || (typeof localStorage !== "undefined" ? localStorage.getItem("aurafisky_lang") : null) || "en";
   if (curLang && curLang !== "en" && typeof window !== "undefined" && window.aurafiskyI18n?.translateDOM) {
     window.aurafiskyI18n.translateDOM(card, curLang);
+    window.aurafiskyI18n.refreshExternalTranslation?.(curLang);
   }
 }
 

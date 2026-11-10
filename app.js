@@ -1538,6 +1538,7 @@ class AurafiskyApp {
         }
         if (this.$.searchDropdown) {
           this.$.searchDropdown.classList.remove("open");
+          this._syncSearchAria();
         }
 
         // Dismiss open terms, info, or shortcuts modals on map click
@@ -3036,6 +3037,7 @@ class AurafiskyApp {
     this._boundKeydown = (e) => {
       if (e.key === "Escape") {
         this.$.searchDropdown.classList.remove("open");
+        this._syncSearchAria();
         if (this.$.weatherPanel.classList.contains("open")) {
           this.hideWeatherPanel();
         }
@@ -3173,9 +3175,11 @@ class AurafiskyApp {
     this._boundDocClick = (e) => {
       if (
         !e.target.closest("#searchInput") &&
+        !e.target.closest("#searchClearBtn") &&
         !e.target.closest("#searchDropdown")
       ) {
         this.$.searchDropdown.classList.remove("open");
+        this._syncSearchAria();
       }
       if (
         !e.target.closest("#bookmarksBtn") &&
@@ -6489,6 +6493,7 @@ class AurafiskyApp {
     gpsBtn.addEventListener("click", (e) => {
       e.stopPropagation();
       this.$.searchDropdown.classList.remove("open");
+      this._syncSearchAria();
       if (this.$.searchInput) this.$.searchInput.blur();
       this.getMyLocation();
       this._haptic?.('selection');
@@ -6515,6 +6520,7 @@ class AurafiskyApp {
     homeBtn.addEventListener("click", (e) => {
       e.stopPropagation();
       this.$.searchDropdown.classList.remove("open");
+      this._syncSearchAria();
       if (this.$.searchInput) this.$.searchInput.blur();
       if (this.defaultLocation && this.defaultLocation.lat != null) {
         this.goToHomeLocation?.();
@@ -7176,6 +7182,7 @@ class AurafiskyApp {
 
   async selectSearchResult(result) {
     this.$.searchDropdown.classList.remove("open");
+    this._syncSearchAria();
     this.$.searchInput.value = result.displayName || result.name || "";
     this.$.searchClearBtn.classList.remove("hidden");
     if (this.$.searchInput) this.$.searchInput.blur();
@@ -11459,6 +11466,8 @@ class AurafiskyApp {
 
   applyLanguage(lang) {
     if (!lang) return;
+    setLocale(lang);
+    this.language = lang;
     try {
       localStorage.setItem("aurafisky_lang", lang);
     } catch (_) { /* ignore */ }
@@ -11475,23 +11484,29 @@ class AurafiskyApp {
     this.setMapLanguage(lang);
 
     const title = document.querySelector("title");
-    if (title) title.textContent = `${t("app_name")} — ${t("app_tagline")}`;
+    if (title) title.textContent = `${t("app_name", lang)} — ${t("app_tagline", lang)}`;
     if (this.$.searchInput) {
       // Keep the source placeholder stable across language switches. Without
       // this, translateDOM can remember the first selected locale as the source
       // and leave the search field stuck in that language on later changes.
       this.$.searchInput.setAttribute("data-orig-placeholder", "Search a city...");
-      this.$.searchInput.placeholder = t("search_placeholder");
+      this.$.searchInput.placeholder = t("search_placeholder", lang);
+      this.$.searchInput.setAttribute("aria-label", t("search_placeholder", lang));
+    }
+    const voiceSearchBtn = document.getElementById("voiceSearchBtn");
+    if (voiceSearchBtn) {
+      voiceSearchBtn.title = t("search_by_voice", lang) || "Search by voice";
+      voiceSearchBtn.setAttribute("aria-label", t("search_by_voice", lang) || "Search by voice");
     }
 
     // 1. Update Weather Tab Labels
     const tabMap = {
-      overview: t("tab_overview") || "Overview",
-      hourly: t("tab_hourly") || "Hourly",
-      daily: t("tab_daily") || "7-Day",
-      metrics: t("tab_metrics") || "Details & AQI",
-      astronomy: t("tab_astronomy") || "Astronomy",
-      farm: t("tab_farm") || "🌾 Farm",
+      overview: t("tab_overview", lang) || "Overview",
+      hourly: t("tab_hourly", lang) || "Hourly",
+      daily: t("tab_daily", lang) || "7-Day",
+      metrics: t("tab_metrics", lang) || "Details & AQI",
+      astronomy: t("tab_astronomy", lang) || "Astronomy",
+      farm: t("tab_farm", lang) || "🌾 Farm",
     };
     document.querySelectorAll(".weather-tab-btn").forEach((btn) => {
       const tab = btn.dataset.tab;
@@ -11500,35 +11515,35 @@ class AurafiskyApp {
 
     // 2. Update Bottom Navigation Labels
     const homeLabel = document.querySelector("#mobileNavHomeBtn span.text-\\[11px\\]");
-    if (homeLabel) homeLabel.textContent = t("nav_home") || "Set Home";
+    if (homeLabel) homeLabel.textContent = t("nav_home", lang) || "Set Home";
     const routeLabel = document.querySelector("#mobileNavRouteBtn span.text-\\[11px\\]");
-    if (routeLabel) routeLabel.textContent = t("nav_route") || "Route Weather";
+    if (routeLabel) routeLabel.textContent = t("nav_route", lang) || "Route Weather";
     const favLabel = document.querySelector("#mobileNavFavsBtn span.text-\\[11px\\]");
-    if (favLabel) favLabel.textContent = t("nav_favs") || "Favourites";
+    if (favLabel) favLabel.textContent = t("nav_favs", lang) || "Favourites";
 
     // 3. Update Header quick chip pills
     const chipAskAura = document.querySelector('.mobile-quick-chip[data-category="aura"] span:last-child');
-    if (chipAskAura) chipAskAura.textContent = t("chip_ask_aura") || "Ask Aura";
+    if (chipAskAura) chipAskAura.textContent = t("chip_ask_aura", lang) || "Ask Aura";
     const chipRadar = document.querySelector('.mobile-quick-chip[data-category="radar"] span:last-child');
-    if (chipRadar) chipRadar.textContent = t("chip_rain_radar") || "Rain Radar";
+    if (chipRadar) chipRadar.textContent = t("chip_rain_radar", lang) || "Rain Radar";
     const chipRoute = document.querySelector('.mobile-quick-chip[data-category="route-weather"] span:last-child');
-    if (chipRoute) chipRoute.textContent = t("chip_route_weather") || "Route Weather";
+    if (chipRoute) chipRoute.textContent = t("chip_route_weather", lang) || "Route Weather";
 
     // 4. Update Settings Labels
     const appLangLabel = document.getElementById("settingsAppLanguageLabel");
-    if (appLangLabel) appLangLabel.textContent = t("settings_app_language") || "App language";
+    if (appLangLabel) appLangLabel.textContent = t("settings_app_language", lang) || "App language";
     const appLangSub = document.getElementById("settingsAppLanguageSub");
-    if (appLangSub) appLangSub.textContent = t("settings_app_language_sub") || "All features & tabs";
+    if (appLangSub) appLangSub.textContent = t("settings_app_language_sub", lang) || "All features & tabs";
 
     // 5. Update Weather Card Actions and Header Titles
     const copyBtn = document.getElementById("copyAddressBtnText");
-    if (copyBtn) copyBtn.textContent = t("copy") || "Copy";
+    if (copyBtn) copyBtn.textContent = t("copy", lang) || "Copy";
     const detailsBtn = document.getElementById("toggleAddressCardText");
-    if (detailsBtn) detailsBtn.textContent = t("details") || "Details";
+    if (detailsBtn) detailsBtn.textContent = t("details", lang) || "Details";
     const briefingBtn = document.getElementById("briefingBtn");
-    if (briefingBtn) briefingBtn.textContent = `📡 ${t("generate_briefing") || "Generate Briefing"}`;
+    if (briefingBtn) briefingBtn.textContent = `📡 ${t("generate_briefing", lang) || "Generate Briefing"}`;
     const discHeader = document.getElementById("discoveriesHeaderTitle");
-    if (discHeader) discHeader.textContent = t("live_weather_intelligence_safety") || "Live Weather Intelligence & Safety";
+    if (discHeader) discHeader.textContent = t("live_weather_intelligence_safety", lang) || "Live Weather Intelligence & Safety";
 
     // 6. Sync Settings dropdown value
     const langSelect = this.$.settingsAppLanguageSelect || document.getElementById("settingsAppLanguageSelect");

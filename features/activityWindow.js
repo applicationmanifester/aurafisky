@@ -15,13 +15,13 @@ export function calculateBestOutdoorWindow(weatherData, airQualityData, currentH
   const totalHours = h.time.length;
 
   const windowHours = 2; // 2-hour window
-  const maxSearchHours = Math.min(24, totalHours - currentHourIndex - windowHours);
-  if (maxSearchHours <= 0) return null;
+  const maxSearchOffset = Math.min(24, totalHours - currentHourIndex - windowHours);
+  if (maxSearchOffset < 0) return null;
 
   let bestScore = Infinity;
   let bestWindow = null;
 
-  for (let offset = 0; offset <= maxSearchHours; offset++) {
+  for (let offset = 0; offset <= maxSearchOffset; offset++) {
     const idx1 = currentHourIndex + offset;
     const idx2 = idx1 + 1;
 
@@ -71,7 +71,7 @@ export function calculateBestOutdoorWindow(weatherData, airQualityData, currentH
       bestWindow = {
         startHourIndex: idx1,
         startTime: h.time[idx1],
-        endTime: h.time[idx2 + 1] || h.time[idx2],
+        endTime: h.time[idx1 + windowHours] || addHoursToWallTime(h.time[idx1], windowHours),
         score,
         avgAqi: Math.round(avgAqi),
         avgUv: Number(avgUv.toFixed(1)),
@@ -86,6 +86,15 @@ export function calculateBestOutdoorWindow(weatherData, airQualityData, currentH
   return bestWindow;
 }
 
+function addHoursToWallTime(value, hours) {
+  const match = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})/.exec(String(value || ""));
+  if (!match) return value;
+  const date = new Date(Date.UTC(
+    Number(match[1]), Number(match[2]) - 1, Number(match[3]), Number(match[4]) + hours, Number(match[5]),
+  ));
+  return `${date.getUTCFullYear()}-${String(date.getUTCMonth() + 1).padStart(2, "0")}-${String(date.getUTCDate()).padStart(2, "0")}T${String(date.getUTCHours()).padStart(2, "0")}:${String(date.getUTCMinutes()).padStart(2, "0")}`;
+}
+
 function aq1Safe(val) {
   return Number.isFinite(val) ? val : 50;
 }
@@ -96,16 +105,18 @@ function aq1Safe(val) {
 export function formatOutdoorWindowLabel(window, utcOffsetSeconds = 0) {
   if (!window || !window.startTime) return { time: "--", detail: "", badge: "--", tone: "neutral" };
 
-  const startD = new Date(window.startTime);
-  const endD = new Date(window.endTime);
+  const startParts = parseForecastWallTime(window.startTime);
+  const endParts = parseForecastWallTime(window.endTime);
+  const startHourStr = formatWallClock(startParts);
+  const endHourStr = formatWallClock(endParts);
 
-  const startHourStr = startD.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
-  const endHourStr = endD.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
-
+  const locationToday = new Date(Date.now() + (Number(utcOffsetSeconds) || 0) * 1000).toISOString().slice(0, 10);
+  const tomorrowDate = new Date(Date.parse(`${locationToday}T00:00:00Z`) + 86400000).toISOString().slice(0, 10);
   let dayPrefix = "Today";
-  const now = new Date();
-  if (startD.getDate() !== now.getDate()) {
-    dayPrefix = "Tomorrow";
+  if (startParts?.date && startParts.date !== locationToday) {
+    dayPrefix = startParts.date === tomorrowDate
+      ? "Tomorrow"
+      : new Date(`${startParts.date}T12:00:00`).toLocaleDateString([], { month: "short", day: "numeric" });
   }
 
   const timeLabel = `${dayPrefix} ${startHourStr} – ${endHourStr}`;
@@ -132,6 +143,16 @@ export function formatOutdoorWindowLabel(window, utcOffsetSeconds = 0) {
     badge,
     tone,
   };
+}
+
+function parseForecastWallTime(value) {
+  const match = /^(\d{4}-\d{2}-\d{2})T(\d{2}):(\d{2})/.exec(String(value || ""));
+  return match ? { date: match[1], hour: Number(match[2]), minute: Number(match[3]) } : null;
+}
+
+function formatWallClock(parts) {
+  if (!parts) return "--";
+  return new Date(2000, 0, 1, parts.hour, parts.minute).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
 }
 
 export function updateBestOutdoorWindowUI(app) {

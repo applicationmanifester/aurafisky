@@ -514,5 +514,130 @@ describe("Internationalisation (i18n) Engine & Language Support", () => {
     expect(sowDe).toContain("säen");
     expect(sowDe).toContain("Tage");
   });
+
+  it("verifies 100% Gujarati translation without English leakage for all user screenshot elements", () => {
+    // Top Bar & Controls
+    expect(translateText("Search a city...", "gu")).toBe("શહેર અથવા સ્થળ શોધો…");
+    expect(translateText("Search a city…", "gu")).toBe("શહેર અથવા સ્થળ શોધો…");
+    expect(translateText("Ask Aura", "gu")).toBe("ઓરાને પૂછો");
+    expect(translateText("Rain Radar", "gu")).toBe("વરસાદ રડાર");
+    expect(translateText("Plan a route", "gu")).toBe("રૂટ હવામાન");
+    expect(translateText("Set Home", "gu")).toBe("ઘર સેટ કરો");
+
+    // Weather Card Meta & Freshness
+    expect(translateText("Just now", "gu")).toBe("હમણાં જ");
+    expect(translateText("📡 Just now", "gu")).toBe("📡 હમણાં જ");
+    expect(translateText("Copy", "gu")).toBe("કૉપિ કરો");
+    expect(translateText("Details", "gu")).toBe("વિગતો");
+    const trustPure = translateText("55% trust (temp 62%, wind 52%, precip 47%)", "gu");
+    expect(trustPure).toContain("વિશ્વસનીયતા");
+    expect(trustPure).toContain("તાપમાન");
+    expect(trustPure).toContain("પવન");
+    expect(trustPure).toContain("વરસાદ");
+    const trustMixed = translateText("🎯 55% trust (તાપમાન 62%, Wind 52%, Precipitation 47%)", "gu");
+    expect(trustMixed).toContain("વિશ્વસનીયતા");
+    expect(trustMixed).toContain("તાપમાન");
+    expect(trustMixed).toContain("પવન");
+    expect(trustMixed).toContain("વરસાદ");
+
+    // Weather Tabs
+    expect(translateText("Overview", "gu")).toBe("ઝાંખી");
+    expect(translateText("Hourly", "gu")).toBe("કલાકદીઠ");
+    expect(translateText("7-Day", "gu")).toBe("૭ દિવસ");
+    expect(translateText("Details & AQI", "gu")).toBe("વિગતો અને AQI");
+    expect(translateText("Astronomy", "gu")).toBe("ખગોળશાસ્ત્ર");
+    expect(translateText("🌾 Farm", "gu")).toBe("🌾 ખેતી");
+
+    // Today's Briefing Card
+    expect(translateText("TODAY'S BRIEFING", "gu")).toBe("આજનો સારાંશ");
+    expect(translateText("Today's briefing", "gu")).toBe("આજનો સારાંશ");
+    const headline = translateText("Rain expected around 2:00 PM — keep the umbrella handy.", "gu");
+    expect(headline).toContain("વરસાદની શક્યતા");
+    expect(headline).toContain("છત્રી");
+
+    const bestTime = translateText("Best time to be outside: 7:00 PM–9:00 AM overnight.", "gu");
+    expect(bestTime).toContain("બહાર રહેવા માટે શ્રેષ્ઠ સમય");
+    expect(bestTime).toContain("રાતોરાત");
+
+    const nowDrizzle = translateText("Right now Light drizzle · 29° (feels 33°)", "gu");
+    expect(nowDrizzle).toContain("અત્યારે");
+    expect(nowDrizzle).toContain("હળવી ઝરમર");
+    expect(nowDrizzle).toContain("અનુભવાય છે");
+
+    const rangeStr = translateText("Today's range 23° - 31°", "gu");
+    expect(rangeStr).toContain("આજનું તાપમાન");
+
+    const rain6h = translateText("Rain 61% chance within 6 hours — plan around it", "gu");
+    expect(rain6h).toContain("વરસાદ");
+    expect(rain6h).toContain("6 કલાકમાં શક્યતા");
+
+    const rain24h = translateText("Rain 33% peak over 24h — low concern", "gu");
+    expect(rain24h).toContain("વરસાદ");
+    expect(rain24h).toContain("24 કલાકમાં ટોચ");
+
+    const bestOut = translateText("Best outdoor window 11:00 PM - 12:00 PM (overnight) (14h)", "gu");
+    expect(bestOut).toContain("બહાર જવા માટે શ્રેષ્ઠ સમય");
+    expect(bestOut).toContain("રાતોરાત");
+
+    const daylight = translateText("Daylight 6:10 AM - 5:54 PM", "gu");
+    expect(daylight).toContain("દિવસનો પ્રકાશ");
+
+    const footer = translateText("Generated from your live forecast — regenerated once a day.", "gu");
+    expect(footer).toContain("લાઈવ પૂર્વાનુમાનમાંથી જનરેટ કરેલ");
+
+    // Map Keys & Legends
+    expect(translateText("Map Key", "gu")).toBe("નકશાની સંજ્ઞા સૂચિ");
+    expect(translateText("Elevation Key", "gu")).toBe("ઊંચાઈની સંજ્ઞા સૂચિ");
+    expect(translateText("Temperature Scale", "gu")).toBe("તાપમાન સ્કેલ");
+
+    // Farm & Local Plants
+    expect(translateText("Local Plants & Wild Flora (GBIF)", "gu")).toBe("સ્થાનિક છોડ અને જંગલી વનસ્પતિ (GBIF)");
+    expect(translateText("92 observed nearby", "gu")).toBe("92 નજીકમાં જોવા મળ્યા");
+    expect(translateText("Trees (26)", "gu")).toBe("વૃક્ષો (26)");
+    expect(translateText("Wildflowers (8)", "gu")).toBe("જંગલી ફૂલો (8)");
+    expect(translateText("Herbs (7)", "gu")).toBe("જડીબુટ્ટીઓ (7)");
+    expect(translateText("Search local plants, trees, herbs...", "gu")).toBe("સ્થાનિક છોડ, વૃક્ષો, જડીબુટ્ટીઓ શોધો...");
+    expect(translateText("Observed within ~25 km. Shows what naturally survives here.", "gu")).toContain("~25 કિમીની અંદર");
+    expect(translateText("Show fewer", "gu")).toBe("ઓછા બતાવો");
+  });
+
+  it("verifies 100% Chinese translation without English leakage for all user screenshot elements", () => {
+    // Settings Drawer
+    expect(translateText("Units (Metric)", "zh-CN")).toBe("单位 (公制)");
+    expect(translateText("Dark mode", "zh-CN")).toBe("深色模式");
+    expect(translateText("24h timeline", "zh-CN")).toBe("24小时时间轴");
+    expect(translateText("Map style", "zh-CN")).toBe("地图样式");
+    expect(translateText("App Language", "zh-CN")).toBe("应用语言");
+    expect(translateText("Translate all features & tabs", "zh-CN")).toBe("翻译所有功能与标签页");
+    expect(translateText("Map language", "zh-CN")).toBe("地图语言");
+    expect(translateText("Ambient sounds", "zh-CN")).toBe("环境音效");
+    expect(translateText("Sync history", "zh-CN")).toBe("同步历史");
+    expect(translateText("Default location", "zh-CN")).toBe("默认位置");
+    expect(translateText("Set here", "zh-CN")).toBe("设在此处");
+
+    // Weather Panel
+    expect(translateText("Search a city...", "zh-CN")).toBe("搜索城市…");
+    expect(translateText("Elevation Key", "zh-CN")).toBe("海拔图例");
+    expect(translateText("Map Key", "zh-CN")).toBe("地图图例");
+    expect(translateText("TODAY'S BRIEFING", "zh-CN")).toBe("今日简报");
+
+    const bestTime = translateText("Best time to be outside: 7:00 PM–9:00 AM overnight.", "zh-CN");
+    expect(bestTime).toContain("最佳户外时间");
+    expect(bestTime).toContain("通宵");
+
+    const rainPeak = translateText("Rain 33% peak over 24h — low concern", "zh-CN");
+    expect(rainPeak).toContain("降雨");
+    expect(rainPeak).toContain("24小时内峰值");
+
+    const bestOut = translateText("Best outdoor window 7:00 PM – 9:00 AM (overnight) (15h)", "zh-CN");
+    expect(bestOut).toContain("最佳户外时段");
+    expect(bestOut).toContain("通宵");
+
+    const daylight = translateText("Daylight 6:12 AM – 6:09 PM", "zh-CN");
+    expect(daylight).toContain("日照时段");
+
+    const footer = translateText("Generated from your live forecast — regenerated once a day.", "zh-CN");
+    expect(footer).toContain("根据实时预报生成");
+  });
 });
 

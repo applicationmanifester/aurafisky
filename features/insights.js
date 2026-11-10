@@ -355,7 +355,10 @@ async function updatePredictiveArrival(weather, hourIndex) {
           const fromThe = (typeof window !== "undefined" && window.aurafiskyI18n?.t) ? (window.aurafiskyI18n.t("from_the", lang) || "from the") : "from the";
           const predHTML = `<span class="text-[10px] font-bold text-teal-500 uppercase tracking-wider">🌬️ ${comingWay}</span><span class="text-xs text-slate-600 dark:text-slate-300">${upwindWeather.icon} ${upwindWeather.description}, ${WeatherService.formatTemp(upwindWeather.temperature)} ${arrivingIn} ~${travelHours}h ${fromThe} ${WeatherService.getWindDirection(windDir)}</span>`;
           this.setSafeHTML(this.$.predictiveArrival, predHTML);
-          if (lang !== "en" && typeof window !== "undefined") window.aurafiskyI18n?.translateDOM(this.$.predictiveArrival, lang);
+          if (lang !== "en" && typeof window !== "undefined") {
+            window.aurafiskyI18n?.translateDOM(this.$.predictiveArrival, lang);
+            window.aurafiskyI18n?.refreshExternalTranslation?.(lang);
+          }
           this.$.predictiveArrival.classList.remove("hidden");
           return;
         }
@@ -393,7 +396,10 @@ async function updatePredictiveArrival(weather, hourIndex) {
     const fromThe = (typeof window !== "undefined" && window.aurafiskyI18n?.t) ? (window.aurafiskyI18n.t("from_the", lang) || "from the") : "from the";
     const predHTML = `<span class="text-[10px] font-bold text-teal-500 uppercase tracking-wider">🌬️ ${comingWay}</span><span class="text-xs text-slate-600 dark:text-slate-300">${upwindWeather.icon} ${upwindWeather.description}, ${WeatherService.formatTemp(upwindWeather.temperature)} ${arrivingIn} ~${travelHours}h ${fromThe} ${WeatherService.getWindDirection(windDir)}</span>`;
     this.setSafeHTML(this.$.predictiveArrival, predHTML);
-    if (lang !== "en" && typeof window !== "undefined") window.aurafiskyI18n?.translateDOM(this.$.predictiveArrival, lang);
+    if (lang !== "en" && typeof window !== "undefined") {
+      window.aurafiskyI18n?.translateDOM(this.$.predictiveArrival, lang);
+      window.aurafiskyI18n?.refreshExternalTranslation?.(lang);
+    }
     this.$.predictiveArrival.classList.remove("hidden");
   }
 
@@ -450,7 +456,10 @@ function updateTrustScore(trust) {
     const precipTxt = (i18n ? i18n.t("precipitation", lang) : "precip") || "precip";
     this.$.trustScore.textContent = `🎯 ${trust.overall}% ${trustTxt} (${tempTxt} ${trust.temp}%, ${windTxt} ${trust.wind}%, ${precipTxt} ${trust.precip}%)`;
     this.$.trustScore.className = `text-[9px] font-semibold ${color}`;
-    if (lang !== "en" && i18n?.translateDOM) i18n.translateDOM(this.$.trustScore, lang);
+    if (lang !== "en" && i18n?.translateDOM) {
+      i18n.translateDOM(this.$.trustScore, lang);
+      i18n.refreshExternalTranslation?.(lang);
+    }
   }
 
 function updateParamImportance(importance) {
@@ -471,7 +480,10 @@ function updateParamImportance(importance) {
         .join(" > ") +
       " " + limitTxt;
     this.$.paramImportance.className = "text-[10px] text-slate-400";
-    if (lang !== "en" && i18n?.translateDOM) i18n.translateDOM(this.$.paramImportance, lang);
+    if (lang !== "en" && i18n?.translateDOM) {
+      i18n.translateDOM(this.$.paramImportance, lang);
+      i18n.refreshExternalTranslation?.(lang);
+    }
   }
 
 function toggleSignalNoiseView() {

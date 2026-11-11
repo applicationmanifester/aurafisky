@@ -10390,6 +10390,441 @@ export const EXTENDED_FEATURE_PHRASES = {
     "fa": "هلال رو به زوال",
     "ne": "झर्ने क्रिसेन्ट",
     "si": "හීන වන අඩ සඳ"
+  },
+  "Location address details": {
+    "kn": "ಸ್ಥಳದ ವಿಳಾಸದ ವಿವರಗಳು",
+    "hi": "स्थान के पते का विवरण",
+    "ta": "இருப்பிட முகவரி விவரங்கள்",
+    "te": "స్థానం చిరునామా వివరాలు",
+    "mr": "ठिकाणाच्या पत्त्याचा तपशील",
+    "bn": "অবস্থানের ঠিকানার বিবরণ",
+    "gu": "સ્થળના સરનામાની વિગતો",
+    "ml": "സ്ഥലത്തിന്റെ വിലാസ വിവരങ്ങൾ",
+    "pa": "ਸਥਾਨ ਪਤੇ ਦੇ ਵੇਰਵੇ",
+    "or": "ସ୍ଥାନ ଠିକଣା ବିବରଣୀ",
+    "as": "স্থানৰ ঠিকনাৰ বিৱৰণ",
+    "ur": "مقام کے پتے کی تفصیلات",
+    "es": "Detalles de la dirección",
+    "fr": "Détails de l'adresse du lieu",
+    "de": "Details zur Standortadresse",
+    "it": "Dettagli indirizzo località",
+    "pt": "Detalhes do endereço do local",
+    "ru": "Сведения об адресе",
+    "ja": "住所の詳細",
+    "ko": "위치 주소 세부정보",
+    "zh-CN": "位置地址详情",
+    "zh-TW": "位置地址詳情",
+    "ar": "تفاصيل عنوان الموقع"
+  },
+  "Location sync": {
+    "kn": "ಸ್ಥಳ ಸಿಂಕ್",
+    "hi": "स्थान सिंक",
+    "ta": "இருப்பிட ஒத்திசைவு",
+    "te": "స్థానం సింక్",
+    "mr": "ठिकाण सिंक",
+    "bn": "অবস্থান সিঙ্ক",
+    "gu": "સ્થળ સિંક",
+    "ml": "ലൊക്കേഷൻ സിങ്ക്",
+    "pa": "ਸਥਾਨ ਸਿੰਕ",
+    "or": "ସ୍ଥାନ ସିଙ୍କ୍",
+    "as": "স্থান ছিংক",
+    "ur": "مقام کی ہم آہنگی",
+    "es": "Sincronización de ubicación",
+    "fr": "Synchronisation de position",
+    "de": "Standortsynchronisierung",
+    "it": "Sincronizzazione posizione",
+    "pt": "Sincronização de local",
+    "ru": "Синхронизация местоположения",
+    "ja": "位置情報の同期",
+    "ko": "위치 동기화",
+    "zh-CN": "位置同步",
+    "zh-TW": "位置同步",
+    "ar": "مزامنة الموقع"
+  },
+  "Default (None)": {
+    "kn": "ಡೀಫಾಲ್ಟ್ (ಯಾವುದೂ ಇಲ್ಲ)",
+    "hi": "डिफ़ॉल्ट (कोई नहीं)",
+    "ta": "இயல்புநிலை (ஏதுமில்லை)",
+    "te": "డిఫాల్ట్ (ఏదీ లేదు)",
+    "mr": "डीफॉल्ट (काहीही नाही)",
+    "bn": "ডিফল্ট (কোনটিই নয়)",
+    "gu": "ડિફૉલ્ટ (કંઈ નહીં)",
+    "ml": "ഡിഫോൾട്ട് (ഒന്നുമില്ല)",
+    "pa": "ਡਿਫੌਲਟ (ਕੋਈ ਨਹੀਂ)",
+    "es": "Predeterminado (Ninguno)",
+    "fr": "Par défaut (Aucun)",
+    "de": "Standard (Keine)",
+    "ja": "デフォルト（なし）",
+    "ko": "기본값 (없음)",
+    "zh-CN": "默认（无）",
+    "zh-TW": "預設（無）",
+    "ar": "الافتراضي (لا شيء)"
+  },
+  "Golden Hour": {
+    "kn": "ಗೋಲ್ಡನ್ ಅವರ್",
+    "hi": "गोल्डन ऑवर",
+    "ta": "தங்க நேரம்",
+    "te": "గోల్డెన్ అవర్",
+    "mr": "गोल्डन अवर",
+    "bn": "গোল্ডেন আওয়ার",
+    "gu": "ગોલ્ડન અવર",
+    "ml": "ഗോൾഡൻ അവർ",
+    "es": "Hora dorada",
+    "fr": "Heure dorée",
+    "de": "Goldene Stunde",
+    "ja": "ゴールデンアワー",
+    "ko": "골든 아워",
+    "zh-CN": "黄金时段",
+    "zh-TW": "黃金時段",
+    "ar": "الساعة الذهبية"
+  },
+  "🌅 Golden Hour": {
+    "kn": "🌅 ಗೋಲ್ಡನ್ ಅವರ್",
+    "hi": "🌅 गोल्डन ऑवर",
+    "ta": "🌅 தங்க நேரம்",
+    "te": "🌅 గోల్డెన్ అవర్",
+    "mr": "🌅 गोल्डन अवर",
+    "bn": "🌅 গোল্ডেন আওয়ার",
+    "gu": "🌅 গোল্ডেন અવર",
+    "ml": "🌅 ഗോൾഡൻ അവർ",
+    "es": "🌅 Hora dorada",
+    "fr": "🌅 Heure dorée",
+    "de": "🌅 Goldene Stunde",
+    "ja": "🌅 ゴールデンアワー",
+    "ko": "🌅 골든 아워",
+    "zh-CN": "🌅 黄金时段",
+    "zh-TW": "🌅 黃金時段",
+    "ar": "🌅 الساعة الذهبية"
+  },
+  "chance": {
+    "kn": "ಸಾಧ್ಯತೆ",
+    "hi": "संभावना",
+    "ta": "வாய்ப்பு",
+    "te": "అవకాశం",
+    "mr": "शक्यता",
+    "bn": "সম্ভাবনা",
+    "gu": "શક્યતા",
+    "ml": "സാധ്യത",
+    "pa": "ਸੰਭਾਵਨਾ",
+    "es": "probabilidad",
+    "fr": "probabilité",
+    "de": "Wahrscheinlichkeit",
+    "it": "probabilità",
+    "pt": "chance",
+    "ru": "вероятность",
+    "ja": "確率",
+    "ko": "확률",
+    "zh-CN": "概率",
+    "zh-TW": "機率",
+    "ar": "احتمال"
+  },
+  "Skip to main content": {
+    "kn": "ಮುಖ್ಯ ವಿಷಯಕ್ಕೆ ಹೋಗಿ",
+    "hi": "मुख्य सामग्री पर जाएं",
+    "ta": "முதன்மை உள்ளடக்கத்திற்குச் செல்லவும்",
+    "te": "ప్రధాన కంటెంట్‌కు వెళ్లండి",
+    "ml": "പ്രധാന ഉള്ളടക്കത്തിലേക്ക് പോകുക",
+    "bn": "মূল বিষয়বস্তুতে যান",
+    "gu": "મુખ્ય સામગ્રી પર જાઓ",
+    "mr": "मुख्य मजकुरावर जा",
+    "pa": "ਮੁੱਖ ਸਮੱਗਰੀ 'ਤੇ ਜਾਓ",
+    "es": "Saltar al contenido principal",
+    "fr": "Aller au contenu principal",
+    "de": "Zum Hauptinhalt springen",
+    "it": "Vai al contenuto principale",
+    "pt": "Ir para o conteúdo principal",
+    "ru": "Перейти к основному содержанию",
+    "ja": "メインコンテンツへスキップ",
+    "ko": "본문으로 건너뛰기",
+    "zh-CN": "跳转到主要内容",
+    "zh-TW": "跳至主要內容",
+    "ar": "تخطي إلى المحتوى الرئيسي"
+  },
+  "Temp": {
+    "kn": "ತಾಪಮಾನ",
+    "hi": "तापमान",
+    "ta": "வெப்பம்",
+    "te": "ఉష్ణోగ్రత",
+    "ml": "താപനില",
+    "bn": "তাপমাত্রা",
+    "gu": "તાપમાન",
+    "mr": "तापमान",
+    "pa": "ਤਾਪਮਾਨ",
+    "es": "Temp.",
+    "fr": "Temp.",
+    "de": "Temp.",
+    "it": "Temp.",
+    "pt": "Temp.",
+    "ru": "Темп.",
+    "ja": "気温",
+    "ko": "기온",
+    "zh-CN": "气温",
+    "zh-TW": "氣溫",
+    "ar": "الحرارة"
+  },
+  "Hybrid (Satellite + Labels)": {
+    "kn": "ಹೈಬ್ರಿಡ್ (ಉಪಗ್ರಹ + ಲೇಬಲ್‌ಗಳು)",
+    "hi": "हाइब्रिड (सैटेलाइट + लेबल)",
+    "ta": "ஹைப்ரிட் (செயற்கைக்கோள் + லேபிள்கள்)",
+    "te": "హైబ్రిడ్ (శాటిలైట్ + లేబుల్స్)",
+    "ml": "ഹൈബ്രിഡ് (സാറ്റലൈറ്റ് + ലേബലുകൾ)",
+    "bn": "হাইব্রিড (স্যাটেলাইট + লেবেল)",
+    "gu": "હાઇબ્રિડ (સેટેલાઇટ + લેબલ્સ)",
+    "mr": "हायब्रिड (सॅटेलाइट + लेबल्स)",
+    "pa": "ਹਾਈਬ੍ਰਿਡ (ਸੈਟੇਲਾਈਟ + ਲੇਬਲ)",
+    "es": "Híbrido (Satélite + Etiquetas)",
+    "fr": "Hybride (Satellite + Libellés)",
+    "de": "Hybrid (Satellit + Beschriftungen)",
+    "it": "Ibrida (Satellite + Etichette)",
+    "pt": "Híbrido (Satélite + Rótulos)",
+    "ru": "Гибрид (Спутник + Подписи)",
+    "ja": "ハイブリッド（衛星 + ラベル）",
+    "ko": "하이브리드 (위성 + 라벨)",
+    "zh-CN": "混合（卫星 + 标签）",
+    "zh-TW": "混合（衛星 + 標籤）",
+    "ar": "هجين (قمر صناعي + تسميات)"
+  },
+  "🔀 Hybrid (Sat + Labels)": {
+    "kn": "🔀 ಹೈಬ್ರಿಡ್ (ಉಪಗ್ರಹ + ಲೇಬಲ್)",
+    "hi": "🔀 हाइब्रिड (सैट + लेबल)",
+    "ta": "🔀 ஹைப்ரிட் (செயற்கை + லேபிள்)",
+    "te": "🔀 హైబ్రిడ్ (శాట్ + లేబుల్స్)",
+    "ml": "🔀 ഹൈബ്രിഡ് (സാറ്റ് + ലേബലുകൾ)",
+    "bn": "🔀 হাইব্রিড (স্যাট + লেবেল)",
+    "gu": "🔀 હાઇબ્રિડ (સેટ + લેબલ્સ)",
+    "mr": "🔀 हायब्रिड (सॅट + लेबल्स)",
+    "pa": "🔀 ਹਾਈਬ੍ਰਿਡ (ਸੈਟ + ਲੇਬਲ)",
+    "es": "🔀 Híbrido (Sat. + Etiquetas)",
+    "fr": "🔀 Hybride (Sat. + Libellés)",
+    "de": "🔀 Hybrid (Sat. + Labels)",
+    "it": "🔀 Ibrida (Sat. + Etichette)",
+    "pt": "🔀 Híbrido (Sat. + Rótulos)",
+    "ru": "🔀 Гибрид (Спут. + Метки)",
+    "ja": "🔀 ハイブリッド (衛星 + ラベル)",
+    "ko": "🔀 하이브리드 (위성 + 라벨)",
+    "zh-CN": "🔀 混合 (卫星 + 标签)",
+    "zh-TW": "🔀 混合 (衛星 + 標籤)",
+    "ar": "🔀 هجين (قمر صناعي + تسميات)"
+  },
+  "🌌 Midnight": {
+    "kn": "🌌 ಮಧ್ಯರಾತ್ರಿ",
+    "hi": "🌌 मध्यरात्रि",
+    "ta": "🌌 நள்ளிரவு",
+    "te": "🌌 అర్ధరాత్రి",
+    "ml": "🌌 അർദ്ധരാത്രി",
+    "bn": "🌌 মধ্যরাত",
+    "gu": "🌌 મધ્યરાત્રિ",
+    "mr": "🌌 मध्यरात्र",
+    "pa": "🌌 ਅੱਧੀ ਰਾਤ",
+    "es": "🌌 Medianoche",
+    "fr": "🌌 Minuit",
+    "de": "🌌 Mitternacht",
+    "it": "🌌 Mezzanotte",
+    "pt": "🌌 Meia-noite",
+    "ru": "🌌 Полночь",
+    "ja": "🌌 ミッドナイト",
+    "ko": "🌌 미드나잇",
+    "zh-CN": "🌌 午夜",
+    "zh-TW": "🌌 午夜",
+    "ar": "🌌 منتصف الليل"
+  },
+  "🌲 Forest": {
+    "kn": "🌲 ಅರಣ್ಯ",
+    "hi": "🌲 वन",
+    "ta": "🌲 காடு",
+    "te": "🌲 అడవి",
+    "ml": "🌲 വനം",
+    "bn": "🌲 অরণ্য",
+    "gu": "🌲 જંગલ",
+    "mr": "🌲 जंगल",
+    "pa": "🌲 ਜੰਗਲ",
+    "es": "🌲 Bosque",
+    "fr": "🌲 Forêt",
+    "de": "🌲 Wald",
+    "it": "🌲 Foresta",
+    "pt": "🌲 Floresta",
+    "ru": "🌲 Лес",
+    "ja": "🌲 フォレスト",
+    "ko": "🌲 포레스트",
+    "zh-CN": "🌲 森林",
+    "zh-TW": "🌲 森林",
+    "ar": "🌲 غابة"
+  },
+  "🏜️ Desert": {
+    "kn": "🏜️ ಮರುಭೂಮಿ",
+    "hi": "🏜️ मरुस्थल",
+    "ta": "🏜️ பாலைவனம்",
+    "te": "🏜️ ఎడారి",
+    "ml": "🏜️ മരുഭൂമി",
+    "bn": "🏜️ মরুভূমি",
+    "gu": "🏜️ રણ",
+    "mr": "🏜️ वाळवंट",
+    "pa": "🏜️ ਮਾਰੂਥਲ",
+    "es": "🏜️ Desierto",
+    "fr": "🏜️ Désert",
+    "de": "🏜️ Wüste",
+    "it": "🏜️ Deserto",
+    "pt": "🏜️ Deserto",
+    "ru": "🏜️ Пустыня",
+    "ja": "🏜️ デザート",
+    "ko": "🏜️ 사막",
+    "zh-CN": "🏜️ 沙漠",
+    "zh-TW": "🏜️ 沙漠",
+    "ar": "🏜️ صحراء"
+  },
+  "✨ Aurora": {
+    "kn": "✨ ಅರೋರಾ",
+    "hi": "✨ ऑरोरा",
+    "ta": "✨ அரோரா",
+    "te": "✨ అరోరా",
+    "ml": "✨ അറോറ",
+    "bn": "✨ অরোরা",
+    "gu": "✨ ઓરોરા",
+    "mr": "✨ ऑरोरा",
+    "pa": "✨ ਔਰੋਰਾ",
+    "es": "✨ Aurora",
+    "fr": "✨ Aurore",
+    "de": "✨ Aurora",
+    "it": "✨ Aurora",
+    "pt": "✨ Aurora",
+    "ru": "✨ Аврора",
+    "ja": "✨ オーロラ",
+    "ko": "✨ 오로라",
+    "zh-CN": "✨ 极光",
+    "zh-TW": "✨ 極光",
+    "ar": "✨ شفق"
+  },
+  "🖤 Monochrome": {
+    "kn": "🖤 ಏಕವರ್ಣ",
+    "hi": "🖤 मोनोक्रोम",
+    "ta": "🖤 ஒற்றை நிறம்",
+    "te": "🖤 మోనోక్రోమ్",
+    "ml": "🖤 മോണോക്രോം",
+    "bn": "🖤 মনোক্রোম",
+    "gu": "🖤 મોનોક્રોમ",
+    "mr": "🖤 मोनोक्रोम",
+    "pa": "🖤 ਮੋਨੋਕ੍ਰੋਮ",
+    "es": "🖤 Monocromo",
+    "fr": "🖤 Monochrome",
+    "de": "🖤 Monochrom",
+    "it": "🖤 Monocromatico",
+    "pt": "🖤 Monocromático",
+    "ru": "🖤 Монохром",
+    "ja": "🖤 モノクロ",
+    "ko": "🖤 모노크롬",
+    "zh-CN": "🖤 单色",
+    "zh-TW": "🖤 單色",
+    "ar": "🖤 أحادي اللون"
+  },
+  "Every 1 minute": {
+    "kn": "ಪ್ರತಿ 1 ನಿಮಿಷಕ್ಕೆ",
+    "hi": "हर 1 मिनट",
+    "ta": "ஒவ்வொரு 1 நிமிடமும்",
+    "te": "ప్రతి 1 నిమిషానికి",
+    "ml": "ഓരോ 1 മിനിറ്റിലും",
+    "bn": "প্রতি ১ মিনিটে",
+    "gu": "દર 1 મિનિટે",
+    "mr": "दर 1 मिनिटाला",
+    "pa": "ਹਰ 1 ਮਿੰਟ",
+    "es": "Cada 1 minuto",
+    "fr": "Toutes les 1 minute",
+    "de": "Alle 1 Minute",
+    "it": "Ogni 1 minuto",
+    "pt": "A cada 1 minuto",
+    "ru": "Каждую 1 минуту",
+    "ja": "1分ごと",
+    "ko": "1분마다",
+    "zh-CN": "每 1 分钟",
+    "zh-TW": "每 1 分鐘",
+    "ar": "كل دقيقة واحدة"
+  },
+  "Every 5 minutes": {
+    "kn": "ಪ್ರತಿ 5 ನಿಮಿಷಕ್ಕೆ",
+    "hi": "हर 5 मिनट",
+    "ta": "ஒவ்வொரு 5 நிமிடமும்",
+    "te": "ప్రతి 5 నిమిషాలకు",
+    "ml": "ഓരോ 5 മിനിറ്റിലും",
+    "bn": "প্রতি ৫ মিনিটে",
+    "gu": "દર 5 મિનિટે",
+    "mr": "दर 5 मिनिटांनी",
+    "pa": "ਹਰ 5 ਮਿੰਟ",
+    "es": "Cada 5 minutos",
+    "fr": "Toutes les 5 minutes",
+    "de": "Alle 5 Minuten",
+    "it": "Ogni 5 minuti",
+    "pt": "A cada 5 minutos",
+    "ru": "Каждые 5 минут",
+    "ja": "5分ごと",
+    "ko": "5분마다",
+    "zh-CN": "每 5 分钟",
+    "zh-TW": "每 5 分鐘",
+    "ar": "كل 5 دقائق"
+  },
+  "Every 15 minutes": {
+    "kn": "ಪ್ರತಿ 15 ನಿಮಿಷಕ್ಕೆ",
+    "hi": "हर 15 मिनट",
+    "ta": "ஒவ்வொரு 15 நிமிடமும்",
+    "te": "ప్రతి 15 నిమిషాలకు",
+    "ml": "ഓരോ 15 മിനിറ്റിലും",
+    "bn": "প্রতি ১৫ মিনিটে",
+    "gu": "દર 15 મિનિટે",
+    "mr": "दर 15 मिनिटांनी",
+    "pa": "ਹਰ 15 ਮਿੰਟ",
+    "es": "Cada 15 minutos",
+    "fr": "Toutes les 15 minutes",
+    "de": "Alle 15 Minuten",
+    "it": "Ogni 15 minuti",
+    "pt": "A cada 15 minutos",
+    "ru": "Каждые 15 минут",
+    "ja": "15分ごと",
+    "ko": "15분마다",
+    "zh-CN": "每 15 分钟",
+    "zh-TW": "每 15 分鐘",
+    "ar": "كل 15 دقيقة"
+  },
+  "Every 30 minutes": {
+    "kn": "ಪ್ರತಿ 30 ನಿಮಿಷಕ್ಕೆ",
+    "hi": "हर 30 मिनट",
+    "ta": "ஒவ்வொரு 30 நிமிடமும்",
+    "te": "ప్రతి 30 నిమిషాలకు",
+    "ml": "ഓരോ 30 മിനിറ്റിലും",
+    "bn": "প্রতি ৩০ মিনিটে",
+    "gu": "દર 30 મિનિટે",
+    "mr": "दर 30 मिनिटांनी",
+    "pa": "ਹਰ 30 ਮਿੰਟ",
+    "es": "Cada 30 minutos",
+    "fr": "Toutes les 30 minutes",
+    "de": "Alle 30 Minuten",
+    "it": "Ogni 30 minuti",
+    "pt": "A cada 30 minutos",
+    "ru": "Каждые 30 минут",
+    "ja": "30分ごと",
+    "ko": "30분마다",
+    "zh-CN": "每 30 分钟",
+    "zh-TW": "每 30 分鐘",
+    "ar": "كل 30 دقيقة"
+  },
+  "Every 60 minutes": {
+    "kn": "ಪ್ರತಿ 60 ನಿಮಿಷಕ್ಕೆ",
+    "hi": "हर 60 मिनट",
+    "ta": "ஒவ்வொரு 60 நிமிடமும்",
+    "te": "ప్రతి 60 నిమిషాలకు",
+    "ml": "ഓരോ 60 മിനിറ്റിലും",
+    "bn": "প্রতি ৬০ মিনিটে",
+    "gu": "દર 60 મિનિટે",
+    "mr": "दर 60 मिनिटांनी",
+    "pa": "ਹਰ 60 ਮਿੰਟ",
+    "es": "Cada 60 minutos",
+    "fr": "Toutes les 60 minutes",
+    "de": "Alle 60 Minuten",
+    "it": "Ogni 60 minuti",
+    "pt": "A cada 60 minutos",
+    "ru": "Каждые 60 минут",
+    "ja": "60分ごと",
+    "ko": "60분마다",
+    "zh-CN": "每 60 分钟",
+    "zh-TW": "每 60 分鐘",
+    "ar": "كل 60 دقيقة"
   }
 };
 
@@ -10444,115 +10879,172 @@ export function hasTranslatableText(text) {
   if (!/[a-zA-Z]/.test(trimmed)) return false;
   if (/^#[0-9a-f]{3,8}$/i.test(trimmed)) return false;
   if (/^(?:https?:\/\/|data:|blob:)/i.test(trimmed)) return false;
-  return true;
+  // Strip time-of-day, timezone, and metric unit tokens so already-localized
+  // timestamps/metrics (e.g. "🕒 ಬುಧ, 11 ನವೆಂ · 7:42 PM · GMT+7") are not sent out.
+  const withoutUnits = trimmed
+    .replace(/\b(?:AM|PM|GMT(?:[+-]\d{1,2}(?::\d{2})?)?|UTC(?:[+-]\d{1,2}(?::\d{2})?)?|AQI|UV)\b/gi, " ")
+    .replace(/(?:^|[\s([/])(?:[+-]?\d+(?:\.\d+)?)\s*(?:mm|cm|m|km\/h|km|mph|mi|ft|hPa|mb|in|dB|[mh])\b/gi, " ")
+    .replace(/\b(?:km\/h|mm\/h|m\/s|mm|hPa|mph|mb)\b/g, " ");
+  return /[a-zA-Z]{2,}/.test(withoutUnits);
 }
 
 let _pendingQueue = [];
 let _batchTimeout = null;
+let _isFlushingQueue = false;
+let _translationCooldown = 0; // timestamp (ms) until next allowed translation attempt
+let _domQueueCooldown = 0; // suppresses background DOM scraping after a CORS/network failure
+let _consecutiveTranslateFailures = 0;
+const _inFlightTranslations = new Map();
+const _failedTranslations = new Set();
+
+function _recordTranslateOutcome(ok, status = 0) {
+  if (ok) {
+    _consecutiveTranslateFailures = 0;
+    return;
+  }
+  _consecutiveTranslateFailures += 1;
+  if (status === 429 || status === 403 || _consecutiveTranslateFailures >= 3) {
+    _translationCooldown = Date.now() + 60_000;
+  }
+}
+
+function _markTranslationFailed(cacheKey) {
+  if (_failedTranslations.size >= 500) {
+    const oldest = _failedTranslations.values().next().value;
+    if (oldest !== undefined) _failedTranslations.delete(oldest);
+  }
+  _failedTranslations.add(cacheKey);
+}
 
 function queueForTranslation(item) {
+  const now = Date.now();
+  if (now < _translationCooldown || now < _domQueueCooldown) return;
+  const trimmed = item?.text?.trim?.();
+  if (trimmed && _failedTranslations.has(`${item.locale}\0${trimmed}`)) return;
   _pendingQueue.push(item);
-  if (_batchTimeout) return;
+  if (_batchTimeout || _isFlushingQueue) return;
   _batchTimeout = setTimeout(() => {
     _batchTimeout = null;
     flushTranslationQueue();
-  }, 25);
+  }, 120);
+}
+
+function _applyFetchedTranslation(orig, trans, cache, needed) {
+  if (!trans) return;
+  cache[orig] = trans;
+  const targets = needed.get(orig) || [];
+  for (const tgt of targets) applyItemTranslation(tgt, trans);
+}
+
+async function _translateChunkIndividually(chunk, locale, cache, needed) {
+  for (const orig of chunk) {
+    if (Date.now() < _translationCooldown) break;
+    const cacheKey = `${locale}\0${orig}`;
+    if (_failedTranslations.has(cacheKey)) continue;
+    try {
+      const trans = await _fetchGoogleTranslateWithFallback(orig, locale);
+      _applyFetchedTranslation(orig, trans, cache, needed);
+    } catch (_) {}
+  }
 }
 
 async function flushTranslationQueue() {
-  const queue = _pendingQueue;
-  _pendingQueue = [];
-  if (queue.length === 0) return;
+  if (_isFlushingQueue) return;
+  _isFlushingQueue = true;
+  try {
+    while (_pendingQueue.length > 0) {
+      const queue = _pendingQueue;
+      _pendingQueue = [];
+      const now = Date.now();
+      if (now < _translationCooldown || now < _domQueueCooldown) break;
 
-  const byLocale = new Map();
-  for (const item of queue) {
-    if (!byLocale.has(item.locale)) byLocale.set(item.locale, []);
-    byLocale.get(item.locale).push(item);
-  }
-
-  for (const [locale, items] of byLocale.entries()) {
-    if (locale === "en") continue;
-    const cache = getTranslationCache(locale);
-    const needed = new Map();
-
-    for (const it of items) {
-      const trimmed = it.text.trim();
-      if (!hasTranslatableText(trimmed)) continue;
-      if (cache[trimmed]) {
-        applyItemTranslation(it, cache[trimmed]);
-        continue;
+      const byLocale = new Map();
+      for (const item of queue) {
+        if (!byLocale.has(item.locale)) byLocale.set(item.locale, []);
+        byLocale.get(item.locale).push(item);
       }
-      if (!needed.has(trimmed)) needed.set(trimmed, []);
-      needed.get(trimmed).push(it);
-    }
 
-    if (needed.size === 0) continue;
+      for (const [locale, items] of byLocale.entries()) {
+        if (locale === "en") continue;
+        const cache = getTranslationCache(locale);
+        const needed = new Map();
 
-    const uniqueTexts = Array.from(needed.keys());
-    const chunkSize = 25;
-    for (let i = 0; i < uniqueTexts.length; i += chunkSize) {
-      const chunk = uniqueTexts.slice(i, i + chunkSize);
-      try {
-        const hasInternalNewlines = chunk.some(t => t.includes('\n'));
-        if (!hasInternalNewlines) {
-          const url = `https://translate.googleapis.com/translate_a/single?client=gtx&sl=auto&tl=${encodeURIComponent(locale)}&dt=t&q=${encodeURIComponent(chunk.join('\n'))}`;
-          const res = await fetch(url);
-          if (res.ok) {
-            const data = await res.json();
-            const joined = data[0].map(x => x[0]).join('');
-            const lines = joined.split('\n');
-            if (lines.length === chunk.length) {
-              for (let j = 0; j < chunk.length; j++) {
-                const orig = chunk[j];
-                const trans = lines[j].trim();
-                if (trans) {
-                  cache[orig] = trans;
-                  const targets = needed.get(orig) || [];
-                  for (const tgt of targets) applyItemTranslation(tgt, trans);
+        for (const it of items) {
+          const trimmed = it.text.replace(/\s+/g, " ").trim();
+          if (!hasTranslatableText(trimmed)) continue;
+          const staticHit =
+            COMPREHENSIVE_TRANSLATIONS[trimmed]?.[locale] ||
+            COMPREHENSIVE_TRANSLATIONS[trimmed]?.[locale.split("-")[0]];
+          if (staticHit) {
+            applyItemTranslation(it, staticHit);
+            continue;
+          }
+          if (cache[trimmed]) {
+            applyItemTranslation(it, cache[trimmed]);
+            continue;
+          }
+          if (_failedTranslations.has(`${locale}\0${trimmed}`)) continue;
+          if (!needed.has(trimmed)) needed.set(trimmed, []);
+          needed.get(trimmed).push(it);
+        }
+
+        if (needed.size === 0 || Date.now() < _translationCooldown || Date.now() < _domQueueCooldown) continue;
+
+        const uniqueTexts = Array.from(needed.keys());
+        const chunkSize = 25;
+        for (let i = 0; i < uniqueTexts.length; i += chunkSize) {
+          if (Date.now() < _translationCooldown || Date.now() < _domQueueCooldown) break;
+          const chunk = uniqueTexts.slice(i, i + chunkSize);
+          let batchApplied = false;
+          let shouldFallbackIndividually = chunk.length > 1;
+          try {
+            if (!chunk.some((t) => t.includes("\n"))) {
+              // dict-chrome-ex reliably includes Access-Control-Allow-Origin: *, whereas client=gtx
+              // returns 429 HTML without CORS headers and triggers browser CORS console errors.
+              const url = `https://translate.googleapis.com/translate_a/single?client=dict-chrome-ex&sl=auto&tl=${encodeURIComponent(locale)}&dt=t&q=${encodeURIComponent(chunk.join("\n"))}`;
+              const res = await fetch(url);
+              if (res?.ok) {
+                const data = await res.json();
+                const joined = Array.isArray(data?.[0])
+                  ? data[0].map((x) => x?.[0] || "").join("")
+                  : "";
+                const lines = joined ? joined.split("\n") : [];
+                if (lines.length === chunk.length) {
+                  for (let j = 0; j < chunk.length; j++) {
+                    _applyFetchedTranslation(chunk[j], lines[j].trim(), cache, needed);
+                  }
+                  _recordTranslateOutcome(true);
+                  batchApplied = true;
                 }
+              } else {
+                _recordTranslateOutcome(false, res?.status || 0);
+                shouldFallbackIndividually = false;
               }
-              continue;
             }
+          } catch (_) {
+            _recordTranslateOutcome(false, 0);
+            _domQueueCooldown = Date.now() + 120_000;
+            shouldFallbackIndividually = false;
+            if (chunk.length === 1) _markTranslationFailed(`${locale}\0${chunk[0]}`);
+          }
+
+          if (!batchApplied && shouldFallbackIndividually && Date.now() >= _translationCooldown && Date.now() >= _domQueueCooldown) {
+            await _translateChunkIndividually(chunk, locale, cache, needed);
+          } else if (!batchApplied && chunk.length === 1) {
+            _markTranslationFailed(`${locale}\0${chunk[0]}`);
           }
         }
-
-        // Individual fallback
-        for (const orig of chunk) {
-          try {
-            const sUrl = `https://translate.googleapis.com/translate_a/single?client=gtx&sl=auto&tl=${encodeURIComponent(locale)}&dt=t&q=${encodeURIComponent(orig)}`;
-            const sRes = await fetch(sUrl);
-            if (sRes.ok) {
-              const sData = await sRes.json();
-              const sTrans = sData[0]?.[0]?.[0];
-              if (sTrans) {
-                const trans = sTrans.trim();
-                cache[orig] = trans;
-                const targets = needed.get(orig) || [];
-                for (const tgt of targets) applyItemTranslation(tgt, trans);
-              }
-            }
-          } catch (_) {}
-        }
-      } catch (err) {
-        for (const orig of chunk) {
-          try {
-            const sUrl = `https://translate.googleapis.com/translate_a/single?client=gtx&sl=auto&tl=${encodeURIComponent(locale)}&dt=t&q=${encodeURIComponent(orig)}`;
-            const sRes = await fetch(sUrl);
-            if (sRes.ok) {
-              const sData = await sRes.json();
-              const sTrans = sData[0]?.[0]?.[0];
-              if (sTrans) {
-                const trans = sTrans.trim();
-                cache[orig] = trans;
-                const targets = needed.get(orig) || [];
-                for (const tgt of targets) applyItemTranslation(tgt, trans);
-              }
-            }
-          } catch (_) {}
-        }
+        persistTranslationCache(locale);
       }
     }
-    persistTranslationCache(locale);
+  } finally {
+    _isFlushingQueue = false;
+    if (_pendingQueue.length > 0 && !_batchTimeout && Date.now() >= _translationCooldown && Date.now() >= _domQueueCooldown) {
+      _batchTimeout = setTimeout(() => {
+        _batchTimeout = null;
+        flushTranslationQueue();
+      }, 120);
+    }
   }
 }
 
@@ -10567,6 +11059,11 @@ function applyItemTranslation(item, translated) {
     const leading = matchLead ? matchLead[0] : "";
     const trailing = matchTrail ? matchTrail[0] : "";
     item.node.nodeValue = leading + translated + trailing;
+    const parentEl = item.node.parentElement;
+    if (parentEl && item.locale && item.locale !== "en") {
+      parentEl.setAttribute("lang", item.locale);
+      parentEl.setAttribute("data-i18n-lang", item.locale);
+    }
   } else if (item.type === "attr" && item.element.isConnected) {
     item.element.setAttribute(item.attr, translated);
     if (item.attr === "value") item.element.value = translated;
@@ -10578,32 +11075,61 @@ function applyItemTranslation(item, translated) {
 }
 
 async function _fetchGoogleTranslateWithFallback(trimmed, targetLocale, signal) {
-  const tl = encodeURIComponent(targetLocale);
-  const q = encodeURIComponent(trimmed);
-  const endpoints = [
-    `https://translate.googleapis.com/translate_a/single?client=gtx&sl=auto&tl=${tl}&dt=t&q=${q}`,
-    `https://translate.googleapis.com/translate_a/single?client=dict-chrome-ex&sl=auto&tl=${tl}&dt=t&q=${q}`,
-    `https://translate.googleapis.com/translate_a/t?client=dict-chrome-ex&sl=auto&tl=${tl}&q=${q}`,
-  ];
-  for (const url of endpoints) {
-    if (signal?.aborted) break;
-    try {
-      const res = await fetch(url, signal ? { signal } : undefined);
-      if (!res || !res.ok) continue;
-      const data = await res.json();
-      let trans = "";
-      if (Array.isArray(data?.[0]) && Array.isArray(data[0][0])) {
-        trans = data[0].map((seg) => seg?.[0] || "").join("").trim();
-      } else if (Array.isArray(data)) {
-        trans = data
-          .map((item) => (typeof item === "string" ? item : Array.isArray(item) ? item[0] || "" : ""))
-          .join("")
-          .trim();
-      }
-      if (trans) return trans;
-    } catch (_) {}
+  if (Date.now() < _translationCooldown) return "";
+  const cacheKey = `${targetLocale}\0${trimmed}`;
+  if (_failedTranslations.has(cacheKey)) return "";
+  if (_inFlightTranslations.has(cacheKey)) {
+    return _inFlightTranslations.get(cacheKey);
   }
-  return "";
+
+  const run = (async () => {
+    const tl = encodeURIComponent(targetLocale);
+    const q = encodeURIComponent(trimmed);
+    const endpoints = [
+      `https://translate.googleapis.com/translate_a/single?client=dict-chrome-ex&sl=auto&tl=${tl}&dt=t&q=${q}`,
+      `https://translate.googleapis.com/translate_a/t?client=dict-chrome-ex&sl=auto&tl=${tl}&dt=t&q=${q}`,
+      `https://translate.googleapis.com/translate_a/single?client=gtx&sl=auto&tl=${tl}&dt=t&q=${q}`,
+    ];
+    let lastStatus = 0;
+    for (const url of endpoints) {
+      if (signal?.aborted || Date.now() < _translationCooldown) break;
+      try {
+        const res = await fetch(url, signal ? { signal } : undefined);
+        if (!res || !res.ok) {
+          lastStatus = res?.status || 0;
+          continue;
+        }
+        const data = await res.json();
+        let trans = "";
+        if (Array.isArray(data?.[0]) && Array.isArray(data[0][0])) {
+          trans = data[0].map((seg) => seg?.[0] || "").join("").trim();
+        } else if (Array.isArray(data)) {
+          trans = data
+            .map((item) => (typeof item === "string" ? item : Array.isArray(item) ? item[0] || "" : ""))
+            .join("")
+            .trim();
+        }
+        if (trans) {
+          _recordTranslateOutcome(true);
+          return trans;
+        }
+      } catch (_) {
+        lastStatus = 0;
+        // Stop probing secondary endpoints on network/CORS blocks so failures do not multiply.
+        break;
+      }
+    }
+    _recordTranslateOutcome(false, lastStatus);
+    _markTranslationFailed(cacheKey);
+    return "";
+  })();
+
+  _inFlightTranslations.set(cacheKey, run);
+  try {
+    return await run;
+  } finally {
+    _inFlightTranslations.delete(cacheKey);
+  }
 }
 
 export async function translateAsync(text, locale = detectLocale()) {
@@ -11417,8 +11943,13 @@ export function getCanonicalEnglish(text) {
 
 export function translateText(rawText, locale = detectLocale()) {
   if (!rawText || typeof rawText !== "string") return rawText;
-  const trimmed = rawText.trim();
-  if (!trimmed) return rawText;
+  const rawTrimmed = rawText.trim();
+  if (!rawTrimmed) return rawText;
+  const trimmed = rawTrimmed.replace(/\s+/g, " ");
+  if (trimmed !== rawTrimmed) {
+    const normalizedResult = translateText(trimmed, locale);
+    return normalizedResult !== trimmed ? rawText.replace(rawTrimmed, normalizedResult) : rawText;
+  }
 
   // If target locale is English, restore canonical English if rawText is translated
   if (!locale || locale === "en") {
@@ -11991,6 +12522,7 @@ export function translateDOM(root = (typeof document !== "undefined" ? document.
     }
 
   const rootElement = root.nodeType === Node.ELEMENT_NODE ? root : null;
+  if (rootElement?.closest?.(".notranslate, [translate='no']")) return;
   const elementsMatching = (selector) => {
     const matches = [];
     if (rootElement?.matches(selector)) matches.push(rootElement);
@@ -12051,7 +12583,7 @@ export function translateDOM(root = (typeof document !== "undefined" ? document.
   // 2. Translate <select> options (except settingsAppLanguageSelect)
   try {
     elementsMatching("option").forEach(opt => {
-      if (opt.closest("#settingsAppLanguageSelect")) return;
+      if (opt.closest("#settingsAppLanguageSelect, .notranslate, [translate='no']")) return;
       if (!opt.hasAttribute("data-orig-text")) {
         const val = opt.text;
         const canonical = /[A-Za-z]/.test(val) ? val : (getCanonicalEnglish(val) || val);
@@ -12075,6 +12607,7 @@ export function translateDOM(root = (typeof document !== "undefined" ? document.
     });
 
     elementsMatching("optgroup[label]").forEach(group => {
+      if (group.closest?.(".notranslate, [translate='no']")) return;
       if (!group.hasAttribute("data-orig-label")) {
         const val = group.label;
         const canonical = /[A-Za-z]/.test(val) ? val : (getCanonicalEnglish(val) || val);
@@ -12100,7 +12633,13 @@ export function translateDOM(root = (typeof document !== "undefined" ? document.
 
   // 3. TreeWalker for all text nodes
   try {
-    if (root.nodeType === Node.TEXT_NODE && root.nodeValue?.trim()) {
+    if (
+      root.nodeType === Node.TEXT_NODE &&
+      root.nodeValue?.trim() &&
+      !root.parentElement?.closest?.(
+        "#settingsAppLanguageSelect, #defaultLocationStatus, #defaultLocationNotifyHint, .notranslate, [translate='no']"
+      )
+    ) {
       if (root._origText == null) {
         const val = root.nodeValue;
         root._origText = /[A-Za-z]/.test(val) ? val : (getCanonicalEnglish(val) || val);
@@ -12135,8 +12674,9 @@ export function translateDOM(root = (typeof document !== "undefined" ? document.
           }
           if (
             parent.closest &&
-            (parent.closest("#settingsAppLanguageSelect, #defaultLocationStatus, #defaultLocationNotifyHint") ||
-              parent.classList?.contains("notranslate"))
+            parent.closest(
+              "#settingsAppLanguageSelect, #defaultLocationStatus, #defaultLocationNotifyHint, .notranslate, [translate='no']"
+            )
           ) {
             return NodeFilter.FILTER_REJECT;
           }
@@ -12157,10 +12697,19 @@ export function translateDOM(root = (typeof document !== "undefined" ? document.
       }
       const orig = node._origText;
       const translated = translateText(orig, locale);
+      const parentEl = node.parentElement;
       if (locale !== "en" && translated && translated !== orig) {
         if (node.nodeValue !== translated) node.nodeValue = translated;
+        if (parentEl && (!parentEl.hasAttribute("lang") || parentEl.hasAttribute("data-i18n-lang"))) {
+          parentEl.setAttribute("lang", locale);
+          parentEl.setAttribute("data-i18n-lang", locale);
+        }
       } else if (locale === "en" || !translated || translated === orig) {
         if (orig && node.nodeValue !== orig) node.nodeValue = orig;
+        if (parentEl?.hasAttribute("data-i18n-lang")) {
+          parentEl.removeAttribute("lang");
+          parentEl.removeAttribute("data-i18n-lang");
+        }
       }
       if (locale !== "en" && (!translated || translated === orig) && hasTranslatableText(orig)) {
         queueForTranslation({
@@ -12179,7 +12728,7 @@ export function translateDOM(root = (typeof document !== "undefined" ? document.
   try {
     const attrElements = elementsMatching("[placeholder], [title], [aria-label], [aria-description], [aria-placeholder], [alt], input[type='button'][value], input[type='submit'][value]");
     attrElements.forEach(el => {
-      if (el.id === "settingsAppLanguageSelect") return;
+      if (el.id === "settingsAppLanguageSelect" || el.closest?.(".notranslate, [translate='no']")) return;
       ["placeholder", "title", "aria-label", "aria-description", "aria-placeholder", "alt", "value"].forEach(attr => {
         if (attr === "value" && !/^(button|submit)$/i.test(el.type || "")) return;
         const val = el.getAttribute(attr);
@@ -12224,7 +12773,7 @@ export function translateDOM(root = (typeof document !== "undefined" ? document.
 
 let externalTranslationRefreshTimer = null;
 
-/** Reapply the page translator after a feature replaces its live DOM. */
+/** Reapply first-party DOM translation after a feature replaces live markup. */
 export function refreshExternalTranslation(locale = detectLocale()) {
   if (!locale || locale === "en" || typeof document === "undefined") return false;
   if (externalTranslationRefreshTimer !== null) {
@@ -12232,11 +12781,10 @@ export function refreshExternalTranslation(locale = detectLocale()) {
   }
   externalTranslationRefreshTimer = setTimeout(() => {
     externalTranslationRefreshTimer = null;
-    const combo = document.querySelector(".goog-te-combo");
-    if (!combo) return;
-    if (combo.value !== locale) combo.value = locale;
-    combo.dispatchEvent(new Event("change"));
-  }, 120);
+    if (document.body) {
+      translateDOM(document.body, locale);
+    }
+  }, 60);
   return true;
 }
 

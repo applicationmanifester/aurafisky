@@ -219,17 +219,24 @@ export default class PlacesPanel {
       resultsEl.classList.remove('hidden');
       return;
     }
-    resultsEl.innerHTML = results.map((r, i) => `
-      <div class="search-result-item" data-index="${i}" role="option">
-        <div class="search-result-name">${r.display_name.split(',')[0]}</div>
-        <div class="search-result-detail">${r.display_name}</div>
-      </div>
-    `).join('');
-    resultsEl.classList.remove('hidden');
-
-    resultsEl.querySelectorAll('.search-result-item').forEach((el, i) => {
-      el.onclick = () => this.selectSearchResult(results[i], el);
+    resultsEl.innerHTML = "";
+    results.forEach((r, i) => {
+      const itemEl = document.createElement("div");
+      itemEl.className = "search-result-item";
+      itemEl.setAttribute("data-index", String(i));
+      itemEl.setAttribute("role", "option");
+      const nameEl = document.createElement("div");
+      nameEl.className = "search-result-name";
+      nameEl.textContent = r.display_name.split(",")[0];
+      const detailEl = document.createElement("div");
+      detailEl.className = "search-result-detail";
+      detailEl.textContent = r.display_name;
+      itemEl.appendChild(nameEl);
+      itemEl.appendChild(detailEl);
+      itemEl.onclick = () => this.selectSearchResult(results[i], itemEl);
+      resultsEl.appendChild(itemEl);
     });
+    resultsEl.classList.remove('hidden');
   }
 
   selectSearchResult(result, el) {
@@ -383,7 +390,12 @@ export default class PlacesPanel {
   }
 
   escapeHtml(str) {
-    const map = { '&': '&', '<': '<', '>': '>', '"': '"', "'": '''' };
-    return str.replace(/[&<>"]/g, c => map[c]).replace(/'/g, map["'"]);
+    if (str == null) return "";
+    return String(str)
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;")
+      .replace(/'/g, "&#039;");
   }
 }

@@ -383,6 +383,44 @@ async function refreshBookmarkPins() {
   if (!this.map || this.bookmarks.length === 0) return;
   if (!this.showBookmarksOnMap) return;
 
+  // ── Bookmark Clustering ──
+  // Group nearby bookmarks into clusters when zoomed out, show individual pins when zoomed in.
+  const view = this.map.getView();
+  const zoom = view.getZoom() || 3;
+  const clusterThreshold = zoom < 8 ? 0.05 : zoom < 12 ? 0.02 : 0; // degrees
+  const clusters = [];
+
+  if (clusterThreshold > 0 && this.bookmarks.length > 0) {
+    // Grid-based clustering
+    const assigned = new Set();
+    for (let i = 0; i < this.bookmarks.length; i++) {
+      if (assigned.has(i)) continue;
+      const b1 = this.bookmarks[i];
+      const cluster = { bookmarks: [b1], indices: [i], lat: b1.lat, lng: b1.lng };
+      assigned.add(i);
+      for (let j = i + 1; j < this.bookmarks.length; j++) {
+        if (assigned.has(j)) continue;
+        const b2 = this.bookmarks[j];
+        const dLat = Math.abs(b1.lat - b2.lat);
+        const dLng = Math.abs(b1.lng - b2.lng);
+        if (dLat < clusterThreshold && dLng < clusterThreshold) {
+          cluster.bookmarks.push(b2);
+          cluster.indices.push(j);
+          assigned.add(j);
+          // Recompute cluster center
+          cluster.lat = cluster.bookmarks.reduce((s, b) => s + b.lat, 0) / cluster.bookmarks.length;
+          cluster.lng = cluster.bookmarks.reduce((s, b) => s + b.lng, 0) / cluster.bookmarks.length;
+        }
+      }
+      clusters.push(cluster);
+    }
+  } else {
+    // No clustering - each bookmark is its own cluster
+    for (let i = 0; i < this.bookmarks.length; i++) {
+      clusters.push({ bookmarks: [this.bookmarks[i]], indices: [i], lat: this.bookmarks[i].lat, lng: this.bookmarks[i].lng });
+    }
+  }
+
   // Use cached data if recent (< 5 min)
   const pinCache = this._getBookmarkPinCache();
   const now = Date.now();
@@ -395,38 +433,45 @@ async function refreshBookmarkPins() {
   const renderPins = () => {
     this.bookmarkMarkers.forEach((m) => m.remove());
     this.bookmarkMarkers = [];
-    this.bookmarks.forEach((b) => {
-      // Don't render a duplicate bookmark pin on top of the active selected location marker card
-      if (this.selectedLat != null && this.selectedLng != null) {
-        const isSelected =
-          Math.abs(b.lat - this.selectedLat) < 0.0001 &&
-          Math.abs(b.lng - this.selectedLng) < 0.0001;
-        if (isSelected) return;
-      }
+    clusters.forEach((cluster) => {
+      const isMulti = cluster.bookmarks.length > 1;
+      const rep = cluster.bookmarks[0]; // representative bookmark for cluster center
+      const cached = pinCache[rep.lat + "_" + rep.lng];
+      const icon = cached?.weather ? cached.weather.icon : isMulti ? "📍" : "⭐";
+      const tempText = cached?.weather ? WeatherService.formatTemp(cached.weather.temperature) : (rep.name ? rep.name.split(',')[0] : "Saved");
+      const label = isMulti ? `+${cluster.bookmarks.length}` : tempText;
 
-      const cached = pinCache[b.lat + "_" + b.lng];
-      const icon = cached?.weather ? cached.weather.icon : "⭐";
-      const tempText = cached?.weather ? WeatherService.formatTemp(cached.weather.temperature) : (b.name ? b.name.split(',')[0] : "Saved");
-
+      const esc = (v) => String(v ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;");
       const html = `
-            <div class="flex items-center gap-1.5 bg-white/95 dark:bg-slate-800/95 rounded-full px-2.5 py-1 shadow-md border-2 border-amber-500 cursor-pointer transition-transform hover:scale-105" style="white-space:nowrap;">
-              <span class="text-xs text-amber-500 font-bold">${icon}</span>
-              <span class="text-[11px] font-bold text-slate-800 dark:text-white">${tempText}</span>
+            <div class="flex items-center gap-1.5 bg-white/95 dark:bg-slate-800/95 rounded-full px-2.5 py-1 shadow-md border-2 ${isMulti ? "border-blue-500" : "border-amber-500"} cursor-pointer transition-transform hover:scale-105" style="white-space:nowrap;">
+              <span class="text-xs ${isMulti ? "text-blue-500" : "text-amber-500"} font-bold">${icon}</span>
+              <span class="text-[11px] font-bold text-slate-800 dark:text-white">${esc(label)}</span>
             </div>
           `;
 
       const marker = new HtmlMarker(this.map, {
-        lat: b.lat,
-        lng: b.lng,
+        lat: cluster.lat,
+        lng: cluster.lng,
         html,
         className: "bookmark-pin-icon",
-        size: [80, 30],
-        anchor: [40, 15],
-        tooltip: b.name,
+        size: [isMulti ? 90 : 80, 30],
+        anchor: [isMulti ? 45 : 40, 15],
+        tooltip: isMulti ? `${cluster.bookmarks.length} locations` : rep.name,
         tooltipClassName: "location-tooltip",
         onClick: (domEvent) => {
           if (this._isDragGesture({ originalEvent: domEvent })) return;
-          this.selectLocation(b.lat, b.lng, b.name);
+          if (isMulti) {
+            if (!this.map) return;
+            // Zoom into cluster center and show individual pins at higher zoom
+            const view = this.map.getView();
+            view.animate({
+              center: fromLonLat([cluster.lng, cluster.lat]),
+              zoom: Math.min((view.getZoom() || 3) + 2, 14),
+              duration: 300,
+            }, () => this.refreshBookmarkPins());
+          } else {
+            this.selectLocation(rep.lat, rep.lng, rep.name);
+          }
         },
       });
       this.bookmarkMarkers.push(marker);
@@ -508,7 +553,7 @@ function startBookmarkAlertPolling() {
 export function exportWorkspaceData(app) {
   try {
     const backup = {
-      version: "19.0.0",
+      version: "20.0.0",
       app: "Aurafisky",
       exportedAt: new Date().toISOString(),
       bookmarks: app.bookmarks || [],

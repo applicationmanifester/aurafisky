@@ -54,7 +54,7 @@ export class AuraWorkflowEngine {
     return [
       'BEGIN:VCALENDAR',
       'VERSION:2.0',
-      'PRODID:-//Aura of Sky Live//Aurafisky v19.0.0//EN',
+      'PRODID:-//Aura of Sky Live//Aurafisky v20.0.0//EN',
       'CALSCALE:GREGORIAN',
       'METHOD:PUBLISH',
       'BEGIN:VEVENT',
@@ -103,7 +103,7 @@ export class AuraWorkflowEngine {
           });
           return true;
         }
-      } catch (_) {}
+      } catch (_) { }
     }
 
     // 2. Fallback: Browser direct download
@@ -118,7 +118,7 @@ export class AuraWorkflowEngine {
         document.body.removeChild(a);
         setTimeout(() => URL.revokeObjectURL(url), 1000);
         return true;
-      } catch (_) {}
+      } catch (_) { }
     }
 
     return false;

@@ -59,7 +59,9 @@
     width: 100% !important;
     max-width: 100% !important;
     height: 100% !important;
+    height: 100vh !important;
     height: 100dvh !important;
+    max-height: 100vh !important;
     max-height: 100dvh !important;
     border-radius: 0 !important;
     z-index: 1200 !important;
@@ -182,6 +184,7 @@
     -webkit-overflow-scrolling: touch;
   }
   .search-dropdown.open {
+    max-height: min(340px, calc(100vh - 180px), calc(var(--visual-viewport-height, 100vh) - 130px)) !important;
     max-height: min(340px, calc(100dvh - 180px), calc(var(--visual-viewport-height, 100vh) - 130px)) !important;
     opacity: 1 !important;
     visibility: visible !important;

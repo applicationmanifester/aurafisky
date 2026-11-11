@@ -6,9 +6,8 @@ interface ToastOptions {
   duration?: number;
 }
 
-const container = document.getElementById('toastContainer');
-
 export function showToast(message: string, options: ToastOptions = {}) {
+  const container = document.getElementById('toastContainer');
   if (!container) return;
   
   const { type = 'info', duration = 3000 } = options;
@@ -22,7 +21,13 @@ export function showToast(message: string, options: ToastOptions = {}) {
   }`;
   
   const icon = type === 'error' ? '❌' : type === 'success' ? '✅' : type === 'warning' ? '⚠️' : 'ℹ️';
-  toast.innerHTML = `<span>${icon}</span><span class="text-sm text-slate-700 dark:text-slate-200">${message}</span>`;
+  const iconSpan = document.createElement('span');
+  iconSpan.textContent = icon;
+  const msgSpan = document.createElement('span');
+  msgSpan.className = 'text-sm text-slate-700 dark:text-slate-200';
+  msgSpan.textContent = message;
+  toast.appendChild(iconSpan);
+  toast.appendChild(msgSpan);
   
   container.appendChild(toast);
   

@@ -39,6 +39,13 @@ import { apply as applyMapboxStyle, applyStyle as applyMapboxLayerStyle, getLaye
 import { HtmlMarker } from "./modules/ol-marker.js";
 import { localizeGlStyle } from "./modules/map-language.js";
 import {
+  initBasemapSwitching,
+  prewarmBasemaps,
+  scheduleBasemapPrewarm,
+  setMapModeLoading,
+  switchBasemap,
+} from "./modules/basemap-switch.js";
+import {
   formatPlaceName,
   shortPlaceName,
   mediumPlaceName,
@@ -53,7 +60,7 @@ import {
 } from "./modules/geo.js";
 import { reverseUrls, labelFromReverse, reverseGeocode, getGeocodeCache } from "./modules/reverseGeocode.js";
 import { applyViewportHeight, watchViewport } from "./modules/viewport.js";
-import { t, detectLocale, setLocale, supportedLocales, translateText, translateDOM, refreshExternalTranslation, translateAsync } from "./modules/i18n.js";
+import { t, detectLocale, setLocale, translateText, translateDOM, refreshExternalTranslation, translateAsync } from "./modules/i18n.js";
 import { isMobileLayout } from "./features/breakpoints.js";
 // localforage v1.x is UMD-only (no ESM default export). Load as a
 // side-effect so it self-attaches to window.localforage; access via global.
@@ -819,11 +826,14 @@ class AurafiskyApp {
 
     // ── Loading-overlay watchdog ──────────────────────────────
     // Guarantee the overlay never permanently blocks the UI, even if init()
-    // throws before hideLoadingOverlay() runs. Force it gone after 2.5s.
-    setTimeout(() => {
-      const ov = this.$.loadingOverlay;
+    // throws before hideLoadingOverlay() runs. Force it gone after 2.8s.
+    this._loadingTargetPct = 12;
+    this._loadingDisplayedPct = 12;
+    this._loadingOverlayHiding = false;
+    this._loadingWatchdogTimer = setTimeout(() => {
+      const ov = this.$.loadingOverlay || document.getElementById("loadingOverlay");
       if (ov && ov.isConnected) this.hideLoadingOverlay();
-    }, 2500);
+    }, 2800);
 
     // ── Initialize ────────────────────────────────────────────
     this.init();
@@ -973,6 +983,7 @@ class AurafiskyApp {
     // Load bookmarks (in-memory until cloud sync)
 
     // Setup OpenLayers map viewport
+    this.setLoadingProgress(25, "Preparing the map");
     this.initMap();
 
     // Keep --app-height tracking the visible viewport. Must start before the
@@ -982,6 +993,7 @@ class AurafiskyApp {
     this._stopViewportWatch = watchViewport({
       onResize: () => this.map?.updateSize(),
     });
+    this.setLoadingProgress(45, "Positioning the map");
 
     // Setup Particle Canvas Overlay
     this.initWeatherCanvas();
@@ -1229,19 +1241,97 @@ class AurafiskyApp {
     }
   }
 
+  _parseUrlMapParams() {
+    try {
+      const hashStr = window.location.hash.startsWith("#") ? window.location.hash.slice(1) : "";
+      const hashParams = new URLSearchParams(hashStr);
+      const searchParams = new URLSearchParams(window.location.search);
+      return hashParams.has("lat") ? hashParams : searchParams;
+    } catch (_) {
+      return new URLSearchParams();
+    }
+  }
+
+  _getTimezoneDefaultLocation() {
+    try {
+      const tz = Intl.DateTimeFormat().resolvedOptions().timeZone || "";
+      if (tz.includes("Kolkata") || tz.includes("Calcutta") || tz.includes("India")) {
+        return { lat: 12.9716, lng: 77.5946, name: "Bengaluru, Karnataka, India" };
+      }
+      if (tz.includes("London") || tz.includes("Europe/London") || tz.includes("GB")) {
+        return { lat: 51.5074, lng: -0.1278, name: "London, England, UK" };
+      }
+      if (tz.includes("Paris") || tz.includes("Berlin") || tz.includes("Rome") || tz.includes("Madrid") || tz.includes("Amsterdam")) {
+        return { lat: 48.8566, lng: 2.3522, name: "Paris, France" };
+      }
+      if (tz.includes("New_York") || tz.includes("Detroit") || tz.includes("Toronto") || tz.includes("Montreal")) {
+        return { lat: 40.7128, lng: -74.0060, name: "New York, USA" };
+      }
+      if (tz.includes("Los_Angeles") || tz.includes("Vancouver") || tz.includes("San_Francisco")) {
+        return { lat: 34.0522, lng: -118.2437, name: "Los Angeles, USA" };
+      }
+      if (tz.includes("Chicago") || tz.includes("Winnipeg") || tz.includes("Mexico_City")) {
+        return { lat: 41.8781, lng: -87.6298, name: "Chicago, USA" };
+      }
+      if (tz.includes("Tokyo")) {
+        return { lat: 35.6762, lng: 139.6503, name: "Tokyo, Japan" };
+      }
+      if (tz.includes("Shanghai") || tz.includes("Beijing") || tz.includes("Hong_Kong") || tz.includes("Chongqing")) {
+        return { lat: 31.2304, lng: 121.4737, name: "Shanghai, China" };
+      }
+      if (tz.includes("Sydney") || tz.includes("Melbourne") || tz.includes("Brisbane")) {
+        return { lat: -33.8688, lng: 151.2093, name: "Sydney, Australia" };
+      }
+      if (tz.includes("Dubai") || tz.includes("Riyadh") || tz.includes("Qatar")) {
+        return { lat: 25.2048, lng: 55.2708, name: "Dubai, UAE" };
+      }
+      if (tz.includes("Sao_Paulo") || tz.includes("Buenos_Aires")) {
+        return { lat: -23.5505, lng: -46.6333, name: "São Paulo, Brazil" };
+      }
+    } catch (_) {}
+    return { lat: 12.9716, lng: 77.5946, name: "Bengaluru, Karnataka, India" };
+  }
+
+  _getInitialMapView() {
+    const clampLat = (lat) => Math.max(-83.5, Math.min(83.5, lat));
+    const params = this._parseUrlMapParams();
+    const lat = parseFloat(params.get("lat"));
+    const lng = parseFloat(params.get("lng"));
+    const zoomRaw = parseFloat(params.get("zoom"));
+    const urlZoom = Number.isFinite(zoomRaw) && zoomRaw >= 2 && zoomRaw <= 18 ? zoomRaw : 9;
+    if (Number.isFinite(lat) && Number.isFinite(lng) && lat >= -90 && lat <= 90 && lng >= -180 && lng <= 180) {
+      return { center: fromLonLat([lng, clampLat(lat)]), zoom: urlZoom };
+    }
+    try {
+      const rawDef = localStorage.getItem("defaultLocation");
+      if (rawDef) {
+        const def = JSON.parse(rawDef);
+        if (def && Number.isFinite(Number(def.lat)) && Number.isFinite(Number(def.lng))) {
+          return { center: fromLonLat([Number(def.lng), clampLat(Number(def.lat))]), zoom: 9 };
+        }
+      }
+    } catch (_) {}
+    const tzLoc = this._getTimezoneDefaultLocation();
+    return { center: fromLonLat([tzLoc.lng, clampLat(tzLoc.lat)]), zoom: 9 };
+  }
+
   initMap() {
     try {
       // Latitude clamp to valid Web Mercator data extent (±83.5°) — longitude is
       // left unconstrained (multiWorld) so panning wraps smoothly.
       const maxLat = fromLonLat([0, 83.5])[1];
       const minLat = fromLonLat([0, -83.5])[1];
+      const initialView = this._getInitialMapView();
 
       this.map = new OlMap({
         target: "map",
         layers: [],
+        // Balance HTTP/2 stream throughput against main-thread vector tile decode
+        // so the visible viewport tiles finish cleanly without over-queuing.
+        maxTilesLoading: 32,
         view: new View({
-          center: fromLonLat([0.0, 20.0]),
-          zoom: 3,
+          center: initialView.center,
+          zoom: initialView.zoom,
           minZoom: 2,
           maxZoom: 18,
           extent: [-Infinity, minLat, Infinity, maxLat],
@@ -1274,14 +1364,18 @@ class AurafiskyApp {
 
       // Map label locale is synchronized with the app language below.
       this.mapLanguage = this.getSavedMapLanguage() || 'en';
-    // i18n: detect and apply the user's preferred language.
+    // i18n: detect and apply the user's preferred language using first-party localization.
     this.language = detectLocale();
+    this._clearLegacyGoogleTranslate();
     this.applyLanguage(this.language);
-    this.applyUniversalTranslation(this.language);
 
       // Map style preference: 'street' | 'satellite' | 'terrain' | 'dark'
       const savedMapStyle = localStorage.getItem("aurafisky_map_style");
-      this.mapStyle = savedMapStyle || (this.isDark ? "dark" : "street");
+      const urlLayer = this._parseUrlMapParams().get("layer");
+      const validInitStyles = ['street', 'satellite', 'terrain', 'hillshade', 'opentopo', 'ocean', 'natgeo', 'dark'];
+      this.mapStyle = (urlLayer && validInitStyles.includes(urlLayer))
+        ? urlLayer
+        : (savedMapStyle || (this.isDark ? "dark" : "street"));
 
       // Map opacity: 0-1 range
       const savedOpacity = localStorage.getItem("aurafisky_map_opacity");
@@ -1295,9 +1389,10 @@ class AurafiskyApp {
       localStorage.removeItem("aurafisky_map_layers_minimized");
       this.mapLayersMinimized = false;
 
-      // Instant global edge raster basemaps so the map paints in <50ms immediately
-      // while OpenFreeMap vector styles stream in the background. Keyless, zero-watermark OSM raster fallback.
+      // Resilient OSM raster fallback (starts hidden so it does not compete with
+      // OpenFreeMap vector tiles on boot; activated only if OpenFreeMap fails/stalls).
       const instantLightTile = new TileLayer({
+        visible: false,
         source: new XYZ({
           url: "https://tile.openstreetmap.org/{z}/{x}/{y}.png",
           maxZoom: 19,
@@ -1308,6 +1403,7 @@ class AurafiskyApp {
         zIndex: 0
       });
       const instantDarkTile = new TileLayer({
+        visible: false,
         className: "ol-dark-tile",
         source: new XYZ({
           url: "https://tile.openstreetmap.org/{z}/{x}/{y}.png",
@@ -1318,6 +1414,7 @@ class AurafiskyApp {
         }),
         zIndex: 0
       });
+      this._instantFallbackTiles = { light: instantLightTile, dark: instantDarkTile };
 
       this.lightBasemap = new LayerGroup({ layers: [instantLightTile] });
       this.darkBasemap = new LayerGroup({ layers: [instantDarkTile] });
@@ -1432,6 +1529,11 @@ class AurafiskyApp {
       };
       this._basemapCache = {};
 
+      // Fast map-mode switching: the token invalidates an in-flight switch
+      // when the user picks another mode before the first one finished
+      // loading, and the URL set keeps prewarming from re-fetching a tile.
+      initBasemapSwitching(this);
+
       // Helper to get basemap (creates on first call)
       this._getBasemap = (style) => {
         if (style === 'street') return this.lightBasemap;
@@ -1449,119 +1551,134 @@ class AurafiskyApp {
 
       this.map.addLayer(initialGroup);
 
-      // Preload all basemaps upfront so mode switches are instant — no blank
-      // tiles or delayed layer creation when the user toggles map styles.
-      Object.values(this._basemapFactories).forEach((factory) => {
-        try { factory(); } catch (_) {}
-      });
-
-      // Paint the instant raster basemap at once and drop the loading overlay
-      // so the map is visible within ~100 ms — the user sees a map immediately
-      // instead of staring at a spinner while the vector style fetches. The
-      // OpenFreeMap vector style upgrades the same layers in the background
-      // via loadBasemap() below; we deliberately do not block first paint on it.
-      // Track actual tile loads so the spinner stays up until the map has real
-      // content — OL's "rendercomplete" fires on the first frame (often before
-      // tiles download), which used to hide the spinner over a blank canvas.
+      // Track actual tile loads so the overlay stays up until real map tiles
+      // download, while keeping startup focused exclusively on the active style.
+      this._initialMapReady = false;
       let _tilesLoaded = false;
       const _markTilesLoaded = () => {
         if (!_tilesLoaded) {
           _tilesLoaded = true;
+          this.setLoadingProgress(62, "Loading map tiles");
           this.hideLoadingOverlay();
         }
       };
-      for (const lyr of initialGroup.getLayers().getArray()) {
-        const src = lyr.getSource();
-        if (src && typeof src.on === "function") {
-          src.on("tileloadstart", () => { /* tiles are fetching */ });
-          src.on("tileloadend", _markTilesLoaded);
-          src.on("tileloaderror", (e) => {
-            console.warn("Basemap tile failed:", e.tile?.src);
-          });
+      const _markInitialMapReady = () => {
+        if (this._initialMapReady) return;
+        this._initialMapReady = true;
+        // Schedule secondary basemap warming only after active tiles have painted.
+        scheduleBasemapPrewarm(this, 2500);
+      };
+      const _boundTileSources = new WeakSet();
+      const attachTileHooks = (lyr) => {
+        const src = lyr?.getSource?.();
+        if (!src || typeof src.on !== "function" || _boundTileSources.has(src)) return;
+        _boundTileSources.add(src);
+        src.on("tileloadend", () => {
+          _markTilesLoaded();
+          if (!this._initialMapReady && this.map) {
+            this.map.once("rendercomplete", () => {
+              setTimeout(_markInitialMapReady, 500);
+            });
+          }
+        });
+        src.on("tileloaderror", (e) => {
+          console.warn("Basemap tile failed:", e.tile?.src);
+        });
+      };
+      if (this.mapStyle !== "street" && this.mapStyle !== "dark") {
+        for (const lyr of initialGroup.getLayers().getArray()) {
+          attachTileHooks(lyr);
         }
       }
-      // Watchdog: never leave the spinner up forever if tiles never load.
-      setTimeout(_markTilesLoaded, 4000);
+      // Watchdog: never leave the spinner or prewarm gate stuck if tiles stall.
+      setTimeout(() => {
+        _markTilesLoaded();
+        _markInitialMapReady();
+      }, 3500);
       this.map.render();
 
-      // Real vector basemap: OpenFreeMap's OpenMapTiles-schema tiles, styled
-      // via the same Mapbox/MapLibre style JSON OpenFreeMap publishes,
-      // rendered client-side by OpenLayers' Canvas 2D vector-tile renderer
-      // (no WebGL dependency — see modules/map-language.js for why real
-      // language switching needs vector tiles at all). Replaces the old
-      // raster-tile setup, whose URLs were dead ends: OpenFreeMap serves
-      // vector tiles only (a "?lang=en" raster PNG endpoint 404s on every
-      // tile — part of the original "tiles render slow" complaint), and
-      // OSM's raster server silently ignores "?lang=native". Style JSON is
-      // fetched once per theme, localized for the current language (see
-      // localizeGlStyle), and applied to a LayerGroup per theme so toggling
-      // dark mode is just swapping which group is on the map.
+      // Vector basemaps (OpenFreeMap OpenMapTiles schema) localized client-side.
+      // Loaded lazily for the active theme only; inactive theme loads on demand.
       this._glStyleUrls = {
         light: "https://tiles.openfreemap.org/styles/liberty",
         dark: "https://tiles.openfreemap.org/styles/dark",
       };
       this._glStyles = {}; // cache of the raw (un-localized) fetched style JSON, by theme
+      this._basemapLoadPromises = {};
 
-      const loadBasemap = async (theme, group) => {
-        let lastErr;
-        // Retry with exponential backoff: 1s, 2s, 4s, then give up
-        for (let attempt = 0; attempt < 4; attempt++) {
-          try {
-            if (attempt > 0) {
-              await new Promise((r) => setTimeout(r, 1000 * 2 ** (attempt - 1)));
+      this._ensureBasemapLoaded = (theme) => {
+        const normTheme = theme === "dark" ? "dark" : "light";
+        if (this._glStyles[normTheme]) return Promise.resolve();
+        if (this._basemapLoadPromises[normTheme]) return this._basemapLoadPromises[normTheme];
+        const group = normTheme === "dark" ? this.darkBasemap : this.lightBasemap;
+        const fallbackTile = this._instantFallbackTiles?.[normTheme];
+
+        const promise = (async () => {
+          let fallbackTimer = null;
+          const showFallbackIfActive = () => {
+            const expectedStyle = normTheme === "dark" ? "dark" : "street";
+            if (!fallbackTile || this._glStyles[normTheme] || this.mapStyle !== expectedStyle) return;
+            const grpLayers = group?.getLayers?.();
+            if (grpLayers && !grpLayers.getArray().includes(fallbackTile)) {
+              grpLayers.insertAt(0, fallbackTile);
             }
-            const res = await fetch(this._glStyleUrls[theme]);
-            const rawStyle = await res.json();
-            this._enhanceBasemapVibrance(rawStyle, theme);
-            this._glStyles[theme] = rawStyle;
-            await applyMapboxStyle(group, localizeGlStyle(rawStyle, this.mapLanguage));
-            // Preload 1 level of lower-resolution tiles beyond the viewport so
-            // panning into new territory shows something immediately instead
-            // of a blank tile while the full-res one is still being fetched
-            // and parsed (vector tiles decode on the main thread — there's no
-            // background worker like MapLibre GL had — so this preload buffer
-            // is what actually keeps panning feeling smooth).
-            for (const vtLayer of getMapboxLayers(group, "openmaptiles")) {
-              vtLayer.setPreload(1);
+            fallbackTile.setVisible(true);
+            attachTileHooks(fallbackTile);
+            this.map?.render();
+          };
+          // Keep OSM raster disabled unless OpenFreeMap fails or stalls past 5s.
+          fallbackTimer = setTimeout(showFallbackIfActive, 5000);
+
+          let lastErr;
+          for (let attempt = 0; attempt < 4; attempt++) {
+            try {
+              if (attempt > 0) {
+                await new Promise((r) => setTimeout(r, 1000 * 2 ** (attempt - 1)));
+              }
+              const res = await fetch(this._glStyleUrls[normTheme]);
+              if (!res?.ok) throw new Error(`HTTP ${res?.status || 0}`);
+              const rawStyle = await res.json();
+              this._enhanceBasemapVibrance(rawStyle, normTheme);
+              this._glStyles[normTheme] = rawStyle;
+              await applyMapboxStyle(group, localizeGlStyle(rawStyle, this.mapLanguage));
+              if (fallbackTimer) {
+                clearTimeout(fallbackTimer);
+                fallbackTimer = null;
+              }
+              if (fallbackTile) {
+                fallbackTile.setVisible(false);
+                group?.getLayers?.().remove(fallbackTile);
+              }
+              // Keep vector tile preload at 0 so OpenLayers does not double PBF requests
+              // on initial viewport load with zoom-1 tiles.
+              for (const lyr of group.getLayers().getArray()) {
+                attachTileHooks(lyr);
+              }
+              this.map?.render();
+              return;
+            } catch (err) {
+              lastErr = err;
+              console.warn(`Basemap load attempt ${attempt + 1} failed (${normTheme}):`, err.message);
             }
-            // A location passed in on startup (shared link, restored session)
-            // calls selectLocation() — and therefore view.animate() — before
-            // this fetch resolves, while the map still has zero layers. OL
-            // doesn't always notice that layers were added to a view that
-            // already has stale frame state from animating before anything
-            // was renderable: the map reports every layer/source as "ready"
-            // but the canvas stays blank until something else nudges it. Force
-            // that nudge here instead of relying on it happening implicitly.
-            this.map.render();
-            return; // success
-          } catch (err) {
-            lastErr = err;
-            console.warn(`Basemap load attempt ${attempt + 1} failed (${theme}):`, err.message);
           }
-        }
-        console.error(`Basemap load failed (${theme}) after 4 attempts:`, lastErr);
-        // Vector style unavailable — the instant OSM raster basemap remains
-        // visible as a graceful fallback. No spinner, no crash.
+          if (fallbackTimer) clearTimeout(fallbackTimer);
+          showFallbackIfActive();
+          console.error(`Basemap load failed (${normTheme}) after 4 attempts:`, lastErr);
+          delete this._basemapLoadPromises[normTheme];
+        })();
+
+        this._basemapLoadPromises[normTheme] = promise;
+        return promise;
       };
-      // Load the visible theme first, on its own — fetching+parsing both
-      // basemaps at once (the old behavior) doubled network requests and
-      // main-thread parse work during the exact window the visible map is
-      // trying to paint, which is real time added to "map loads slowly".
-      // The other theme loads during idle time, well before anyone would
-      // toggle it, so switching dark/light stays instant.
-      const activeTheme = this.isDark ? "dark" : "light";
-      const inactiveTheme = this.isDark ? "light" : "dark";
-      const activeGroup = this.isDark ? this.darkBasemap : this.lightBasemap;
-      const inactiveGroup = this.isDark ? this.lightBasemap : this.darkBasemap;
-      loadBasemap(activeTheme, activeGroup).then(() => {
-        // Defer inactive theme to idle callback to avoid blocking first paint
-        if (typeof requestIdleCallback !== 'undefined') {
-          requestIdleCallback(() => loadBasemap(inactiveTheme, inactiveGroup), { timeout: 3000 });
-        } else {
-          setTimeout(() => loadBasemap(inactiveTheme, inactiveGroup), 0);
-        }
+
+      if (this.mapStyle === "street" || this.mapStyle === "dark") {
+        const activeTheme = this.mapStyle === "dark" ? "dark" : "light";
+        this._ensureBasemapLoaded(activeTheme).then(() => {
+          this._updateMapStyleUI();
+        });
+      } else {
         this._updateMapStyleUI();
-      });
+      }
 
       this.map.on("movestart", () => {
         if (this.radarPlaying) {
@@ -1589,6 +1706,10 @@ class AurafiskyApp {
       // range on its own — no manual re-clamp-after-the-fact needed here,
       // unlike Leaflet's maxBounds which snapped back reactively.
       this.map.on("moveend", () => {
+        // Re-warm other basemaps only after initial startup map tiles settle.
+        if (this._initialMapReady) {
+          scheduleBasemapPrewarm(this, 1800);
+        }
         if (this._radarWasPlayingBeforeMove) {
           this._radarWasPlayingBeforeMove = false;
           clearTimeout(this._radarResumeTimer);
@@ -3246,8 +3367,14 @@ class AurafiskyApp {
     this._isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) ||
       (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
     this._isInStandalone =
-      window.matchMedia &&
-      window.matchMedia("(display-mode: standalone)").matches;
+      (typeof window.matchMedia === "function" &&
+        window.matchMedia("(display-mode: standalone)").matches) ||
+      window.navigator?.standalone === true;
+
+    if (this._isInStandalone) {
+      this.$.pwaInstallBanner?.classList.add("hidden");
+      this.$.installBtn?.classList.add("hidden");
+    }
 
     const showMobileInstallBanner = () => {
       if (
@@ -3723,16 +3850,12 @@ class AurafiskyApp {
 
   _checkUrlParamsOnStartup() {
     try {
-      const hashStr = window.location.hash.startsWith("#") ? window.location.hash.slice(1) : "";
-      const hashParams = new URLSearchParams(hashStr);
-      const searchParams = new URLSearchParams(window.location.search);
-      // Accept either query params or URL hash state
-      const params = hashParams.has("lat") ? hashParams : searchParams;
+      const params = this._parseUrlMapParams();
       const latStr = params.get("lat");
       const lngStr = params.get("lng");
       const nameStr = params.get("name");
       const layerStr = params.get("layer");
-      if (layerStr && this.setMapStyle) {
+      if (layerStr && layerStr !== this.mapStyle && this.setMapStyle) {
         try { this.setMapStyle(layerStr); } catch (_) {}
       }
       const wallpaperStr = params.get("wallpaper");
@@ -3745,6 +3868,7 @@ class AurafiskyApp {
           try {
             if (action === "radar") this.toggleRadar?.();
             else if (action === "aura") this.aura?.open?.();
+            else if (action === "locate") this.getMyLocation?.();
             else if (action === "briefing") {
               this.showWeatherPanel?.();
               this.switchWeatherTab?.("overview");
@@ -3754,6 +3878,21 @@ class AurafiskyApp {
             console.warn("URL action failed:", action, e);
           }
         }, 1200); // let the map + panel finish mounting
+      }
+
+      // Search deep link — the target of the WebSite SearchAction in the
+      // page's structured data, so a search engine or an assistant can send
+      // someone straight to a place.
+      const searchQuery = params.get("search");
+      if (searchQuery) {
+        setTimeout(() => {
+          try {
+            if (this.$.searchInput) this.$.searchInput.value = searchQuery;
+            this.performSearch?.(searchQuery);
+          } catch (e) {
+            console.warn("Search deep link failed:", e);
+          }
+        }, 1200);
       }
 
       if (latStr != null && lngStr != null) {
@@ -3787,53 +3926,16 @@ class AurafiskyApp {
 
   async _loadInitialStartupLocation() {
     this._sweepStaleCache();
+    this.setLoadingProgress(70, "Finding your location");
     await this._loadLocalCache();
 
     // 1. Priority 1: Check if page was opened via a shared link URL (?lat=...&lng=...&name=...)
-    if (this._checkUrlParamsOnStartup()) {
+    if (this._checkUrlParamsOnStartup() || this._hasPendingShareTarget) {
       return;
     }
 
     // Resolves an immediate regional city from user's timezone if no prior session exists
-    const getStartupDefaultLocation = () => {
-      try {
-        const tz = Intl.DateTimeFormat().resolvedOptions().timeZone || "";
-        if (tz.includes("Kolkata") || tz.includes("Calcutta") || tz.includes("India")) {
-          return { lat: 12.9716, lng: 77.5946, name: "Bengaluru, Karnataka, India" };
-        }
-        if (tz.includes("London") || tz.includes("Europe/London") || tz.includes("GB")) {
-          return { lat: 51.5074, lng: -0.1278, name: "London, England, UK" };
-        }
-        if (tz.includes("Paris") || tz.includes("Berlin") || tz.includes("Rome") || tz.includes("Madrid") || tz.includes("Amsterdam")) {
-          return { lat: 48.8566, lng: 2.3522, name: "Paris, France" };
-        }
-        if (tz.includes("New_York") || tz.includes("Detroit") || tz.includes("Toronto") || tz.includes("Montreal")) {
-          return { lat: 40.7128, lng: -74.0060, name: "New York, USA" };
-        }
-        if (tz.includes("Los_Angeles") || tz.includes("Vancouver") || tz.includes("San_Francisco")) {
-          return { lat: 34.0522, lng: -118.2437, name: "Los Angeles, USA" };
-        }
-        if (tz.includes("Chicago") || tz.includes("Winnipeg") || tz.includes("Mexico_City")) {
-          return { lat: 41.8781, lng: -87.6298, name: "Chicago, USA" };
-        }
-        if (tz.includes("Tokyo")) {
-          return { lat: 35.6762, lng: 139.6503, name: "Tokyo, Japan" };
-        }
-        if (tz.includes("Shanghai") || tz.includes("Beijing") || tz.includes("Hong_Kong") || tz.includes("Chongqing")) {
-          return { lat: 31.2304, lng: 121.4737, name: "Shanghai, China" };
-        }
-        if (tz.includes("Sydney") || tz.includes("Melbourne") || tz.includes("Brisbane")) {
-          return { lat: -33.8688, lng: 151.2093, name: "Sydney, Australia" };
-        }
-        if (tz.includes("Dubai") || tz.includes("Riyadh") || tz.includes("Qatar")) {
-          return { lat: 25.2048, lng: 55.2708, name: "Dubai, UAE" };
-        }
-        if (tz.includes("Sao_Paulo") || tz.includes("Buenos_Aires")) {
-          return { lat: -23.5505, lng: -46.6333, name: "São Paulo, Brazil" };
-        }
-      } catch (_) {}
-      return { lat: 12.9716, lng: 77.5946, name: "Bengaluru, Karnataka, India" };
-    };
+    const getStartupDefaultLocation = () => this._getTimezoneDefaultLocation();
 
     // Fallback runner to restore previous session or default home, guaranteed never to leave UI blank
     const restoreFallback = (guaranteed = false) => {
@@ -4681,8 +4783,23 @@ class AurafiskyApp {
 
       this.map.updateSize();
       const view = this.map.getView();
+      const targetCenter = fromLonLat([lng, viewCenterLat]);
       const targetZoom = options.zoom ?? Math.min(Math.max(view.getZoom(), 9), 17);
-      view.animate({ center: fromLonLat([lng, viewCenterLat]), zoom: targetZoom });
+      const curCenter = view.getCenter();
+      const curZoom = view.getZoom();
+      const isSameCenter =
+        Array.isArray(curCenter) &&
+        Math.hypot(curCenter[0] - targetCenter[0], curCenter[1] - targetCenter[1]) < 25;
+      const isSameZoom = Number.isFinite(curZoom) && Math.abs(curZoom - targetZoom) < 0.05;
+      if (!isSameCenter || !isSameZoom) {
+        if (!this._hasCenteredMapOnce || options.immediate) {
+          view.setCenter(targetCenter);
+          view.setZoom(targetZoom);
+        } else {
+          view.animate({ center: targetCenter, zoom: targetZoom });
+        }
+      }
+      this._hasCenteredMapOnce = true;
 
       // Refresh UI panel state
       this._updateHeaderLocationAndCoords(name, lat, lng);
@@ -5284,7 +5401,17 @@ class AurafiskyApp {
     );
     if (!weather) return;
 
+    // First successful forecast render is the last real milestone before the
+    // overlay lifts, so report it (only once — this runs on every scrub).
+    if (!this._firstWeatherRendered) {
+      this._firstWeatherRendered = true;
+      this.setLoadingProgress(85, "Fetching the forecast");
+    }
+
     this.currentWeather = weather;
+    if (this.$.weatherPanel) {
+      this.$.weatherPanel.setAttribute("lang", this.language || "en");
+    }
 
     // Header labels
     this._updateHeaderLocationAndCoords(this.selectedName, this.selectedLat, this.selectedLng);
@@ -9756,6 +9883,7 @@ class AurafiskyApp {
     this._noiseBuffer = null;
     this._historicalResults = null;
     this.biasMap = null;
+    this._stopLoadingTimers?.();
     if (this._alertPollTimer) clearInterval(this._alertPollTimer);
     if (this.tempOverlayTimer) clearInterval(this.tempOverlayTimer);
     if (this.wallpaperTimer) clearInterval(this.wallpaperTimer);
@@ -10365,7 +10493,12 @@ class AurafiskyApp {
     }
 
     if (this.$.nowcastBars) {
+      const lang = this.language || "en";
+      const trWord = (word) => (lang !== "en" && typeof translateText === "function" ? translateText(word, lang) || word : word);
       const maxMm = Math.max(0.5, ...nowcast.intervals.map((i) => i.mm || 0));
+      const chanceWord = trWord("chance");
+      const precipWord = (lang !== "en" ? t("precipitation", lang) : null) || trWord("precipitation");
+      const nowWord = (lang !== "en" ? t("now", lang) : null) || trWord("Now");
       this.$.nowcastBars.innerHTML = nowcast.intervals
         .map((interval) => {
           const heightPx = Math.max(4, Math.min(36, Math.round(((interval.mm || 0) / maxMm) * 36)));
@@ -10377,7 +10510,9 @@ class AurafiskyApp {
           } else if (interval.intensity === "light") {
             colorClass = "bg-sky-400 dark:bg-sky-400";
           }
-          return `<div class="flex-1 rounded-sm transition-all duration-300 ${colorClass}" style="height: ${heightPx}px" title="${interval.label}: ${(interval.mm || 0).toFixed(2)} mm (${interval.prob}% chance)" role="img" aria-label="${interval.label}: ${interval.intensity} precipitation"></div>`;
+          const label = interval.label === "Now" ? nowWord : interval.label;
+          const intensityWord = trWord(interval.intensity);
+          return `<div class="flex-1 rounded-sm transition-all duration-300 ${colorClass}" style="height: ${heightPx}px" title="${label}: ${(interval.mm || 0).toFixed(2)} mm (${interval.prob}% ${chanceWord})" role="img" aria-label="${label}: ${intensityWord} ${precipWord}"></div>`;
         })
         .join("");
     }
@@ -10817,7 +10952,12 @@ class AurafiskyApp {
         // Small delay to let clients.claim() finish before reloading
         setTimeout(() => location.reload(), 300);
       });
-      window.addEventListener("load", () => {
+      // Register as soon as the page is ready — but not *after* the load
+      // event has already fired. init() does enough asynchronous work that
+      // it can reach this line well after `load`, and a `load` listener added
+      // then never runs: the worker was never registered, so Chrome never
+      // offered to install the app and the offline cache never existed.
+      const registerWorker = () => {
         navigator.serviceWorker
           // updateViaCache: 'none' makes the browser fetch sw.js from the
           // network on every navigation instead of serving a stale copy from
@@ -10874,7 +11014,15 @@ class AurafiskyApp {
             console.warn("Service Worker registration failed:", err);
             window.toastModule?.show("Offline support unavailable", "error");
           });
-      });
+      };
+
+      // If the page is already loaded, register straight away; otherwise
+      // wait for it. Either way the worker gets registered.
+      if (document.readyState === "complete") {
+        registerWorker();
+      } else {
+        window.addEventListener("load", registerWorker, { once: true });
+      }
     }
   }
 
@@ -10911,14 +11059,171 @@ class AurafiskyApp {
     window.toastModule?.show(message, type, duration);
   }
 
-  hideLoadingOverlay() {
-    const overlay = this.$.loadingOverlay;
-    if (!overlay) return;
-    // Drop pointer events immediately so the fading overlay never eats
-    // clicks on the UI underneath it.
+  _stopLoadingTimers() {
+    if (this._loadingTrickleTimer) {
+      clearInterval(this._loadingTrickleTimer);
+      this._loadingTrickleTimer = null;
+    }
+    if (this._loadingHideTimer) {
+      clearTimeout(this._loadingHideTimer);
+      this._loadingHideTimer = null;
+    }
+    if (this._loadingRemoveTimer) {
+      clearTimeout(this._loadingRemoveTimer);
+      this._loadingRemoveTimer = null;
+    }
+    if (this._loadingWatchdogTimer) {
+      clearTimeout(this._loadingWatchdogTimer);
+      this._loadingWatchdogTimer = null;
+    }
+  }
+
+  _applyLoadingVisuals(pct) {
+    const safePct = Math.max(0, Math.min(100, Math.round(pct)));
+    this._loadingDisplayedPct = safePct;
+    const ring = document.getElementById("loaderProgressRing");
+    if (ring) {
+      const circumference = 295.31;
+      ring.style.strokeDashoffset = (circumference * (1 - safePct / 100)).toFixed(2);
+    }
+    const barFill = document.getElementById("loaderBarFill");
+    if (barFill) {
+      barFill.style.width = `${safePct}%`;
+    }
+    const barTrack = document.querySelector("#loadingOverlay [role='progressbar']");
+    if (barTrack) {
+      barTrack.setAttribute("aria-valuenow", String(safePct));
+    }
+    const percentEl = document.getElementById("loaderPercent");
+    if (percentEl) {
+      percentEl.textContent = `${safePct}%`;
+    }
+  }
+
+  _startLoadingTrickle() {
+    if (this._loadingTrickleTimer || this._loadingOverlayHiding) return;
+    let tickCount = 0;
+    this._loadingTrickleTimer = setInterval(() => {
+      if (this._loadingOverlayHiding) {
+        clearInterval(this._loadingTrickleTimer);
+        this._loadingTrickleTimer = null;
+        return;
+      }
+      tickCount += 1;
+      const target = this._loadingTargetPct ?? 12;
+      const displayed = this._loadingDisplayedPct ?? 12;
+      const ceiling = Math.min(92, target + 8);
+      if (displayed < target) {
+        const step = Math.max(2, Math.ceil((target - displayed) / 3));
+        this._applyLoadingVisuals(Math.min(target, displayed + step));
+      } else if (displayed < ceiling && tickCount % 2 === 0) {
+        this._applyLoadingVisuals(displayed + 1);
+      }
+    }, 120);
+  }
+
+  /**
+   * Update loading overlay progress ring, bar, and localized telemetry label.
+   * Monotonic so parallel startup tasks never cause the progress indicator to jump backward.
+   */
+  setLoadingProgress(pct, statusText, phaseText) {
+    if (this._loadingOverlayHiding && pct < 100) return;
+    const overlay = this.$.loadingOverlay || document.getElementById("loadingOverlay");
+    if (!overlay || !overlay.isConnected) return;
+
+    const requested = Number.isFinite(Number(pct)) ? Math.round(Number(pct)) : 0;
+    const prevTarget = this._loadingTargetPct ?? 12;
+    const nextTarget = Math.max(prevTarget, Math.max(0, Math.min(100, requested)));
+    this._loadingTargetPct = nextTarget;
+
+    const lang = this.language || (typeof detectLocale === "function" ? detectLocale() : "en");
+    const tr = (text) => {
+      if (!text) return "";
+      try {
+        return typeof translateText === "function" ? translateText(text, lang) : text;
+      } catch (_) {
+        return text;
+      }
+    };
+
+    const inferredPhase =
+      phaseText ||
+      (nextTarget >= 100
+        ? "Live radar active"
+        : nextTarget >= 80
+          ? "Live forecast"
+          : nextTarget >= 65
+            ? "Location sync"
+            : nextTarget >= 45
+              ? "Basemap & layers"
+              : nextTarget >= 20
+                ? "Map engine"
+                : "Starting engine");
+
+    const phaseEl = document.getElementById("loaderPhaseText");
+    if (phaseEl && inferredPhase) {
+      phaseEl.textContent = tr(inferredPhase);
+    }
+
+    const statusEl = document.getElementById("loaderStatusText");
+    if (statusEl && statusText) {
+      const suffix = nextTarget >= 100 ? "" : "…";
+      const clean = String(statusText).replace(/\.+$/, "").replace(/…$/, "");
+      statusEl.textContent = `${tr(clean)}${suffix}`;
+    }
+
+    if ((this._loadingDisplayedPct ?? 12) < nextTarget) {
+      this._applyLoadingVisuals(nextTarget);
+    }
+    if (nextTarget < 100) {
+      this._startLoadingTrickle();
+    }
+  }
+
+  hideLoadingOverlay(options = {}) {
+    const overlay = this.$.loadingOverlay || document.getElementById("loadingOverlay");
+    if (!overlay || !overlay.isConnected) {
+      this._stopLoadingTimers();
+      return;
+    }
+    if (this._loadingOverlayHiding) return;
+    this._loadingOverlayHiding = true;
+    this._stopLoadingTimers();
+
+    // Drop pointer events immediately so the completing/fading overlay
+    // never blocks interactions on the map underneath.
     overlay.style.pointerEvents = "none";
-    overlay.style.opacity = "0";
-    setTimeout(() => overlay.remove(), 500);
+
+    const startFadeOut = () => {
+      if (!overlay.isConnected) return;
+      overlay.classList.add("is-hidden");
+      overlay.style.opacity = "0";
+      this._loadingRemoveTimer = setTimeout(() => {
+        if (overlay.isConnected) overlay.remove();
+        if (this.$) this.$.loadingOverlay = null;
+      }, 420);
+    };
+
+    this._loadingTargetPct = 100;
+    this._applyLoadingVisuals(100);
+    const lang = this.language || (typeof detectLocale === "function" ? detectLocale() : "en");
+    const tr = (text) => {
+      try {
+        return typeof translateText === "function" ? translateText(text, lang) : text;
+      } catch (_) {
+        return text;
+      }
+    };
+    const phaseEl = document.getElementById("loaderPhaseText");
+    if (phaseEl) phaseEl.textContent = tr("Live radar active");
+    const statusEl = document.getElementById("loaderStatusText");
+    if (statusEl) statusEl.textContent = tr("Ready");
+
+    if (options?.immediate) {
+      startFadeOut();
+    } else {
+      this._loadingHideTimer = setTimeout(startFadeOut, 170);
+    }
   }
 
   showTermsModal() {
@@ -11925,63 +12230,26 @@ class AurafiskyApp {
     }
   }
 
-  applyUniversalTranslation(lang) {
-    if (!lang || typeof document === "undefined") return;
-    const target = lang === "zh-CN" ? "zh-CN" : lang;
-
-    // Set standard googtrans cookie so page and dynamic content are translated
+  /**
+   * Scrub any legacy Google Translate widget cookies or banners from earlier sessions
+   * so the external Google Translate bar never reappears.
+   */
+  _clearLegacyGoogleTranslate() {
+    if (typeof document === "undefined") return;
     try {
+      const expired = "Thu, 01 Jan 1970 00:00:00 GMT";
       const host = window.location.hostname;
-      document.cookie = `googtrans=/en/${target}; path=/;`;
+      document.cookie = `googtrans=; expires=${expired}; path=/;`;
       if (host && host !== "localhost") {
-        document.cookie = `googtrans=/en/${target}; path=/; domain=.${host};`;
+        document.cookie = `googtrans=; expires=${expired}; path=/; domain=${host};`;
+        document.cookie = `googtrans=; expires=${expired}; path=/; domain=.${host};`;
+      }
+      document.getElementById("google_translate_element")?.remove();
+      document.querySelectorAll(".goog-te-banner-frame, .skiptranslate, #goog-gt-tt").forEach((el) => el.remove());
+      if (document.body?.style?.top) {
+        document.body.style.top = "";
       }
     } catch (_) {}
-
-    const syncWidgetLocale = (attempt = 0) => {
-      const combo = document.querySelector(".goog-te-combo");
-      if (combo) {
-        // Read the latest selection here instead of capturing the language
-        // from the first call while the translation widget is still loading.
-        const activeLocale = detectLocale();
-        if (combo.value !== activeLocale) {
-          combo.value = activeLocale;
-          combo.dispatchEvent(new Event("change"));
-        }
-      } else if (attempt < 40) {
-        window.setTimeout(() => syncWidgetLocale(attempt + 1), 150);
-      }
-    };
-
-    const combo = document.querySelector(".goog-te-combo");
-    if (combo) {
-      if (combo.value !== target) {
-        combo.value = target;
-        combo.dispatchEvent(new Event("change"));
-      }
-    } else if (target !== "en" && !window.__googleTranslateInitialized) {
-      // Lazy load Google translation for prose and feature output that does
-      // not yet have a first-party translation string.
-      window.__googleTranslateInitialized = true;
-      window.googleTranslateElementInit = () => {
-        try {
-          new window.google.translate.TranslateElement({
-            pageLanguage: "en",
-            autoDisplay: false,
-            includedLanguages: supportedLocales().join(","),
-          }, "google_translate_element");
-          syncWidgetLocale();
-        } catch (_) {}
-      };
-      const s = document.createElement("script");
-      s.src = "https://translate.google.com/translate_a/element.js?cb=googleTranslateElementInit";
-      s.async = true;
-      document.head.appendChild(s);
-    } else if (window.__googleTranslateInitialized) {
-      // A prior language selection may have started loading the widget. Keep
-      // polling briefly so rapid locale changes cannot leave it on an old one.
-      syncWidgetLocale();
-    }
   }
 
   applyLanguage(lang) {
@@ -12178,7 +12446,7 @@ class AurafiskyApp {
           if (record.type === "childList") {
             for (const node of record.addedNodes) {
               if (node.nodeType === Node.ELEMENT_NODE) {
-                if (node.tagName === "SCRIPT" || node.tagName === "STYLE" || node.id === "google_translate_element") continue;
+                if (node.tagName === "SCRIPT" || node.tagName === "STYLE") continue;
                 if (node._lastI18nLocale === this.language) continue;
                 pendingNodes.add(node);
               }
@@ -12218,8 +12486,8 @@ class AurafiskyApp {
   setLanguage(lang, silent = false) {
     if (!setLocale(lang)) return false;
     this.language = lang;
+    this._clearLegacyGoogleTranslate();
     this.applyLanguage(lang);
-    this.applyUniversalTranslation(lang);
     if (typeof this.saveUserDataToCloud === "function") {
       this.saveUserDataToCloud();
     }
@@ -12237,10 +12505,28 @@ class AurafiskyApp {
     return true;
   }
 
+  _activateStyleGroup(targetStyle) {
+    if (targetStyle === 'dark' || targetStyle === 'street') {
+      const targetTheme = targetStyle === 'dark' ? 'dark' : 'light';
+      if (!this._glStyles?.[targetTheme] && this._ensureBasemapLoaded) {
+        // Hold the active basemap until the deferred vector style attaches its
+        // VectorTileLayer so switchBasemap crossfades cleanly on real tiles.
+        setMapModeLoading(this, true);
+        this._ensureBasemapLoaded(targetTheme).then(() => {
+          if (this.mapStyle === targetStyle) {
+            this._updateActiveBasemap();
+            this._updateMapStyleUI();
+          }
+        });
+        return;
+      }
+    }
+    this._updateActiveBasemap();
+  }
+
   /**
    * Swap the active vector basemap layer group when light/dark theme
-   * changes. Both groups were already styled (with the current language) in
-   * initMap(), so this is just an add/remove — no re-fetching.
+   * changes, loading the target theme's GL style on demand if deferred at boot.
    */
   _switchBasemapTheme() {
     if (!this.map || !this.lightBasemap || !this.darkBasemap) return;
@@ -12253,7 +12539,7 @@ class AurafiskyApp {
         try { localStorage.setItem("aurafisky_map_style", "street"); } catch (_) {}
       }
     }
-    this._updateActiveBasemap();
+    this._activateStyleGroup(this.mapStyle);
     this._updateMapStyleUI();
   }
 
@@ -12300,7 +12586,7 @@ class AurafiskyApp {
       }
     }
 
-    this._updateActiveBasemap();
+    this._activateStyleGroup(style);
     this._updateMapStyleUI();
     const styleNames = {
       street: "Default (Street)",
@@ -12316,6 +12602,10 @@ class AurafiskyApp {
   }
 
   _updateActiveBasemap() {
+    switchBasemap(this);
+  }
+
+  _updateActiveBasemapLegacy() {
     if (!this.map) return;
     const targetGroup = this._getBasemap(this.mapStyle);
     if (!targetGroup) return;
@@ -12406,6 +12696,10 @@ class AurafiskyApp {
     const layers = this.map.getLayers().getArray();
     layers.forEach(layer => {
       if (layer instanceof LayerGroup) {
+        // A basemap that is still fading in is on its way to `mapOpacity`
+        // already — setting it here would make it pop in before the
+        // crossfade starts.
+        if (this._pendingBasemapGroup && layer === this._pendingBasemapGroup) return;
         layer.getLayers().forEach((l) => {
           if (typeof l.setOpacity === "function") {
             l.setOpacity(opacity);
@@ -12501,6 +12795,14 @@ class AurafiskyApp {
       if (this.selectedLat != null && this.selectedLng != null) {
         this.updateMarineFloodUI?.(this.selectedLat, this.selectedLng);
       }
+      // The user is about to pick a mode, so this is the moment to warm the
+      // tiles for all of them — the switch that follows should be a cache
+      // hit rather than a download.
+      setTimeout(() => {
+        try {
+          prewarmBasemaps(this, { maxStyles: 99, maxTilesPerLayer: 10, budget: 64, force: true });
+        } catch (_) { /* best effort */ }
+      }, 150);
     } else {
       this.popHistoryOverlay("layers");
     }
@@ -12850,6 +13152,7 @@ function bootAurafisky() {
     const shareUrl = shareParams.get("url") || "";
 
     if (shareText || shareUrl) {
+      window.app._hasPendingShareTarget = true;
       const mapsMatch = shareUrl.match(/@(-?\d+\.\d+),(-?\d+\.\d+)/);
       if (mapsMatch) {
         // Google Maps URL with embedded coordinates — load directly
@@ -12871,10 +13174,17 @@ function bootAurafisky() {
                 best.displayName || best.name,
               );
             } else {
+              window.app._hasPendingShareTarget = false;
               window.app.showToast?.(`Couldn't find "${shareText}"`, "error");
             }
+          }).catch(() => {
+            window.app._hasPendingShareTarget = false;
           });
+        } else {
+          window.app._hasPendingShareTarget = false;
         }
+      } else {
+        window.app._hasPendingShareTarget = false;
       }
       // Clean the share-target params from the URL bar
       window.history.replaceState({}, document.title, window.location.pathname);
@@ -12883,8 +13193,23 @@ function bootAurafisky() {
     console.error("Failed to boot Aurafisky:", err);
     const ov = document.getElementById("loadingOverlay");
     if (ov) {
-      ov.innerHTML = `<div class="text-center p-6 bg-white dark:bg-slate-900 rounded-2xl shadow-xl max-w-sm mx-4"><p class="text-rose-500 font-semibold mb-2">Startup Error</p><p class="text-sm text-slate-600 dark:text-slate-400 mb-4">${err.message || 'An error occurred during startup.'}</p><button id="bootRetryBtn" class="px-4 py-2 bg-primary text-white rounded-lg text-sm font-medium hover:opacity-90">Retry</button></div>`;
-      ov.querySelector("#bootRetryBtn")?.addEventListener("click", () => location.reload());
+      ov.textContent = "";
+      const card = document.createElement("div");
+      card.className = "text-center p-6 bg-white dark:bg-slate-900 rounded-2xl shadow-xl max-w-sm mx-4";
+      const title = document.createElement("p");
+      title.className = "text-rose-500 font-semibold mb-2";
+      title.textContent = "Startup Error";
+      const body = document.createElement("p");
+      body.className = "text-sm text-slate-600 dark:text-slate-400 mb-4";
+      body.textContent = err?.message || "An error occurred during startup.";
+      const retryBtn = document.createElement("button");
+      retryBtn.id = "bootRetryBtn";
+      retryBtn.type = "button";
+      retryBtn.className = "px-4 py-2 bg-primary text-white rounded-lg text-sm font-medium hover:opacity-90";
+      retryBtn.textContent = "Retry";
+      retryBtn.addEventListener("click", () => location.reload());
+      card.append(title, body, retryBtn);
+      ov.appendChild(card);
     }
   }
 }

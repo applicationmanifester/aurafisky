@@ -38,6 +38,18 @@ function initKeyboardShortcuts() {
         this._haptic?.('selection');
         return;
       }
+      // Numbered map-mode shortcuts (1-9). MAP_MODES lives on the app instance
+      // (this.MAP_MODES) — the same array the picker grid is built from — so
+      // cards, readout and keyboard never drift apart.
+      if (/^[1-9]$/.test(e.key)) {
+        const list = this.MAP_MODES || [];
+        const mode = list[parseInt(e.key, 10) - 1];
+        if (mode) {
+          e.preventDefault();
+          this.setMapStyle?.(mode.id);
+          return;
+        }
+      }
       switch (e.key.toLowerCase()) {
         case "?":
           e.preventDefault();

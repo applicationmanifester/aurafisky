@@ -348,6 +348,7 @@ function renderCard(view) {
 
   const curLang = (typeof window !== "undefined" && (window.app?.language || localStorage.getItem("aurafisky_lang"))) || detectLocale();
 
+  card.setAttribute("lang", curLang || "en");
   card.textContent = "";
   const inner = document.createElement("div");
   inner.className =

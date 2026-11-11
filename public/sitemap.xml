@@ -1,6 +1,33 @@
 <?xml version="1.0" encoding="UTF-8"?>
+<!--
+  The app is a single page: the map is the page, and the features are
+  reached through the interface and through ?action= deep links. Listing
+  the deep links here tells a crawler what the app can do, and each one
+  opens the relevant view directly.
+-->
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
   <url>
     <loc>https://aurafisky.web.app/</loc>
+    <lastmod>2026-11-11</lastmod>
+    <changefreq>daily</changefreq>
+    <priority>1.0</priority>
+  </url>
+  <url>
+    <loc>https://aurafisky.web.app/?action=radar</loc>
+    <lastmod>2026-11-11</lastmod>
+    <changefreq>daily</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <url>
+    <loc>https://aurafisky.web.app/?action=briefing</loc>
+    <lastmod>2026-11-11</lastmod>
+    <changefreq>daily</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <url>
+    <loc>https://aurafisky.web.app/?action=locate</loc>
+    <lastmod>2026-11-11</lastmod>
+    <changefreq>weekly</changefreq>
+    <priority>0.6</priority>
   </url>
 </urlset>

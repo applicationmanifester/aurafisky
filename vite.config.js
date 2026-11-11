@@ -20,7 +20,13 @@ export default defineConfig(({ mode }) => {
       },
     },
   build: {
-    target: 'es2022',
+    // ES2020 rather than ES2022: optional chaining and nullish coalescing
+    // are the newest syntax the app actually uses, and ES2022 syntax would
+    // lock out Safari 15 and every browser older than Chrome 94 for no
+    // reason. The CSS carries its own fallbacks (see the `vh` declarations
+    // in front of every `dvh` one), so older browsers get a working — if
+    // less precise — layout rather than a broken one.
+    target: ['es2020', 'chrome87', 'safari14', 'firefox78'],
     minify: 'terser',
     terserOptions: {
       compress: {
@@ -69,40 +75,131 @@ export default defineConfig(({ mode }) => {
     modulePreload: { polyfill: false }
   },
   plugins: [
+    {
+      // Avoid emitting two <link rel="manifest"> tags in dist/index.html: keep
+      // /manifest.json in index.html for vite dev and let VitePWA inject the
+      // generated manifest.webmanifest as the sole manifest link during build.
+      name: 'aurafisky-dedupe-manifest',
+      apply: 'build',
+      transformIndexHtml: {
+        order: 'pre',
+        handler(html) {
+          return html.replace(/^\s*<link\s+rel=["']manifest["'][^>]*>\r?\n?/gim, '');
+        },
+      },
+    },
     VitePWA({
       registerType: 'autoUpdate',
       // app.js registers the worker itself (updateViaCache:'none' + forced
       // update checks on focus/visibility). Don't inject a second registration.
       injectRegister: null,
-      includeAssets: ['favicon.svg', 'icon-192.png', 'icon-512.png', 'logo.svg', 'aurafisky-social.png', 'robots.txt', 'sitemap.xml'],
+      includeAssets: ['favicon.svg', 'icon-192.png', 'icon-512.png', 'logo.svg', 'aurafisky-social.png'],
       manifest: {
-        name: 'Aurafisky Live Explorer',
+        // The manifest is generated here rather than served from the
+        // repository's manifest.json, so this is the copy browsers
+        // actually see — keep the two in step.
+        id: '/',
+        name: 'Aurafisky — Live Weather & Maps',
         short_name: 'Aurafisky',
-        description: 'Explore live weather maps and radar, compare forecasts, and plan around conditions along your route.',
-        theme_color: '#14b8a6',
-        background_color: '#0f172a',
+        description:
+          'Explore live weather maps and radar, compare forecasts, and plan around conditions along your route.',
+        lang: 'en',
+        dir: 'ltr',
+        start_url: '/',
+        scope: '/',
         display: 'standalone',
-        start_url: './index.html',
+        display_override: ['standalone', 'minimal-ui', 'browser'],
+        // The map works in landscape as well as portrait — locking the
+        // orientation to portrait left tablet and desktop users with a
+        // letterboxed app.
+        orientation: 'any',
+        launch_handler: { client_mode: 'navigate-existing' },
+        edge_side_panel: { preferred_width: 420 },
+        handle_links: 'preferred',
+        categories: ['weather', 'utilities'],
+        background_color: '#0f172a',
+        // Matches the app's brand and the <meta name="theme-color"> tags —
+        // a mismatch colours the Android splash screen and the installed
+        // app's title bar the wrong way.
+        theme_color: '#14b8a6',
+        prefer_related_applications: false,
+        // Web Share Target: lets a user share a place from any app straight
+        // into Aurafisky. The app already handles the shared parameters.
+        share_target: {
+          action: '/share-target',
+          method: 'GET',
+          enctype: 'application/x-www-form-urlencoded',
+          params: { title: 'title', text: 'text', url: 'url' },
+        },
         icons: [
-          { src: '/icon-192.png', sizes: '192x192', type: 'image/png', purpose: 'any maskable' },
-          { src: '/icon-512.png', sizes: '512x512', type: 'image/png', purpose: 'any maskable' }
+          { src: '/icon-192.png', sizes: '192x192', type: 'image/png', purpose: 'any' },
+          { src: '/icon-512.png', sizes: '512x512', type: 'image/png', purpose: 'any' },
+          { src: '/icon-192.png', sizes: '192x192', type: 'image/png', purpose: 'maskable' },
+          { src: '/icon-512.png', sizes: '512x512', type: 'image/png', purpose: 'maskable' },
         ],
-        widgets: [
+        // Real screenshots of the app — Chrome shows these in the install
+        // dialog, and its richer install UI only appears with them.
+        screenshots: [
           {
-            name: "Aurafisky Weather",
-            description: "Current weather for your location",
-            tag: "weather-widget",
-            ms_ac_template: "/widgets/template.json",
-            data: "/widgets/data.json",
-            type: "application/json"
-          }
-        ]
+            src: '/screenshots/desktop.png',
+            sizes: '1440x900',
+            type: 'image/png',
+            form_factor: 'wide',
+            label: 'Aurafisky live weather map',
+          },
+          {
+            src: '/screenshots/mobile.png',
+            sizes: '390x844',
+            type: 'image/png',
+            form_factor: 'narrow',
+            label: 'Aurafisky on mobile',
+          },
+        ],
+        // Shortcuts point at the app's own ?action= deep links. Each one
+        // below is handled by the URL action handler in app.js — a shortcut
+        // that points at an unhandled parameter just opens the app, which
+        // is worse than not offering it.
+        shortcuts: [
+          {
+            name: 'Live Rain Radar',
+            short_name: 'Radar',
+            description: 'Open the animated rain radar',
+            url: '/?action=radar',
+            icons: [{ src: '/icon-192.png', sizes: '192x192', type: 'image/png' }],
+          },
+          {
+            name: 'My Location',
+            short_name: 'Locate',
+            description: 'Show the weather where you are',
+            url: '/?action=locate',
+            icons: [{ src: '/icon-192.png', sizes: '192x192', type: 'image/png' }],
+          },
+          {
+            name: 'Daily Briefing',
+            short_name: 'Briefing',
+            description: "Read today's weather briefing",
+            url: '/?action=briefing',
+            icons: [{ src: '/icon-192.png', sizes: '192x192', type: 'image/png' }],
+          },
+          {
+            name: 'Ask Aura',
+            short_name: 'Ask Aura',
+            description: 'Open the Aura weather assistant',
+            url: '/?action=aura',
+            icons: [{ src: '/icon-192.png', sizes: '192x192', type: 'image/png' }],
+          },
+        ],
       },
       workbox: {
         clientsClaim: true,
         skipWaiting: true,
         cleanupOutdatedCaches: true,
-        importScripts: ['sw-widgets.js'],
+        // The manifest screenshots are only used by the browser's install
+        // dialog. Precaching them would push a couple of megabytes into
+        // every visitor's cache for something the app itself never needs.
+        globIgnores: ['screenshots/**'],
+        navigationPreload: true,
+        // importScripts: ['sw-widgets.js'],  // sw-widgets.js not found — removed to prevent SW install failure
         // Web Share Target: serve the app shell for /share-target so the page
         // JS can read location.search and load the shared location.
         navigateFallback: './index.html',
@@ -219,6 +316,31 @@ export default defineConfig(({ mode }) => {
               cacheableResponse: { statuses: [0, 200] },
             },
           },
+          // OpenTopoMap tiles (a.tile.opentopomap.org …) — CacheFirst.
+          // Without this route the OpenTopo map mode was the one mode with
+          // no offline or warm cache at all: every switch back to it
+          // re-downloaded every tile from scratch.
+          {
+            urlPattern: ({ url }) => /(^|\.)tile\.opentopomap\.org$/.test(url.hostname),
+            handler: "CacheFirst",
+            options: {
+              cacheName: "topo-tiles",
+              expiration: {
+                maxEntries: 300,
+                maxAgeSeconds: 60 * 60 * 24 * 30 // 30d
+              },
+              cacheableResponse: { statuses: [0, 200] },
+              plugins: [
+                {
+                  handlerDidError: async () =>
+                    new Response("", {
+                      status: 404,
+                      statusText: "Tile Not Found",
+                    }),
+                },
+              ],
+            },
+          },
           // Satellite & topography basemaps (server.arcgisonline.com) — imagery
           // changes rarely, so CacheFirst keeps satellite/topo modes instant.
           {
@@ -227,7 +349,7 @@ export default defineConfig(({ mode }) => {
             options: {
               cacheName: "satellite-tiles",
               expiration: {
-                maxEntries: 300,
+                maxEntries: 500,
                 maxAgeSeconds: 60 * 60 * 24 * 30 // 30d
               },
               cacheableResponse: { statuses: [0, 200] },

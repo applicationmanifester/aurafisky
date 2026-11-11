@@ -123,7 +123,13 @@ describe("Internationalisation (i18n) Engine & Language Support", () => {
     expect(html).toContain('value="zh-TW"'); // Chinese Traditional
     expect(html).toContain('value="ko"'); // Korean
     expect(html).toContain('value="tr"'); // Turkish
-    expect(html).toContain('id="google_translate_element"');
+    expect(html).not.toContain('id="google_translate_element"');
+    expect(html).not.toContain('translate.google.com/translate_a/element.js');
+    const appCode = readFileSync(resolve(__dirname, "../app.js"), "utf8");
+    const i18nCode = readFileSync(resolve(__dirname, "../modules/i18n.js"), "utf8");
+    expect(appCode).not.toContain('translate.google.com/translate_a/element.js');
+    expect(appCode).not.toContain('.goog-te-combo');
+    expect(i18nCode).not.toContain('.goog-te-combo');
   });
 
   it("translates universal weather card and route phrases via translateText", () => {
@@ -700,13 +706,13 @@ describe("Internationalisation (i18n) Engine & Language Support", () => {
     }
   });
 
-  it("falls back to dict-chrome-ex endpoint when client=gtx returns HTTP 429", async () => {
+  it("falls back to secondary translate endpoint when primary dict-chrome-ex returns HTTP 429", async () => {
     const { translateAsync } = await import("../modules/i18n.js");
     const origFetch = globalThis.fetch;
     const urls = [];
     globalThis.fetch = async (url) => {
       urls.push(String(url));
-      if (String(url).includes("client=gtx")) {
+      if (String(url).includes("/translate_a/single?client=dict-chrome-ex")) {
         return { ok: false, status: 429 };
       }
       return {
@@ -718,10 +724,114 @@ describe("Internationalisation (i18n) Engine & Language Support", () => {
     try {
       const result = await translateAsync("Yalduru", "hi");
       expect(urls.length).toBe(2);
-      expect(urls[0]).toContain("client=gtx");
-      expect(urls[1]).toContain("client=dict-chrome-ex");
+      expect(urls[0]).toContain("/translate_a/single?client=dict-chrome-ex");
+      expect(urls[1]).toContain("/translate_a/t?client=dict-chrome-ex");
       expect(result).toBe("यल्दुरु");
     } finally {
+      globalThis.fetch = origFetch;
+    }
+  });
+
+  it("normalizes Prettier-wrapped HTML whitespace before offline dictionary lookup", () => {
+    expect(translateText("Map\n          Mode", "kn")).toBe("ನಕ್ಷೆ ಮೋಡ್");
+    expect(translateText("  Map\n          Mode ", "kn")).toBe("  ನಕ್ಷೆ ಮೋಡ್ ");
+
+    const expectedOpacity = translateText("Map Opacity", "kn");
+    expect(expectedOpacity).not.toBe("Map Opacity");
+    expect(translateText("\n  Map\n            Opacity", "kn")).toBe(
+      `\n  ${expectedOpacity}`
+    );
+  });
+
+  it("deduplicates concurrent translateAsync lookups and stops endpoint probing on network error", async () => {
+    const { translateAsync } = await import("../modules/i18n.js");
+    const origFetch = globalThis.fetch;
+    let calls = 0;
+    globalThis.fetch = async () => {
+      calls += 1;
+      throw new TypeError("Failed to fetch");
+    };
+    try {
+      const [a, b] = await Promise.all([
+        translateAsync("Unique Uncached Phrase XYZ", "te"),
+        translateAsync("Unique Uncached Phrase XYZ", "te"),
+      ]);
+      expect(calls).toBe(1);
+      expect(a).toBe("Unique Uncached Phrase XYZ");
+      expect(b).toBe("Unique Uncached Phrase XYZ");
+    } finally {
+      globalThis.fetch = origFetch;
+    }
+  });
+
+  it("stamps and cleans lang attribute on dynamically translated DOM elements", () => {
+    const box = document.createElement("div");
+    const label = document.createElement("span");
+    label.textContent = "App Language";
+    box.appendChild(label);
+    document.body.appendChild(box);
+
+    try {
+      setLocale("kn");
+      translateDOM(box, "kn");
+      expect(label.getAttribute("lang")).toBe("kn");
+
+      setLocale("en");
+      translateDOM(box, "en");
+      expect(label.textContent).toBe("App Language");
+      expect(label.getAttribute("lang")).toBeNull();
+    } finally {
+      setLocale("en");
+      box.remove();
+    }
+  });
+
+  it("ignores localized timestamps/units in hasTranslatableText and translates address/sync UI phrases offline", async () => {
+    const { hasTranslatableText } = await import("../modules/i18n.js");
+    expect(hasTranslatableText("🕒 ಬುಧ, 11 ನವೆಂ · 7:42 PM · GMT+7")).toBe(false);
+    expect(hasTranslatableText("ಬುಧ, 11 ನವೆಂ · 12:42 PM")).toBe(false);
+    expect(hasTranslatableText("12 km/h")).toBe(false);
+    expect(hasTranslatableText("0.00 mm")).toBe(false);
+    expect(hasTranslatableText("+30m: 0.00 mm (3% ಸಾಧ್ಯತೆ)")).toBe(false);
+    expect(hasTranslatableText("Location address details")).toBe(true);
+    expect(hasTranslatableText("Hodh Ech Chargui")).toBe(true);
+
+    expect(translateText("Location address details", "kn")).toBe("ಸ್ಥಳದ ವಿಳಾಸದ ವಿವರಗಳು");
+    expect(translateText("Location sync", "kn")).toBe("ಸ್ಥಳ ಸಿಂಕ್");
+    expect(translateText("Default (None)", "kn")).toBe("ಡೀಫಾಲ್ಟ್ (ಯಾವುದೂ ಇಲ್ಲ)");
+    expect(translateText("chance", "kn")).toBe("ಸಾಧ್ಯತೆ");
+    expect(translateText("Temp", "kn")).toBe("ತಾಪಮಾನ");
+    expect(translateText("Hybrid (Satellite + Labels)", "kn")).toBe("ಹೈಬ್ರಿಡ್ (ಉಪಗ್ರಹ + ಲೇಬಲ್‌ಗಳು)");
+    expect(translateText("Every 5 minutes", "kn")).toBe("ಪ್ರತಿ 5 ನಿಮಿಷಕ್ಕೆ");
+    expect(translateText("🌌 Midnight", "kn")).toBe("🌌 ಮಧ್ಯರಾತ್ರಿ");
+  });
+
+  it("skips nested spans inside .notranslate / [translate='no'] and resolves multiline dictionary text offline", async () => {
+    const origFetch = globalThis.fetch;
+    let fetchCalls = 0;
+    globalThis.fetch = async () => {
+      fetchCalls += 1;
+      throw new Error("unexpected network fetch");
+    };
+
+    const wrap = document.createElement("div");
+    wrap.innerHTML = `
+      <span class="notranslate" translate="no"><span>Aura</span><span>fisky</span></span>
+      <a href="#main-content">Skip\n    to main content</a>
+    `;
+    document.body.appendChild(wrap);
+
+    try {
+      setLocale("kn");
+      translateDOM(wrap, "kn");
+      await new Promise((r) => setTimeout(r, 150));
+
+      expect(wrap.querySelector(".notranslate").textContent).toBe("Aurafisky");
+      expect(wrap.querySelector("a").textContent).toBe("ಮುಖ್ಯ ವಿಷಯಕ್ಕೆ ಹೋಗಿ");
+      expect(fetchCalls).toBe(0);
+    } finally {
+      setLocale("en");
+      wrap.remove();
       globalThis.fetch = origFetch;
     }
   });

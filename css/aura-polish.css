@@ -115,6 +115,16 @@ button {
 .dark :focus-visible {
   outline-color: #2dd4bf;
 }
+@media (prefers-contrast: high) {
+  :focus-visible {
+    outline: 3px solid #0f172a;
+    outline-offset: 2px;
+    border-radius: 4px;
+  }
+  .dark :focus-visible {
+    outline-color: #ffffff;
+  }
+}
 
 /* Refined glass: crisper hairline + layered shadow */
 .glass,
@@ -446,6 +456,7 @@ input[type='range'].timeline-slider:focus-visible {
   border-radius: var(--aura-radius-xl);
   border: 1px solid var(--aura-hairline);
   box-shadow: var(--aura-shadow-3);
+  max-height: min(86vh, calc(var(--app-height, 100vh) - 2rem));
   max-height: min(86vh, calc(var(--app-height, 100dvh) - 2rem));
 }
 #auraModal {
@@ -473,9 +484,313 @@ input[type='range'].timeline-slider:focus-visible {
   top: calc(3.5rem + env(safe-area-inset-top, 0px));
   letter-spacing: -0.01em;
 }
+/* ── 5b. Loading overlay: calibrated weather radar loader ────── */
 #loadingOverlay {
-  -webkit-backdrop-filter: blur(6px);
-  backdrop-filter: blur(6px);
+  background:
+    radial-gradient(60% 48% at 50% 42%, rgba(20, 184, 166, 0.08), transparent 70%),
+    radial-gradient(45% 40% at 32% 28%, rgba(249, 115, 22, 0.06), transparent 68%),
+    rgba(248, 250, 252, 0.985);
+  -webkit-backdrop-filter: blur(20px);
+  backdrop-filter: blur(20px);
+  transition: opacity 0.36s ease, transform 0.44s cubic-bezier(0.22, 1, 0.36, 1);
+}
+.dark #loadingOverlay {
+  background:
+    radial-gradient(60% 48% at 50% 42%, rgba(45, 212, 191, 0.11), transparent 72%),
+    radial-gradient(45% 40% at 32% 28%, rgba(249, 115, 22, 0.07), transparent 68%),
+    rgba(2, 6, 23, 0.985);
+}
+
+.loader-backdrop-glow {
+  position: absolute;
+  width: 24rem;
+  height: 24rem;
+  border-radius: 9999px;
+  background: radial-gradient(circle, rgba(20, 184, 166, 0.12) 0%, rgba(56, 189, 248, 0.05) 45%, transparent 70%);
+  filter: blur(22px);
+  pointer-events: none;
+  animation: loader-stage-in 0.55s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+.dark .loader-backdrop-glow {
+  background: radial-gradient(circle, rgba(45, 212, 191, 0.16) 0%, rgba(56, 189, 248, 0.07) 45%, transparent 70%);
+}
+
+.loader-stage {
+  animation: loader-stage-in 0.45s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+@keyframes loader-stage-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px) scale(0.985);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.loader-orb {
+  width: 7.5rem;
+  height: 7.5rem;
+}
+
+.loader-aura {
+  position: absolute;
+  inset: 10%;
+  border-radius: 9999px;
+  background: radial-gradient(circle, rgba(20, 184, 166, 0.14) 0%, transparent 72%);
+  pointer-events: none;
+}
+.dark .loader-aura {
+  background: radial-gradient(circle, rgba(45, 212, 191, 0.2) 0%, transparent 72%);
+}
+
+/* Soft Doppler radar sweep — feathered so no hard disc edge ever shows */
+.loader-sweep {
+  position: absolute;
+  inset: 12%;
+  border-radius: 9999px;
+  background: conic-gradient(
+    from 0deg,
+    rgba(20, 184, 166, 0) 0deg,
+    rgba(20, 184, 166, 0.06) 45deg,
+    rgba(20, 184, 166, 0.26) 96deg,
+    rgba(56, 189, 248, 0.14) 108deg,
+    rgba(20, 184, 166, 0) 118deg
+  );
+  -webkit-mask-image: radial-gradient(circle, transparent 42%, rgba(0, 0, 0, 0.85) 66%, rgba(0, 0, 0, 0.95) 86%, transparent 98%);
+  mask-image: radial-gradient(circle, transparent 42%, rgba(0, 0, 0, 0.85) 66%, rgba(0, 0, 0, 0.95) 86%, transparent 98%);
+  animation: loader-sweep-spin 2.8s linear infinite;
+  will-change: transform;
+  pointer-events: none;
+}
+.dark .loader-sweep {
+  background: conic-gradient(
+    from 0deg,
+    rgba(45, 212, 191, 0) 0deg,
+    rgba(45, 212, 191, 0.08) 45deg,
+    rgba(45, 212, 191, 0.34) 96deg,
+    rgba(56, 189, 248, 0.2) 108deg,
+    rgba(45, 212, 191, 0) 118deg
+  );
+}
+@keyframes loader-sweep-spin {
+  to { transform: rotate(360deg); }
+}
+
+.loader-dial {
+  position: relative;
+  z-index: 1;
+}
+
+.loader-bezel-ring {
+  stroke: rgba(100, 116, 139, 0.32);
+}
+.dark .loader-bezel-ring {
+  stroke: rgba(148, 163, 184, 0.28);
+}
+
+.loader-track-ring {
+  stroke: rgba(148, 163, 184, 0.22);
+}
+.dark .loader-track-ring {
+  stroke: rgba(51, 65, 85, 0.72);
+}
+
+#loaderProgressRing {
+  transition: stroke-dashoffset 0.32s cubic-bezier(0.22, 1, 0.36, 1);
+  filter: drop-shadow(0 0 6px rgba(20, 184, 166, 0.32));
+}
+.dark #loaderProgressRing {
+  filter: drop-shadow(0 0 8px rgba(45, 212, 191, 0.42));
+}
+
+.loader-lens {
+  fill: rgba(241, 245, 249, 0.92);
+  stroke: rgba(20, 184, 166, 0.24);
+}
+.dark .loader-lens {
+  fill: rgba(15, 23, 42, 0.9);
+  stroke: rgba(45, 212, 191, 0.26);
+}
+
+/* Orbiting beacon around exact SVG center (60, 60) along r=55 bezel */
+.loader-orbit {
+  transform-origin: 60px 60px;
+  animation: loader-sweep-spin 2.8s linear infinite;
+  will-change: transform;
+}
+.loader-orbit-halo {
+  fill: rgba(249, 115, 22, 0.26);
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: loader-beacon-pulse 1.8s ease-in-out infinite;
+}
+.loader-orbit-dot {
+  fill: #f97316;
+  stroke: rgba(255, 255, 255, 0.95);
+  stroke-width: 1;
+}
+.dark .loader-orbit-dot {
+  fill: #fb923c;
+  stroke: rgba(15, 23, 42, 0.95);
+}
+@keyframes loader-beacon-pulse {
+  0%, 100% { opacity: 0.45; transform: scale(0.92); }
+  50% { opacity: 0.95; transform: scale(1.25); }
+}
+
+/* Emblem gently breathes inside its frosted lens */
+.loader-mark {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: loader-mark-pulse 2.6s ease-in-out infinite;
+  filter: drop-shadow(0 3px 8px rgba(15, 23, 42, 0.16));
+  will-change: transform;
+}
+.dark .loader-mark {
+  filter: drop-shadow(0 3px 10px rgba(249, 115, 22, 0.26));
+}
+@keyframes loader-mark-pulse {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.055); }
+}
+
+.loader-brand {
+  font-family: var(--aura-font);
+  font-size: 1.125rem;
+  font-weight: 800;
+  letter-spacing: -0.025em;
+  line-height: 1.2;
+}
+
+.loader-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.125rem 0.45rem;
+  border-radius: 9999px;
+  font-size: 0.625rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: #0f766e;
+  background: rgba(20, 184, 166, 0.12);
+  border: 1px solid rgba(20, 184, 166, 0.22);
+}
+.dark .loader-badge {
+  color: #2dd4bf;
+  background: rgba(45, 212, 191, 0.14);
+  border-color: rgba(45, 212, 191, 0.28);
+}
+
+.loader-phase {
+  font-size: 0.6875rem;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: #475569;
+  min-height: 1rem;
+}
+.dark .loader-phase {
+  color: #94a3b8;
+}
+
+.loader-bar-track {
+  position: relative;
+  width: 100%;
+  height: 0.375rem;
+  border-radius: 9999px;
+  background: rgba(148, 163, 184, 0.22);
+  box-shadow: inset 0 1px 2px rgba(15, 23, 42, 0.06);
+  overflow: hidden;
+}
+.dark .loader-bar-track {
+  background: rgba(51, 65, 85, 0.72);
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.35);
+}
+
+.loader-bar-fill {
+  position: relative;
+  height: 100%;
+  border-radius: 9999px;
+  background: linear-gradient(90deg, #14b8a6 0%, #0d9488 55%, #38bdf8 100%);
+  transition: width 0.32s cubic-bezier(0.22, 1, 0.36, 1);
+  overflow: hidden;
+}
+.loader-bar-fill::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    rgba(255, 255, 255, 0.45) 50%,
+    transparent 100%
+  );
+  transform: translateX(-100%);
+  animation: loader-bar-sheen 1.6s ease-in-out infinite;
+}
+@keyframes loader-bar-sheen {
+  0% { transform: translateX(-100%); }
+  100% { transform: translateX(200%); }
+}
+
+.loader-status {
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: #64748b;
+  text-align: left;
+  min-height: 1.125rem;
+}
+.dark .loader-status {
+  color: #94a3b8;
+}
+
+.loader-percent {
+  flex-shrink: 0;
+  font-family: var(--aura-mono);
+  font-size: 0.75rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: #0d9488;
+}
+.dark .loader-percent {
+  color: #2dd4bf;
+}
+
+/* Exit: silk veil fade + gentle scale lift */
+#loadingOverlay.is-hidden {
+  opacity: 0;
+  pointer-events: none;
+  transform: scale(1.022);
+}
+
+/* Reduced motion: keep live telemetry, drop spatial motion */
+@media (prefers-reduced-motion: reduce) {
+  .loader-backdrop-glow,
+  .loader-stage,
+  .loader-sweep,
+  .loader-orbit,
+  .loader-orbit-halo,
+  .loader-mark,
+  .loader-bar-fill::after {
+    animation: none !important;
+  }
+  .loader-sweep { opacity: 0.28; }
+  .loader-bar-fill::after { display: none; }
+  #loaderProgressRing,
+  #loaderBarFill,
+  #loadingOverlay {
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* Narrow phones: compact dial size while SVG stays centered cleanly */
+@media (max-width: 359px) {
+  .loader-orb {
+    width: 6rem;
+    height: 6rem;
+  }
 }
 
 /* ── 6. Phones ─────────────────────────────────────────────── */
@@ -684,6 +999,7 @@ input[type='range'].timeline-slider:focus-visible {
     top: 50% !important;
     transform: translateY(-50%) !important;
     gap: 2px !important;
+    max-height: calc(100vh - 100px) !important;
     max-height: calc(100dvh - 100px) !important;
     padding: 2px !important;
     right: max(0.4rem, env(safe-area-inset-right, 0px)) !important;
@@ -752,6 +1068,7 @@ input[type='range'].timeline-slider:focus-visible {
 /* Very short viewports (height <= 400px): split controls into compact dual columns so zero scrolling is required */
 @media (max-height: 400px) {
   #mobileMapControls {
+    max-height: calc(100vh - 75px) !important;
     max-height: calc(100dvh - 75px) !important;
     display: grid !important;
     grid-template-columns: repeat(2, 32px) !important;
@@ -957,16 +1274,20 @@ input[type='range'].timeline-slider:focus-visible {
     border-top-color: rgba(100, 116, 139, 0.2);
   }
   .search-dropdown.open {
+    max-height: min(340px, calc(100vh - 180px), calc(var(--visual-viewport-height, 100vh) - 130px)) !important;
     max-height: min(340px, calc(100dvh - 180px), calc(var(--visual-viewport-height, 100vh) - 130px)) !important;
   }
 }
 /* Dynamic viewport units where supported (Chrome/Android URL bar) */
 @supports (height: 100dvh) {
   #map {
+    height: 100vh;
     height: 100dvh;
+    height: var(--app-height, 100vh);
     height: var(--app-height, 100dvh);
   }
   #weatherPanel {
+    max-height: calc(var(--app-height, 100vh) - 6rem);
     max-height: calc(var(--app-height, 100dvh) - 6rem);
   }
 }
@@ -1235,6 +1556,7 @@ a svg,
 /* Map Action Controls (#mobileMapControls) Fluid Scaling & Universal Fitting */
 #mobileMapControls {
   gap: clamp(3px, 0.7vh, 6px) !important;
+  max-height: calc(100vh - 180px - env(safe-area-inset-bottom, 0px)) !important;
   max-height: calc(100dvh - 180px - env(safe-area-inset-bottom, 0px)) !important;
   padding: 3px !important;
   right: max(0.45rem, env(safe-area-inset-right, 0px)) !important;

@@ -1,4 +1,13 @@
+# Aurafisky — https://aurafisky.web.app/
+#
+# The whole app is client-rendered and crawlable: the map, the radar, the
+# forecasts and the route planner all work without an account. Nothing here
+# is private, so nothing is blocked.
 User-agent: *
 Allow: /
+
+# The share-target endpoint only carries text that the app reads on launch;
+# it has nothing to index.
+Disallow: /share-target
 
 Sitemap: https://aurafisky.web.app/sitemap.xml

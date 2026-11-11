@@ -1,6 +1,6 @@
 {
   "name": "aurafisky",
-  "version": "19.0.0",
+  "version": "20.0.0",
   "type": "module",
   "description": "Aurafisky — Interactive weather maps, radar, forecasts and route weather planning",
   "author": "Aurafisky",
@@ -18,8 +18,19 @@
     "cap:build": "npm run build && npx cap sync",
     "cap:android": "npm run build && npx cap sync android && npx cap open android",
     "cap:ios": "npm run build && npx cap sync ios && npx cap open ios",
-    "cap:sync": "npx cap sync"
+    "cap:sync": "npx cap sync",
+    "mcp:start": "cd mcp-server && node index.mjs",
+    "mcp:dev": "cd mcp-server && node index.mjs"
   },
+  "//browserslist": "The browsers the app is built and tested for. The CSS carries `vh` fallbacks in front of every `dvh` declaration, and `:has()` is only used for progressive refinement, so older browsers get a working layout rather than a broken one.",
+  "browserslist": [
+    "chrome >= 87",
+    "edge >= 87",
+    "firefox >= 78",
+    "safari >= 14",
+    "ios_saf >= 14",
+    "samsung >= 14"
+  ],
   "build": {
     "appId": "com.aurafisky.app",
     "productName": "Aurafisky",

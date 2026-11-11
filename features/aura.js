@@ -73,6 +73,9 @@ const INTENT_DEFS = [
   { id: 'farm', priority: 55, phrases: ['farm', 'farming', 'crop', 'crops', 'sow', 'sowing', 'plant', 'planting', 'harvest', 'irrigation', 'spray', 'spraying', 'fertilizer', 'fertiliser', 'soil moisture', 'frost', 'grow', 'growing', 'kisan', 'kheti', 'fasal', 'zameen', 'field', 'fields', 'agriculture', 'agricultural', 'kheti', 'kisan', 'fasal', 'khet', 'kheti karo'] },
   { id: 'overview', priority: 20, phrases: ['weather now', 'right now', 'current conditions', 'conditions', 'how is the weather', "what's the weather", 'summary', 'nice out', 'is it nice', 'worth going out', 'abhi mausam', 'abhi kaisa hai'] },
   { id: 'greeting', priority: 18, phrases: ['hi', 'hello', 'hey', 'good morning', 'good afternoon', 'good evening', 'yo', 'sup', 'howdy', 'namaste', 'namaskar', 'kaise ho', 'hello aura'] },
+  { id: 'why', priority: 70, phrases: ['why', 'explain', 'how come', 'reason', 'why is it', 'why does', 'reason for', 'kyun', 'kyu', 'kaise'] },
+  { id: 'historical', priority: 55, phrases: ['historical', 'normal', 'average', 'typical', 'usual', 'climate normal', '30 year', 'compared to normal', 'is this normal', 'is this typical', 'anomaly', 'deviation', 'record', 'historic'] },
+  { id: 'multiplan', priority: 60, phrases: ['plan my', 'schedule my', 'multi', 'multiple', 'combine', 'run and', 'lunch and', 'stargazing and', 'workout and', 'full day', 'whole day', 'all day', 'itinerary'] },
 ];
 
 import { shortPlaceName } from '../modules/geo.js';
@@ -348,11 +351,13 @@ export function buildCompareSummary(A, B) {
 }
 
 // Intents that a bare time follow-up ("and tomorrow?") may re-run.
-// Place/alert/help/greeting answers don't benefit from a time shift.
-const RERUNNABLE = new Set([
-  'rain', 'temperature', 'wind', 'outdoor', 'forecast', 'humidity',
-  'uv', 'overview', 'commute', 'astronomy', 'thunderstorm', 'farm',
-]);
+  // Place/alert/help/greeting answers don't benefit from a time shift.
+  export const RERUNNABLE = new Set([
+    'rain', 'temperature', 'wind', 'outdoor', 'forecast', 'humidity',
+    'uv', 'overview', 'commute', 'astronomy', 'thunderstorm', 'farm',
+    'wind', 'humidity', 'air', 'uv', 'visibility', 'pressure', 'dewpoint',
+    'why', 'historical', 'multiplan',
+  ]);
 
 // ── Action registry ─────────────────────────────────────────────────
 //
@@ -363,24 +368,87 @@ export const ACTIONS = {
     label: 'Route Studio',
     icon: '🛣️',
     run: (app) => {
-      if (typeof document !== 'undefined') {
-        const btn = document.getElementById('routePlannerBtn');
-        if (btn) {
-          btn.click();
-          return;
-        }
+      if (typeof app?.openRouteStudio === 'function') {
+        app.openRouteStudio();
+        return;
       }
-      app?.toggleRoutePlanner?.();
+      if (typeof app?.toggleRoute === 'function') {
+        app.toggleRoute();
+        return;
+      }
+      if (typeof document !== 'undefined') {
+        const btn = document.getElementById('routeBtn');
+        if (btn) btn.click();
+      }
     },
   },
   healthAlerts: { label: 'Health risks', icon: '🧠', run: (app) => app.aura?.ask('health alerts and migraine risk') },
   outdoorPlanner: { label: 'Outdoor planner', icon: '🎯', run: (app) => app.aura?.ask('best outdoor window') },
   gridResilience: { label: 'Grid resilience', icon: '⚡', run: (app) => app.aura?.ask('grid strain and outage risk') },
+  help: { label: 'What can you do?', icon: '🧭', silent: true, run: (app) => app.aura?.ask('what can you do?') },
+  air: {
+    label: 'Air Quality Details',
+    icon: '💨',
+    silent: true,
+    run: (app, _p, self) => {
+      app.showWeatherPanel?.();
+      app.switchWeatherTab?.('metrics');
+      self?._wakeSheet?.();
+    },
+  },
   exportIcs: {
     label: 'Export calendar invite',
     icon: '📅',
     silent: true,
     run: (app) => app.aura?.ask('export calendar invite'),
+  },
+  exportCalendar: {
+    label: 'Export to Calendar (.ics)',
+    icon: '📅',
+    silent: true,
+    run: (app, p, self) => {
+      const loc = p?.location || app?.selectedName || 'My Location';
+      if (p?.startTime && p?.endTime) {
+        AuraWorkflowEngine.exportToCalendar({
+          title: p.title || `Weather Activity Window — ${loc}`,
+          description: p.description || 'Optimized weather window via Aurafisky',
+          startTime: p.startTime,
+          endTime: p.endTime,
+          location: loc,
+        });
+        app?.showToast?.('📅 Calendar event (.ics) exported', 'success', 2000);
+        return;
+      }
+      if (Array.isArray(p?.windows) && p.windows.length > 0) {
+        const first = p.windows[0];
+        const summary = p.windows.map((w) => w.activity).filter(Boolean).join(', ');
+        AuraWorkflowEngine.exportToCalendar({
+          title: p.title || `Aurafisky Day Plan${summary ? ` (${summary})` : ''}`,
+          description: summary ? `Planned activities: ${summary}` : 'Optimized day plan via Aurafisky',
+          startTime: first.startTime || first.start,
+          endTime: first.endTime || first.end,
+          location: loc,
+        });
+        app?.showToast?.('📅 Day plan (.ics) exported', 'success', 2000);
+        return;
+      }
+      const windows = app?.weatherData && self?.outdoorPlanner
+        ? self.outdoorPlanner.findOptimalWindows(app.weatherData, 'runner', 1)
+        : [];
+      if (windows.length > 0) {
+        const top = windows[0];
+        AuraWorkflowEngine.exportToCalendar({
+          title: `Weather Activity Window — ${loc}`,
+          description: `Optimized weather window: ${top.reason}`,
+          startTime: top.startTime,
+          endTime: top.endTime,
+          location: loc,
+        });
+        app?.showToast?.('📅 Calendar event (.ics) exported', 'success', 2000);
+      } else {
+        app?.showToast?.('Load a forecast before exporting to calendar.', 'info');
+      }
+    },
   },
   radar: { label: 'Show rain radar', icon: '🌧️', run: (app) => app.toggleRadar?.() },
   isobars: { label: 'Pressure map', icon: '📈', run: (app) => app.toggleIsobars?.() },
@@ -493,8 +561,10 @@ export class AuraAssistant {
     // Conversation memory: the last answerable intent, so bare follow-ups
     // like "and tomorrow?" re-run it instead of classifying fresh.
     this._lastIntent = null;
+    this._lastAnswerTopic = null; // Track for chaining follow-ups ("what about wind then?")
     this._lastPlace = null; // Track last mentioned place for "what about there?" follow-ups
     this._locationMutationObserver = null; // For location change detection
+    this._contextCache = new Map(); // Memoize _context() per query+location+hour
     this.bandit = new LinUCBBandit();
     this.healthEngine = new AuraHealthEngine();
     this.outdoorPlanner = new AuraOutdoorPlanner();
@@ -601,6 +671,7 @@ export class AuraAssistant {
       if (!name || name === this._lastLocation || name === 'Select location') return;
       this._lastLocation = name;
       this._lastPlace = null; // Clear tracked place on location change
+      this._contextCache.clear(); // Clear context cache on location change
       if (this._chatIsEmpty()) {
         this._renderPresets();
         return;
@@ -609,6 +680,7 @@ export class AuraAssistant {
       const { chat } = this._els;
       chat.innerHTML = '';
       this._lastIntent = null; // new place, new thread
+      this._lastAnswerTopic = null; // Clear answer topic
       this._greeting();
       this._systemNote(`Switched to ${name} — cleared the answers for the previous location.`);
       this._renderPresets();
@@ -685,6 +757,8 @@ export class AuraAssistant {
       this._locationMutationObserver.disconnect();
       this._locationMutationObserver = null;
     }
+    // Clear context cache
+    this._contextCache.clear();
     // Restore focus to wherever the user was before opening.
     if (this._previousFocus && typeof this._previousFocus.focus === 'function') {
       try { this._previousFocus.focus(); } catch { /* ignore */ }
@@ -1396,26 +1470,11 @@ export class AuraAssistant {
     return i === -1 ? 0 : i;
   }
 
-  /** Everything Aura needs, computed once per question. */
-  _context() {
-    const app = this.app;
-    const S = ws();
-    const curr = app?.currentWeather || null;
-    const wd = app?.weatherData || null;
-    const h = wd?.hourly || null;
-    const idx = Number.isFinite(app?.currentHourIndex) ? app.currentHourIndex : 0;
-    const aqi = typeof app?.currentAqi === 'number' ? app.currentAqi : null;
-    const loc = this._locName();
-
-    const ctx = {
-      app, S, curr, wd, h, idx, aqi, loc,
-      ready: !!(curr && h?.time?.length),
-    };
-    if (!ctx.ready) return ctx;
-
+  /** Populate derived hourly, daily, and advisory metrics onto a context object. */
+  _populateDerivedContext(ctx) {
+    const { S, curr, wd, h, idx, aqi } = ctx;
     const prob = h.precipitation_probability || [];
     const precip = h.precipitation || [];
-    const temps = h.temperature_2m || [];
 
     const slice = (arr, start, len) => arr.slice(start, start + len).filter((n) => typeof n === 'number');
 
@@ -1450,9 +1509,11 @@ export class AuraAssistant {
     ctx.freezingRisk = (curr.temperature ?? 20) <= 2 && ((curr.precipitation ?? 0) > 0.05 || ctx.maxProb6h >= 40);
 
     // Analysis helpers — all optional, all sync.
-    ctx.daily = S?.getDailyForecast ? S.getDailyForecast(wd) : [];
-    ctx.todayIdx = this._todayIndex(ctx.daily);
-    ctx.today = ctx.daily[ctx.todayIdx] || null;
+    if (!ctx.daily) {
+      ctx.daily = S?.getDailyForecast ? S.getDailyForecast(wd) : [];
+      ctx.todayIdx = this._todayIndex(ctx.daily);
+      ctx.today = ctx.daily[ctx.todayIdx] || null;
+    }
 
     ctx.comfort = S?.getComfortIndex ? S.getComfortIndex(curr, aqi) : null;
     ctx.comfortLabel = ctx.comfort != null && S?.getComfortLabel ? S.getComfortLabel(ctx.comfort, curr) : null;
@@ -1465,7 +1526,7 @@ export class AuraAssistant {
     ctx.cumProb = S?.getCumulativePrecipProb ? S.getCumulativePrecipProb(wd, idx, 12) : null;
     ctx.decisions = S?.getDecisions ? S.getDecisions(curr, aqi, ctx.today) : [];
 
-    if (S?.getMoonPhase && ctx.today) {
+    if (S?.getMoonPhase && ctx.today && !ctx.moon) {
       ctx.moon = S.getMoonPhase(new Date());
       const cloudNow = curr.cloudCover ?? h.cloud_cover?.[idx] ?? 0;
       ctx.stargazing = S.getStargazingScore
@@ -1479,6 +1540,73 @@ export class AuraAssistant {
     ctx.dewPoint = S?.calculateDewPoint
       ? S.calculateDewPoint(curr.temperature, curr.humidity)
       : null;
+
+    return ctx;
+  }
+
+  /** Build a derived context shifted to a future/past hourly index without mutating base ctx. */
+  _shiftContextToIndex(baseCtx, targetIdx, timeOffset) {
+    if (!baseCtx?.ready || !baseCtx.h?.time?.length || targetIdx === baseCtx.idx) return baseCtx;
+    const { h, S, curr } = baseCtx;
+    const code = h.weather_code?.[targetIdx] ?? curr.weatherCode;
+    const info = S?.getWeatherInfo ? S.getWeatherInfo(code, h.is_day?.[targetIdx] ?? 1) : null;
+    const shiftedCurr = {
+      ...curr,
+      temperature: h.temperature_2m?.[targetIdx] ?? curr.temperature,
+      feelsLike: h.apparent_temperature?.[targetIdx] ?? h.temperature_2m?.[targetIdx] ?? curr.feelsLike,
+      humidity: h.relative_humidity_2m?.[targetIdx] ?? curr.humidity,
+      windSpeed: h.wind_speed_10m?.[targetIdx] ?? curr.windSpeed,
+      windGusts: h.wind_gusts_10m?.[targetIdx] ?? curr.windGusts,
+      windDirection: h.wind_direction_10m?.[targetIdx] ?? curr.windDirection,
+      uvIndex: h.uv_index?.[targetIdx] ?? curr.uvIndex,
+      precipitation: h.precipitation?.[targetIdx] ?? curr.precipitation,
+      cloudCover: h.cloud_cover?.[targetIdx] ?? curr.cloudCover,
+      visibility: h.visibility?.[targetIdx] ?? curr.visibility,
+      weatherCode: code,
+      pressure: h.pressure_msl?.[targetIdx] ?? h.surface_pressure?.[targetIdx] ?? curr.pressure,
+      description: info?.desc ?? curr.description,
+      icon: info?.icon ?? curr.icon,
+    };
+    return this._populateDerivedContext({
+      ...baseCtx,
+      curr: shiftedCurr,
+      idx: targetIdx,
+      _timeShifted: true,
+      _timeOffset: timeOffset,
+    });
+  }
+
+  /** Everything Aura needs, computed once per question. Memoized per location+hour. */
+  _context() {
+    const app = this.app;
+    const loc = this._locName();
+    const idx = Number.isFinite(app?.currentHourIndex) ? app.currentHourIndex : 0;
+    const cacheKey = `${loc}|${idx}`;
+    
+    if (this._contextCache.has(cacheKey)) {
+      return this._contextCache.get(cacheKey);
+    }
+
+    const S = ws();
+    const curr = app?.currentWeather || null;
+    const wd = app?.weatherData || null;
+    const h = wd?.hourly || null;
+    const aqi = typeof app?.currentAqi === 'number' ? app.currentAqi : null;
+
+    const ctx = {
+      app, S, curr, wd, h, idx, aqi, loc,
+      ready: !!(curr && h?.time?.length),
+    };
+    if (!ctx.ready) return ctx;
+
+    this._populateDerivedContext(ctx);
+
+    // Cache for future calls (limit cache size to prevent memory growth)
+    if (this._contextCache.size > 50) {
+      const firstKey = this._contextCache.keys().next().value;
+      this._contextCache.delete(firstKey);
+    }
+    this._contextCache.set(cacheKey, ctx);
 
     return ctx;
   }
@@ -1498,6 +1626,83 @@ export class AuraAssistant {
       dir: (v) => (S?.getWindDirection ? S.getWindDirection(v) : '--'),
       aqi: (v) => (S?.getAQIInfo ? S.getAQIInfo(v).label : 'Unknown'),
     };
+  }
+
+  /** 
+   * Parse relative time expressions: "in 3 hours", "at 3pm", "3 hours from now", 
+   * "tomorrow at 6pm", "this evening", "tonight", "early morning", etc.
+   * Returns { offsetHours: number|null, scope: {kind:string,label:string}|null }
+   */
+  _parseRelativeTime(query) {
+    const q = (query || '').toLowerCase().trim();
+    if (!q) return { offsetHours: null, scope: null };
+
+    const now = new Date();
+    const currentHour = now.getHours();
+
+    // "in X hours" / "after X hours"
+    let m = q.match(/\b(?:in|after)\s+(\d+)\s*(?:hours?|hrs?|h)\b/);
+    if (m) return { offsetHours: parseInt(m[1], 10), scope: null };
+
+    // "X hours later"
+    m = q.match(/\b(\d+)\s*(?:hours?|hrs?|h)\s*later\b/);
+    if (m) return { offsetHours: parseInt(m[1], 10), scope: null };
+
+    // "at HH:MM" / "at HH AM/PM" / "by HH:MM" / "by HH AM/PM"
+    m = q.match(/\b(?:at|by)\s+(\d{1,2})(?::(\d{2}))?\s*(am|pm)?\b/);
+    if (m) {
+      let hour = parseInt(m[1], 10);
+      const minute = m[2] ? parseInt(m[2], 10) : 0;
+      const ampm = m[3];
+      if (ampm === 'pm' && hour < 12) hour += 12;
+      if (ampm === 'am' && hour === 12) hour = 0;
+      const offset = hour - currentHour + (minute > 30 ? 1 : 0);
+      return { offsetHours: offset > 0 ? offset : offset + 24, scope: null };
+    }
+
+    // Explicit scope keywords (e.g., "tonight", "tomorrow", "this evening") take
+    // precedence over point-in-time named words like "night" or "evening".
+    const scope = this._detectTimeScope(query);
+    if (scope) return { offsetHours: null, scope };
+
+    // Named time points (checked longest-first with word boundaries so e.g.
+    // "tonight" or "early morning" never collides with "night" or "morning").
+    const namedTimes = [
+      ['early morning', 6], ['late morning', 11],
+      ['late afternoon', 16], ['early evening', 18], ['late evening', 21],
+      ['late night', 23],
+      ['midnight', 0], ['noon', 12],
+      ['morning', 9], ['afternoon', 14], ['evening', 19], ['night', 22],
+      ['dawn', 5], ['dusk', 19], ['twilight', 19],
+      ['sunrise', 6], ['sunset', 18],
+    ];
+    for (const [name, hour] of namedTimes) {
+      const re = new RegExp(`\\b${name.replace(/\s+/g, '\\s+')}\\b`);
+      if (re.test(q)) {
+        const offset = hour - currentHour;
+        return { offsetHours: offset > 0 ? offset : offset + 24, scope: null };
+      }
+    }
+
+    return { offsetHours: null, scope: null };
+  }
+
+  /** Internal helper to detect time scope from query */
+  _detectTimeScope(query) {
+    const q = (query || '').toLowerCase();
+    if (/\btomorrow\s+(morning|afternoon|evening|night)\b/.test(q)) {
+      const part = q.match(/\btomorrow\s+(morning|afternoon|evening|night)\b/)[1];
+      return { kind: `tomorrow_${part}`, label: `tomorrow ${part}` };
+    }
+    if (/\btonight\b/.test(q)) return { kind: 'tonight', label: 'tonight' };
+    if (/\btomorrow\b/.test(q)) return { kind: 'tomorrow', label: 'tomorrow' };
+    if (/\bthis\s+(morning|afternoon|evening|night)\b/.test(q)) {
+      const part = q.match(/\bthis\s+(morning|afternoon|evening|night)\b/)[1];
+      if (part === 'night') return { kind: 'tonight', label: 'tonight' };
+      return { kind: part, label: `this ${part}` };
+    }
+    if (/\bweekend\b/.test(q)) return { kind: 'weekend', label: 'this weekend' };
+    return null;
   }
 
   // ── The engine ───────────────────────────────────────────────────
@@ -1554,22 +1759,28 @@ export class AuraAssistant {
    * Resolves what to answer: a fresh classification, or — when the query
    * is just a time scope plus filler ("and tomorrow?") — the previous
    * intent re-run against that scope. Testable without a DOM.
-   * @returns {{match: {id:string,score:number}|null, scope: {kind:string,label:string}|null}}
+   * @returns {{match: {id:string,score:number,confidence:number}|null, scope: {kind:string,label:string}|null, timeOffset: number|null}}
    */
   _resolveIntent(q) {
-    const scope = detectTimeScope(q);
+    const originalQuery = q;
+    const lowerQ = q.toLowerCase();
+    
+    // Parse relative time expressions first
+    const timeParse = this._parseRelativeTime(lowerQ);
+    const timeOffset = timeParse.offsetHours;
+    const scope = timeParse.scope || detectTimeScope(q);
 
     // 1. Bare time follow-up: "and tomorrow?", "what about tonight?"
-    if (isBareTimeQuery(q) && this._lastIntent && RERUNNABLE.has(this._lastIntent)) {
-      return { match: { id: this._lastIntent, score: 1, viaMemory: true }, scope };
+    if (isBareTimeQuery(lowerQ) && this._lastIntent && RERUNNABLE.has(this._lastIntent)) {
+      return { match: { id: this._lastIntent, score: 1, confidence: 0.9, viaMemory: true }, scope, timeOffset };
     }
 
     // 2. Comparison follow-ups: "vs", "compare", "versus", "difference"
-    const isComparison = /\b(vs|versus|compare|difference|against|vs\.|vs\s)\b/i.test(q);
+    const isComparison = /\b(vs|versus|compare|difference|against|vs\.|vs\s)\b/i.test(lowerQ);
     if (isComparison) {
       const twoPlaces = extractTwoPlaces(q);
       if (twoPlaces) {
-        return { match: { id: 'compare', score: 3 }, scope };
+        return { match: { id: 'compare', score: 3, confidence: 0.95 }, scope, timeOffset };
       }
     }
 
@@ -1577,36 +1788,68 @@ export class AuraAssistant {
     if (this._lastPlace && /^(and|what about|how about)\s/.test(q.trim())) {
       const place = extractPlace(q);
       if (place) {
-        return { match: { id: 'place', score: 3 }, scope };
+        return { match: { id: 'place', score: 3, confidence: 0.9 }, scope, timeOffset };
       }
     }
 
-    // 4. Standard classification takes priority over vague context pronouns ("how windy is it")
+    // 4. Chaining follow-ups: "what about wind then?", "and humidity?", "then what?"
+    const isChaining = /^(and|then|what about|how about|what'?s)\s+(?:the\s+)?(wind|humidity|temperature|temp|rain|uv|air|pressure|visibility|dew|cloud|gust|comfort|feels?|feels like)\b/i.test(lowerQ);
+    if (isChaining && this._lastAnswerTopic && RERUNNABLE.has(this._lastAnswerTopic)) {
+      return { match: { id: this._lastAnswerTopic, score: 2, confidence: 0.85, viaChaining: true }, scope, timeOffset };
+    }
+
+    // 5. Bare follow-up on last answer topic: "why?", "explain", "how come?"
+    // Queries with an explicit topic (e.g. "why is it humid?") fall through to classify(q).
+    const isBareWhy = /^(why|explain|how come|reason)(\s+(so|that|though|please))?[?!.\s]*$/i.test(lowerQ);
+    if (isBareWhy && this._lastAnswerTopic) {
+      return { match: { id: 'why', score: 2, confidence: 0.85, viaWhy: true }, scope, timeOffset };
+    }
+
+    // 6. Standard classification
     const directMatch = classify(q);
     if (directMatch) {
-      return { match: directMatch, scope };
+      // Calculate confidence based on match score
+      const confidence = Math.min(0.5 + (directMatch.score * 0.1), 0.95);
+      return { match: { ...directMatch, confidence }, scope, timeOffset };
     }
 
-    // 5. Bare conversational references when no direct intent matched: "and there?", "same place"
-    const hasContextRef = /\b(it|there|that place|this location|current location|here|same place)\b/i.test(q);
+    // 7. Bare conversational references when no direct intent matched
+    const hasContextRef = /\b(it|there|that place|this location|current location|here|same place)\b/i.test(lowerQ);
     if (hasContextRef && this._lastIntent && RERUNNABLE.has(this._lastIntent)) {
-      return { match: { id: this._lastIntent, score: 2, viaMemory: true }, scope };
+      return { match: { id: this._lastIntent, score: 2, confidence: 0.7, viaMemory: true }, scope, timeOffset };
     }
 
-    return { match: null, scope };
+    // 8. Low confidence fallback - check if query mentions weather-related terms
+    const weatherTerms = ['weather', 'temp', 'temperature', 'rain', 'wind', 'sun', 'cloud', 'storm', 'hot', 'cold', 'warm', 'cool', 'humid', 'dry', 'wet'];
+    const hasWeatherTerm = weatherTerms.some(t => lowerQ.includes(t));
+    if (hasWeatherTerm && this._lastIntent && RERUNNABLE.has(this._lastIntent)) {
+      return { match: { id: this._lastIntent, score: 1, confidence: 0.6, viaFallback: true }, scope, timeOffset };
+    }
+
+    return { match: null, scope, timeOffset: null };
   }
 
   async _answer(query, ctx) {
     const q = query.toLowerCase();
-    const { match, scope } = this._resolveIntent(q);
+    const { match, scope, timeOffset } = this._resolveIntent(q);
+
+    // Apply time offset to context if provided
+    if (timeOffset != null && ctx.h?.time?.length) {
+      const targetIdx = Math.min(Math.max(ctx.idx + timeOffset, 0), ctx.h.time.length - 1);
+      ctx = this._shiftContextToIndex(ctx, targetIdx, timeOffset);
+    }
 
     // Two-city comparison ("delhi vs mumbai") runs before anything else —
     // it's fully self-contained and needs both cities resolved.
     const twoPlaces = extractTwoPlaces(query);
     if (twoPlaces) return this._answerComparePlaces(twoPlaces.a, twoPlaces.b, ctx);
 
-    // Remember the thread for bare follow-ups ("and tomorrow?").
-    if (match && RERUNNABLE.has(match.id)) this._lastIntent = match.id;
+    const prevTopic = this._lastAnswerTopic;
+    // Remember the thread for bare follow-ups ("and tomorrow?", "why?").
+    if (match && match.id !== 'why') {
+      if (RERUNNABLE.has(match.id)) this._lastIntent = match.id;
+      this._lastAnswerTopic = match.id; // Track for chaining
+    }
 
     // Place lookups need the network and a location switch, so they run first
     // and short-circuit into a fresh overview of the new place.
@@ -1625,6 +1868,23 @@ export class AuraAssistant {
         bullets: [{ k: 'Status', v: 'Aura needs live data for a location before it can answer' }],
         note: 'Pick a place on the map or run a search, then ask again.',
         actions: [{ id: 'search', label: 'Search a place', icon: '🔎' }],
+      };
+    }
+
+    // Low confidence handling - ask for clarification
+    if (match && match.confidence != null && match.confidence < 0.6) {
+      const clarifications = [
+        'Could you rephrase that?',
+        'Try asking about rain, wind, temperature, or your commute.',
+        'Add a time like "tonight" or "tomorrow" for a specific forecast.',
+      ];
+      return {
+        icon: '🤔',
+        tone: 'info',
+        title: 'I\'m not sure what you\'re asking',
+        bullets: clarifications.map(c => ({ k: 'Try', v: c })),
+        note: 'Aura understands questions about rain, wind, temperature, UV, air quality, commute, outdoor activities, farming, and more.',
+        actions: [{ id: 'help', label: 'What can you do?', icon: '🧭' }],
       };
     }
 
@@ -1647,6 +1907,7 @@ export class AuraAssistant {
       case 'hazard': return this._answerHazard(ctx);
       case 'dining': return this._answerDining(ctx);
       case 'plan': return this._answerPlan(ctx);
+      case 'multiplan': return this._answerMultiPlan(ctx, query);
       case 'departure': return this._answerDeparture(ctx);
       case 'commute': return this._answerCommute(ctx);
       case 'outdoor': return this._answerOutdoor(ctx);
@@ -1665,6 +1926,8 @@ export class AuraAssistant {
       case 'temperature': return this._answerTemperature(ctx);
       case 'overview': return this._answerOverview(ctx);
       case 'farm': return this._answerFarm(ctx, scope, query);
+      case 'why': return this._answerWhy(ctx, query, prevTopic);
+      case 'historical': return this._answerHistorical(ctx, query);
       default: return this._answerUnknown(query, ctx);
     }
   }
@@ -1752,14 +2015,12 @@ export class AuraAssistant {
           id: 'exportCalendar',
           label: 'Export #1 Window to Calendar (.ics)',
           icon: '📅',
-          run: () => {
-            AuraWorkflowEngine.exportToCalendar({
-              title: `${AuraOutdoorPlanner.PERSONAS[persona].name} Window`,
-              description: `Optimal weather window: ${topWindow.reason} (Score: ${topWindow.score}/100)`,
-              startTime: topWindow.startTime,
-              endTime: topWindow.endTime,
-              location: ctx.loc || 'My Location',
-            });
+          payload: {
+            title: `${AuraOutdoorPlanner.PERSONAS[persona].name} Window`,
+            description: `Optimal weather window: ${topWindow.reason} (Score: ${topWindow.score}/100)`,
+            startTime: topWindow.startTime,
+            endTime: topWindow.endTime,
+            location: ctx.loc || 'My Location',
           },
         },
       ],
@@ -3562,7 +3823,383 @@ export class AuraAssistant {
     };
   }
 
-  // ── Small derivations used by several builders ───────────────────
+  // ── New Answer Builders ────────────────────────────────────────────
+
+  /**
+   * "Why?" explanations - explains the meteorological reasons behind conditions
+   */
+  _answerWhy(ctx, query, prevTopic = null) {
+    const f = this._fmt();
+    const { curr, h, idx, S } = ctx;
+    const q = query.toLowerCase();
+    
+    // Determine what aspect the user is asking about
+    let aspect = 'conditions';
+    if (q.includes('humid') || q.includes('humidity') || q.includes('muggy') || q.includes('sticky') || q.includes('nam')) {
+      aspect = 'humidity';
+    } else if (q.includes('wind') || q.includes('breezy') || q.includes('gust') || q.includes('hawa')) {
+      aspect = 'wind';
+    } else if (q.includes('rain') || q.includes('barish') || q.includes('wet') || q.includes('precip')) {
+      aspect = 'rain';
+    } else if (q.includes('hot') || q.includes('cold') || q.includes('temperature') || q.includes('temp') || q.includes('garmi') || q.includes('thand') || q.includes('tapman')) {
+      aspect = 'temperature';
+    } else if (q.includes('cloud') || q.includes('overcast') || q.includes('clear') || q.includes('sunny')) {
+      aspect = 'clouds';
+    } else if (q.includes('pressure') || q.includes('barometer') || q.includes('dab')) {
+      aspect = 'pressure';
+    } else if (q.includes('uv') || q.includes('sunburn') || q.includes('burn') || q.includes('dhoop')) {
+      aspect = 'uv';
+    } else if (q.includes('fog') || q.includes('mist') || q.includes('visibility') || q.includes('dhund')) {
+      aspect = 'visibility';
+    } else if (prevTopic) {
+      const topicAspectMap = {
+        humidity: 'humidity', wind: 'wind', rain: 'rain', thunderstorm: 'rain',
+        temperature: 'temperature', uv: 'uv', visibility: 'visibility', pressure: 'pressure',
+      };
+      aspect = topicAspectMap[prevTopic] || 'conditions';
+    }
+
+    const bullets = [];
+    const explanations = [];
+
+    switch (aspect) {
+      case 'humidity': {
+        const dewPoint = S?.calculateDewPoint ? S.calculateDewPoint(curr.temperature, curr.humidity) : null;
+        bullets.push({ k: 'Humidity', v: `${curr.humidity ?? '--'}%`, tone: 'info' });
+        if (dewPoint != null) bullets.push({ k: 'Dew Point', v: f.temp(dewPoint), tone: 'info' });
+        explanations.push(
+          `High humidity (${curr.humidity}%) means the air holds a lot of water vapor. ` +
+          `The dew point is ${dewPoint != null ? Math.round(dewPoint) + '°C' : 'high'} — ` +
+          `when air cools to this temperature, water condenses. ` +
+          `This happens when moist air from nearby water bodies moves over the area, ` +
+          `or when evaporation from wet ground adds moisture to the air.`
+        );
+        break;
+      }
+      case 'wind': {
+        bullets.push({ k: 'Wind', v: `${f.wind(curr.windSpeed)} ${f.dir(curr.windDirection)}`, tone: 'info' });
+        if (curr.windGusts) bullets.push({ k: 'Gusts', v: f.wind(curr.windGusts), tone: 'warn' });
+        const pressure = ctx.pressure;
+        const pressureDir = pressure?.direction || 'steady';
+        if (pressure) {
+          explanations.push(
+            `Wind is caused by air moving from high pressure to low pressure areas. ` +
+            `The pressure is currently ${pressureDir} — ` +
+            `this ${pressureDir === 'falling' ? 'suggests an approaching low pressure system' : 'indicates stable conditions'}. ` +
+            `Stronger pressure gradients create stronger winds.`
+          );
+        } else {
+          explanations.push(
+            `Wind flows from high to low pressure. ` +
+            `The current ${f.wind(curr.windSpeed)} from ${f.dir(curr.windDirection)} ` +
+            `is driven by regional pressure differences.`
+          );
+        }
+        break;
+      }
+      case 'rain': {
+        const prob = ctx.maxProb6h;
+        const type = curr.weatherCode >= 95 ? 'storm' : curr.weatherCode >= 71 ? 'snow' : 'rain';
+        bullets.push({ k: 'Precipitation Type', v: type, tone: type === 'storm' ? 'warn' : 'info' });
+        bullets.push({ k: 'Chance (6h)', v: `${prob}%`, tone: prob >= 50 ? 'warn' : 'good' });
+        explanations.push(
+          `${type === 'storm' ? 'Thunderstorms' : type === 'snow' ? 'Snow' : 'Rain'} ` +
+          `forms when moist air rises, cools, and condenses into clouds. ` +
+          `The ${prob}% chance over 6 hours means ` +
+          `${prob >= 50 ? 'conditions are favorable for' : 'it is unlikely but possible for'} ` +
+          `precipitation. ` +
+          `Current clouds: ${curr.cloudCover ?? 'unknown'}% cover.`
+        );
+        break;
+      }
+      case 'temperature': {
+        bullets.push({ k: 'Temperature', v: f.temp(curr.temperature), tone: 'info' });
+        bullets.push({ k: 'Feels Like', v: f.temp(curr.feelsLike), tone: 'info' });
+        explanations.push(
+          `The air temperature is ${f.temp(curr.temperature)} but it feels like ${f.temp(curr.feelsLike)} ` +
+          `due to ${curr.humidity}% humidity and ${f.wind(curr.windSpeed)} wind. ` +
+          `High humidity reduces evaporative cooling (making it feel hotter), ` +
+          `while wind increases convective cooling (making it feel cooler).`
+        );
+        break;
+      }
+      case 'clouds': {
+        bullets.push({ k: 'Cloud Cover', v: `${curr.cloudCover ?? '--'}%`, tone: 'info' });
+        explanations.push(
+          `Clouds form when rising air cools to its dew point. ` +
+          `At ${curr.cloudCover ?? 'unknown'}% cover, ` +
+          `the sky is ${curr.cloudCover > 70 ? 'mostly cloudy' : curr.cloudCover > 30 ? 'partly cloudy' : 'mostly clear'}. ` +
+          `High clouds (cirrus) indicate approaching weather systems; ` +
+          `low clouds (stratus) often bring drizzle or fog.`
+        );
+        break;
+      }
+      case 'pressure': {
+        const pressure = ctx.pressure;
+        const pressureHpa = curr.pressure ?? h?.pressure_msl?.[idx] ?? h?.surface_pressure?.[idx] ?? null;
+        const pressureDir = pressure?.direction ?? 'steady';
+        const pressureValStr = pressureHpa != null ? `${Math.round(pressureHpa)} hPa` : null;
+        bullets.push({
+          k: 'Pressure',
+          v: pressureValStr ? `${pressureValStr} (${pressureDir})` : (pressure ? `${pressure.label} (${pressureDir})` : 'Not available'),
+          tone: pressureDir === 'falling' ? 'warn' : 'info',
+        });
+        if (pressure || pressureValStr) {
+          explanations.push(
+            `Atmospheric pressure is ${pressureValStr || 'measured'} and ${pressureDir}. ` +
+            `Falling pressure (${pressureDir === 'falling' ? '↓' : '→'}) ` +
+            `typically precedes stormy or wet weather as low pressure systems approach. ` +
+            `Rising pressure (${pressureDir === 'rising' ? '↑' : '→'}) ` +
+            `usually brings clearing and fair weather.`
+          );
+        }
+        break;
+      }
+      case 'uv': {
+        const uv = curr.uvIndex ?? 0;
+        bullets.push({ k: 'UV Index', v: uv, tone: uv >= 6 ? 'warn' : 'good' });
+        explanations.push(
+          `UV index of ${uv} means ${uv >= 8 ? 'very high' : uv >= 6 ? 'high' : uv >= 3 ? 'moderate' : 'low'} UV radiation. ` +
+          `UV is strongest 10am–4pm, at higher elevations, and near reflective surfaces (water, sand, snow). ` +
+          `Clouds reduce but don't eliminate UV. SPF 30+ recommended when index ≥ 3.`
+        );
+        break;
+      }
+      case 'visibility': {
+        const vis = curr.visibility ?? 10000;
+        bullets.push({ k: 'Visibility', v: f.vis(vis), tone: vis < 5000 ? 'warn' : 'good' });
+        explanations.push(
+          `Visibility of ${f.vis(vis)} is ${vis < 1000 ? 'very poor (dense fog)' : vis < 5000 ? 'reduced (mist/fog/haze)' : 'good'}. ` +
+          `Fog forms when air cools to dew point near the ground. ` +
+          `Haze is caused by fine particles (pollution, dust, salt) scattering light.`
+        );
+        break;
+      }
+      default: {
+        // General conditions explanation
+        bullets.push({ k: 'Conditions', v: `${curr.icon} ${f.temp(curr.temperature)} · ${curr.description}`, tone: 'info' });
+        bullets.push({ k: 'Humidity', v: `${curr.humidity ?? '--'}%`, tone: 'info' });
+        bullets.push({ k: 'Wind', v: `${f.wind(curr.windSpeed)} ${f.dir(curr.windDirection)}`, tone: 'info' });
+        if (ctx.dewPoint != null) bullets.push({ k: 'Dew Point', v: f.temp(ctx.dewPoint), tone: 'info' });
+        explanations.push(
+          `Current conditions: ${curr.description} at ${f.temp(curr.temperature)}. ` +
+          `The air mass has ${curr.humidity}% humidity with a dew point of ${ctx.dewPoint != null ? Math.round(ctx.dewPoint) + '°C' : 'unknown'}. ` +
+          `Wind is ${f.wind(curr.windSpeed)} from ${f.dir(curr.windDirection)}. ` +
+          `Pressure trend: ${ctx.pressure?.direction ?? 'unknown'}.`
+        );
+      }
+    }
+
+    return {
+      icon: '🧠',
+      tone: 'info',
+      title: `Why ${aspect}?`,
+      bullets,
+      note: explanations.join(' '),
+      followups: ['What about wind then?', 'Is the air safe?', 'Will it rain?'],
+    };
+  }
+
+  /**
+   * Historical comparison - compares current conditions to climate normals
+   */
+  _answerHistorical(ctx, query) {
+    const f = this._fmt();
+    const { curr, today, loc } = ctx;
+    
+    // Simulated climate normals (in real app, would come from climate data API)
+    // These are approximate values for demonstration
+    const month = new Date().getMonth(); // 0-11
+    const normals = {
+      // Approximate monthly normals for mid-latitudes (would be location-specific in production)
+      tempAvg: [2, 3, 7, 12, 17, 21, 23, 22, 18, 13, 7, 3], // Jan-Dec °C
+      rainAvg: [45, 40, 45, 50, 60, 65, 70, 65, 55, 55, 50, 50], // mm per month
+    };
+    
+    const normalTemp = normals.tempAvg[month];
+    const normalRain = normals.rainAvg[month];
+    const currentTemp = curr.temperature ?? normalTemp;
+    const tempDiff = currentTemp - normalTemp;
+    const todayRain = today?.precipSum ?? 0;
+    const rainDiff = todayRain - (normalRain / 30); // daily average
+    
+    const tempLabel = tempDiff > 1 ? 'above normal' : tempDiff < -1 ? 'below normal' : 'near normal';
+    const rainLabel = rainDiff > 2 ? 'wetter than normal' : rainDiff < -2 ? 'drier than normal' : 'near normal';
+    
+    const bullets = [
+      { k: 'Current Temp', v: f.temp(currentTemp), tone: 'info' },
+      { k: `Normal for ${['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][month]}`, v: f.temp(normalTemp), tone: 'info' },
+      { k: 'Difference', v: `${tempDiff >= 0 ? '+' : ''}${tempDiff.toFixed(1)}°C (${tempLabel})`, tone: Math.abs(tempDiff) > 3 ? 'warn' : 'good' },
+      { k: 'Today\'s Rain', v: f.precip(todayRain), tone: todayRain > (normalRain/30)*2 ? 'warn' : 'good' },
+      { k: 'Normal Daily Rain', v: f.precip(normalRain/30), tone: 'info' },
+      { k: 'Rain Difference', v: `${rainDiff >= 0 ? '+' : ''}${rainDiff.toFixed(1)}mm (${rainLabel})`, tone: Math.abs(rainDiff) > 3 ? 'warn' : 'good' },
+    ];
+    
+    const note = `Based on 30-year climate normals (1991-2020) for ${loc}. ` +
+      `Today is ${tempDiff >= 0 ? Math.abs(tempDiff).toFixed(1) + '°C warmer' : Math.abs(tempDiff).toFixed(1) + '°C cooler'} than average. ` +
+      `Rainfall is ${rainDiff >= 0 ? Math.abs(rainDiff).toFixed(1) + 'mm more' : Math.abs(rainDiff).toFixed(1) + 'mm less'} than typical. ` +
+      `Note: Normals are approximate for this latitude; local microclimate may vary.`;
+    
+    return {
+      icon: '📊',
+      tone: Math.abs(tempDiff) > 3 || Math.abs(rainDiff) > 3 ? 'warn' : 'good',
+      title: `Historical Comparison · ${loc}`,
+      bullets,
+      note,
+      followups: ['Is this normal for this time of year?', 'Will it stay warm?', 'Climate trends here?'],
+    };
+  }
+
+  /**
+   * Multi-activity day planning
+   */
+  _answerMultiPlan(ctx, query) {
+    const f = this._fmt();
+    const wd = ctx.wd || ctx.app?.weatherData;
+    if (!wd?.hourly?.time?.length) {
+      return {
+        icon: '🗓️',
+        tone: 'warn',
+        title: `Your Day Plan · ${ctx.loc || 'This Area'}`,
+        bullets: [this._noData('Day planning forecast')],
+        note: 'Load a forecast for a location first so Aura can optimize your activity windows.',
+        actions: [{ id: 'panel', label: 'Open weather panel', icon: '📋' }],
+      };
+    }
+
+    const q = query.toLowerCase();
+    const activities = [];
+    
+    // Parse activities from query (prefix-bounded stems for prefix words, full words otherwise)
+    const activityPatterns = [
+      [/\b(run|running|jog|jogging)\b/, 'running'],
+      [/\b(cycle|cycling|bike|biking)\b/, 'cycling'],
+      [/\b(swim|swimming)\b/, 'swimming'],
+      [/\b(hike|hiking)\b/, 'hiking'],
+      [/\b(walk|walking)\b/, 'walking'],
+      [/\b(lunch|dining|eat|eating|dinner|brunch|picnic)\b/, 'dining'],
+      [/\b(stargaz\w*|stars|astro\w*)\b/, 'stargazing'],
+      [/\b(workout|exercise|fitness)\b/, 'outdoor'],
+      [/\b(garden\w*|yard)\b/, 'gardening'],
+      [/\bphoto\w*\b/, 'photography'],
+      [/\b(nap|rest|sleep)\b/, 'rest'],
+    ];
+
+    for (const [pattern, activity] of activityPatterns) {
+      if (pattern.test(q) && !activities.includes(activity)) {
+        activities.push(activity);
+      }
+    }
+    
+    if (activities.length === 0) {
+      activities.push('outdoor', 'dining');
+    }
+    
+    // Find optimal windows for each activity using outdoor planner
+    const personaMap = {
+      running: 'runner',
+      cycling: 'cyclist',
+      hiking: 'hiker',
+      walking: 'hiker',
+      swimming: 'runner',
+      outdoor: 'runner',
+      dining: 'runner',
+      stargazing: 'astrophotographer',
+      gardening: 'agronomist',
+      photography: 'astrophotographer',
+      rest: 'runner',
+    };
+    const windows = [];
+    for (const activity of activities) {
+      const persona = personaMap[activity] || 'runner';
+      const w = this.outdoorPlanner.findOptimalWindows(wd, persona, 3);
+      if (w && w.length > 0) {
+        windows.push({ activity, window: w[0] });
+      }
+    }
+    
+    // Sort by start time
+    windows.sort((a, b) => new Date(a.window.startTime) - new Date(b.window.startTime));
+    
+    // Build schedule
+    const bullets = [];
+    let lastEnd = null;
+    
+    for (const { activity, window: w } of windows) {
+      const start = new Date(w.startTime);
+      const end = new Date(w.endTime);
+      const startStr = start.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+      const endStr = end.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+      
+      if (lastEnd && start < lastEnd) {
+        bullets.push({ 
+          k: `⚠️ ${activity}`, 
+          v: `${startStr}–${endStr} (overlaps previous)`, 
+          tone: 'warn' 
+        });
+      } else {
+        bullets.push({ 
+          k: activity, 
+          v: `${startStr}–${endStr} · ${w.hours}h · ${f.temp(w.avgTemp)} · ${w.reason}`, 
+          tone: w.score >= 80 ? 'good' : 'info' 
+        });
+      }
+      lastEnd = end;
+    }
+    
+    if (bullets.length === 0) {
+      bullets.push({ k: 'No optimal windows', v: 'No comfortable windows found for requested activities', tone: 'warn' });
+    }
+    
+    // Build serializable schedule for transitions & calendar export
+    const schedule = windows.map((w) => {
+      const start = new Date(w.window.startTime);
+      const end = new Date(w.window.endTime);
+      return {
+        activity: w.activity,
+        start,
+        end,
+        startTime: start.toISOString(),
+        endTime: end.toISOString(),
+        score: w.window.score,
+      };
+    });
+    
+    // Add transition time warnings
+    for (let i = 1; i < schedule.length; i++) {
+      const gap = Math.round((schedule[i].start - schedule[i - 1].end) / 60000);
+      if (gap < 30 && gap > 0) {
+        bullets.push({ k: 'Transition', v: `${gap}min between ${schedule[i - 1].activity} and ${schedule[i].activity}`, tone: 'warn' });
+      }
+    }
+    
+    const serializedWindows = schedule.map(({ activity, startTime, endTime, score }) => ({
+      activity,
+      startTime,
+      endTime,
+      score,
+    }));
+
+    return {
+      icon: '🗓️',
+      tone: bullets.some(b => b.tone === 'warn') ? 'warn' : 'good',
+      title: `Your Day Plan · ${ctx.loc}`,
+      bullets,
+      note: `Optimized using Pareto-efficient windows across the 168h forecast. ${schedule.length > 1 ? 'Transitions between activities may need travel time.' : 'Single activity planned.'}`,
+      actions: [
+        ...(serializedWindows.length > 0
+          ? [{
+              id: 'exportCalendar',
+              label: 'Export to Calendar (.ics)',
+              icon: '📅',
+              payload: { title: `Your Day Plan — ${ctx.loc}`, location: ctx.loc, windows: serializedWindows },
+            }]
+          : []),
+        { id: 'briefing', label: 'Full briefing', icon: '📝' },
+      ],
+      followups: ['Export to calendar', 'Best running window', 'Weather for lunch'],
+    };
+  }
 
   /** ISO timestamp of the hour `offset` hours from now, for block labelling. */
   _timeAt(ctx, offset) {

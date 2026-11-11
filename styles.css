@@ -235,6 +235,7 @@ html, body {
   box-shadow: 0 24px 52px -6px rgba(0, 0, 0, 0.65), 0 0 0 1px rgba(255, 255, 255, 0.08) !important;
 }
 .search-dropdown.open {
+  max-height: min(440px, calc(100vh - 160px), calc(var(--visual-viewport-height, 100vh) - 120px)) !important;
   max-height: min(440px, calc(100dvh - 160px), calc(var(--visual-viewport-height, 100vh) - 120px)) !important;
   opacity: 1 !important;
   visibility: visible !important;
@@ -477,6 +478,7 @@ html, body {
     width: 100% !important;
   }
   .search-dropdown.open {
+    max-height: min(420px, calc(100vh - 160px), calc(var(--visual-viewport-height, 100vh) - 120px)) !important;
     max-height: min(420px, calc(100dvh - 160px), calc(var(--visual-viewport-height, 100vh) - 120px)) !important;
   }
 }
@@ -647,7 +649,9 @@ html, body {
     width: 100% !important;
     max-width: 100% !important;
     height: 100% !important;
+    height: 100vh !important;
     height: 100dvh !important;
+    max-height: 100vh !important;
     max-height: 100dvh !important;
     border-radius: 0 !important;
     border: 2px solid #f97316 !important;
@@ -773,6 +777,14 @@ html, body {
   }
   .glass {
     border-width: 2px;
+  }
+  :focus-visible {
+    outline: 3px solid #0f172a;
+    outline-offset: 2px;
+    border-radius: 4px;
+  }
+  .dark :focus-visible {
+    outline-color: #fff;
   }
 }
 
@@ -1668,14 +1680,14 @@ button:active:not(.ol-zoom):not(.ol-rotate):not(.marker-close-btn):not(.weather-
   max-width: 360px;
 }
 
-/* Loading overlay: more elegant spinner */
+/* Loading overlay: crisp atmospheric base (prevents UI bleed-through) */
 #loadingOverlay {
-  -webkit-backdrop-filter: blur(12px);
-  backdrop-filter: blur(12px);
-  background: rgba(255, 255, 255, 0.85);
+  -webkit-backdrop-filter: blur(18px);
+  backdrop-filter: blur(18px);
+  background: rgba(248, 250, 252, 0.985);
 }
 .dark #loadingOverlay {
-  background: rgba(15, 23, 42, 0.85);
+  background: rgba(2, 6, 23, 0.985);
 }
 #weatherPanelTabs.dragging {
   cursor: grabbing;
@@ -2304,8 +2316,10 @@ button:active:not(.ol-zoom):not(.ol-rotate):not(.marker-close-btn):not(.weather-
   inset: 0 !important;
   width: 100vw !important;
   height: 100vh !important;
+  height: 100vh !important;
   height: 100dvh !important;
   max-width: 100vw !important;
+  max-height: 100vh !important;
   max-height: 100dvh !important;
   margin: 0 !important;
   border-radius: 0 !important;
@@ -3313,6 +3327,7 @@ body.sky-radar-fullscreen-active #timelineMinimizedTrigger #timelineMinimizedLab
 .aura-panel {
   transform-origin: bottom center;
   width: 100%;
+  max-height: min(88vh, calc(var(--app-height, 100vh) - 1.5rem));
   max-height: min(88vh, calc(var(--app-height, 100dvh) - 1.5rem));
   transition: max-width 0.25s cubic-bezier(0.16, 1, 0.3, 1), max-height 0.25s ease;
 }
@@ -3326,7 +3341,9 @@ body.sky-radar-fullscreen-active #timelineMinimizedTrigger #timelineMinimizedLab
     width: 100% !important;
     max-width: 100% !important;
     height: 100% !important;
+    height: 100vh !important;
     height: 100dvh !important;
+    max-height: 100vh !important;
     max-height: 100dvh !important;
     border-radius: 0 !important;
     border: none !important;
@@ -3836,6 +3853,7 @@ button, a, input, select, textarea, [role="button"] {
     flex-direction: column !important;
     align-items: center !important;
     z-index: 1001 !important;
+    max-height: calc(100vh - 180px - env(safe-area-inset-bottom, 0px)) !important;
     max-height: calc(100dvh - 180px - env(safe-area-inset-bottom, 0px)) !important;
     overflow-y: auto !important;
     overflow-x: hidden !important;
@@ -3858,6 +3876,7 @@ button, a, input, select, textarea, [role="button"] {
     bottom: calc(min(36vh, 230px) + env(safe-area-inset-bottom, 0px)) !important;
     top: auto !important;
     transform: none !important;
+    max-height: calc(100vh - 350px - env(safe-area-inset-bottom, 0px)) !important;
     max-height: calc(100dvh - 350px - env(safe-area-inset-bottom, 0px)) !important;
   }
 
@@ -3944,6 +3963,7 @@ button, a, input, select, textarea, [role="button"] {
       bottom: calc(3.85rem + env(safe-area-inset-bottom, 0px)) !important;
       top: auto !important;
       transform: none !important;
+      max-height: calc(100vh - 160px) !important;
       max-height: calc(100dvh - 160px) !important;
     }
     body:has(#weatherPanel.open.minimized) #mobileMapControls,
@@ -3953,6 +3973,7 @@ button, a, input, select, textarea, [role="button"] {
       bottom: calc(min(34vh, 200px) + env(safe-area-inset-bottom, 0px)) !important;
       top: auto !important;
       transform: none !important;
+      max-height: calc(100vh - 310px) !important;
       max-height: calc(100dvh - 310px) !important;
     }
     #mobileMapControls button,
@@ -4026,6 +4047,7 @@ button, a, input, select, textarea, [role="button"] {
     transform: translate(-50%, -50%) !important;
     width: min(320px, calc(100vw - 1.5rem)) !important;
     max-width: min(320px, calc(100vw - 1.5rem)) !important;
+    max-height: calc(100vh - 5rem - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px)) !important;
     max-height: calc(100dvh - 5rem - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px)) !important;
     max-height: calc(var(--app-height, 100vh) - 5rem) !important;
     margin: 0 !important;
@@ -4048,6 +4070,7 @@ button, a, input, select, textarea, [role="button"] {
     transform: translate(-50%, -50%) !important;
     width: min(340px, calc(100vw - 1.5rem)) !important;
     max-width: min(340px, calc(100vw - 1.5rem)) !important;
+    max-height: calc(100vh - 5rem - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px)) !important;
     max-height: calc(100dvh - 5rem - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px)) !important;
     max-height: calc(var(--app-height, 100vh) - 5rem) !important;
     margin: 0 !important;
@@ -4187,7 +4210,9 @@ button, a, input, select, textarea, [role="button"] {
     right: 0 !important;
     width: 100% !important;
     max-width: 100% !important;
+    height: var(--app-height, 100vh) !important;
     height: var(--app-height, 100dvh) !important;
+    max-height: var(--app-height, 100vh) !important;
     max-height: var(--app-height, 100dvh) !important;
     border-radius: 0 !important;
     z-index: 1250 !important;
@@ -4255,6 +4280,7 @@ button, a, input, select, textarea, [role="button"] {
   #routePanel.route-search-focused .route-search-dropdown {
     position: relative;
     z-index: 2;
+    max-height: min(52vh, calc(var(--visual-viewport-height, 100vh) - 230px));
     max-height: min(52dvh, calc(var(--visual-viewport-height, 100dvh) - 230px));
     overscroll-behavior: contain;
     -webkit-overflow-scrolling: touch;
@@ -4470,8 +4496,10 @@ button, a, input, select, textarea, [role="button"] {
     width: 100% !important;
     max-width: 100% !important;
     height: 100% !important;
+    height: 100vh !important;
     height: 100dvh !important;
     max-height: 100% !important;
+    max-height: 100vh !important;
     max-height: 100dvh !important;
     border-radius: 0 !important;
     box-shadow: 0 0 40px rgba(0, 0, 0, 0.3) !important;
@@ -4548,6 +4576,7 @@ button, a, input, select, textarea, [role="button"] {
 /* ── Map Mode & Terrain Switcher Cards ────────────────────────── */
 #mapLayersFlyout {
   max-height: min(88vh, calc(var(--app-height, 100vh) - 4rem));
+  max-height: calc(100vh - 4rem);
   max-height: calc(100dvh - 4rem);
   flex-direction: column;
   overflow-y: hidden;
@@ -4576,6 +4605,7 @@ button, a, input, select, textarea, [role="button"] {
 }
 #radarExpandedPanel {
   max-height: min(88vh, calc(var(--app-height, 100vh) - 4rem));
+  max-height: calc(100vh - 4rem);
   max-height: calc(100dvh - 4rem);
   overflow-y: auto;
   overscroll-behavior: contain;
@@ -4857,7 +4887,9 @@ button, a, input, select, textarea, [role="button"] {
     width: 100% !important;
     max-width: 100% !important;
     height: 100% !important;
+    height: 100vh !important;
     height: 100dvh !important;
+    max-height: 100vh !important;
     max-height: 100dvh !important;
     border-radius: 0 !important;
     box-shadow: 0 -8px 36px rgba(0, 0, 0, 0.35) !important;
@@ -4908,7 +4940,9 @@ button, a, input, select, textarea, [role="button"] {
     width: 100% !important;
     max-width: 100% !important;
     height: 100% !important;
+    height: 100vh !important;
     height: 100dvh !important;
+    max-height: 100vh !important;
     max-height: 100dvh !important;
     border-radius: 0 !important;
     z-index: 1200 !important;
@@ -5429,29 +5463,6 @@ button, a, input, select, textarea, [role="button"] {
     animation: none !important;
     transform: none !important;
   }
-}
-
-/* Seamless Universal Auto-Translation Integration */
-.goog-te-banner-frame.skiptranslate,
-.goog-te-banner-frame {
-  display: none !important;
-  visibility: hidden !important;
-  height: 0 !important;
-}
-body {
-  top: 0px !important;
-  position: static !important;
-}
-#goog-gt-tt, .goog-te-balloon-frame {
-  display: none !important;
-}
-.goog-text-highlight {
-  background: transparent !important;
-  box-shadow: none !important;
-}
-font {
-  background: transparent !important;
-  box-shadow: none !important;
 }
 
 

@@ -4193,7 +4193,8 @@ class AurafiskyApp {
   async _loadInitialStartupLocation() {
     this._sweepStaleCache();
 
-    // 1. Deep link / URL parameters (instant startup with ?lat=...&lng=...&name=...)
+    // 1. Priority 1: Check if page was opened via a shared link URL (?lat=...&lng=...&name=...)
+    // Run this synchronously BEFORE awaiting local cache/IndexedDB so deep-link clicks open immediately!
     if (this._checkUrlParamsOnStartup() || this._hasPendingShareTarget) {
       this._loadLocalCache().catch(() => {});
       return;
@@ -4435,6 +4436,11 @@ class AurafiskyApp {
   }
 
   _renderLocationAddressLoading() {
+    if (typeof this.clearHighwayBadge === "function") {
+      this.clearHighwayBadge();
+    } else {
+      document.getElementById("locationHighwayBadge")?.remove();
+    }
     const content = document.getElementById("locationAddressContent");
     if (!content) return;
     content.innerHTML = `
@@ -5037,6 +5043,7 @@ class AurafiskyApp {
       this._currentFullAddress = '';
       this.addressResolvedForLat = null;
       this.addressResolvedForLng = null;
+      document.getElementById("locationHighwayBadge")?.remove();
       const summaryEl = document.getElementById("locationAddressSummary");
       if (summaryEl) {
         summaryEl.innerHTML = `<span class="text-slate-400">${this._escapeHtml(translateText("Resolving address...", this.language || "en") || "Resolving address...")}</span>`;

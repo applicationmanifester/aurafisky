@@ -74,4 +74,31 @@ describe("Interactive Highway Inspector", () => {
     const res = detectHighway("Ocean", -10.0, 75.0);
     expect(res).toBeNull();
   });
+
+  it("returns null for rural/interior village locations like Pachgaon", () => {
+    // Pachgaon, Rajura Taluka, Maharashtra (19.7082°N, 79.2668°E)
+    const pachgaonAddress = {
+      hamlet: "Golkarguda",
+      village: "Pachgaon",
+      county: "Rajura Taluka",
+      state_district: "Chandrapur",
+      state: "Maharashtra"
+    };
+    const res = detectHighway(pachgaonAddress, 19.7082, 79.2668);
+    expect(res).toBeNull();
+  });
+
+  it("dynamically detects regional state highways or uncataloged highways", () => {
+    const shAddress = {
+      road: "State Highway 233",
+      ref: "SH 233",
+      highway: "primary",
+      state: "Maharashtra"
+    };
+    const res = detectHighway(shAddress, 19.8, 79.3);
+    expect(res).not.toBeNull();
+    expect(res.ref).toBe("SH 233");
+    expect(res.isDynamic).toBe(true);
+  });
 });
+

@@ -396,17 +396,48 @@ export function detectHighway(textOrAddress, lat = null, lng = null) {
     for (const hwy of Object.values(HIGHWAY_DATABASE)) {
       for (const wp of hwy.waypoints) {
         const d = haversineMeters(lat, lng, wp.lat, wp.lng);
-        // If within 18 km of a known highway waypoint and the query/road mentions highway or road
-        if (d < 18000 && d < closestDist) {
+        // Only match spatial proximity if within 15 km of a known highway waypoint AND query or address context indicates highway
+        if (d < 15000 && d < closestDist) {
           closestDist = d;
           bestHwy = hwy;
         }
       }
     }
 
-    // Only pick spatial match if it's within close proximity (<18 km)
-    if (bestHwy && closestDist <= 18000) {
+    if (bestHwy && closestDist <= 15000) {
       matchedHighway = bestHwy;
+    }
+  }
+
+  // 3. Dynamic generic highway detection from OpenStreetMap reverse geocode attributes
+  if (!matchedHighway && textOrAddress && typeof textOrAddress === "object") {
+    const road = textOrAddress.road || "";
+    const ref = textOrAddress.ref || "";
+    const hwyProp = textOrAddress.highway || "";
+    const isHighwayLike =
+      /\b(?:NH\s*\d+|SH\s*\d+|STATE HIGHWAY|NATIONAL HIGHWAY|EXPRESSWAY|MOTORWAY|FREEWAY|INTERSTATE|AUTOBAHN|ROUTE\s*\d+|BYPASS)\b/i.test(road + " " + ref) ||
+      /^(motorway|trunk|primary|motorway_link|trunk_link)$/i.test(hwyProp);
+
+    if (isHighwayLike && (road || ref)) {
+      const hwyRef = ref || (road.match(/\b(?:NH|SH|NE|M|A|I)\s*[- ]?\d+[A-Z]?\b/i)?.[0]) || "Highway";
+      const hwyName = road || hwyRef;
+      const nearestPlace = textOrAddress.village || textOrAddress.town || textOrAddress.city || textOrAddress.county || "";
+      matchedHighway = {
+        id: hwyRef.replace(/\s+/g, ""),
+        ref: hwyRef,
+        type: hwyProp ? `Road Class: ${hwyProp}` : "Regional Highway / Expressway",
+        name: hwyName,
+        shortName: `${hwyRef}${nearestPlace ? ` (${nearestPlace})` : ''}`,
+        origin: "Regional Corridor",
+        destination: "Active Route Segment",
+        lengthKm: null,
+        states: [textOrAddress.state || textOrAddress.county || "Region"].filter(Boolean),
+        description: `Active highway corridor section along ${[road, nearestPlace, textOrAddress.state].filter(Boolean).join(", ")}.`,
+        isDynamic: true,
+        waypoints: (lat != null && lng != null) ? [
+          { name: nearestPlace || hwyName, lat, lng, role: "waypoint", km: 0 }
+        ] : []
+      };
     }
   }
 
@@ -655,18 +686,24 @@ export async function openHighwayWeather(highwayId) {
 }
 
 /**
+ * Removes any active Highway Badge from the location card.
+ */
+export function clearHighwayBadge() {
+  const existingBadge = document.getElementById("locationHighwayBadge");
+  if (existingBadge) existingBadge.remove();
+}
+
+/**
  * Renders an interactive Highway Badge in the location panel address summary.
  */
 export function renderHighwaySummaryBadge(containerEl, highwayInfo) {
+  clearHighwayBadge();
   if (!containerEl || !highwayInfo) return;
-
-  const existingBadge = document.getElementById("locationHighwayBadge");
-  if (existingBadge) existingBadge.remove();
 
   const rel = highwayInfo.relativeInfo;
   const relText = rel
     ? `${rel.nearestCity ? `Near ${rel.nearestCity}` : ''} · ${rel.approxKmFromOrigin} km from start`
-    : `${highwayInfo.lengthKm} km`;
+    : (highwayInfo.lengthKm ? `${highwayInfo.lengthKm} km` : (highwayInfo.type || "Highway"));
 
   const badge = document.createElement("div");
   badge.id = "locationHighwayBadge";
@@ -674,11 +711,11 @@ export function renderHighwaySummaryBadge(containerEl, highwayInfo) {
   badge.innerHTML = `
     <div class="flex items-center gap-2 min-w-0">
       <div class="flex items-center justify-center px-2 py-0.5 rounded font-black text-[11px] bg-slate-900 text-white dark:bg-white dark:text-slate-900 border border-slate-700 dark:border-slate-300 shadow-sm shrink-0">
-        ${highwayInfo.ref}
+        ${highwayInfo.ref || "HWY"}
       </div>
       <div class="flex flex-col min-w-0">
         <span class="font-bold text-slate-800 dark:text-slate-100 truncate text-[11.5px]">
-          ${highwayInfo.shortName}
+          ${highwayInfo.shortName || highwayInfo.name}
         </span>
         <span class="text-[10px] text-slate-500 dark:text-slate-400 truncate">
           ${relText}
@@ -696,7 +733,7 @@ export function renderHighwaySummaryBadge(containerEl, highwayInfo) {
 
   badge.querySelector("#inspectHighwayBtn")?.addEventListener("click", (e) => {
     e.stopPropagation();
-    openHighwayInspectorModal(highwayInfo.id, appRef?.selectedLat, appRef?.selectedLng);
+    openHighwayInspectorModal(highwayInfo.id || highwayInfo.ref, appRef?.selectedLat, appRef?.selectedLng);
   });
 }
 
@@ -875,6 +912,7 @@ export function init(app) {
   app.detectHighway = detectHighway;
   app.traceHighwayOnMap = traceHighwayOnMap;
   app.clearHighwayTrace = clearHighwayTrace;
+  app.clearHighwayBadge = clearHighwayBadge;
   app.openHighwayInspectorModal = openHighwayInspectorModal;
   app.openHighwayWeather = openHighwayWeather;
   app.renderHighwaySummaryBadge = renderHighwaySummaryBadge;
@@ -882,9 +920,10 @@ export function init(app) {
   window.detectHighway = detectHighway;
   window.traceHighwayOnMap = traceHighwayOnMap;
   window.clearHighwayTrace = clearHighwayTrace;
+  window.clearHighwayBadge = clearHighwayBadge;
   window.openHighwayInspectorModal = openHighwayInspectorModal;
 
-  // Intercept location address resolution to show Highway badge when detected
+  // Intercept location address resolution to show Highway badge when detected, or remove it when not on a highway
   const origRenderLocationAddressCard = app._renderLocationAddressCard?.bind(app);
   if (origRenderLocationAddressCard) {
     app._renderLocationAddressCard = function(address, displayName, lat, lng) {
@@ -894,6 +933,8 @@ export function init(app) {
         const container = document.getElementById("locationAddressCard") || document.getElementById("locationAddressContent") || document.getElementById("locationAddressSummary")?.parentElement;
         if (detected && container) {
           renderHighwaySummaryBadge(container, detected);
+        } else {
+          clearHighwayBadge();
         }
       } catch (e) {
         console.warn("Highway detection hook error:", e);

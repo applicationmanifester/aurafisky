@@ -35,6 +35,7 @@ import * as tvNavigation from './tvNavigation.js';
 import * as sync from './sync.js';
 import * as activityWindow from './activityWindow.js';
 import * as marine from './marine.js';
+import * as highwayInspector from './highwayInspector.js';
 
 // Feature modules loaded eagerly. Order matters: deviceProfile first so
 // data-device attributes exist on <html> before any other feature reads them.
@@ -44,6 +45,7 @@ const featureModules = {
   sync,
   activityWindow,
   marine,
+  highwayInspector,
   ensemble,
   radar,
   bookmarks,

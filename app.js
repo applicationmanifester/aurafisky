@@ -4064,8 +4064,11 @@ class AurafiskyApp {
   // ================================================================
   //  GEOLOCATION & REVERSE SEARCH (Nominatim)
 
-  _persistSession(lat, lng, name) {
-    localforage.setItem("_lastSession", { lat, lng, name }).catch(() => {});
+  _persistSession(lat, lng, name, userExplicit = true) {
+    if (!userExplicit) return;
+    this._localCache = this._localCache || {};
+    this._localCache._lastSession = { lat, lng, name, userExplicit: true };
+    localforage.setItem("_lastSession", { lat, lng, name, userExplicit: true }).catch(() => {});
     this._updateUrlParams(lat, lng, name);
   }
 
@@ -4190,8 +4193,7 @@ class AurafiskyApp {
   async _loadInitialStartupLocation() {
     this._sweepStaleCache();
 
-    // 1. Priority 1: Check if page was opened via a shared link URL (?lat=...&lng=...&name=...)
-    // Run this synchronously BEFORE awaiting local cache/IndexedDB so deep-link clicks open immediately!
+    // 1. Deep link / URL parameters (instant startup with ?lat=...&lng=...&name=...)
     if (this._checkUrlParamsOnStartup() || this._hasPendingShareTarget) {
       this._loadLocalCache().catch(() => {});
       return;
@@ -4200,86 +4202,82 @@ class AurafiskyApp {
     this.setLoadingProgress(70, "Finding your location");
     await this._loadLocalCache();
 
-    // Resolves an immediate regional city from user's timezone if no prior session exists
-    const getStartupDefaultLocation = () => this._getTimezoneDefaultLocation();
-
-    // Fallback runner to restore previous session or default home, guaranteed never to leave UI blank
-    const restoreFallback = (guaranteed = false) => {
-      if (this._restoreSession()) {
-        return true;
-      }
-      if (this.defaultLocation && this.defaultLocation.lat != null) {
-        this.selectLocation(this.defaultLocation.lat, this.defaultLocation.lng, this.getLocalizedLocationName(this.defaultLocation) || this.defaultLocation.name);
-        if (this.defaultLocationNotify) {
-          this.setupHourlyNotifications();
-        }
-        return true;
-      }
-      if (guaranteed) {
-        const def = getStartupDefaultLocation();
-        this.selectLocation(def.lat, def.lng, def.name);
-        return true;
-      }
-      return false;
-    };
-
-    // 2. Mobile-first Smart Hybrid auto-location check
-    // On mobile devices, if geolocation permission is already granted or in a native app (Capacitor),
-    // open the user's current location immediately.
-    // If not yet determined or if permission is prompt/denied, instantly render the cached session / home
-    // without raising an unexpected intrusive prompt or blocking the screen.
-    const isMobile = isMobileLayout();
-    const isNativeApp = typeof window !== "undefined" && Boolean(window.Capacitor?.isNativePlatform?.());
-
-    if (isMobile) {
-      let permissionState = null;
-      try {
-        if (typeof navigator !== "undefined" && navigator.permissions?.query) {
-          const perm = await navigator.permissions.query({ name: "geolocation" });
-          permissionState = perm?.state;
-        }
-      } catch (e) {
-        // Permission query not supported on some WebViews
-      }
-
-      if (isNativeApp || permissionState === "granted" || permissionState !== "denied" || this._lastKnownGpsCoords) {
-        // Instantly render optimistic cached session/home so screen is never blank while GPS locks
-        const restored = restoreFallback(true);
-
-        // Concurrently get fresh user location and smoothly transition to where the user currently is
-        this.getMyLocation({
-          silent: true,
-          precise: true,
-          onFail: () => {
-            if (!restored) restoreFallback(true);
-          },
-        });
-        return;
-      }
-    }
-
-    // 3. Desktop or mobile without pre-granted location: Restored previous session
+    // 2. Fallback to previous location if the user previously changed/selected one
     if (this._restoreSession()) {
       return;
     }
 
-    // 4. Default Home location
-    if (this.defaultLocation && this.defaultLocation.lat != null) {
-      this.selectLocation(this.defaultLocation.lat, this.defaultLocation.lng, this.getLocalizedLocationName(this.defaultLocation) || this.defaultLocation.name);
-      if (this.defaultLocationNotify) {
-        this.setupHourlyNotifications();
+    // 3. Fallback hierarchy when no previous user-selected location exists:
+    //    First try live device coordinates (GPS).
+    //    If coordinates are not available, fall back to the user's set Home location.
+    //    If Home location is not set either, fall back to regional timezone default
+    //    (marked isFallback: true so it is never permanently saved as a user choice).
+    const onCoordsUnavailable = () => {
+      if (this.defaultLocation && this.defaultLocation.lat != null) {
+        this.selectLocation(
+          this.defaultLocation.lat,
+          this.defaultLocation.lng,
+          this.getLocalizedLocationName(this.defaultLocation) || this.defaultLocation.name,
+          { isHomeFallback: true }
+        );
+        if (this.defaultLocationNotify) {
+          this.setupHourlyNotifications();
+        }
+        return;
       }
+      const def = this._getTimezoneDefaultLocation();
+      this.selectLocation(def.lat, def.lng, def.name, { isFallback: true, isAutomaticDefault: true });
+    };
+
+    // Mobile-first smart auto-location check
+    const isMobile = isMobileLayout();
+    const isNativeApp = typeof window !== "undefined" && Boolean(window.Capacitor?.isNativePlatform?.());
+    let permissionState = null;
+    try {
+      if (typeof navigator !== "undefined" && navigator.permissions?.query) {
+        const perm = await navigator.permissions.query({ name: "geolocation" });
+        permissionState = perm?.state;
+      }
+    } catch (e) {}
+
+    if (isMobile && (isNativeApp || permissionState === "granted" || permissionState !== "denied" || this._lastKnownGpsCoords)) {
+      this.getMyLocation({
+        silent: true,
+        precise: true,
+        onFail: () => {
+          onCoordsUnavailable();
+        },
+      });
       return;
     }
 
-    // 5. Geolocation fallback with guaranteed regional fallback location
-    restoreFallback(true);
-    this.getMyLocation({ silent: true });
+    this.getMyLocation({
+      silent: false,
+      precise: true,
+      onFail: () => {
+        onCoordsUnavailable();
+      },
+    });
   }
 
   _restoreSession() {
     const saved = this._localCache?._lastSession;
     if (saved && saved.lat != null && saved.lng != null) {
+      // Ignore automatic fallbacks or sessions not explicitly chosen by user
+      if (saved.isFallback || saved.userExplicit === false) {
+        return false;
+      }
+      // Migrate legacy sessions: previously, the app auto-persisted Bengaluru for GMT+5:30
+      // without setting userExplicit. Filter those out so mobile devices are not hijacked.
+      const tzDef = this._getTimezoneDefaultLocation();
+      const isLegacyAutoDefault =
+        saved.userExplicit === undefined &&
+        ((Math.abs(saved.lat - tzDef.lat) < 0.005 && Math.abs(saved.lng - tzDef.lng) < 0.005) ||
+         (Math.abs(saved.lat - 12.9716) < 0.005 && Math.abs(saved.lng - 77.5946) < 0.005));
+      if (isLegacyAutoDefault) {
+        return false;
+      }
+
       let savedName = saved.name;
       if (savedName && isOceanName(savedName) && isCoordinateOnLand(saved.lat, saved.lng)) {
         savedName = null;
@@ -4288,6 +4286,7 @@ class AurafiskyApp {
         saved.lat,
         saved.lng,
         savedName || `${saved.lat.toFixed(4)}, ${saved.lng.toFixed(4)}`,
+        { restored: true }
       );
       return true;
     }
@@ -4826,7 +4825,9 @@ class AurafiskyApp {
         this.selectedName = resolvedName;
         this._updateHeaderLocationAndCoords(resolvedName, lat, lng);
         this._updateUrlParams(lat, lng, resolvedName);
-        this._persistSession(lat, lng, resolvedName);
+        if (!opts?.isFallback && !opts?.isAutomaticDefault && !opts?.restored) {
+          this._persistSession(lat, lng, resolvedName, true);
+        }
         if (typeof this.updateHomeButton === "function") {
           this.updateHomeButton();
         }
@@ -5013,12 +5014,14 @@ class AurafiskyApp {
     // Rapid switching (tap A → quickly tap B) used to lose B entirely: the
     // guard returned silently, so the user had to tap a third time.
     if (this._isFetching) {
-      this._pendingLocation = { lat, lng, name };
+      this._pendingLocation = { lat, lng, name, options };
       return;
     }
     this._isFetching = true;
     try {
-      this._persistSession(lat, lng, name);
+      if (!options?.isFallback && !options?.isAutomaticDefault && !options?.restored) {
+        this._persistSession(lat, lng, name, true);
+      }
       this.syncBus?.syncLocation(lat, lng, name);
 
       let weatherPopulated = false;
@@ -5075,7 +5078,7 @@ class AurafiskyApp {
       // Refresh UI panel state
       this._updateHeaderLocationAndCoords(name, lat, lng);
       this._renderLocationAddressLoading();
-      this.resolveLocationAddress(lat, lng, name);
+      this.resolveLocationAddress(lat, lng, name, options);
       if (this.$.panelTimeLabel) this.$.panelTimeLabel.textContent = "Fetching weather...";
       if (this.$.mobilePanelTimeLabel) this.$.mobilePanelTimeLabel.textContent = "Fetching weather...";
       if (this.$.panelCardLocalTimeText) this.$.panelCardLocalTimeText.textContent = "Fetching weather...";
@@ -5379,7 +5382,7 @@ class AurafiskyApp {
       if (this._pendingLocation) {
         const pending = this._pendingLocation;
         this._pendingLocation = null;
-        this.selectLocation(pending.lat, pending.lng, pending.name);
+        this.selectLocation(pending.lat, pending.lng, pending.name, pending.options);
       }
     }
   }

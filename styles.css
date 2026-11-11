@@ -5466,5 +5466,26 @@ button, a, input, select, textarea, [role="button"] {
   }
 }
 
+/* ── Interactive Highway Inspector ── */
+#locationHighwayBadge {
+  box-shadow: 0 4px 16px -2px rgba(14, 165, 233, 0.15);
+  animation: hwyBadgeIn 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+@keyframes hwyBadgeIn {
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+#highwayTraceHud {
+  animation: hwyHudIn 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+@keyframes hwyHudIn {
+  from { opacity: 0; transform: translate(-50%, 8px); }
+  to { opacity: 1; transform: translate(-50%, 0); }
+}
+
+
 
 

@@ -19,11 +19,7 @@
  * ============================================================
  */
 
-import "@fontsource/inter/latin-400.css";
-import "@fontsource/inter/latin-500.css";
-import "@fontsource/inter/latin-600.css";
-import "@fontsource/inter/latin-700.css";
-import "@fontsource/inter/latin-ext-400.css";
+import "@fontsource-variable/inter";
 import "ol/ol.css";
 
 // OpenLayers: renders vector tiles via Canvas 2D, not WebGL — chosen over
@@ -1488,14 +1484,19 @@ class AurafiskyApp {
       // basemaps at once (the old behavior) doubled network requests and
       // main-thread parse work during the exact window the visible map is
       // trying to paint, which is real time added to "map loads slowly".
-      // The other theme loads right after, still well before anyone would
+      // The other theme loads during idle time, well before anyone would
       // toggle it, so switching dark/light stays instant.
       const activeTheme = this.isDark ? "dark" : "light";
       const inactiveTheme = this.isDark ? "light" : "dark";
       const activeGroup = this.isDark ? this.darkBasemap : this.lightBasemap;
       const inactiveGroup = this.isDark ? this.lightBasemap : this.darkBasemap;
       loadBasemap(activeTheme, activeGroup).then(() => {
-        loadBasemap(inactiveTheme, inactiveGroup);
+        // Defer inactive theme to idle callback to avoid blocking first paint
+        if (typeof requestIdleCallback !== 'undefined') {
+          requestIdleCallback(() => loadBasemap(inactiveTheme, inactiveGroup), { timeout: 3000 });
+        } else {
+          setTimeout(() => loadBasemap(inactiveTheme, inactiveGroup), 0);
+        }
         this._updateMapStyleUI();
       });
 

@@ -33,8 +33,9 @@ function initWeatherCanvas() {
       });
     }
 
-    // Start the animation loop
-    this.runWeatherCanvasLoop();
+    // DO NOT start animation loop here — only start when an effect is activated
+    // (see updateWeatherCanvasOverlayEffect). This saves CPU/battery when no
+    // weather effect is active.
   }
 
 function resizeWeatherCanvas() {
@@ -75,12 +76,11 @@ function updateWeatherCanvasOverlayEffect(code, windSpeed, windDirection) {
     }
 
     if (this.activeEffectType === effect) return;
-    const wasIdle = this.activeEffectType === "none";
     this.activeEffectType = effect;
     this.particles = []; // Clear current particle arrays
 
     // Restart animation loop if it was paused (perf #7)
-    if (wasIdle && effect !== "none" && !this.animationFrameId) {
+    if (effect !== "none" && !this.animationFrameId) {
       this.runWeatherCanvasLoop();
     }
 

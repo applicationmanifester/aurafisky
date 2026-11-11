@@ -17,6 +17,17 @@ const WeatherService = (() => {
   const PAST_DAYS = 3;
   const FORECAST_DAYS = 7;
 
+  // ── Haversine distance (meters) for batch grouping ──────────
+  function haversineMeters(lat1, lon1, lat2, lon2) {
+    const R = 6371000; // Earth radius in meters
+    const toRad = (deg) => deg * Math.PI / 180;
+    const dLat = toRad(lat2 - lat1);
+    const dLon = toRad(lon2 - lon1);
+    const a = Math.sin(dLat / 2) ** 2 +
+      Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLon / 2) ** 2;
+    return 2 * R * Math.asin(Math.sqrt(a));
+  }
+
   // ── In-Memory Request Cache ────────────────────────────────
   // Deduplicates concurrent identical API calls so multiple callers
   // share a single network request.
@@ -393,6 +404,127 @@ const WeatherService = (() => {
 
     _setCache(cacheKey, { data: fetchPromise, ts: Date.now() });
     return await fetchPromise;
+  }
+
+  /**
+   * Batched forecast fetch for multiple nearby coordinates.
+   * Open-Meteo supports multiple latitude/longitude pairs in a single request.
+   *
+   * @param {Array<{lat: number, lng: number}>} locations - Array of {lat, lng} objects
+   * @param {number} maxDistanceKm - Max distance between locations to batch (default 10km)
+   * @returns {Promise<Array<Object>>} Array of forecast data for each location
+   */
+  async function fetchForecastBatch(locations, maxDistanceKm = 10) {
+    if (!locations?.length) return [];
+    if (locations.length === 1) return [await fetchForecast(locations[0].lat, locations[0].lng)];
+
+    const round = (v) => Number(v).toFixed(4);
+    const singleCacheKey = (lat, lng) =>
+      `${FORECAST_URL}?latitude=${round(lat)}&longitude=${round(lng)}&past_days=${PAST_DAYS}&forecast_days=${FORECAST_DAYS}&timezone=auto`;
+
+    const distributeBatchData = (groupEntries, rawData) => {
+      const items = Array.isArray(rawData) ? rawData : [rawData];
+      return groupEntries.map((_, i) => {
+        const item = items[i] ?? (items.length === 1 ? items[0] : null);
+        return item && item.hourly && item.hourly.time ? item : null;
+      });
+    };
+
+    // Group nearby locations while preserving original result indices
+    const groups = [];
+    const used = new Set();
+    for (let i = 0; i < locations.length; i++) {
+      if (used.has(i)) continue;
+      const group = [{ lat: locations[i].lat, lng: locations[i].lng, origIdx: i }];
+      used.add(i);
+      for (let j = i + 1; j < locations.length; j++) {
+        if (used.has(j)) continue;
+        const d = haversineMeters(
+          locations[i].lat, locations[i].lng,
+          locations[j].lat, locations[j].lng
+        );
+        if (d <= maxDistanceKm * 1000) {
+          group.push({ lat: locations[j].lat, lng: locations[j].lng, origIdx: j });
+          used.add(j);
+        }
+      }
+      groups.push(group);
+    }
+
+    // Fetch each group
+    const results = new Array(locations.length);
+    for (const group of groups) {
+      if (group.length === 1) {
+        results[group[0].origIdx] = await fetchForecast(group[0].lat, group[0].lng);
+        continue;
+      }
+
+      const lats = group.map((l) => round(l.lat)).join(",");
+      const lngs = group.map((l) => round(l.lng)).join(",");
+      const cacheKey = `${FORECAST_URL}?latitude=${lats}&longitude=${lngs}&past_days=${PAST_DAYS}&forecast_days=${FORECAST_DAYS}&timezone=auto`;
+
+      // Check cache
+      let cachedData = null;
+      if (_requestCache.has(cacheKey)) {
+        const entry = _requestCache.get(cacheKey);
+        if (entry && Date.now() - entry.ts < REQUEST_CACHE_TTL) {
+          cachedData = entry.data instanceof Promise ? await entry.data : entry.data;
+        }
+      }
+
+      if (cachedData) {
+        const mapped = distributeBatchData(group, cachedData);
+        if (mapped.every(Boolean)) {
+          group.forEach((loc, i) => {
+            results[loc.origIdx] = mapped[i];
+          });
+          continue;
+        }
+      }
+
+      const params = new URLSearchParams({
+        latitude: lats,
+        longitude: lngs,
+        hourly: "temperature_2m,relative_humidity_2m,apparent_temperature,precipitation_probability,precipitation,weather_code,cloud_cover,wind_speed_10m,wind_direction_10m,wind_gusts_10m,uv_index,pressure_msl,visibility,is_day",
+        daily: "weather_code,temperature_2m_max,temperature_2m_min,apparent_temperature_max,apparent_temperature_min,sunrise,sunset,uv_index_max,precipitation_sum,precipitation_probability_max,wind_speed_10m_max",
+        timezone: "auto",
+        past_days: PAST_DAYS,
+        forecast_days: FORECAST_DAYS,
+      });
+
+      const { signal: fetchSignal, cleanup } = _createCombinedSignal(null, 7500);
+      try {
+        const response = await fetch(`${FORECAST_URL}?${params}`, { signal: fetchSignal });
+        if (response.ok) {
+          const rawData = await response.json();
+          const items = Array.isArray(rawData) ? rawData : [rawData];
+          const mapped = distributeBatchData(group, items);
+          if (mapped.every(Boolean)) {
+            _setCache(cacheKey, { data: items, ts: Date.now() });
+          }
+          for (let i = 0; i < group.length; i++) {
+            const loc = group[i];
+            if (mapped[i]) {
+              results[loc.origIdx] = mapped[i];
+              _setCache(singleCacheKey(loc.lat, loc.lng), { data: mapped[i], ts: Date.now() });
+            } else {
+              results[loc.origIdx] = await fetchForecast(loc.lat, loc.lng);
+            }
+          }
+          continue;
+        }
+      } catch (_err) {
+        // Fallback to individual requests below
+      } finally {
+        cleanup();
+      }
+
+      for (const loc of group) {
+        results[loc.origIdx] = await fetchForecast(loc.lat, loc.lng);
+      }
+    }
+
+    return results;
   }
 
   /**
@@ -3133,6 +3265,7 @@ const WeatherService = (() => {
   // ── Public API ─────────────────────────────────────────────
   return {
     fetchForecast,
+    fetchForecastBatch,
     getPrecipitationNowcast,
     getUVGuidance,
     getHourlyAtIndex,

@@ -115,7 +115,7 @@ html, body {
   overflow: hidden;
   overscroll-behavior: none;
   -webkit-text-size-adjust: 100%;
-  font-family: 'Inter', system-ui, -apple-system, sans-serif;
+  font-family: 'Inter Variable', 'Inter', system-ui, -apple-system, sans-serif;
   /* Smoother rendering on mobile Retina displays */
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
@@ -4081,7 +4081,9 @@ button, a, input, select, textarea, [role="button"] {
   body:has(#routePanel:not(.hidden)) #zoomControls {
     opacity: 0 !important;
     pointer-events: none !important;
+    visibility: hidden !important;
     transform: translateY(-50%) translateX(-36px) scale(0.9) !important;
+    transition: opacity 0.22s cubic-bezier(0.16, 1, 0.3, 1), transform 0.22s cubic-bezier(0.16, 1, 0.3, 1), visibility 0s linear 0.22s;
   }
 
   .weather-panel.open:not(.minimized) ~ #mobileMapControls,
@@ -4091,11 +4093,13 @@ button, a, input, select, textarea, [role="button"] {
   body:has(#routePanel:not(.hidden)) #mobileMapControls {
     opacity: 0 !important;
     pointer-events: none !important;
+    visibility: hidden !important;
     transform: translateY(-50%) translateX(36px) scale(0.9) !important;
+    transition: opacity 0.22s cubic-bezier(0.16, 1, 0.3, 1), transform 0.22s cubic-bezier(0.16, 1, 0.3, 1), visibility 0s linear 0.22s;
   }
   #zoomControls,
   #mobileMapControls {
-    transition: opacity 0.22s cubic-bezier(0.16, 1, 0.3, 1), transform 0.22s cubic-bezier(0.16, 1, 0.3, 1);
+    transition: opacity 0.22s cubic-bezier(0.16, 1, 0.3, 1), transform 0.22s cubic-bezier(0.16, 1, 0.3, 1), visibility 0s linear 0s;
   }
 
   /* Responsive weather tabs on mobile so all tabs fit and scroll gracefully */

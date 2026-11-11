@@ -34,10 +34,10 @@ export default defineConfig(({ mode }) => {
     rollupOptions: {
       output: {
         manualChunks: {
-          // Large third-party map libs — split out so they cache independently
-          // of app-core (they change far less often than app.js) and so the
-          // main bundle doesn't trip the >500kB chunk-size warning.
-          'vendor-map': ['ol', 'ol-mapbox-style'],
+          // Split OpenLayers core from mapbox-style parser — they're loaded at different times
+          'vendor-ol': ['ol'],
+          'vendor-mapbox-style': ['ol-mapbox-style'],
+          // Eager core features (loaded synchronously with features/registry.js)
           'features-core': [
             './features/ensemble.js',
             './features/radar.js',
@@ -65,6 +65,7 @@ export default defineConfig(({ mode }) => {
             './features/auraMapsMobile.js',
             './features/activityWindow.js',
             './features/marine.js',
+            './features/analytics.js',
           ],
           // Heavy features (aura, routes, timeMachine, compareCities) are
           // dynamically imported from registry.js — no eager chunk.

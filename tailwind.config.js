@@ -13,7 +13,7 @@ module.exports = {
   theme: {
     extend: {
       fontFamily: {
-        sans: ["Inter", "system-ui", "-apple-system", "sans-serif"],
+        sans: ["Inter Variable", "Inter", "system-ui", "-apple-system", "sans-serif"],
       },
       colors: {
         primary: { DEFAULT: "#14b8a6", light: "#2dd4bf", dark: "#0d9488" },

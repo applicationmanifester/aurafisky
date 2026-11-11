@@ -2,16 +2,13 @@
 // directly onto the running AurafiskyApp instance (app.foo = foo), so `this`
 // inside each extracted function resolves normally at the call site.
 //
-// Core features are loaded eagerly (static import) so they're available the
-// instant the app boots. Heavy, interaction-gated features (aura assistant,
-// routes, time-machine, city comparison) are loaded in the background after
-// first paint so they don't block parse/eval of the critical path.
+// Core features are loaded eagerly (static import into features-core) so
+// initial weather render, tabs, radar, insights, astronomy, and controls never
+// race against dynamic imports or trigger dozens of small network requests.
 //
-// Lazy features are initialized on a setTimeout(0) after the eager set; by
-// the time a user clicks a corresponding button they've already evaluated.
-// If a call site is reached before loading completes, the corresponding
-// app.* method is undefined and call sites must guard (they already do for
-// optional features like app._ensembleReady).
+// Heavy, interaction-gated features (aura assistant, routes, time-machine,
+// city comparison) are dynamically imported in parallel after first paint so
+// they don't block parse/eval of the critical path.
 
 // ── Eager (critical path) ─────────────────────────────────────────────
 import * as ensemble from './ensemble.js';
@@ -54,13 +51,13 @@ import * as activityWindow from './activityWindow.js';
 import * as marine from './marine.js';
 
 const featureModules = {
-  activityWindow,
-  marine,
   // Device profile runs first so data-device attributes exist on <html>
   // before any other feature (and before first panel paint) reads them.
   deviceProfile,
   tvNavigation,
   sync,
+  activityWindow,
+  marine,
   ensemble,
   radar,
   bookmarks,
@@ -96,7 +93,7 @@ const featureModules = {
   animatedShare,
 };
 
-// ── Heavy / interaction-gated (background-loaded) ─────────────────────
+// ── Heavy / interaction-gated (background-loaded in parallel) ─────────
 const heavyFeatureImports = {
   aura: () => import('./aura.js'),
   routes: () => import('./routes.js'),
@@ -104,19 +101,21 @@ const heavyFeatureImports = {
   compareCities: () => import('./compareCities.js'),
 };
 
-let heavyLoaded = false;
+let heavyPromise = null;
 
-export async function initHeavyFeatures(app) {
-  if (heavyLoaded) return;
-  heavyLoaded = true;
-  for (const [name, importFn] of Object.entries(heavyFeatureImports)) {
-    try {
-      const mod = await importFn();
-      if (typeof mod.init === 'function') mod.init(app);
-    } catch (e) {
-      console.warn(`Heavy feature "${name}" failed to initialize:`, e);
-    }
-  }
+export function initHeavyFeatures(app) {
+  if (heavyPromise) return heavyPromise;
+  heavyPromise = Promise.allSettled(
+    Object.entries(heavyFeatureImports).map(async ([name, importFn]) => {
+      try {
+        const mod = await importFn();
+        if (typeof mod.init === 'function') mod.init(app);
+      } catch (e) {
+        console.warn(`Heavy feature "${name}" failed to initialize:`, e);
+      }
+    }),
+  );
+  return heavyPromise;
 }
 
 export function initFeatures(app) {
@@ -128,7 +127,11 @@ export function initFeatures(app) {
     }
   }
 
-  // Kick off heavy-feature loading on the next tick so the critical path
-  // (map + weather + panel) isn't blocked by their parse/eval cost.
-  setTimeout(() => initHeavyFeatures(app), 0);
+  // Kick off heavy-feature loading during idle/after first paint so the critical
+  // path (map + weather + panel) isn't blocked by their parse/eval cost.
+  if (typeof requestIdleCallback !== 'undefined') {
+    requestIdleCallback(() => initHeavyFeatures(app), { timeout: 1500 });
+  } else {
+    setTimeout(() => initHeavyFeatures(app), 0);
+  }
 }

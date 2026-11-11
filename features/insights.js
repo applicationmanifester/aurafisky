@@ -1,4 +1,5 @@
 import { t, detectLocale, translateText } from "../modules/i18n.js";
+import { isOpenMeteoCoolingDown } from "../modules/openmeteo-guard.js";
 // -- BEST OUTDOOR WINDOW --
 
 function renderBestOutdoorWindow(startIdx) {
@@ -368,6 +369,10 @@ async function updatePredictiveArrival(weather, hourIndex) {
     this._lastPredictiveWindDir = windDir;
 
     let upwindData = null;
+    if (isOpenMeteoCoolingDown()) {
+      this.$.predictiveArrival.classList.add("hidden");
+      return;
+    }
     try {
       upwindData = await WeatherService.fetchForecast(upwind.lat, upwind.lng);
     } catch {

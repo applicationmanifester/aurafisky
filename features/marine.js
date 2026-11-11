@@ -8,6 +8,7 @@
  *      Flags river basin surge / flood percentiles against baseline discharge.
  */
 import { translateText, detectLocale } from "../modules/i18n.js";
+import { isOpenMeteoCoolingDown } from "../modules/openmeteo-guard.js";
 
 const MARINE_CACHE = new Map();
 const FLOOD_CACHE = new Map();
@@ -19,6 +20,7 @@ export async function fetchMarineData(lat, lng, signal) {
   if (cached && Date.now() - cached.ts < CACHE_TTL_MS) {
     return cached.data;
   }
+  if (isOpenMeteoCoolingDown()) return null;
 
   const url = `https://marine-api.open-meteo.com/v1/marine?latitude=${lat.toFixed(4)}&longitude=${lng.toFixed(4)}&current=wave_height,wave_period,wave_direction,swell_wave_height,swell_wave_period,swell_wave_direction&timezone=auto`;
   try {
@@ -39,6 +41,7 @@ export async function fetchFloodData(lat, lng, signal) {
   if (cached && Date.now() - cached.ts < CACHE_TTL_MS) {
     return cached.data;
   }
+  if (isOpenMeteoCoolingDown()) return null;
 
   const url = `https://flood-api.open-meteo.com/v1/flood?latitude=${lat.toFixed(4)}&longitude=${lng.toFixed(4)}&daily=river_discharge,river_discharge_max&forecast_days=7`;
   try {

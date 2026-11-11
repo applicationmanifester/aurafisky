@@ -15,6 +15,8 @@
 //   * Fully offline-tolerant: stale cache is always better than no data.
 //   * Pure helpers exported for unit tests.
 
+import { isOpenMeteoCoolingDown } from "../modules/openmeteo-guard.js";
+
 export const GLANCE_CACHE_KEY = "aurafisky_place_glance_v1";
 export const GLANCE_TTL_MS = 30 * 60 * 1000;
 export const GLANCE_MAX_PLACES = 6;
@@ -170,6 +172,7 @@ async function refreshStale(places, staleKeys) {
   const S = globalThis.WeatherService;
   if (!S?.fetchForecast || !S?.getHourlyAtIndex) return;
   if (typeof navigator !== "undefined" && navigator.onLine === false) return;
+  if (isOpenMeteoCoolingDown()) return;
 
   const targets = places.filter((p) =>
     staleKeys.includes(cacheKeyFor(p.lat, p.lng)),

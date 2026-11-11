@@ -2,6 +2,7 @@
 import { HtmlMarker } from "../modules/ol-marker.js";
 import { fromLonLat } from "ol/proj.js";
 import { translateText } from "../modules/i18n.js";
+import { isOpenMeteoCoolingDown } from "../modules/openmeteo-guard.js";
 
 async function loadBookmarks() {
   let cloudBookmarks = [];
@@ -481,10 +482,11 @@ async function refreshBookmarkPins() {
   // Render pins immediately so user sees them on the map without waiting
   renderPins();
 
-  if (needsFetch.length > 0) {
+  if (needsFetch.length > 0 && !isOpenMeteoCoolingDown()) {
     await Promise.all(
       needsFetch.map(async (b) => {
         try {
+          if (isOpenMeteoCoolingDown()) return;
           const forecast = await WeatherService.fetchForecast(b.lat, b.lng);
           const idx = WeatherService.getCurrentHourIndex(
             forecast,
@@ -515,8 +517,9 @@ function _saveBookmarkPinCache(cache) {
 // -- SEVERE WEATHER ALERTS FOR BOOKMARKS --
 
 async function checkBookmarkAlerts() {
-  if (!this.bookmarks?.length) return;
+  if (!this.bookmarks?.length || isOpenMeteoCoolingDown()) return;
   for (const bm of this.bookmarks) {
+    if (isOpenMeteoCoolingDown()) break;
     try {
       const data = await WeatherService.fetchForecast(bm.lat, bm.lng);
       if (!data?.hourly) continue;
@@ -553,7 +556,7 @@ function startBookmarkAlertPolling() {
 export function exportWorkspaceData(app) {
   try {
     const backup = {
-      version: "20.1.0",
+      version: "20.2.0",
       app: "Aurafisky",
       exportedAt: new Date().toISOString(),
       bookmarks: app.bookmarks || [],

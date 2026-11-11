@@ -212,6 +212,18 @@ describe("Offline and installability", () => {
     // The navigation fallback is what makes the app work offline.
     expect(sw).toContain("index.html");
   });
+
+  test("the service worker does not combine navigationPreload with navigateFallback", () => {
+    const sw = fs.readFileSync("dist/sw.js", "utf-8");
+    expect(viteConfig).toContain("navigationPreload: false");
+    expect(sw).not.toContain("navigationPreload");
+    expect(appJs).toContain("reg.navigationPreload?.disable");
+  });
+
+  test("overview location selection defers multi-model ensemble requests until the daily tab", () => {
+    expect(appJs).not.toMatch(/if\s*\(this\._ensembleReady\)\s*this\.renderEnsemble/);
+    expect(appJs).toContain('this._ensembleReady && this.activeWeatherTab === "daily"');
+  });
 });
 
 describe("Browser support", () => {

@@ -247,7 +247,7 @@ const WeatherService = (() => {
    * @param {number} lng - Longitude
    * @returns {Promise<Object>} Parsed weather data
    */
-  async function fetchForecast(lat, lng, retries = 3, signal) {
+  async function fetchForecast(lat, lng, retries = 3, signal, options = {}) {
     const round = (v) => v.toFixed(4);
     const cacheKey = `${FORECAST_URL}?latitude=${round(lat)}&longitude=${round(lng)}&past_days=${PAST_DAYS}&forecast_days=${FORECAST_DAYS}&timezone=auto`;
     let staleData = null;
@@ -261,6 +261,19 @@ const WeatherService = (() => {
           staleData = entry.data;
         }
       }
+    }
+
+    const guard = typeof globalThis !== "undefined" ? globalThis.OpenMeteoGuard : null;
+    if (!options?.bypassCooldown && guard?.isOpenMeteoCoolingDown?.()) {
+      if (staleData) {
+        _setCache(cacheKey, { data: staleData, ts: Date.now() - (REQUEST_CACHE_TTL - 60000) });
+        return staleData;
+      }
+      throw guard.createRateLimitError(
+        "Weather API rate limit active (429); paused briefly before retrying.",
+        429,
+        guard.getOpenMeteoCooldownMs(),
+      );
     }
 
     const fetchPromise = (async () => {
@@ -372,15 +385,21 @@ const WeatherService = (() => {
               const sec = parseInt(retryAfter, 10);
               if (!isNaN(sec)) err.retryAfterMs = sec * 1000;
             }
+            if (response.status === 429) {
+              guard?.recordOpenMeteoRateLimit?.(response);
+              err.isRateLimited = true;
+              err.noRetry = true;
+            }
             throw err;
           }
           const data = await response.json();
           if (!data.hourly?.time || !data.daily)
             throw new Error("Unexpected format");
+          guard?.clearOpenMeteoRateLimit?.();
           _setCache(cacheKey, { data, ts: Date.now() });
           return data;
         } catch (err) {
-          if (attempt < retries) {
+          if (attempt < retries && !err.noRetry && err.status !== 429) {
             let delay = 300 * Math.pow(2, attempt);
             if (err.status === 429 || String(err).includes("429")) {
               const backoff = 1500 * Math.pow(2, attempt) + Math.random() * 500;
@@ -1367,6 +1386,11 @@ const WeatherService = (() => {
       _requestCache.delete(cacheKey);
     }
 
+    const guard = typeof globalThis !== "undefined" ? globalThis.OpenMeteoGuard : null;
+    if (guard?.isOpenMeteoCoolingDown?.()) {
+      return null;
+    }
+
     const fetchPromise = (async () => {
       const params = new URLSearchParams({
         latitude: round(lat),
@@ -1400,6 +1424,7 @@ const WeatherService = (() => {
             if (response.status === 429) {
               const err = new Error("Air quality rate limit 429");
               err.status = 429;
+              err.noRetry = true;
               throw err;
             }
             return null;
@@ -1408,7 +1433,7 @@ const WeatherService = (() => {
           _setCache(cacheKey, { data, ts: Date.now() });
           return data;
         } catch (err) {
-          if (attempt < retries) {
+          if (attempt < retries && !err.noRetry && err.status !== 429) {
             let delay = 400 * Math.pow(2, attempt);
             if (err.status === 429 || String(err).includes("429")) {
               delay = 1500 * Math.pow(2, attempt) + Math.random() * 500;

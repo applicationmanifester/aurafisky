@@ -8,6 +8,12 @@
 // diurnal day/night cycles, and true climate poles (Pilbara, Afar, Antarctica, Siberia),
 // the live winner reflects genuine extreme readings year-round.
 
+// Extremes panel imports rate-limit guard so cooldowns skip duplicate probes.
+import {
+  isOpenMeteoCoolingDown,
+  guardedOpenMeteoFetch,
+} from "../modules/openmeteo-guard.js";
+
 export const SURF_EXTREME_STATIONS = [
   { name: "Nazaré, Portugal", lat: 39.60, lng: -9.07, note: "Big wave surfing capital · Underwater canyon swell amp" },
   { name: "Teahupo'o, French Polynesia", lat: -17.85, lng: -149.27, note: "Heaviest reef break in the world" },
@@ -88,12 +94,16 @@ async function openExtremesPanel() {
   const lngParam = EXTREME_STATIONS.map((s) => s.lng.toFixed(4)).join(",");
 
   try {
+    if (isOpenMeteoCoolingDown()) {
+      this._renderExtremesError();
+      return;
+    }
     const surfLat = SURF_EXTREME_STATIONS.map((s) => s.lat.toFixed(4)).join(",");
     const surfLng = SURF_EXTREME_STATIONS.map((s) => s.lng.toFixed(4)).join(",");
     const surfUrl = `https://marine-api.open-meteo.com/v1/marine?latitude=${surfLat}&longitude=${surfLng}&current=wave_height,swell_wave_period,swell_wave_height&timezone=auto`;
 
     const [res, surfRes] = await Promise.all([
-      fetch(`https://api.open-meteo.com/v1/forecast?latitude=${latParam}&longitude=${lngParam}&current=temperature_2m,wind_speed_10m,wind_gusts_10m,precipitation&timezone=auto`),
+      guardedOpenMeteoFetch(`https://api.open-meteo.com/v1/forecast?latitude=${latParam}&longitude=${lngParam}&current=temperature_2m,wind_speed_10m,wind_gusts_10m,precipitation&timezone=auto`),
       fetch(surfUrl).catch(() => null),
     ]);
     if (!res.ok) throw new Error("Extremes fetch failed");

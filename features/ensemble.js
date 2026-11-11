@@ -1,10 +1,16 @@
+import {
+  isOpenMeteoCoolingDown,
+  guardedOpenMeteoFetch,
+} from "../modules/openmeteo-guard.js";
+
 // Feature: Model Ensemble — fetches several Open-Meteo forecast models
 // (ECMWF / GFS / ICON) for the selected location and shows model agreement
 // plus probabilistic rain. Compute runs in a Web Worker.
 let worker = null;
 let reqId = 0;
+let appRef = null;
 const _ensembleCache = new Map();
-const ENSEMBLE_CACHE_TTL = 300000; // 5 minutes
+const ENSEMBLE_CACHE_TTL = 900000; // 15 minutes
 
 // Correct model names for Open-Meteo API
 const ENSEMBLE_MODELS = [
@@ -14,6 +20,7 @@ const ENSEMBLE_MODELS = [
 ];
 
 export function init(app) {
+  appRef = app;
   app.renderEnsemble = renderEnsemble;
   app._ensembleReady = true;
   ensureSection();
@@ -29,6 +36,9 @@ export function init(app) {
       console.warn('Ensemble worker failed to load:', e);
       worker = null;
     }
+  }
+  if (app.activeWeatherTab === "daily" && app.selectedLat != null && app.selectedLng != null) {
+    renderEnsemble(app.selectedLat, app.selectedLng);
   }
 }
 
@@ -78,7 +88,7 @@ async function fetchModelSnapshot(lat, lng, modelId, signal) {
 
   const fetchPromise = (async () => {
     try {
-      const res = await fetch(url, { signal });
+      const res = await guardedOpenMeteoFetch(url, { signal });
       if (!res.ok) {
         // If a 4xx with a specific model (except 429), retry without model selection
         if (modelId && res.status >= 400 && res.status < 500 && res.status !== 429) {
@@ -110,18 +120,43 @@ async function fetchModelSnapshot(lat, lng, modelId, signal) {
 }
 
 let ensembleAbortCtrl = null;
+let _activeEnsembleCoordsKey = null;
+let _activeEnsemblePromise = null;
+
+function _hasFreshCachedEnsemble(lat, lng) {
+  const round = (v) => Number(v).toFixed(4);
+  const now = Date.now();
+  return ENSEMBLE_MODELS.some((m) => {
+    const entry = _ensembleCache.get(`${round(lat)},${round(lng)},${m.id}`);
+    return entry && entry.data && now - entry.ts < ENSEMBLE_CACHE_TTL;
+  });
+}
 
 export async function renderEnsemble(lat, lng) {
   const body = document.getElementById("ensembleBody");
   if (!body || lat === null || lat === undefined || lng === null || lng === undefined) return;
-  
+  if (appRef?.activeWeatherTab && appRef.activeWeatherTab !== "daily") return;
+
+  const coordsKey = `${Number(lat).toFixed(4)},${Number(lng).toFixed(4)}`;
+  if (_activeEnsembleCoordsKey === coordsKey && _activeEnsemblePromise) {
+    return _activeEnsemblePromise;
+  }
+
   if (ensembleAbortCtrl) {
     ensembleAbortCtrl.abort();
   }
   ensembleAbortCtrl = new AbortController();
   const signal = ensembleAbortCtrl.signal;
+  _activeEnsembleCoordsKey = coordsKey;
+
+  if (isOpenMeteoCoolingDown() && !_hasFreshCachedEnsemble(lat, lng)) {
+    _activeEnsemblePromise = null;
+    body.textContent = "Ensemble data unavailable (rate limited or offline).";
+    return;
+  }
 
   body.textContent = "Comparing ECMWF · GFS · ICON…";
+  const run = (async () => {
   try {
     const snapshots = await Promise.all(
       ENSEMBLE_MODELS.map((m) =>
@@ -210,7 +245,14 @@ export async function renderEnsemble(lat, lng) {
     if (!signal.aborted) {
       body.textContent = "Ensemble data unavailable.";
     }
+  } finally {
+    if (_activeEnsemblePromise === run) {
+      _activeEnsemblePromise = null;
+    }
   }
+  })();
+  _activeEnsemblePromise = run;
+  return run;
 }
 
 function aggregate(snapshots) {

@@ -18,6 +18,7 @@ import LineString from "ol/geom/LineString.js";
 import Point from "ol/geom/Point.js";
 import { Style, Stroke, Text, Fill, Circle as CircleStyle } from "ol/style.js";
 import { fromLonLat, toLonLat } from "ol/proj.js";
+import { guardedOpenMeteoFetch } from "../modules/openmeteo-guard.js";
 
 const GRID_SIZE = 7; // 7x7 = 49 sample points — enough for marching squares
                       // to read as contour lines, cheap enough for one fetch.
@@ -82,7 +83,7 @@ async function _fetchPressureGrid(lats, lngs) {
   const latParam = points.map((p) => p.lat.toFixed(3)).join(",");
   const lngParam = points.map((p) => p.lng.toFixed(3)).join(",");
 
-  const res = await fetch(
+  const res = await guardedOpenMeteoFetch(
     `https://api.open-meteo.com/v1/forecast?latitude=${latParam}&longitude=${lngParam}&current=pressure_msl&timezone=auto`,
   );
   if (!res.ok) throw new Error("Pressure grid fetch failed");

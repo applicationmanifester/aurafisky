@@ -25,6 +25,7 @@ import { fromLonLat, toLonLat } from "ol/proj.js";
 import { HtmlMarker } from "../modules/ol-marker.js";
 import { wakeLockManager } from "../modules/wake-lock.js";
 import { t, detectLocale, translateText, translateDOM, refreshExternalTranslation } from "../modules/i18n.js";
+import { guardedOpenMeteoFetch } from "../modules/openmeteo-guard.js";
 
 const OSRM_BASE = "https://router.project-osrm.org/route/v1/driving";
 const EARTH_RADIUS_M = 6371000;
@@ -1288,7 +1289,7 @@ async function resolvePointName(pt) {
   try {
     const lang = typeof navigator !== "undefined" && navigator.language ? navigator.language : "en";
     const url = `https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${pt.lat}&lon=${pt.lng}&zoom=14&addressdetails=1&namedetails=1&accept-language=en,${lang};q=0.8`;
-    const res = await fetch(url, { headers: { "User-Agent": "Aurafisky/20.1.0", Accept: "application/json" } });
+    const res = await fetch(url, { headers: { "User-Agent": "Aurafisky/20.2.0", Accept: "application/json" } });
     if (!res.ok) return;
     const data = await res.json();
     const city =
@@ -1375,7 +1376,7 @@ async function searchPlacesForRoute(query) {
   try {
     const lang = typeof navigator !== "undefined" && navigator.language ? navigator.language : "en";
     const url = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(q)}&format=json&limit=5&addressdetails=1&namedetails=1&accept-language=en,${lang};q=0.8`;
-    const res = await fetch(url, { headers: { "User-Agent": "Aurafisky/20.1.0", Accept: "application/json" } });
+    const res = await fetch(url, { headers: { "User-Agent": "Aurafisky/20.2.0", Accept: "application/json" } });
     if (res.ok) {
       const list = await res.json();
       return list.map((item) => {
@@ -3168,7 +3169,7 @@ async function fetchAndRenderRoutePlan() {
         `&current=temperature_2m,precipitation,weather_code,wind_speed_10m,wind_direction_10m` +
         `&hourly=temperature_2m,precipitation_probability,precipitation,weather_code,wind_speed_10m,wind_direction_10m,visibility` +
         `&timezone=auto`;
-      const r = await fetch(url);
+      const r = await guardedOpenMeteoFetch(url);
       if (!r.ok) return null;
       const data = await r.json();
 

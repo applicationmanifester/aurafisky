@@ -56,6 +56,7 @@ import {
   resolveIndianFloraName,
 } from "../modules/indianFloraNames.js";
 import { t, detectLocale, translateDOM, refreshExternalTranslation, translateText } from "../modules/i18n.js";
+import { guardedOpenMeteoFetch } from "../modules/openmeteo-guard.js";
 
 // ────────────────── constants ──────────────────
 
@@ -927,7 +928,7 @@ export async function fetchAgroData(lat, lng, opts = {}) {
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), 8000);
   try {
-    const res = await fetch(`${AGRO_URL}?${params}`, { signal: opts.signal || ctrl.signal });
+    const res = await guardedOpenMeteoFetch(`${AGRO_URL}?${params}`, { signal: opts.signal || ctrl.signal });
     if (!res.ok) throw new Error(`Agro API error ${res.status}`);
     const data = await res.json();
     _agroCache.set(key, { ts: now, data });
@@ -2496,6 +2497,10 @@ function scheduleFarmUpdate(app, force = false) {
   }
 
   clearTimeout(_farmFetchTimer);
+  const hasActiveField = Boolean(getActiveFieldId());
+  if (!force && a.activeWeatherTab !== "farm" && !hasActiveField) {
+    return;
+  }
   _farmFetchTimer = setTimeout(async () => {
     try {
       const cached = a.farmAgroCache;

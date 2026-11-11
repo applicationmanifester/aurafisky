@@ -106,6 +106,7 @@ if (typeof window !== "undefined") {
   };
 }
 
+import { clearOpenMeteoRateLimit } from './modules/openmeteo-guard.js';
 import './weather.js';
 import './modules/dom-utils.js';
 import './modules/toast.js';
@@ -3261,6 +3262,7 @@ class AurafiskyApp {
     this.$.weatherRetryBtn?.addEventListener("click", () => {
       this._haptic('light');
       if (this.selectedLat != null && this.selectedLng != null) {
+        clearOpenMeteoRateLimit();
         this.selectLocation(this.selectedLat, this.selectedLng, this.selectedName);
       }
     });
@@ -5109,7 +5111,7 @@ class AurafiskyApp {
         this.$.timelineSlider.value = this.currentHourIndex - timeOffset;
         this.$.timelineSlider.disabled = false;
         this.updateWeatherDisplay(this.currentHourIndex);
-        if (this._ensembleReady) this.renderEnsemble(lat, lng);
+        if (this._ensembleReady && this.activeWeatherTab === "daily") this.renderEnsemble(lat, lng);
         if (
           cached.address &&
           cached.addressLat != null &&
@@ -5225,7 +5227,7 @@ class AurafiskyApp {
 
         // Update weather dashboard text, AQI, soundscapes, and SVG charts
         this.updateWeatherDisplay(this.currentHourIndex);
-        if (this._ensembleReady) this.renderEnsemble(lat, lng);
+        if (this._ensembleReady && this.activeWeatherTab === "daily") this.renderEnsemble(lat, lng);
 
         // One-time PWA install prompt after the first successful lookup.
         if (this.deferredPrompt && !this._installPromptShown) {
@@ -5277,7 +5279,7 @@ class AurafiskyApp {
           this.$.timelineSlider.disabled = false;
 
           this.updateWeatherDisplay(this.currentHourIndex);
-          if (this._ensembleReady) this.renderEnsemble(lat, lng);
+          if (this._ensembleReady && this.activeWeatherTab === "daily") this.renderEnsemble(lat, lng);
           this.createWeatherMarker(lat, lng, this.currentHourIndex);
 
           this.updateHomeButton();
@@ -10653,6 +10655,13 @@ class AurafiskyApp {
         try { initHeavyFeatures(this); } catch (_) {}
       }
     }
+    if (tabName === "daily") {
+      if (this._ensembleReady && this.selectedLat != null && this.selectedLng != null) {
+        this.renderEnsemble(this.selectedLat, this.selectedLng);
+      } else {
+        try { initHeavyFeatures(this); } catch (_) {}
+      }
+    }
 
     const activePanel = document.getElementById(targetPanelId);
     if (activePanel) translateDOM(activePanel, this.language || detectLocale());
@@ -11199,6 +11208,11 @@ class AurafiskyApp {
           // up to 24h — the #1 cause of "browser persists older version".
           .register("./sw.js", { updateViaCache: "none" })
           .then((reg) => {
+            // Ensure navigation preload is disabled on existing registrations so
+            // Chrome does not fire orphaned preload requests against navigateFallback.
+            if (reg.navigationPreload?.disable) {
+              reg.navigationPreload.disable().catch(() => {});
+            }
             // If a newer SW is already waiting, activate it immediately.
             if (reg.waiting) {
               reg.waiting.postMessage("skipWaiting");

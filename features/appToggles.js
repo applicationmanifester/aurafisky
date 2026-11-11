@@ -5,6 +5,7 @@ import Feature from "ol/Feature.js";
 import Point from "ol/geom/Point.js";
 import { Style, Circle as CircleStyle, Fill, Stroke, Text } from "ol/style.js";
 import { fromLonLat } from "ol/proj.js";
+import { guardedOpenMeteoFetch } from "../modules/openmeteo-guard.js";
 
 let tempOverlaySource = null;
 let tempOverlayLayer = null;
@@ -74,7 +75,7 @@ async function initTempOverlayLayers() {
     try {
       const latsParam = points.map((p) => p.lat.toFixed(4)).join(",");
       const lngsParam = points.map((p) => p.lng.toFixed(4)).join(",");
-      let results = await fetch(
+      let results = await guardedOpenMeteoFetch(
         `https://api.open-meteo.com/v1/forecast?latitude=${latsParam}&longitude=${lngsParam}&current=temperature_2m,weather_code&timezone=auto`,
       )
         .then((res) => {

@@ -196,7 +196,10 @@ export default defineConfig(({ mode }) => {
         // dialog. Precaching them would push a couple of megabytes into
         // every visitor's cache for something the app itself never needs.
         globIgnores: ['screenshots/**'],
-        navigationPreload: true,
+        // navigateFallback serves precached ./index.html immediately without waiting for
+        // event.preloadResponse; keeping navigationPreload enabled causes Chrome to abort
+        // preload requests and emit a console warning on every load.
+        navigationPreload: false,
         // importScripts: ['sw-widgets.js'],  // sw-widgets.js not found — removed to prevent SW install failure
         // Web Share Target: serve the app shell for /share-target so the page
         // JS can read location.search and load the shared location.

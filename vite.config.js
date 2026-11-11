@@ -43,11 +43,9 @@ export default defineConfig(({ mode }) => {
           // Split OpenLayers core from mapbox-style parser — they're loaded at different times
           'vendor-ol': ['ol'],
           'vendor-mapbox-style': ['ol-mapbox-style'],
-          // i18n dictionaries are huge (470KB gzipped) — load lazily
-          'vendor-i18n': [
-            './modules/i18n-data.js',
-            './modules/i18n-extended.js',
-          ],
+          // i18n dictionaries are one chunk per language, loaded on demand
+          // (see scripts/split-i18n-locales.mjs). Only English is on the
+          // critical path; the rest are fetched when that language is used.
           // Only truly eager features go here (loaded synchronously before first paint)
           'features-core': [
             './features/deviceProfile.js',

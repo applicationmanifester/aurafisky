@@ -88,7 +88,7 @@ describe("Map mode switching — perceived speed", () => {
     expect(switchModule).toContain("export function crossfadeBasemap(");
     expect(switchModule).toContain("l.animate?.({ opacity: 0, duration: CROSSFADE_MS })");
     expect(switchModule).toContain(
-      "l.animate?.({ opacity: app.mapOpacity || 1, duration: CROSSFADE_MS })",
+      "l.animate?.({ opacity: app.mapOpacity ?? 1, duration: CROSSFADE_MS })",
     );
   });
 

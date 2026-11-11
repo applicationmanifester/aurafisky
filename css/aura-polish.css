@@ -94,6 +94,12 @@ textarea {
   input[type='text'] {
     font-size: 0.875rem;
   }
+  select {
+    font-size: 0.8125rem;
+  }
+  #mapModeSelectDropdown {
+    font-size: 0.75rem;
+  }
 }
 img, svg, canvas, video {
   display: block;
@@ -368,7 +374,83 @@ input[type='range'] {
   min-height: 28px;
 }
 #mapOpacitySlider {
-  height: 32px;
+  -webkit-appearance: none;
+  appearance: none;
+  width: 100%;
+  height: 28px;
+  background: transparent;
+  outline: none;
+  cursor: pointer;
+}
+#mapOpacitySlider::-webkit-slider-runnable-track {
+  height: 6px;
+  border-radius: 9999px;
+  background: linear-gradient(
+    90deg,
+    #14b8a6 0%,
+    #14b8a6 var(--opacity-pct, 100%),
+    rgba(148, 163, 184, 0.35) var(--opacity-pct, 100%),
+    rgba(148, 163, 184, 0.35) 100%
+  );
+}
+.dark #mapOpacitySlider::-webkit-slider-runnable-track {
+  background: linear-gradient(
+    90deg,
+    #14b8a6 0%,
+    #14b8a6 var(--opacity-pct, 100%),
+    rgba(71, 85, 105, 0.75) var(--opacity-pct, 100%),
+    rgba(71, 85, 105, 0.75) 100%
+  );
+}
+#mapOpacitySlider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 18px;
+  height: 18px;
+  margin-top: -6px;
+  border-radius: 9999px;
+  background: #14b8a6;
+  border: 2.5px solid #ffffff;
+  box-shadow: 0 1px 5px rgba(15, 23, 42, 0.3);
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+#mapOpacitySlider:hover::-webkit-slider-thumb {
+  transform: scale(1.1);
+  box-shadow: 0 2px 8px rgba(20, 184, 166, 0.45);
+}
+.dark #mapOpacitySlider::-webkit-slider-thumb {
+  border-color: #0f172a;
+}
+#mapOpacitySlider::-moz-range-track {
+  height: 6px;
+  border-radius: 9999px;
+  background: rgba(148, 163, 184, 0.35);
+}
+#mapOpacitySlider::-moz-range-progress {
+  height: 6px;
+  border-radius: 9999px;
+  background: #14b8a6;
+}
+.dark #mapOpacitySlider::-moz-range-track {
+  background: rgba(71, 85, 105, 0.75);
+}
+#mapOpacitySlider::-moz-range-thumb {
+  width: 18px;
+  height: 18px;
+  border-radius: 9999px;
+  background: #14b8a6;
+  border: 2.5px solid #ffffff;
+  box-shadow: 0 1px 5px rgba(15, 23, 42, 0.3);
+}
+.dark #mapOpacitySlider::-moz-range-thumb {
+  border-color: #0f172a;
+}
+@media (pointer: coarse) {
+  #mapOpacitySlider::-webkit-slider-thumb {
+    width: 24px;
+    height: 24px;
+    margin-top: -9px;
+  }
 }
 input[type='range'].timeline-slider::-webkit-slider-thumb {
   width: 28px;

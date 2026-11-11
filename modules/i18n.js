@@ -1,5 +1,18 @@
-import { ALL_DICTIONARIES } from "./i18n-data.js";
-import { COMPREHENSIVE_TRANSLATIONS } from "./i18n-extended.js";
+// The dictionaries used to be one 609 KB object holding all 41 languages,
+// downloaded before the app could start — for the one language the visitor
+// actually reads. They are now one chunk per language (see
+// scripts/split-i18n-locales.mjs), loaded on demand, so only ~10-34 KB
+// stands between the app and its first paint.
+//
+// English is imported statically: it is the fallback for every string in the
+// interface, and it is what the UI renders before the visitor's own
+// language arrives.
+import {
+  DICTIONARY as EN_DICTIONARY,
+  COMPREHENSIVE as EN_COMPREHENSIVE,
+} from "./i18n-locales/en.js";
+import { LOCALE_LOADERS } from "./i18n-locales/index.js";
+
 // modules/i18n.js
 // ── Internationalisation & Multi-Language Translation ────────────────
 //
@@ -913,6 +926,11 @@ function makeLocaleDict(overrides) {
 }
 
 
+// The loaded dictionaries, keyed by language. English is always here; the
+// rest arrive as their chunks are fetched.
+const ALL_DICTIONARIES = { en: EN_DICTIONARY };
+const COMPREHENSIVE_TRANSLATIONS = { ...EN_COMPREHENSIVE };
+
 export const DICT = ALL_DICTIONARIES;
 Object.assign(BASE_EN, ALL_DICTIONARIES.en);
 
@@ -930,10 +948,12 @@ for (const [key, val] of Object.entries(BASE_EN)) {
   }
 }
 
-// Build comprehensive PHRASES map for ALL 41 supported languages
+// Build comprehensive PHRASES map for the loaded languages. A language's
+// phrases are built when its dictionary arrives rather than up front, so the
+// work happens once per language the visitor actually uses.
 export const PHRASES = {};
-for (const [locale, dict] of Object.entries(DICT)) {
-  if (locale === "en") continue;
+function buildPhrases(locale, dict) {
+  if (!dict || locale === "en") return;
   const p = {};
   for (const [key, transVal] of Object.entries(dict)) {
     const enVal = BASE_EN[key];
@@ -957,6 +977,47 @@ for (const [locale, dict] of Object.entries(DICT)) {
   }
   PHRASES[locale] = p;
 }
+/**
+ * Load a language's dictionary.
+ *
+ * Each language is its own chunk, so a visitor downloads only the one they
+ * read. Until it arrives every string falls back to its English source
+ * text, which is why the app can start painting the map immediately.
+ *
+ * @param {string} locale a BCP-47 locale, e.g. "hi" or "pt-BR"
+ * @returns {Promise<string>} the language that was loaded
+ */
+export async function loadLocale(locale) {
+  const raw = String(locale || "en").trim();
+  const base = raw.split("-")[0].toLowerCase();
+  const lang = LOCALE_LOADERS[raw]
+    ? raw
+    : raw.toLowerCase() === "zh-tw" || raw.toLowerCase() === "zh-hk"
+      ? "zh-TW"
+      : base === "zh"
+        ? "zh-CN"
+        : base;
+  if (!lang || lang === "en") return "en";
+  if (ALL_DICTIONARIES[lang]) return lang;
+  const loader = LOCALE_LOADERS[lang];
+  if (!loader) return "en";
+  try {
+    const mod = await loader();
+    if (!mod || !mod.DICTIONARY) return "en";
+    ALL_DICTIONARIES[lang] = mod.DICTIONARY;
+    if (mod.COMPREHENSIVE) {
+      Object.assign(COMPREHENSIVE_TRANSLATIONS, mod.COMPREHENSIVE);
+      mergeComprehensiveTranslations();
+    }
+    buildPhrases(lang, mod.DICTIONARY);
+    populateLocalePhrases(lang, mod.DICTIONARY);
+    return lang;
+  } catch (err) {
+    console.warn("Could not load the", lang, "dictionary:", err);
+    return "en";
+  }
+}
+
 export function detectLocale() {
   // Once the user changes language in Settings, use that choice everywhere in
   // this page, even when the original URL supplied a startup locale.
@@ -10828,10 +10889,16 @@ export const EXTENDED_FEATURE_PHRASES = {
   }
 };
 
-for (const [key, langMap] of Object.entries(COMPREHENSIVE_TRANSLATIONS)) {
-  if (!EXTENDED_FEATURE_PHRASES[key]) EXTENDED_FEATURE_PHRASES[key] = {};
-  Object.assign(EXTENDED_FEATURE_PHRASES[key], langMap);
+// Merge the comprehensive translations into the feature phrase table. Done
+// per language as its dictionary arrives, so a language that is never
+// loaded costs nothing.
+function mergeComprehensiveTranslations() {
+  for (const [key, langMap] of Object.entries(COMPREHENSIVE_TRANSLATIONS)) {
+    if (!EXTENDED_FEATURE_PHRASES[key]) EXTENDED_FEATURE_PHRASES[key] = {};
+    Object.assign(EXTENDED_FEATURE_PHRASES[key], langMap);
+  }
 }
+mergeComprehensiveTranslations();
 
 // ── Universal Translation Cache & Auto-Translation Engine ───────────
 const TRANSLATION_CACHE = {};
@@ -11676,20 +11743,17 @@ function getLocalizedMonthShort(monthStr, loc) {
 }
 
 
-// Inject EXTENDED_FEATURE_PHRASES and core UI labels into PHRASES for all locales
-for (const [phrase, langMap] of Object.entries(EXTENDED_FEATURE_PHRASES)) {
-  for (const [loc, trans] of Object.entries(langMap)) {
-    if (PHRASES[loc]) {
-      PHRASES[loc][phrase] = trans;
-      PHRASES[loc][phrase.toLowerCase()] = trans;
+// Inject EXTENDED_FEATURE_PHRASES and core UI labels into PHRASES for a loaded locale
+function populateLocalePhrases(loc, dict) {
+  if (!loc || loc === "en" || !dict || !PHRASES[loc]) return;
+  const p = PHRASES[loc];
+  for (const [phrase, langMap] of Object.entries(EXTENDED_FEATURE_PHRASES)) {
+    const trans = langMap[loc];
+    if (trans) {
+      p[phrase] = trans;
+      p[phrase.toLowerCase()] = trans;
     }
   }
-}
-
-// Add standard UI labels to PHRASES for all locales
-for (const [loc, dict] of Object.entries(DICT)) {
-  if (loc === "en" || !PHRASES[loc]) continue;
-  const p = PHRASES[loc];
   p["Settings"] = dict.settings_title || dict.settings;
   p["settings"] = dict.settings_title || dict.settings;
   p["SETTINGS"] = dict.settings_title || dict.settings;
@@ -11845,7 +11909,10 @@ for (const [loc, dict] of Object.entries(DICT)) {
   p["Tree / Woody"] = dict.tree_woody;
   p["Wildflower"] = dict.wildflower;
   p["Herb"] = dict.herb;
+}
 
+for (const [loc, dict] of Object.entries(DICT)) {
+  populateLocalePhrases(loc, dict);
 }
 
 let _globalReverseMap = null;

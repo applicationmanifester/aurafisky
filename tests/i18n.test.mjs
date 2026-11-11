@@ -1,4 +1,4 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, beforeAll } from "vitest";
 import { readFileSync } from "fs";
 import { resolve } from "path";
 import {
@@ -7,6 +7,7 @@ import {
   detectLocale,
   supportedLocales,
   isSupported,
+  loadLocale,
   DICT,
   translateText,
   translateDOM,
@@ -14,6 +15,9 @@ import {
 import { getWeatherInfo } from "../weather.js";
 
 describe("Internationalisation (i18n) Engine & Language Support", () => {
+  beforeAll(async () => {
+    await Promise.all(supportedLocales().map((loc) => loadLocale(loc)));
+  });
   it("supports major world and Indian languages", () => {
     const locales = supportedLocales();
     expect(locales).toContain("en");

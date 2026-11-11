@@ -226,5 +226,36 @@ describe("Map Modes & Terrain Styles", () => {
     expect(css).toContain("#mapLayersFlyout:not(.hidden)");
     expect(css).not.toMatch(/#mapLayersFlyout:not\(\.minimized\)\s*\{[^}]*display:\s*flex/s);
   });
+
+  test("mapLayersFlyout wires placeLabelsToggle, hybrid mode, opacity slider rail, and chevron padding", () => {
+    const fs = require("fs");
+    const html = fs.readFileSync("index.html", "utf-8");
+    const appJs = fs.readFileSync("app.js", "utf-8");
+    const polishCss = fs.readFileSync("css/aura-polish.css", "utf-8");
+
+    // 1. Dropdown right padding keeps labels clear of chevron, and single change listener avoids double fire
+    expect(html).toMatch(/id="mapModeSelectDropdown"[^>]*class="[^"]*\bpr-7\b/);
+    expect(html).toContain('value="hybrid"');
+    expect(appJs).not.toContain('mapModeSelect.addEventListener("input"');
+
+    // 2. Hybrid mode and canonical MAP_MODES ordering (matches 1-9 shortcuts & prev/next cycling)
+    expect(appJs).toContain("hybrid: createHybridBasemap");
+    expect(appJs).toContain("'hybrid'");
+    expect(appJs).toContain("this.MAP_MODES = [");
+
+    // 3. Place Labels toggle is wired to setPlaceLabelsEnabled & placeLabelsLayer
+    expect(html).toContain('id="placeLabelsToggle"');
+    expect(appJs).toContain('document.getElementById("placeLabelsToggle")');
+    expect(appJs).toContain("setPlaceLabelsEnabled(");
+    expect(appJs).toContain("_applyPlaceLabels()");
+    expect(appJs).toContain("this.placeLabelsLayer = new TileLayer");
+
+    // 4. Opacity slider renders custom thin track rail with active fill & syncs on startup
+    expect(polishCss).toContain("#mapOpacitySlider::-webkit-slider-runnable-track");
+    expect(polishCss).toContain("#mapOpacitySlider::-moz-range-track");
+    expect(html).not.toMatch(/id="mapOpacitySlider"[^>]*class="[^"]*\bbg-slate-200\/60\b/);
+    expect(appJs).toContain("_syncMapFlyoutControls");
+    expect(appJs).toContain("--opacity-pct");
+  });
 });
 

@@ -65,6 +65,7 @@ export function switchBasemap(app) {
     targetGroup.setVisible(true);
     app._applyMapOpacity();
     app._applyTerrainOverlay();
+    app._applyPlaceLabels?.();
     return;
   }
 
@@ -154,7 +155,7 @@ export function crossfadeBasemap(app, targetGroup, token) {
   if (typeof targetGroup.getLayers === "function") {
     targetGroup.getLayers().forEach((l) => {
       if (typeof l.setOpacity === "function") {
-        l.animate?.({ opacity: app.mapOpacity || 1, duration: CROSSFADE_MS });
+        l.animate?.({ opacity: app.mapOpacity ?? 1, duration: CROSSFADE_MS });
       }
     });
   }
@@ -176,9 +177,10 @@ export function crossfadeBasemap(app, targetGroup, token) {
     app._currentBasemapGroup = targetGroup;
     app._pendingBasemapGroup = null;
 
-    // Apply opacity and the terrain overlay to the new active basemap.
+    // Apply opacity, terrain overlay, and place labels to the new active basemap.
     app._applyMapOpacity();
     app._applyTerrainOverlay();
+    app._applyPlaceLabels?.();
     setMapModeLoading(app, false);
     app.map.render();
 

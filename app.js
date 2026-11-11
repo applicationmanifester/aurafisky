@@ -60,7 +60,7 @@ import {
 } from "./modules/geo.js";
 import { reverseUrls, labelFromReverse, reverseGeocode, getGeocodeCache } from "./modules/reverseGeocode.js";
 import { applyViewportHeight, watchViewport } from "./modules/viewport.js";
-import { t, detectLocale, setLocale, translateText, translateDOM, refreshExternalTranslation, translateAsync } from "./modules/i18n.js";
+import { t, DICT, detectLocale, setLocale, loadLocale, translateText, translateDOM, refreshExternalTranslation, translateAsync } from "./modules/i18n.js";
 import { isMobileLayout } from "./features/breakpoints.js";
 // localforage v1.x is UMD-only (no ESM default export). Load as a
 // side-effect so it self-attaches to window.localforage; access via global.
@@ -986,6 +986,17 @@ class AurafiskyApp {
     this.setLoadingProgress(25, "Preparing the map");
     this.initMap();
 
+    // Load the visitor's language. The dictionaries are one chunk per
+    // language, fetched in parallel with the map's tiles rather than in
+    // front of them — so the map starts painting without waiting for
+    // translations it does not need to draw anything.
+    const startupLocale = detectLocale();
+    if (startupLocale && !startupLocale.startsWith("en")) {
+      await loadLocale(startupLocale);
+      // Now that the dictionary is here, apply it to the interface.
+      this.setLanguage(startupLocale, true);
+    }
+
     // Keep --app-height tracking the visible viewport. Must start before the
     // panel styles resolve: ten rules across the stylesheets are sized as
     // var(--app-height, 100vh), and the 100vh fallback is wrong on iOS Safari
@@ -1369,17 +1380,35 @@ class AurafiskyApp {
     this._clearLegacyGoogleTranslate();
     this.applyLanguage(this.language);
 
-      // Map style preference: 'street' | 'satellite' | 'terrain' | 'dark'
+      // Canonical ordered list of map modes (matches picker dropdown & 1-9 shortcuts)
+      this.MAP_MODES = [
+        'street',
+        'satellite',
+        'hybrid',
+        'terrain',
+        'hillshade',
+        'opentopo',
+        'ocean',
+        'natgeo',
+        'dark'
+      ].map((id) => ({ id }));
+
+      // Map style preference: 'street' | 'satellite' | 'hybrid' | 'terrain' | ... | 'dark'
       const savedMapStyle = localStorage.getItem("aurafisky_map_style");
       const urlLayer = this._parseUrlMapParams().get("layer");
-      const validInitStyles = ['street', 'satellite', 'terrain', 'hillshade', 'opentopo', 'ocean', 'natgeo', 'dark'];
+      const validInitStyles = this.MAP_MODES.map((m) => m.id);
       this.mapStyle = (urlLayer && validInitStyles.includes(urlLayer))
         ? urlLayer
-        : (savedMapStyle || (this.isDark ? "dark" : "street"));
+        : (validInitStyles.includes(savedMapStyle) ? savedMapStyle : (this.isDark ? "dark" : "street"));
 
       // Map opacity: 0-1 range
       const savedOpacity = localStorage.getItem("aurafisky_map_opacity");
-      this.mapOpacity = savedOpacity ? parseFloat(savedOpacity) : 1;
+      const parsedOpacity = savedOpacity !== null ? parseFloat(savedOpacity) : NaN;
+      this.mapOpacity = !isNaN(parsedOpacity) ? Math.max(0, Math.min(1, parsedOpacity)) : 1;
+
+      // Place labels overlay toggle (city & road names on imagery modes)
+      const savedPlaceLabels = localStorage.getItem("aurafisky_place_labels");
+      this.placeLabelsEnabled = savedPlaceLabels !== null ? savedPlaceLabels === "true" : false;
 
       // Terrain overlay toggle
       const savedTerrain = localStorage.getItem("aurafisky_terrain_overlay");
@@ -1430,7 +1459,22 @@ class AurafiskyApp {
               crossOrigin: "anonymous",
               cacheSize: 2048,
               attributions: "Tiles &copy; Esri &mdash; Source: Esri, Maxar, Earthstar Geographics, and the GIS User Community"
-            })
+            }),
+            preload: 1
+          })
+        ]
+      });
+      const createHybridBasemap = () => new LayerGroup({
+        layers: [
+          new TileLayer({
+            source: new XYZ({
+              url: "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
+              maxZoom: 18,
+              crossOrigin: "anonymous",
+              cacheSize: 2048,
+              attributions: "Tiles &copy; Esri &mdash; Source: Esri, Maxar, Earthstar Geographics, and the GIS User Community"
+            }),
+            preload: 1
           }),
           new TileLayer({
             source: new XYZ({
@@ -1442,6 +1486,16 @@ class AurafiskyApp {
             opacity: 0.95
           })
         ]
+      });
+      this.placeLabelsLayer = new TileLayer({
+        source: new XYZ({
+          url: "https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}",
+          maxZoom: 18,
+          crossOrigin: "anonymous",
+          cacheSize: 2048
+        }),
+        opacity: 0.95,
+        visible: false
       });
       const createTerrainBasemap = () => new LayerGroup({
         layers: [
@@ -1521,6 +1575,7 @@ class AurafiskyApp {
       // Lazy getters for basemaps — created on first access
       this._basemapFactories = {
         satellite: createSatelliteBasemap,
+        hybrid: createHybridBasemap,
         terrain: createTerrainBasemap,
         hillshade: createHillshadeBasemap,
         opentopo: createOpenTopoBasemap,
@@ -1550,6 +1605,9 @@ class AurafiskyApp {
       this._currentBasemapGroup = initialGroup;
 
       this.map.addLayer(initialGroup);
+      this._applyMapOpacity();
+      this._applyTerrainOverlay();
+      this._applyPlaceLabels();
 
       // Track actual tile loads so the overlay stays up until real map tiles
       // download, while keeping startup focused exclusively on the active style.
@@ -2463,12 +2521,22 @@ class AurafiskyApp {
     });
 
     // ── Map Opacity Slider ──────────────────────────
+    // ── Place Labels Overlay Toggle ───────────────────
+    const placeLabelsToggle = document.getElementById("placeLabelsToggle");
+    if (placeLabelsToggle) {
+      placeLabelsToggle.addEventListener("change", (e) => {
+        this.setPlaceLabelsEnabled(e.target.checked);
+        this._haptic?.('selection');
+      });
+    }
+
     const opacitySlider = document.getElementById("mapOpacitySlider");
     const opacityValue = document.getElementById("mapOpacityValue");
     if (opacitySlider && opacityValue) {
       opacitySlider.addEventListener("input", (e) => {
         const val = parseInt(e.target.value, 10);
         opacityValue.textContent = `${val}%`;
+        opacitySlider.style.setProperty("--opacity-pct", `${val}%`);
         this.mapOpacity = val / 100;
         try {
           localStorage.setItem("aurafisky_map_opacity", String(this.mapOpacity));
@@ -2500,6 +2568,8 @@ class AurafiskyApp {
         this._haptic?.('selection');
       });
     }
+
+    this._syncMapFlyoutControls?.();
 
     // ── Map Key / Legend Button in Flyout ─────────────
     document.getElementById("toggleMapLegendCardBtn")?.addEventListener("click", () => {
@@ -2540,7 +2610,6 @@ class AurafiskyApp {
         }
       };
       mapModeSelect.addEventListener("change", handleModeChange);
-      mapModeSelect.addEventListener("input", handleModeChange);
     }
 
     document.getElementById("prevMapModeBtn")?.addEventListener("click", (e) => {
@@ -10936,8 +11005,19 @@ class AurafiskyApp {
       // later update to reload the page (unlike a plain sessionStorage flag,
       // which would suppress every future update for the whole session).
       const RELOAD_COOLDOWN_MS = 10000;
+      // The worker claiming the page for the first time is not an update:
+      // the page is already running the current build, so there is nothing
+      // to reload for. Reloading anyway threw away a first visit's map —
+      // the visitor waited through two full loads, and the second one
+      // started with an empty tile queue again.
+      let hadController = Boolean(navigator.serviceWorker.controller);
       navigator.serviceWorker.addEventListener("controllerchange", () => {
         if (reloading) return;
+        if (!hadController) {
+          // First claim — take control and carry on.
+          hadController = true;
+          return;
+        }
         const last = parseInt(sessionStorage.getItem("sw_reload_at") || "0", 10);
         if (last && Date.now() - last < RELOAD_COOLDOWN_MS) {
           console.warn("Skipping SW reload — one just happened, avoiding a loop.");
@@ -12487,6 +12567,13 @@ class AurafiskyApp {
     if (!setLocale(lang)) return false;
     this.language = lang;
     this._clearLegacyGoogleTranslate();
+    if (!DICT?.[lang] && typeof loadLocale === "function") {
+      loadLocale(lang).then((loaded) => {
+        if (this.language === lang && loaded !== "en") {
+          this.applyLanguage(lang);
+        }
+      });
+    }
     this.applyLanguage(lang);
     if (typeof this.saveUserDataToCloud === "function") {
       this.saveUserDataToCloud();
@@ -12544,7 +12631,7 @@ class AurafiskyApp {
   }
 
   setMapStyle(style) {
-    const validStyles = ['street', 'satellite', 'terrain', 'hillshade', 'opentopo', 'ocean', 'natgeo', 'dark'];
+    const validStyles = ['street', 'satellite', 'hybrid', 'terrain', 'hillshade', 'opentopo', 'ocean', 'natgeo', 'dark'];
     if (!validStyles.includes(style)) style = 'street';
     this.mapStyle = style;
     try {
@@ -12555,8 +12642,10 @@ class AurafiskyApp {
     const opacitySlider = document.getElementById("mapOpacitySlider");
     const opacityValue = document.getElementById("mapOpacityValue");
     if (opacitySlider && opacityValue) {
-      opacitySlider.value = Math.round(this.mapOpacity * 100);
-      opacityValue.textContent = `${Math.round(this.mapOpacity * 100)}%`;
+      const pct = Math.round((this.mapOpacity ?? 1) * 100);
+      opacitySlider.value = pct;
+      opacityValue.textContent = `${pct}%`;
+      opacitySlider.style.setProperty("--opacity-pct", `${pct}%`);
     }
 
     // Synchronize dark theme: only in darkmode tabs/UI should be in dark, not in other map modes
@@ -12587,10 +12676,12 @@ class AurafiskyApp {
     }
 
     this._activateStyleGroup(style);
+    this._applyPlaceLabels();
     this._updateMapStyleUI();
     const styleNames = {
       street: "Default (Street)",
       satellite: "Satellite (Aerial)",
+      hybrid: "Hybrid (Sat + Labels)",
       terrain: "Terrain (Topographic)",
       hillshade: "Hillshade (Elevation)",
       opentopo: "OpenTopoMap",
@@ -12662,7 +12753,7 @@ class AurafiskyApp {
     if (typeof targetGroup.getLayers === "function") {
       targetGroup.getLayers().forEach((l) => {
         if (typeof l.setOpacity === "function") {
-          l.animate?.({ opacity: this.mapOpacity || 1, duration: FADE_MS });
+          l.animate?.({ opacity: this.mapOpacity ?? 1, duration: FADE_MS });
         }
       });
     }
@@ -12695,14 +12786,19 @@ class AurafiskyApp {
     const opacity = (typeof this.mapOpacity === "number" && !isNaN(this.mapOpacity)) ? this.mapOpacity : 1;
     const layers = this.map.getLayers().getArray();
     layers.forEach(layer => {
+      if (layer === this.placeLabelsLayer) {
+        if (typeof layer.setOpacity === "function") layer.setOpacity(0.95 * opacity);
+        return;
+      }
       if (layer instanceof LayerGroup) {
         // A basemap that is still fading in is on its way to `mapOpacity`
         // already — setting it here would make it pop in before the
         // crossfade starts.
         if (this._pendingBasemapGroup && layer === this._pendingBasemapGroup) return;
+        const scale = layer === this.terrainOverlayLayer ? 0.4 : 1;
         layer.getLayers().forEach((l) => {
           if (typeof l.setOpacity === "function") {
-            l.setOpacity(opacity);
+            l.setOpacity(scale * opacity);
           }
         });
       }
@@ -12751,6 +12847,96 @@ class AurafiskyApp {
     return this._applyTerrainOverlay();
   }
 
+  /** Toggle place-name labels overlay on imagery/terrain basemaps */
+  setPlaceLabelsEnabled(enabled) {
+    const next = Boolean(enabled);
+    if (!next && this.mapStyle === "hybrid") {
+      // Unchecking Place Labels while in Hybrid mode switches cleanly to pure Satellite
+      this.placeLabelsEnabled = false;
+      try { localStorage.setItem("aurafisky_place_labels", "false"); } catch (_) {}
+      this.setMapStyle("satellite");
+      return;
+    }
+    this.placeLabelsEnabled = next;
+    try { localStorage.setItem("aurafisky_place_labels", String(next)); } catch (_) {}
+    this._applyPlaceLabels();
+    this._syncMapFlyoutControls();
+    this.showToast?.(
+      next ? "🏷️ Place labels overlay enabled" : "Place labels overlay hidden",
+      "info",
+    );
+  }
+
+  /** Apply or remove the place-name overlay layer above the active basemap */
+  _applyPlaceLabels() {
+    if (!this.map || !this.placeLabelsLayer) return;
+    const layers = this.map.getLayers();
+    const layersArr = layers.getArray();
+    // Vector modes ('street', 'dark') already render localized place labels;
+    // 'hybrid' already bundles Reference/World_Boundaries_and_Places.
+    const alreadyHasBuiltInLabels = ['street', 'dark', 'hybrid'].includes(this.mapStyle);
+    const showOverlay = Boolean(this.placeLabelsEnabled && !alreadyHasBuiltInLabels);
+
+    if (showOverlay) {
+      const opacity = (typeof this.mapOpacity === "number" && !isNaN(this.mapOpacity)) ? this.mapOpacity : 1;
+      this.placeLabelsLayer.setOpacity(0.95 * opacity);
+      this.placeLabelsLayer.setVisible(true);
+      if (!layersArr.includes(this.placeLabelsLayer)) {
+        const hasTerrain = Boolean(this.terrainOverlayLayer && layersArr.includes(this.terrainOverlayLayer));
+        const insertIdx = Math.min(hasTerrain ? 2 : 1, layers.getLength());
+        layers.insertAt(insertIdx, this.placeLabelsLayer);
+      }
+    } else {
+      this.placeLabelsLayer.setVisible(false);
+      if (layersArr.includes(this.placeLabelsLayer)) {
+        layers.remove(this.placeLabelsLayer);
+      }
+    }
+    this.map.render();
+  }
+
+  /** Keep Map Modes flyout sliders, toggles, and hints synced with current state */
+  _syncMapFlyoutControls() {
+    const opacitySlider = document.getElementById("mapOpacitySlider");
+    const opacityValue = document.getElementById("mapOpacityValue");
+    if (opacitySlider && opacityValue) {
+      const pct = Math.round(((typeof this.mapOpacity === "number" && !isNaN(this.mapOpacity)) ? this.mapOpacity : 1) * 100);
+      opacitySlider.value = String(pct);
+      opacityValue.textContent = `${pct}%`;
+      opacitySlider.style.setProperty("--opacity-pct", `${pct}%`);
+    }
+
+    const terrainToggle = document.getElementById("terrainOverlayToggle");
+    if (terrainToggle) {
+      terrainToggle.checked = Boolean(this.terrainOverlayEnabled);
+    }
+
+    const placeLabelsToggle = document.getElementById("placeLabelsToggle");
+    const placeLabelsDetail = document.getElementById("placeLabelsDetail");
+    const isHybrid = this.mapStyle === "hybrid";
+    const isVector = this.mapStyle === "street" || this.mapStyle === "dark";
+    if (placeLabelsToggle) {
+      placeLabelsToggle.checked = isHybrid || Boolean(this.placeLabelsEnabled);
+    }
+    if (placeLabelsDetail) {
+      const loc = this.language || (typeof detectLocale === "function" ? detectLocale() : "en");
+      let hint = "City & road names on imagery";
+      if (isHybrid) {
+        hint = "Always shown in Hybrid mode";
+      } else if (isVector && this.placeLabelsEnabled) {
+        hint = "Vector labels active · Enabled for imagery";
+      } else if (this.placeLabelsEnabled) {
+        hint = "Place & boundary labels active";
+      }
+      placeLabelsDetail.textContent = (typeof translateText === "function" ? translateText(hint, loc) : null) || hint;
+    }
+
+    const tempToggle = document.getElementById("tempGridOverlayToggle");
+    if (tempToggle) {
+      tempToggle.checked = Boolean(this.temperatureOverlayEnabled || (this.radarActive && this.overlayType === "temperature"));
+    }
+  }
+
   _updateMapStyleUI() {
     const cards = document.querySelectorAll(".map-style-card");
     cards.forEach((card) => {
@@ -12769,6 +12955,7 @@ class AurafiskyApp {
     }
 
     this._updateMapLayersActiveBadge();
+    this._syncMapFlyoutControls();
     this._updateMapColorLegend?.();
   }
 
@@ -12831,6 +13018,7 @@ class AurafiskyApp {
     const styleNames = {
       street: "🗺️ Default",
       satellite: "🛰️ Satellite",
+      hybrid: "🔀 Hybrid",
       terrain: "🏔️ Terrain",
       hillshade: "⛰️ Hillshade",
       opentopo: "🧭 OpenTopo",
@@ -12849,7 +13037,7 @@ class AurafiskyApp {
   }
 
   cycleMapStyle(direction = 1) {
-    const validStyles = ['street', 'satellite', 'terrain', 'hillshade', 'opentopo', 'ocean', 'natgeo', 'dark'];
+    const validStyles = ['street', 'satellite', 'hybrid', 'terrain', 'hillshade', 'opentopo', 'ocean', 'natgeo', 'dark'];
     let idx = validStyles.indexOf(this.mapStyle);
     if (idx === -1) idx = 0;
     const nextIdx = (idx + direction + validStyles.length) % validStyles.length;

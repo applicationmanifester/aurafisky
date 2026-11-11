@@ -3,12 +3,13 @@
 // inside each extracted function resolves normally at the call site.
 //
 // Core features are loaded eagerly (static import into features-core) so
-// initial weather render, tabs, radar, insights, astronomy, and controls never
-// race against dynamic imports or trigger dozens of small network requests.
+// initial weather render, tabs, radar, insights, and controls never race
+// against dynamic imports or trigger dozens of small network requests.
 //
 // Heavy, interaction-gated features (aura assistant, routes, time-machine,
-// city comparison) are dynamically imported in parallel after first paint so
-// they don't block parse/eval of the critical path.
+// city comparison, farm, wallpaper, astronomy, etc.) are dynamically imported
+// in parallel after first paint so they don't block parse/eval of the
+// critical path.
 
 // ── Eager (critical path) ─────────────────────────────────────────────
 import * as ensemble from './ensemble.js';
@@ -20,39 +21,24 @@ import * as hourlyStrip from './hourlyStrip.js';
 import * as insights from './insights.js';
 import * as minimalMode from './minimalMode.js';
 import * as canvasEffects from './canvasEffects.js';
-import * as audio from './audio.js';
 import * as myLocation from './myLocation.js';
-import * as astronomy from './astronomy.js';
-import * as advisories from './advisories.js';
 import * as appToggles from './appToggles.js';
 import * as dashboard from './dashboard.js';
 import * as keyboardShortcuts from './keyboardShortcuts.js';
-import * as terminator from './terminator.js';
 import * as isobars from './isobars.js';
-import * as stargazing from './stargazing.js';
-import * as extremes from './extremes.js';
 import * as navigation from './navigation.js';
 import * as alerts from './alerts.js';
-import * as rainPush from './rainPush.js';
-import * as farm from './farm.js';
-import * as dailyBriefing from './dailyBriefing.js';
-import * as smartTodos from './smartTodos.js';
-import * as myPlaces from './myPlaces.js';
-import * as shareCard from './shareCard.js';
-import * as wallpaper from './wallpaper.js';
-import * as analytics from './analytics.js';
-import * as nativeBridge from './nativeBridge.js';
-import * as animatedShare from './animatedShare.js';
-import * as auraMapsMobile from './auraMapsMobile.js';
+import * as advisories from './advisories.js';
+import * as audio from './audio.js';
 import * as deviceProfile from './deviceProfile.js';
 import * as tvNavigation from './tvNavigation.js';
 import * as sync from './sync.js';
 import * as activityWindow from './activityWindow.js';
 import * as marine from './marine.js';
 
+// Feature modules loaded eagerly. Order matters: deviceProfile first so
+// data-device attributes exist on <html> before any other feature reads them.
 const featureModules = {
-  // Device profile runs first so data-device attributes exist on <html>
-  // before any other feature (and before first panel paint) reads them.
   deviceProfile,
   tvNavigation,
   sync,
@@ -67,38 +53,46 @@ const featureModules = {
   insights,
   minimalMode,
   canvasEffects,
-  audio,
   myLocation,
-  astronomy,
-  advisories,
   appToggles,
   dashboard,
   keyboardShortcuts,
-  terminator,
-  isobars,
-  stargazing,
-  extremes,
   navigation,
   alerts,
-  rainPush,
-  farm,
-  dailyBriefing,
-  smartTodos,
-  myPlaces,
-  shareCard,
-  wallpaper,
-  auraMapsMobile,
-  analytics,
-  nativeBridge,
-  animatedShare,
+  isobars,
+  advisories,
+  audio,
 };
 
 // ── Heavy / interaction-gated (background-loaded in parallel) ─────────
+// These are NOT on the critical path to first paint. They are dynamically
+// imported after the map has rendered, so they don't add to initial JS
+// parse/eval time. Their init() is called once the import resolves.
 const heavyFeatureImports = {
   aura: () => import('./aura.js'),
   routes: () => import('./routes.js'),
   timeMachine: () => import('./timeMachine.js'),
   compareCities: () => import('./compareCities.js'),
+  // UI-only features — only needed when the user opens the corresponding
+  // panel or tab:
+  farm: () => import('./farm.js'),
+  wallpaper: () => import('./wallpaper.js'),
+  auraMapsMobile: () => import('./auraMapsMobile.js'),
+  shareCard: () => import('./shareCard.js'),
+  astronomy: () => import('./astronomy.js'),
+  dailyBriefing: () => import('./dailyBriefing.js'),
+  smartTodos: () => import('./smartTodos.js'),
+  myPlaces: () => import('./myPlaces.js'),
+  animatedShare: () => import('./animatedShare.js'),
+  nativeBridge: () => import('./nativeBridge.js'),
+  stargazing: () => import('./stargazing.js'),
+  extremes: () => import('./extremes.js'),
+  terminator: () => import('./terminator.js'),
+  rainPush: () => import('./rainPush.js'),
+  // analytics.init() is split out: initWebVitals is imported directly by
+  // app.js, but the Analytics instance setup (localStorage read, app_loaded
+  // tracking) runs lazily here.
+  analytics: () => import('./analytics.js'),
 };
 
 let heavyPromise = null;
@@ -127,8 +121,9 @@ export function initFeatures(app) {
     }
   }
 
-  // Kick off heavy-feature loading during idle/after first paint so the critical
-  // path (map + weather + panel) isn't blocked by their parse/eval cost.
+  // Kick off heavy-feature loading during idle/after first paint so the
+  // critical path (map + weather + panel) isn't blocked by their parse/eval
+  // cost.
   if (typeof requestIdleCallback !== 'undefined') {
     requestIdleCallback(() => initHeavyFeatures(app), { timeout: 1500 });
   } else {

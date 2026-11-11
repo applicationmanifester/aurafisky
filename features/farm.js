@@ -1635,7 +1635,7 @@ function renderLocalPlants(ctx, app) {
         <div class="flex items-center gap-1.5 text-[9px] text-slate-500 dark:text-slate-400 flex-wrap">
           <span class="italic text-teal-700 dark:text-teal-400 font-medium">${esc(cleanSci)}</span>
           ${fam ? `<span>· ${esc(fam)}</span>` : ""}
-          ${badge ? `<span class="px-1 py-0.2 rounded text-[8px] bg-emerald-100/80 dark:bg-emerald-950/60 text-emerald-800 dark:text-emerald-300 font-medium">${esc(badge)}</span>` : ""}
+          ${badge ? `<span class="px-1 py-0.2 rounded text-[9px] bg-emerald-100/80 dark:bg-emerald-950/60 text-emerald-800 dark:text-emerald-300 font-medium">${esc(badge)}</span>` : ""}
           ${recorded ? `<span class="text-slate-400">· ${esc(recorded)}</span>` : ""}
         </div>
       </li>`;
@@ -1755,13 +1755,13 @@ function renderCropCard(ctx, rec) {
   const crop = CROPS.find((c) => c.id === rec.cropId);
   if (!crop) return "";
   const locale = (typeof window !== "undefined" && window.app?.language) || detectLocale();
-  const window = crop.sowMonthsForSite || getSowMonthsForHemisphere(crop, ctx.hemisphere) || crop.sowMonths;
-  const inWindow = isMonthInWindow(ctx.month, window, 0);
-  const until = monthsUntilWindow(ctx.month, window);
+  const sowWindow = crop.sowMonthsForSite || getSowMonthsForHemisphere(crop, ctx.hemisphere) || crop.sowMonths;
+  const inWindow = isMonthInWindow(ctx.month, sowWindow, 0);
+  const until = monthsUntilWindow(ctx.month, sowWindow);
   const cropName = translateText(crop.name, locale);
   const cropCategory = translateText(crop.category, locale);
-  const formattedMonths = Array.isArray(window) && window.length > 0
-    ? window.map((m) => translateText(MONTH_SHORT[m - 1], locale) || MONTH_SHORT[m - 1]).join("-")
+  const formattedMonths = Array.isArray(sowWindow) && sowWindow.length > 0
+    ? sowWindow.map((m) => translateText(MONTH_SHORT[m - 1], locale) || MONTH_SHORT[m - 1]).join("-")
     : (translateText("outside seasonal envelope", locale) || "outside seasonal envelope");
   const sowWord = translateText("sow", locale) || "sow";
   const daysWord = translateText("days", locale) || "days";
@@ -1774,7 +1774,7 @@ function renderCropCard(ctx, rec) {
   const windowOpensNext = translateText("Window opens next month", locale) || "Window opens next month";
   const windowJustClosed = translateText("Window just closed", locale) || "Window just closed";
 
-  const timing = !window.length
+  const timing = !sowWindow.length
     ? `<span class="text-rose-600 dark:text-rose-400 font-semibold">${esc(offSeasonText)}</span>`
     : inWindow
       ? `<span class="text-emerald-700 dark:text-emerald-400 font-bold">✅ ${esc(sowNowText)}</span>`
@@ -1915,7 +1915,7 @@ function renderWaterSection(ctx) {
             <div class="h-2.5 rounded-full bg-amber-500" style="width:${(et0 / maxV) * 100}%"></div>
           </div>
         </div>
-        <div class="w-16 text-[8px] font-mono text-right text-slate-500 dark:text-slate-400 flex-shrink-0">${rain.toFixed(1)} / ${et0.toFixed(1)}</div>
+        <div class="w-16 text-[9px] font-mono text-right text-slate-500 dark:text-slate-400 flex-shrink-0">${rain.toFixed(1)} / ${et0.toFixed(1)}</div>
       </div>`;
   }).join("");
 
@@ -2760,6 +2760,22 @@ export function init(app) {
     };
     wrapped.__farmSwitchWrapped = true;
     app.switchWeatherTab = wrapped;
+  }
+
+  // Catch up immediately if a forecast or active Farm tab landed before lazy init completed.
+  if (app.selectedLat != null && app.selectedLng != null) {
+    try {
+      scheduleFarmUpdate(app);
+      if (
+        app.activeWeatherTab === "farm" ||
+        (typeof document !== "undefined" &&
+          document.getElementById("weatherTabFarm")?.classList.contains("active"))
+      ) {
+        renderFarmTab(app);
+      }
+    } catch (e) {
+      console.warn("Initial Farm Mode catch-up render failed:", e);
+    }
   }
 }
 

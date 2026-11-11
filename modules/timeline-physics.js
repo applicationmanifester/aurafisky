@@ -226,7 +226,7 @@ export function buildSparklinePillSvg(weatherData, hourIndex, units = 'metric') 
   // Check hazard
   const isHazardous = uv >= 8 || windSpeed > 50 || precipMm > 5;
   const hazardBadge = isHazardous
-    ? `<span class="inline-flex items-center px-1.5 py-0.2 rounded bg-amber-500/20 text-amber-300 text-[8px] font-extrabold animate-pulse">⚠️ HAZARD</span>`
+    ? `<span class="inline-flex items-center px-1.5 py-0.2 rounded bg-amber-500/20 text-amber-300 text-[9px] font-extrabold animate-pulse">⚠️ HAZARD</span>`
     : '';
 
   return `

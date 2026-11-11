@@ -8,6 +8,32 @@
  * ============================================================
  */
 
+/* ── Touch target utilities ─────────────────────────────────────── */
+/* Ensure minimum 44×44px touch targets for accessibility */
+.touch-target {
+  min-width: 44px;
+  min-height: 44px;
+}
+.touch-target-sm {
+  min-width: 40px;
+  min-height: 40px;
+}
+
+/* Aura action button click feedback */
+.aura-action-clicked {
+  transform: scale(0.95);
+  opacity: 0.8;
+  transition: transform 0.05s ease, opacity 0.05s ease;
+}
+
+/* Map layers flyout: ensure it's above backdrop on all devices */
+#mapLayersFlyout {
+  z-index: 1250 !important;
+}
+#mapLayersBackdrop {
+  z-index: 1240 !important;
+}
+
 /* ── Map overlay toggle buttons (terminator, isobars) ─────────── */
 #terminatorToggleBtn.terminator-active {
   background-color: rgba(245, 158, 11, 0.18);
@@ -1427,6 +1453,229 @@ input[type='range'].timeline-slider::-moz-range-thumb {
   scrollbar-width: thin;
   scrollbar-color: rgba(20, 184, 166, 0.45) transparent;
   cursor: grab;
+}
+
+/* ── Unified button polish — consistent hover/active states ───── */
+button:not(.ol-zoom):not(.ol-rotate):not(.marker-close-btn):not(.weather-marker),
+[role="button"]:not(.aurafisky-location-pin):not(.marker-close-btn):not(.weather-marker) {
+  position: relative;
+  transition: transform 0.15s ease, box-shadow 0.15s ease, background-color 0.15s ease, border-color 0.15s ease;
+}
+
+button:active:not(.ol-zoom):not(.ol-rotate):not(.marker-close-btn):not(.weather-marker),
+[role="button"]:active:not(.aurafisky-location-pin):not(.marker-close-btn):not(.weather-marker) {
+  transform: scale(0.97);
+}
+
+/* Weather panel: use primary teal instead of clashing orange border */
+#weatherPanel {
+  border: 1px solid var(--aura-hairline) !important;
+  box-shadow: var(--aura-shadow-3) !important;
+}
+.weather-panel {
+  border: 1px solid var(--aura-hairline) !important;
+  box-shadow: var(--aura-shadow-3) !important;
+  border-image: none !important;
+}
+.weather-panel.open {
+  border: 1px solid var(--aura-hairline) !important;
+  box-shadow: var(--aura-shadow-3) !important;
+}
+
+/* Mobile weather panel: same primary styling, no orange border */
+@media (max-width: 639px), (max-height: 500px) and (pointer: coarse) {
+  .weather-panel {
+    border: 1px solid var(--aura-hairline) !important;
+    border-bottom: none !important;
+    box-shadow: var(--aura-shadow-3) !important;
+  }
+  .weather-panel.open {
+    border: 1px solid var(--aura-hairline) !important;
+    border-bottom: none !important;
+    box-shadow: var(--aura-shadow-3) !important;
+  }
+  .weather-panel.open:not(.minimized):not(.sheet-peek),
+  .weather-panel.open.aura-sheet.sheet-full,
+  .weather-panel.open.google-maps-sheet.sheet-full {
+    border: 1px solid var(--aura-hairline) !important;
+    box-shadow: var(--aura-shadow-3) !important;
+  }
+  :is(.dark, [data-theme="dark"]) .weather-panel.open:not(.minimized):not(.sheet-peek),
+  :is(.dark, [data-theme="dark"]) .weather-panel.open.aura-sheet.sheet-full,
+  :is(.dark, [data-theme="dark"]) .weather-panel.open.google-maps-sheet.sheet-full {
+    border: 1px solid var(--aura-hairline) !important;
+    box-shadow: var(--aura-shadow-3) !important;
+  }
+}
+
+/* Glass surfaces: consistent hairline */
+.glass,
+.glass-no-border,
+#googleMapsSearchPill,
+#weatherPanel,
+#comparePanel,
+#mapLayersFlyout,
+#radarExpandedPanel > div {
+  border: 1px solid var(--aura-hairline) !important;
+}
+
+/* Empty state — when no location is selected */
+.empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding: 3rem 1.5rem;
+  color: #64748b;
+}
+.empty-state .empty-icon {
+  font-size: 3.5rem;
+  margin-bottom: 1rem;
+  opacity: 0.5;
+}
+.empty-state h3 {
+  font-size: 1.125rem;
+  font-weight: 600;
+  color: #1e293b;
+  margin: 0 0 0.5rem 0;
+  letter-spacing: -0.01em;
+}
+.empty-state p {
+  font-size: 0.875rem;
+  color: #64748b;
+  margin: 0 0 1.5rem 0;
+  line-height: 1.5;
+}
+.dark .empty-state h3 { color: #f8fafc; }
+.dark .empty-state p { color: #94a3b8; }
+
+/* Skeleton loading states — more elegant pulse */
+.skeleton {
+  background: linear-gradient(90deg, rgba(148, 163, 184, 0.12) 25%, rgba(148, 163, 184, 0.2) 50%, rgba(148, 163, 184, 0.12) 75%);
+  background-size: 200% 100%;
+  animation: shimmer 1.5s ease-in-out infinite;
+  border-radius: 8px;
+}
+.dark .skeleton {
+  background: linear-gradient(90deg, rgba(71, 85, 105, 0.12) 25%, rgba(71, 85, 105, 0.22) 50%, rgba(71, 85, 105, 0.12) 75%);
+  background-size: 200% 100%;
+}
+
+/* Entrance animation for cards when they first appear */
+@keyframes cardSlideIn {
+  from { opacity: 0; transform: translateY(12px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.card-animate {
+  animation: cardSlideIn 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+/* Metric cards: consistent hover lift */
+.metric-card {
+  border-radius: var(--aura-radius-md);
+  border: 1px solid var(--aura-hairline);
+  transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
+}
+.metric-card:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--aura-shadow-1);
+  border-color: rgba(20, 184, 166, 0.3);
+}
+.dark .metric-card:hover {
+  border-color: rgba(45, 212, 191, 0.3);
+}
+
+/* Hourly pills: consistent hover */
+.hourly-pill {
+  border-radius: var(--aura-radius-md);
+  border: 1px solid var(--aura-hairline);
+  transition: transform 0.15s ease, box-shadow 0.15s ease, border-color 0.15s ease;
+}
+.hourly-pill:hover {
+  transform: translateY(-1px);
+  box-shadow: var(--aura-shadow-1);
+  border-color: rgba(20, 184, 166, 0.4);
+}
+.dark .hourly-pill:hover {
+  border-color: rgba(45, 212, 191, 0.4);
+}
+
+/* Daily items: consistent hover */
+.daily-item {
+  border-radius: var(--aura-radius-sm);
+  transition: background-color 0.15s ease, transform 0.15s ease;
+}
+.daily-item:hover {
+  background-color: rgba(20, 184, 166, 0.06);
+  transform: translateX(2px);
+}
+.dark .daily-item:hover {
+  background-color: rgba(45, 212, 191, 0.08);
+}
+
+/* Search pill: enhanced focus glow */
+#googleMapsSearchPill:focus-within {
+  border-color: rgba(20, 184, 166, 0.6) !important;
+  box-shadow: var(--aura-shadow-2), 0 0 0 4px rgba(20, 184, 166, 0.15) !important;
+  transform: translateY(-1px);
+}
+.dark #googleMapsSearchPill:focus-within {
+  box-shadow: var(--aura-shadow-2), 0 0 0 4px rgba(45, 212, 191, 0.2) !important;
+}
+
+/* Map control buttons: consistent sizing and hover */
+#zoomControls > button,
+#mobileMapControls button,
+#radarControls > button,
+#mapLayersBtn,
+#terminatorToggleBtn,
+#extremesBtn {
+  border-radius: var(--aura-radius-md);
+  box-shadow: var(--aura-shadow-2);
+  min-width: var(--aura-tap);
+  min-height: var(--aura-tap);
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+}
+@media (hover: hover) and (pointer: fine) {
+  #zoomControls > button:hover,
+  #mobileMapControls button:hover,
+  #radarControls > button:hover,
+  #mapLayersBtn:hover,
+  #terminatorToggleBtn:hover,
+  #extremesBtn:hover {
+    transform: translateY(-1px);
+    box-shadow: var(--aura-shadow-3);
+  }
+}
+
+/* Toast container: better positioning */
+#toastContainer {
+  bottom: calc(7rem + env(safe-area-inset-bottom, 0px));
+  left: 0.75rem;
+  right: 0.75rem;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  pointer-events: none;
+  z-index: 5000;
+}
+.toast {
+  pointer-events: auto;
+  margin-bottom: 0.5rem;
+  max-width: 360px;
+}
+
+/* Loading overlay: more elegant spinner */
+#loadingOverlay {
+  -webkit-backdrop-filter: blur(12px);
+  backdrop-filter: blur(12px);
+  background: rgba(255, 255, 255, 0.85);
+}
+.dark #loadingOverlay {
+  background: rgba(15, 23, 42, 0.85);
 }
 #weatherPanelTabs.dragging {
   cursor: grabbing;
@@ -3628,10 +3877,10 @@ button, a, input, select, textarea, [role="button"] {
   }
 
   #zoomControls > button {
-    width: 2.25rem !important;
-    height: 2.25rem !important;
-    min-width: 2.25rem !important;
-    min-height: 2.25rem !important;
+    width: 2.5rem !important;
+    height: 2.5rem !important;
+    min-width: 2.5rem !important;
+    min-height: 2.5rem !important;
     border-radius: 0.75rem !important;
     padding: 0 !important;
     display: flex !important;
@@ -3648,10 +3897,10 @@ button, a, input, select, textarea, [role="button"] {
   #mobileFloatingShareBtn,
   #mobileLocationFab,
   #mobileDirectionsFab {
-    width: 2rem !important;
-    height: 2rem !important;
-    min-width: 2rem !important;
-    min-height: 2rem !important;
+    width: 2.25rem !important;
+    height: 2.25rem !important;
+    min-width: 2.25rem !important;
+    min-height: 2.25rem !important;
     border-radius: 0.65rem !important;
     padding: 0 !important;
     display: flex !important;
@@ -3661,10 +3910,10 @@ button, a, input, select, textarea, [role="button"] {
   }
 
   #zoomControls svg {
-    width: 1.2rem !important;
-    height: 1.2rem !important;
-    max-width: 1.2rem !important;
-    max-height: 1.2rem !important;
+    width: 1.3rem !important;
+    height: 1.3rem !important;
+    max-width: 1.3rem !important;
+    max-height: 1.3rem !important;
   }
 
   #compassBtn {
@@ -3715,11 +3964,11 @@ button, a, input, select, textarea, [role="button"] {
     #mobileFloatingShareBtn,
     #mobileLocationFab,
     #mobileDirectionsFab {
-      width: 1.85rem !important;
-      height: 1.85rem !important;
-      min-width: 1.85rem !important;
-      min-height: 1.85rem !important;
-      border-radius: 0.55rem !important;
+      width: 2rem !important;
+      height: 2rem !important;
+      min-width: 2rem !important;
+      min-height: 2rem !important;
+      border-radius: 0.6rem !important;
     }
     #mobileMapControls svg,
     #mapLayersBtn svg,
@@ -3728,10 +3977,10 @@ button, a, input, select, textarea, [role="button"] {
     #mobileFloatingShareBtn svg,
     #mobileLocationFab svg,
     #mobileDirectionsFab svg {
-      width: 0.95rem !important;
-      height: 0.95rem !important;
-      max-width: 0.95rem !important;
-      max-height: 0.95rem !important;
+      width: 1rem !important;
+      height: 1rem !important;
+      max-width: 1rem !important;
+      max-height: 1rem !important;
     }
   }
 
@@ -3789,7 +4038,7 @@ button, a, input, select, textarea, [role="button"] {
   }
 
   /* Map layers flyout: on mobile, centered modal with z-index 1250 */
-  #mapLayersFlyout:not(.minimized) {
+  #mapLayersFlyout:not(.hidden):not(.minimized) {
     position: fixed !important;
     left: 50% !important;
     right: auto !important;
@@ -4045,12 +4294,12 @@ button, a, input, select, textarea, [role="button"] {
   }
 
   /* When the weather panel, restore sheet pill, route panel, or compare panel is active on mobile,
-     hide the timeline bar so they don't visually overlap or block touch gestures */
-  body:not(.sky-radar-fullscreen-active) .weather-panel.open:not(.minimized) ~ #timelineBar,
-  body:not(.sky-radar-fullscreen-active) .weather-panel.open ~ #timelineBar,
-  body:not(.sky-radar-fullscreen-active) #comparePanel.open ~ #timelineBar,
-  body:not(.sky-radar-fullscreen-active):has(#weatherPanel.open:not(.minimized)) #timelineBar,
-  body:not(.sky-radar-fullscreen-active):has(#weatherPanel.open) #timelineBar,
+     hide the timeline bar so they don't visually overlap or block touch gestures.
+     Only the states that actually cover the screen hide it: a peeked sheet (175px strip at the
+     bottom) or the landscape side card leave the map visible, so the scrubber stays available. */
+  body:not(.sky-radar-fullscreen-active) .weather-panel.open.sheet-full:not(.sheet-peek):not(.sheet-side) ~ #timelineBar,
+  body:not(.sky-radar-fullscreen-active):has(#weatherPanel.open.sheet-full:not(.sheet-peek):not(.sheet-side)) #timelineBar,
+  body:not(.sky-radar-fullscreen-active):has(#comparePanel.open) #timelineBar,
   body:not(.sky-radar-fullscreen-active):has(#restoreSheetPill:not(.hidden)) #timelineBar,
   body:not(.sky-radar-fullscreen-active):has(#routePanel:not(.hidden)) #timelineBar,
   body:not(.sky-radar-fullscreen-active) #timelineBar.hidden-by-sheet {
@@ -4300,7 +4549,6 @@ button, a, input, select, textarea, [role="button"] {
 #mapLayersFlyout {
   max-height: min(88vh, calc(var(--app-height, 100vh) - 4rem));
   max-height: calc(100dvh - 4rem);
-  display: flex;
   flex-direction: column;
   overflow-y: hidden;
   overscroll-behavior: contain;
@@ -4308,6 +4556,15 @@ button, a, input, select, textarea, [role="button"] {
               padding 0.2s cubic-bezier(0.16, 1, 0.3, 1),
               box-shadow 0.2s ease,
               transform 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+#mapLayersFlyout:not(.hidden) {
+  display: flex;
+  flex-direction: column;
+}
+
+#mapLayersFlyout.hidden {
+  display: none !important;
 }
 #mapLayersFlyout #mapLayersHeader {
   flex-shrink: 0;
@@ -4658,6 +4915,25 @@ button, a, input, select, textarea, [role="button"] {
     background-color: #ffffff !important;
     padding-top: env(safe-area-inset-top, 0px);
     padding-bottom: env(safe-area-inset-bottom, 0px);
+    transform: translateY(0) !important;
+  }
+
+  /* Landscape phones: dock the sheet against the right edge so the map stays
+     visible instead of covering the whole screen. Listed last and given a
+     higher-specificity selector than the full-screen block above, because both
+     are !important — a plain later rule of equal specificity would still lose
+     to .weather-panel.open.aura-sheet.sheet-full. Mirrors the geometry that
+     features/auraMapsMobile.js snapSheet() writes inline for landscape. */
+  .weather-panel.open.aura-sheet.google-maps-sheet.sheet-full.sheet-side {
+    top: 0.5rem !important;
+    bottom: calc(4.25rem + env(safe-area-inset-bottom, 0px)) !important;
+    left: auto !important;
+    right: max(0.5rem, env(safe-area-inset-right, 0px)) !important;
+    width: min(400px, 55vw) !important;
+    max-width: calc(100vw - 6rem) !important;
+    height: auto !important;
+    max-height: none !important;
+    border-radius: 1.25rem 0.375rem 0.375rem 1.25rem !important;
     transform: translateY(0) !important;
   }
 

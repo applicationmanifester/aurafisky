@@ -4,7 +4,7 @@
 // live rain radar, outdoor fitness decisions, interactive bottom sheet, and Material navigation.
 
 import { shortPlaceName } from '../modules/geo.js';
-import { isMobileLayout } from './breakpoints.js';
+import { isMobileLayout, isLandscapePhone } from './breakpoints.js';
 import { translateDOM, detectLocale, translateText } from '../modules/i18n.js';
 
 const BCP47_SPEECH_MAP = {
@@ -574,17 +574,23 @@ export class AuraMobileController {
     // Window resize handler: seamlessly switch between mobile bottom sheet and desktop sidebar
     window.addEventListener('resize', () => {
       if (!isMobileLayout()) {
-        panel.classList.remove('google-maps-sheet', 'sheet-peek', 'sheet-half', 'sheet-full');
+        panel.classList.remove('google-maps-sheet', 'sheet-peek', 'sheet-half', 'sheet-full', 'sheet-side');
         panel.style.height = '';
         panel.style.maxHeight = '';
+        panel.style.width = '';
+        panel.style.top = '';
+        panel.style.bottom = '';
+        panel.style.left = '';
+        panel.style.right = '';
         panel.style.transform = '';
         panel.style.transition = '';
         panel.style.opacity = '';
         panel.style.pointerEvents = '';
       } else {
         panel.classList.add('google-maps-sheet');
-        if (!panel.classList.contains('sheet-peek') && !panel.classList.contains('sheet-half') && !panel.classList.contains('sheet-full')) {
-          this.snapSheet('full');
+        // Re-apply the geometry for the orientation we just rotated into.
+        if (this.sheetState && this.sheetState !== 'dismissed') {
+          this.snapSheet(this.sheetState);
         }
       }
     });
@@ -612,24 +618,29 @@ export class AuraMobileController {
       panel.style.transition = '';
       panel.style.opacity = '';
       panel.style.pointerEvents = '';
-      panel.classList.remove('minimized', 'sheet-peek', 'sheet-half', 'sheet-full', 'aura-sheet', 'google-maps-sheet');
+      panel.classList.remove('minimized', 'sheet-peek', 'sheet-half', 'sheet-full', 'sheet-side', 'aura-sheet', 'google-maps-sheet');
       panel.classList.add('open');
       panel.removeAttribute('inert');
       return;
     }
 
-    if (timeline) timeline.classList.add('hidden-by-sheet');
-
     this.sheetState = state;
     panel.removeAttribute('inert');
     panel.classList.add('open', 'aura-sheet', 'google-maps-sheet');
-    panel.classList.remove('sheet-peek', 'sheet-half', 'sheet-full');
+    panel.classList.remove('sheet-peek', 'sheet-half', 'sheet-full', 'sheet-side');
     panel.classList.add(`sheet-${state}`);
 
-    const vh = window.innerHeight;
     panel.style.transition = 'height 0.35s cubic-bezier(0.2, 0.9, 0.3, 1), transform 0.35s cubic-bezier(0.2, 0.9, 0.3, 1), opacity 0.2s ease';
     panel.style.opacity = '1';
     panel.style.pointerEvents = 'auto';
+
+    // The scrubber is only hidden while the sheet covers the map. A peeked
+    // (175px) sheet leaves the map visible, and on mobile the timeline used to
+    // be hidden forever because hidden-by-sheet was added on every snap and
+    // only ever removed on desktop — so the time-travel bar was unreachable on
+    // phones. Lift it above the peeked sheet instead of hiding it.
+    const coversScreen = state !== 'peek';
+    if (timeline) timeline.classList.toggle('hidden-by-sheet', coversScreen);
 
     const minBtn = document.getElementById('panelMinimizeBtn');
     if (state === 'peek') {
@@ -648,8 +659,30 @@ export class AuraMobileController {
       minBtn?.setAttribute('title', 'Expand weather details');
       minBtn?.setAttribute('aria-label', 'Expand weather details');
       this.app?.updateWideButtonState?.(false);
+    } else if (isLandscapePhone()) {
+      // Landscape phone (844x390 and friends): a full-screen sheet leaves no
+      // map at all, so dock it as a right-hand card over the map instead.
+      // sheet-full stays on so every `isFull` check keeps working; sheet-side
+      // is what switches the geometry (see the rule after the full-screen
+      // block in styles.css — it needs the extra classes to win the cascade).
+      panel.style.height = '';
+      panel.style.maxHeight = '';
+      panel.style.top = '0.5rem';
+      panel.style.bottom = 'calc(4.25rem + env(safe-area-inset-bottom, 0px))';
+      panel.style.left = 'auto';
+      panel.style.right = 'max(0.5rem, env(safe-area-inset-right, 0px))';
+      panel.style.width = 'min(400px, 55vw)';
+      panel.style.transform = 'translateY(0)';
+      panel.classList.remove('minimized', 'sheet-peek', 'sheet-half');
+      panel.classList.add('sheet-full', 'sheet-side');
+      minBtn?.classList.remove('chevron-flipped');
+      minBtn?.setAttribute('title', 'Minimize weather panel');
+      minBtn?.setAttribute('aria-label', 'Minimize weather panel');
+      this.app?.updateWideButtonState?.(true);
     } else {
-      // 'full' or any expanded state: completely overlap screen on mobile
+      // Portrait phone, expanded: completely overlap the screen.
+      panel.style.width = '';
+      panel.classList.remove('sheet-side');
       panel.style.height = '100dvh';
       panel.style.maxHeight = '100dvh';
       panel.style.top = '0px';
@@ -683,16 +716,18 @@ export class AuraMobileController {
     }
 
     this.sheetState = 'dismissed';
-    panel.classList.remove('open', 'sheet-peek', 'sheet-half', 'sheet-full');
+    panel.classList.remove('open', 'sheet-peek', 'sheet-half', 'sheet-full', 'sheet-side');
     panel.setAttribute('inert', '');
     panel.style.transition = 'transform 0.35s cubic-bezier(0.2, 0.9, 0.3, 1), opacity 0.25s ease';
     panel.style.transform = 'translateY(calc(100% + 120px))';
     panel.style.opacity = '0';
     panel.style.pointerEvents = 'none';
 
-    // Hide timeline bar on mobile so it doesn't overlap with restoreSheetPill
+    // With the sheet gone, the scrubber belongs to the map again. It used to
+    // stay hidden-by-sheet forever here on phones (nothing ever removed the
+    // class on mobile), which made the timeline unreachable.
     const timeline = document.getElementById('timelineBar');
-    if (timeline) timeline.classList.add('hidden-by-sheet');
+    if (timeline) timeline.classList.remove('hidden-by-sheet');
 
     let pill = document.getElementById('restoreSheetPill');
     const locName = (this.currentLocationName || this.app?.selectedName || 'Current Location').split(',')[0].trim();
@@ -719,8 +754,8 @@ export class AuraMobileController {
     panel.classList.add('open');
     const pill = document.getElementById('restoreSheetPill');
     if (pill) pill.classList.add('hidden');
-    const timeline = document.getElementById('timelineBar');
-    if (timeline && isMobileLayout()) timeline.classList.add('hidden-by-sheet');
+    // snapSheet owns the timeline's hidden-by-sheet state (hidden only while
+    // the sheet covers the screen), so don't pre-empt it here.
     this.snapSheet(state);
   }
 

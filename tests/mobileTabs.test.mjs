@@ -132,8 +132,8 @@ describe('Mobile Tabs & Navigation Layout', () => {
 
   it('hides timelineBar when full-height mobile panels are open', () => {
     const css = fs.readFileSync('styles.css', 'utf-8');
-    expect(css).toContain('.weather-panel.open:not(.minimized) ~ #timelineBar');
-    expect(css).toContain('#comparePanel.open ~ #timelineBar');
+    expect(css).toContain('.weather-panel.open.sheet-full:not(.sheet-peek):not(.sheet-side) ~ #timelineBar');
+    expect(css).toContain('#comparePanel.open');
     expect(css).toContain('pointer-events: none !important;');
   });
 
@@ -279,9 +279,11 @@ describe('Mobile Tabs & Navigation Layout', () => {
       : fs.readFileSync('features/googleMapsMobile.js', 'utf-8');
     expect(mobileJs).toContain("this.snapSheet('full');");
 
+    expect(mobileJs).toContain("panel.style.height = '100dvh'");
+
     const appJs = fs.readFileSync('app.js', 'utf-8');
-    expect(appJs).toContain("this.$.weatherPanel.classList.add(\"open\", \"sheet-full\"");
-    expect(appJs).toContain("this.$.weatherPanel.style.height = '100dvh'");
+    expect(appJs).toContain('this.$.weatherPanel.classList.add("open", "aura-sheet", "google-maps-sheet");');
+    expect(appJs).toContain("this.googleMapsMobile.snapSheet('peek')");
   });
 
   it('ensures sheet-full overrides peek/minimized styles and header click expands sheet on mobile', () => {

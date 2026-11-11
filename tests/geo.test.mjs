@@ -473,4 +473,23 @@ describe("breakdownAddress", () => {
     expect(shortPlaceName("16.4106, 77.6953")).toBe("Locating...");
     expect(shortPlaceName("16.4106° N, 77.6953° E")).toBe("Locating...");
   });
+
+  test("collapses repeated commas and stray comma spacing in Kannada addresses", () => {
+    const res = breakdownAddress(
+      {
+        village: "ಯಲ್ಲೂರು",
+        county: "ಶ್ರೀನಿವಾಸಪುರ ತಾಲೂಕು",
+        state_district: "ಕೋಲಾರ ಜಿಲ್ಲೆ,",
+        state: "ಕರ್ನಾಟಕ",
+        country: "ಭಾರತ",
+      },
+      "ಯಲ್ಲೂರು, ಶ್ರೀನಿವಾಸಪುರ ತಾಲೂಕು, ಕೋಲಾರ ಜಿಲ್ಲೆ,, ಕರ್ನಾಟಕ, ಭಾರತ",
+      13.28,
+      78.29,
+    );
+    expect(res.district).not.toContain(",,");
+    expect(res.district.endsWith(",")).toBe(false);
+    expect(res.fullAddress).not.toContain(",,");
+    expect(res.fullAddress).toBe("ಯಲ್ಲೂರು, ಶ್ರೀನಿವಾಸಪುರ ತಾಲೂಕು, ಕೋಲಾರ ಜಿಲ್ಲೆ, ಕರ್ನಾಟಕ, ಭಾರತ");
+  });
 });

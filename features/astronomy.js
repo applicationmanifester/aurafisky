@@ -382,8 +382,8 @@ function updateCelestialBodies(currentTime) {
           if (meteorBadge) {
             meteorBadge.textContent = primaryShower.isActive ? "Active Now 🔥" : `In ${primaryShower.daysUntilPeak}d`;
             meteorBadge.className = primaryShower.isActive
-              ? "text-[8px] font-bold px-1.5 py-0.5 rounded bg-rose-500/15 text-rose-600 dark:text-rose-400"
-              : "text-[8px] font-bold px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-600 dark:text-amber-400";
+              ? "text-[9px] font-bold px-1.5 py-0.5 rounded bg-rose-500/15 text-rose-600 dark:text-rose-400"
+              : "text-[9px] font-bold px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-600 dark:text-amber-400";
           }
         }
 
@@ -485,7 +485,7 @@ function updateCelestialBodies(currentTime) {
                   </div>
                 </div>
               </div>
-              <span class="text-[8px] font-bold px-1.5 py-0.5 rounded-md flex-shrink-0 ${body.badgeClass}">
+              <span class="text-[9px] font-bold px-1.5 py-0.5 rounded-md flex-shrink-0 ${body.badgeClass}">
                 ${bodyBadge}
               </span>
             </div>
@@ -514,11 +514,11 @@ function updateCelestialBodies(currentTime) {
                     <span class="w-1.5 h-1.5 rounded-full inline-block flex-shrink-0" style="background-color: ${star.color}"></span>
                     <span>${starName}</span>
                   </div>
-                  <div class="text-[8px] text-slate-400 truncate mt-0.5">${starConst}</div>
+                  <div class="text-[9px] text-slate-400 truncate mt-0.5">${starConst}</div>
                 </div>
-                <span class="text-[8px] font-semibold text-slate-400">m ${star.magnitude.toFixed(1)}</span>
+                <span class="text-[9px] font-semibold text-slate-400">m ${star.magnitude.toFixed(1)}</span>
               </div>
-              <div class="text-[8px] ${statusClass} flex items-center justify-between mt-2 pt-1.5 border-t border-slate-200/40 dark:border-slate-700/40">
+              <div class="text-[9px] ${statusClass} flex items-center justify-between mt-2 pt-1.5 border-t border-slate-200/40 dark:border-slate-700/40">
                 <span>${starDir} (${Math.round(star.altitude)}°)</span>
                 <span>${statusText}</span>
               </div>
@@ -807,6 +807,19 @@ export function init(app) {
       document.addEventListener("DOMContentLoaded", () => wireSkyRadarFullscreen(app), { once: true });
     } else {
       wireSkyRadarFullscreen(app);
+    }
+    if (app.currentWeather) {
+      try {
+        updateAstronomyWidget(app.currentWeather, app.currentHourIndex || 0);
+      } catch (_) {}
+    }
+    if (
+      app.activeWeatherTab === "astronomy" ||
+      document.getElementById("weatherTabAstronomy")?.classList.contains("active")
+    ) {
+      try {
+        updateCelestialBodies(new Date());
+      } catch (_) {}
     }
   }
 }

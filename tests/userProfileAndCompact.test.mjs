@@ -12,12 +12,13 @@ describe("User Profile Avatar & Compact Mode Removal", () => {
       expect(indexHtml).toContain('id="profileBtn"');
       // SVG person icon must not be hidden
       expect(indexHtml).toMatch(/<svg id="profileIconGeneric"[^>]*class="[^"]*w-4 h-4 text-slate-600[^"]*"[^>]*>/);
+      const normalizedHtml = indexHtml.replace(/\s+/g, " ");
       // profileAvatarFallback must be hidden by default with no static letters
-      expect(indexHtml).toContain('<span id="profileAvatarFallback" class="hidden text-xs font-bold text-white tracking-wider select-none"></span>');
+      expect(normalizedHtml).toContain('<span id="profileAvatarFallback" class="hidden text-xs font-bold text-white tracking-wider select-none"></span>');
       // profileAvatarImg must be hidden initially
-      expect(indexHtml).toContain('<img id="profileAvatarImg" class="w-full h-full object-cover hidden"');
+      expect(normalizedHtml).toContain('<img id="profileAvatarImg" class="w-full h-full object-cover hidden"');
       // Search pill terminates cleanly with pr-1.5 so white bar does not extend past profile icon
-      expect(indexHtml).toContain('id="googleMapsSearchPill" class="flex-1 min-w-0 pointer-events-auto rounded-full relative h-12 shadow-lg bg-white/95 dark:bg-[#282a2d] border border-slate-200/80 dark:border-slate-700/60 flex items-center pl-3 pr-1.5 gap-1.5');
+      expect(normalizedHtml).toContain('id="googleMapsSearchPill" class="flex-1 min-w-0 pointer-events-auto rounded-full relative h-12 shadow-lg bg-white/95 dark:bg-[#282a2d] border border-slate-200/80 dark:border-slate-700/60 flex items-center pl-3 pr-1.5 gap-1.5');
     });
 
     it("enforces strict mutual exclusion between generic icon and profile pic in styles.css", () => {

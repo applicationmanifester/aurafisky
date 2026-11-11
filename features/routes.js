@@ -2751,7 +2751,7 @@ function renderEmptyRoutePanel() {
         onFail: () => {
           if (locationWasFound) return;
           if (appRef.defaultLocation?.lat != null) {
-            setRouteEndpoint("origin", { ...appRef.defaultLocation, name: appRef.defaultLocation.name || "Saved location" });
+            setRouteEndpoint("origin", { ...appRef.defaultLocation, name: appRef.getLocalizedLocationName?.(appRef.defaultLocation) || appRef.defaultLocation.name || "Saved location" });
             appRef.showToast?.("GPS unavailable. Using your saved location as the start.", "info");
           } else {
             appRef.showToast?.("Could not get your location. Search for a starting point instead.", "error");
@@ -2759,7 +2759,7 @@ function renderEmptyRoutePanel() {
         },
       });
     } else if (appRef?.defaultLocation?.lat != null) {
-      setRouteEndpoint("origin", { ...appRef.defaultLocation, name: appRef.defaultLocation.name || "Saved location" });
+      setRouteEndpoint("origin", { ...appRef.defaultLocation, name: appRef.getLocalizedLocationName?.(appRef.defaultLocation) || appRef.defaultLocation.name || "Saved location" });
       appRef.showToast?.("Set starting point to your saved location", "success");
     } else {
       appRef?.showToast?.("Search for a starting point or choose one on the map", "info");
@@ -3740,7 +3740,7 @@ function renderRoutePanelContent(stops, units) {
       addStop(appRef.selectedLat, appRef.selectedLng, placeName);
       appRef.showToast?.(`Added "${placeName}" to route`, "success");
     } else if (appRef && appRef.defaultLocation && appRef.defaultLocation.lat != null) {
-      addStop(appRef.defaultLocation.lat, appRef.defaultLocation.lng, appRef.defaultLocation.name || "Home Location");
+      addStop(appRef.defaultLocation.lat, appRef.defaultLocation.lng, appRef.getLocalizedLocationName?.(appRef.defaultLocation) || appRef.defaultLocation.name || "Home Location");
       appRef.showToast?.(`Added home location to route`, "success");
     } else if (appRef && typeof appRef.getMyLocation === "function") {
       appRef.getMyLocation();

@@ -351,6 +351,15 @@ button {
 input[type='range'].timeline-slider {
   height: var(--aura-tap);
 }
+/* Map-opacity slider in the layers flyout: 4px of hit area was impossible to
+   drag accurately on touch, so give every range input a comfortable track
+   height while keeping the visual rail thin via the background gradient. */
+input[type='range'] {
+  min-height: 28px;
+}
+#mapOpacitySlider {
+  height: 32px;
+}
 input[type='range'].timeline-slider::-webkit-slider-thumb {
   width: 28px;
   height: 28px;
@@ -527,11 +536,11 @@ input[type='range'].timeline-slider:focus-visible {
     display: none !important;
   }
   #zoomControls > button {
-    min-width: 36px !important;
-    min-height: 36px !important;
-    width: 36px !important;
-    height: 36px !important;
-    border-radius: 10px !important;
+    min-width: 40px !important;
+    min-height: 40px !important;
+    width: 40px !important;
+    height: 40px !important;
+    border-radius: 11px !important;
   }
   #mobileMapControls button,
   #mobileMapControls .mobile-floating-control,
@@ -542,15 +551,25 @@ input[type='range'].timeline-slider:focus-visible {
   #mobileFloatingShareBtn,
   #mobileLocationFab,
   #mobileDirectionsFab {
-    min-width: 32px !important;
-    min-height: 32px !important;
-    width: 32px !important;
-    height: 32px !important;
-    border-radius: 10px !important;
+    min-width: 36px !important;
+    min-height: 36px !important;
+    width: 36px !important;
+    height: 36px !important;
+    border-radius: 11px !important;
   }
+  /* Keep the scrubber reachable while the sheet is peeked: lift it above the
+     175px sheet instead of hiding it. hidden-by-sheet (added by snapSheet for
+     the full-screen state) still wins and hides it. */
+  body:has(#weatherPanel.open.sheet-peek) #timelineBar,
+  body:has(#weatherPanel.open.minimized) #timelineBar {
+    bottom: calc(3.5rem + 175px + 0.75rem + env(safe-area-inset-bottom, 0px)) !important;
+  }
+  /* Hidden when the sheet covers the screen (full-screen or dismissed).
+     A peeked/minimized sheet only takes the bottom 175px, so the scrubber
+     stays visible above it — :has(#weatherPanel.open) used to hide it even
+     then, which is why the timeline never appeared on phones. */
   body:not(.sky-radar-fullscreen-active) #timelineBar.hidden-by-sheet,
-  body:not(.sky-radar-fullscreen-active):has(#restoreSheetPill:not(.hidden)) #timelineBar,
-  body:not(.sky-radar-fullscreen-active):has(#weatherPanel.open) #timelineBar {
+  body:not(.sky-radar-fullscreen-active):has(#restoreSheetPill:not(.hidden)) #timelineBar {
     opacity: 0 !important;
     pointer-events: none !important;
     visibility: hidden !important;
@@ -602,7 +621,9 @@ input[type='range'].timeline-slider:focus-visible {
     gap: 3px;
   }
   #searchInput {
-    font-size: 13px;
+    /* Keep >=16px: iOS Safari zooms the page in when a focused input renders
+       smaller than that, which is exactly the wrong thing on a 320px phone. */
+    font-size: 16px;
   }
   .aura-pill-indicator,
   .google-pill-indicator {
@@ -624,11 +645,11 @@ input[type='range'].timeline-slider:focus-visible {
   #mobileFloatingShareBtn,
   #mobileLocationFab,
   #mobileDirectionsFab {
-    width: 29px !important;
-    height: 29px !important;
-    min-width: 29px !important;
-    min-height: 29px !important;
-    border-radius: 8px !important;
+    width: 32px !important;
+    height: 32px !important;
+    min-width: 32px !important;
+    min-height: 32px !important;
+    border-radius: 9px !important;
   }
   #mobileMapControls svg,
   #mapLayersBtn svg,
@@ -637,8 +658,8 @@ input[type='range'].timeline-slider:focus-visible {
   #mobileFloatingShareBtn svg,
   #mobileLocationFab svg,
   #mobileDirectionsFab svg {
-    width: 13.5px !important;
-    height: 13.5px !important;
+    width: 14px !important;
+    height: 14px !important;
   }
 }
 
@@ -676,11 +697,11 @@ input[type='range'].timeline-slider:focus-visible {
   #mobileFloatingShareBtn,
   #mobileLocationFab,
   #mobileDirectionsFab {
-    width: 28px !important;
-    height: 28px !important;
-    min-width: 28px !important;
-    min-height: 28px !important;
-    border-radius: 8px !important;
+    width: 32px !important;
+    height: 32px !important;
+    min-width: 32px !important;
+    min-height: 32px !important;
+    border-radius: 9px !important;
   }
   #mobileMapControls svg,
   #mapLayersBtn svg,
@@ -689,8 +710,8 @@ input[type='range'].timeline-slider:focus-visible {
   #mobileFloatingShareBtn svg,
   #mobileLocationFab svg,
   #mobileDirectionsFab svg {
-    width: 14px !important;
-    height: 14px !important;
+    width: 15px !important;
+    height: 15px !important;
     max-width: 14px !important;
     max-height: 14px !important;
   }
@@ -699,18 +720,18 @@ input[type='range'].timeline-slider:focus-visible {
     left: max(0.4rem, env(safe-area-inset-left, 0px)) !important;
   }
   #zoomControls > button {
-    width: 28px !important;
-    height: 28px !important;
-    min-width: 28px !important;
-    min-height: 28px !important;
-    border-radius: 8px !important;
+    width: 32px !important;
+    height: 32px !important;
+    min-width: 32px !important;
+    min-height: 32px !important;
+    border-radius: 9px !important;
     font-size: 1rem !important;
   }
   #mobileBottomNav {
     height: calc(2.65rem + env(safe-area-inset-bottom, 0px)) !important;
   }
   .mobile-nav-btn {
-    min-height: 38px !important;
+    min-height: 40px !important;
     padding: 2px 4px !important;
     flex-direction: row !important;
     gap: 6px !important;
@@ -733,7 +754,7 @@ input[type='range'].timeline-slider:focus-visible {
   #mobileMapControls {
     max-height: calc(100dvh - 75px) !important;
     display: grid !important;
-    grid-template-columns: repeat(2, 28px) !important;
+    grid-template-columns: repeat(2, 32px) !important;
     gap: 3px !important;
   }
   #mobileMapControls .hidden,
@@ -864,7 +885,13 @@ input[type='range'].timeline-slider:focus-visible {
   border-radius: 10px;
   box-shadow: 0 0 0 6px rgba(45, 212, 191, 0.3);
 }
+/* #timelineBar spans the full viewport width, so scaling it up pushed both
+   edges off-screen on TVs (measured 2074px wide on a 1920px screen, x = -77).
+   Dividing the width by the scale first keeps the *visual* size and the
+   enlarged targets without any clipping. */
 [data-device='tv'] #timelineBar {
+  width: calc(100% / 1.08);
+  margin-inline: auto;
   transform: scale(1.08);
   transform-origin: bottom center;
 }
@@ -1095,17 +1122,17 @@ a svg,
 }
 #voiceSearchBtn,
 #searchClearBtn {
-  min-width: 36px;
-  min-height: 36px;
+  min-width: 38px;
+  min-height: 38px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
 }
 #myLocationBtn {
-  width: 34px !important;
-  height: 34px !important;
-  min-width: 34px !important;
-  min-height: 34px !important;
+  width: 38px !important;
+  height: 38px !important;
+  min-width: 38px !important;
+  min-height: 38px !important;
   border-radius: 9999px !important;
   border: 1.5px solid #f97316 !important;
   color: #f97316 !important;
@@ -1138,8 +1165,8 @@ a svg,
   stroke: #fb923c !important;
 }
 #profileBtn {
-  width: clamp(30px, 4.4vw, 36px);
-  height: clamp(30px, 4.4vw, 36px);
+  width: clamp(34px, 4.8vw, 40px);
+  height: clamp(34px, 4.8vw, 40px);
   margin-right: 0 !important;
   flex-shrink: 0 !important;
 }
@@ -1221,11 +1248,14 @@ a svg,
 #mobileFloatingShareBtn,
 #mobileLocationFab,
 #mobileDirectionsFab {
-  width: clamp(32px, 4.6vmin, 40px) !important;
-  height: clamp(32px, 4.6vmin, 40px) !important;
-  min-width: clamp(32px, 4.6vmin, 40px) !important;
-  min-height: clamp(32px, 4.6vmin, 40px) !important;
-  border-radius: clamp(8px, 1.2vmin, 12px) !important;
+  /* Map chrome minimums were 32px — under the 44px guidance for touch.
+     36px floor keeps the column slim next to the map edge while giving a
+     comfortable hit area on phones; it still scales with short viewports. */
+  width: clamp(36px, 5.2vmin, 44px) !important;
+  height: clamp(36px, 5.2vmin, 44px) !important;
+  min-width: clamp(36px, 5.2vmin, 44px) !important;
+  min-height: clamp(36px, 5.2vmin, 44px) !important;
+  border-radius: clamp(9px, 1.3vmin, 13px) !important;
   display: flex !important;
   align-items: center !important;
   justify-content: center !important;
@@ -1243,11 +1273,11 @@ a svg,
   max-height: clamp(15px, 2.3vmin, 19px) !important;
 }
 #zoomControls > button {
-  width: clamp(34px, 4.8vmin, 42px) !important;
-  height: clamp(34px, 4.8vmin, 42px) !important;
-  min-width: clamp(34px, 4.8vmin, 42px) !important;
-  min-height: clamp(34px, 4.8vmin, 42px) !important;
-  border-radius: clamp(9px, 1.4vmin, 12px) !important;
+  width: clamp(38px, 5.4vmin, 44px) !important;
+  height: clamp(38px, 5.4vmin, 44px) !important;
+  min-width: clamp(38px, 5.4vmin, 44px) !important;
+  min-height: clamp(38px, 5.4vmin, 44px) !important;
+  border-radius: clamp(10px, 1.4vmin, 13px) !important;
   font-size: clamp(1.1rem, 2.4vmin, 1.35rem) !important;
 }
 

@@ -84,7 +84,7 @@ describe("Weather Error States & Retry UI (Phase 1 Foundation)", () => {
 
     const tourTitle = doc.getElementById("tourTitle");
     expect(tourTitle).not.toBeNull();
-    expect(tourTitle.textContent).toContain("Welcome to Aurafisky");
+    expect(tourTitle.textContent.replace(/\s+/g, " ")).toContain("Welcome to Aurafisky");
 
     const closeBtn = doc.getElementById("onboardingCloseBtn");
     expect(closeBtn).not.toBeNull();

@@ -347,7 +347,7 @@ test("Route Weather & Planner Dropdown exists with all required options", () => 
   expect(html).not.toContain('id="routeDropdownSelectOriginBtn"');
   expect(html).not.toContain('id="routeDropdownSelectDestBtn"');
   expect(html).toContain('id="routeDropdownAddStopBtn"');
-  expect(html).toContain('Origin, stops, destination');
+  expect(html.replace(/\s+/g, " ")).toContain('Origin, stops, destination');
   expect(html).toContain('id="routeDropdownOpenStudioBtn"');
   expect(html).toContain('id="routeDropdownCloseStudioBtn"');
   expect(html).toContain('id="routeDropdownDeleteLocationsBtn"');

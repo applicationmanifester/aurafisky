@@ -10577,29 +10577,68 @@ function applyItemTranslation(item, translated) {
   }
 }
 
+async function _fetchGoogleTranslateWithFallback(trimmed, targetLocale, signal) {
+  const tl = encodeURIComponent(targetLocale);
+  const q = encodeURIComponent(trimmed);
+  const endpoints = [
+    `https://translate.googleapis.com/translate_a/single?client=gtx&sl=auto&tl=${tl}&dt=t&q=${q}`,
+    `https://translate.googleapis.com/translate_a/single?client=dict-chrome-ex&sl=auto&tl=${tl}&dt=t&q=${q}`,
+    `https://translate.googleapis.com/translate_a/t?client=dict-chrome-ex&sl=auto&tl=${tl}&q=${q}`,
+  ];
+  for (const url of endpoints) {
+    if (signal?.aborted) break;
+    try {
+      const res = await fetch(url, signal ? { signal } : undefined);
+      if (!res || !res.ok) continue;
+      const data = await res.json();
+      let trans = "";
+      if (Array.isArray(data?.[0]) && Array.isArray(data[0][0])) {
+        trans = data[0].map((seg) => seg?.[0] || "").join("").trim();
+      } else if (Array.isArray(data)) {
+        trans = data
+          .map((item) => (typeof item === "string" ? item : Array.isArray(item) ? item[0] || "" : ""))
+          .join("")
+          .trim();
+      }
+      if (trans) return trans;
+    } catch (_) {}
+  }
+  return "";
+}
+
 export async function translateAsync(text, locale = detectLocale()) {
   if (!text || typeof text !== "string") return text;
-  if (!locale || locale === "en") return text;
-  const sync = translateText(text, locale);
-  if (sync && sync !== text) return sync;
-  const cache = getTranslationCache(locale);
   const trimmed = text.trim();
+  if (!trimmed) return text;
+  const targetLocale = locale || "en";
+  if (targetLocale === "en") {
+    // Plain Latin/ASCII text does not need translation into English
+    if (!/[^\x00-\x7F]/.test(trimmed)) return text;
+    const canonical = getCanonicalEnglish(trimmed);
+    if (canonical && canonical !== trimmed) {
+      return text.replace(trimmed, canonical);
+    }
+  } else {
+    const sync = translateText(text, targetLocale);
+    if (sync && sync !== text) return sync;
+  }
+  const cache = getTranslationCache(targetLocale);
   if (cache[trimmed]) {
     return text.replace(trimmed, cache[trimmed]);
   }
+  const controller = typeof AbortController !== "undefined" ? new AbortController() : null;
+  const timer = controller ? setTimeout(() => controller.abort(), 5000) : null;
   try {
-    const url = `https://translate.googleapis.com/translate_a/single?client=gtx&sl=auto&tl=${encodeURIComponent(locale)}&dt=t&q=${encodeURIComponent(trimmed)}`;
-    const res = await fetch(url);
-    if (res.ok) {
-      const data = await res.json();
-      const trans = data[0]?.[0]?.[0]?.trim();
-      if (trans) {
-        cache[trimmed] = trans;
-        persistTranslationCache(locale);
-        return text.replace(trimmed, trans);
-      }
+    const trans = await _fetchGoogleTranslateWithFallback(trimmed, targetLocale, controller?.signal);
+    if (trans) {
+      cache[trimmed] = trans;
+      persistTranslationCache(targetLocale);
+      return text.replace(trimmed, trans);
     }
   } catch (_) {}
+  finally {
+    if (timer) clearTimeout(timer);
+  }
   return text;
 }
 
@@ -12094,7 +12133,11 @@ export function translateDOM(root = (typeof document !== "undefined" ? document.
           if (tag === "script" || tag === "style" || tag === "textarea" || tag === "code" || tag === "pre" || tag === "option") {
             return NodeFilter.FILTER_REJECT;
           }
-          if (parent.closest && (parent.closest("#settingsAppLanguageSelect") || parent.classList?.contains("notranslate"))) {
+          if (
+            parent.closest &&
+            (parent.closest("#settingsAppLanguageSelect, #defaultLocationStatus, #defaultLocationNotifyHint") ||
+              parent.classList?.contains("notranslate"))
+          ) {
             return NodeFilter.FILTER_REJECT;
           }
           return NodeFilter.FILTER_ACCEPT;

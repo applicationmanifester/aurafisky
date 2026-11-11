@@ -7,6 +7,12 @@ function initWeatherCanvas() {
     this.ctx = this.canvas.getContext("2d");
     this.lightningFlash = 0;
 
+    // Respect prefers-reduced-motion — disable particle effects entirely
+    this._reducedMotion = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false;
+    if (this._reducedMotion) {
+      return; // Skip all particle effects
+    }
+
     // Resize canvas to cover map exactly
     this.resizeWeatherCanvas();
 
@@ -20,6 +26,25 @@ function initWeatherCanvas() {
       this.resizeWeatherCanvas();
       this.canvas.style.opacity = "1";
     });
+
+    // Listen for changes to prefers-reduced-motion
+    if (typeof window !== "undefined" && window.matchMedia) {
+      const mediaQuery = window.matchMedia('(prefers-reduced-motion: reduce)');
+      const handleChange = (e) => {
+        this._reducedMotion = e.matches;
+        if (this._reducedMotion && this.animationFrameId) {
+          cancelAnimationFrame(this.animationFrameId);
+          this.animationFrameId = null;
+          if (this.ctx) {
+            const w = this.canvasCssWidth ?? this.canvas.width;
+            const h = this.canvasCssHeight ?? this.canvas.height;
+            this.ctx.clearRect(0, 0, w, h);
+          }
+        }
+      };
+      mediaQuery.addEventListener?.('change', handleChange);
+      this._reducedMotionCleanup = () => mediaQuery.removeEventListener?.('change', handleChange);
+    }
 
     // Restart loop when returning to tab/app, or cancel loop when tab hidden
     if (typeof document !== "undefined") {
@@ -288,9 +313,26 @@ function runWeatherCanvasLoop() {
     this.animationFrameId = requestAnimationFrame(draw);
   }
 
+function cleanupWeatherCanvas() {
+  if (this.animationFrameId) {
+    cancelAnimationFrame(this.animationFrameId);
+    this.animationFrameId = null;
+  }
+  if (this._reducedMotionCleanup) {
+    this._reducedMotionCleanup();
+    this._reducedMotionCleanup = null;
+  }
+  if (this.ctx && this.canvas) {
+    const w = this.canvasCssWidth ?? this.canvas.width;
+    const h = this.canvasCssHeight ?? this.canvas.height;
+    this.ctx.clearRect(0, 0, w, h);
+  }
+}
+
 export function init(app) {
   app.initWeatherCanvas = initWeatherCanvas;
   app.resizeWeatherCanvas = resizeWeatherCanvas;
   app.updateWeatherCanvasOverlayEffect = updateWeatherCanvasOverlayEffect;
   app.runWeatherCanvasLoop = runWeatherCanvasLoop;
+  app.cleanupWeatherCanvas = cleanupWeatherCanvas;
 }

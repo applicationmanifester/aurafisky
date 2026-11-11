@@ -33,43 +33,46 @@ const ws = () => (typeof WeatherService !== 'undefined' ? WeatherService : globa
 // `priority` only breaks ties between intents that score equally; higher wins.
 // Multi-word phrases score 3, single words score 2 — so "best outdoor window"
 // (3) beats a stray "outdoor" (2), and "show the radar" beats "radar".
+//
+// Hinglish / multilingual keywords are included directly for zero-cost matching.
+// No external NLP needed — all runs offline, instantly, on-device.
 const INTENT_DEFS = [
-  { id: 'help', priority: 90, phrases: ['what can you do', 'what do you do', 'help', 'help me', 'capabilities', 'commands', 'who are you', 'how do you work', 'what do i ask'] },
-  { id: 'place', priority: 88, phrases: ['weather in', 'weather at', 'weather for', 'forecast for', 'how is it in', "what's the weather in"] },
-  { id: 'alert', priority: 86, phrases: ['notify me', 'alert me', 'remind me', 'tell me when', 'set an alert', 'warn me', 'let me know when'] },
-  { id: 'departure', priority: 72, phrases: ['best time to leave', 'when should i leave', 'best departure time', 'when to depart', 'safe time to drive', 'leave now or later', 'departure window', 'when can i leave', 'good time to leave'] },
-  { id: 'compare', priority: 70, phrases: ['compare', 'versus', ' vs ', 'difference between', 'other city', 'another city'] },
-  { id: 'astronomy', priority: 68, phrases: ['sunset', 'sunrise', 'sun set', 'sun rise', 'golden hour', 'blue hour', 'stargazing', 'stars', 'star gazing', 'moon', 'moonlight', 'night sky', 'photography', 'photo', 'photo shoot', 'aurora', 'meteor shower', 'twilight'] },
-  { id: 'healthAlerts', priority: 75, phrases: ['migraine', 'headache', 'joint pain', 'arthritis', 'asthma', 'respiratory', 'allergy', 'allergies', 'pollen', 'biometeorology', 'heat exhaustion', 'barometric migraine', 'sinus', 'head hurt', 'joints ache'] },
-  { id: 'outdoorPlanner', priority: 74, phrases: ['best time to run', 'running window', 'cycling window', 'best time to cycle', 'spray window', 'spraying', 'best window to hike', 'pareto', 'outdoor planner', 'workout window', 'astrophotography window', 'optimal window'] },
-  { id: 'gridResilience', priority: 73, phrases: ['power outage', 'blackout', 'grid strain', 'voltage surge', 'surge protection', 'pre-cool', 'pre-heat', 'unplug appliances', 'grid alert', 'brownout', 'power grid'] },
-  { id: 'calendarWorkflow', priority: 71, phrases: ['export calendar', 'calendar invite', 'add to calendar', 'icalendar', '.ics', 'export to calendar', 'schedule weather event', 'download ics'] },
-  { id: 'dailyBriefing', priority: 67, phrases: ['morning briefing', 'daily briefing', 'brief me', 'my briefing', "today's briefing", 'week ahead', 'day ahead'] },
-  { id: 'thunderstorm', priority: 66, phrases: ['thunder', 'lightning', 'thunderstorm', 'squall', 'lightning storm'] },
-  { id: 'solar', priority: 65, phrases: ['solar energy', 'solar panel', 'solar power', 'solar generation', 'photovoltaic', 'pv output', 'sun energy'] },
-  { id: 'uv', priority: 64, phrases: ['uv', 'sunburn', 'burn risk', 'skin', 'sunscreen', 'wear sunscreen', 'spf', 'tan', 'shade', 'uv index'] },
-  { id: 'dining', priority: 63, phrases: ['restaurant', 'restaurants', 'food', 'eat', 'eating', 'dining', 'dinner', 'lunch', 'breakfast', 'brunch', 'cafe', 'coffee', 'hungry', 'place to eat', 'eat out', 'outing', 'picnic'] },
-  { id: 'clothing', priority: 62, phrases: ['what should i wear', 'what to wear', 'jacket', 'coat', 'sweater', 'hoodie', 'shorts', 't-shirt', 'wear', 'outfit', 'dress code', 'do i need a coat', 'need a jacket'] },
-  { id: 'plan', priority: 61, phrases: ['plan my day', 'plan the day', 'my schedule', 'my agenda', 'itinerary', 'what should i do', 'what can i do', 'things to do', 'this weekend', 'free time', 'day plan', 'routine'] },
-  { id: 'commute', priority: 60, phrases: ['commute', 'drive', 'driving', 'traffic', 'road', 'route', 'car', 'highway', 'journey', 'travel to work', 'grip', 'traction', 'braking', 'tyres', 'tires', 'motorcycle', 'scooter'] },
-  { id: 'outdoor', priority: 58, phrases: ['run', 'running', 'jog', 'jogging', 'workout', 'exercise', 'fitness', 'cycle', 'cycling', 'bike', 'biking', 'hike', 'hiking', 'walk', 'walking', 'sport', 'cricket', 'football', 'yoga', 'marathon', 'outdoor window', 'park'] },
-  { id: 'forecast', priority: 56, phrases: ['tomorrow', 'weekend', '7 day', 'seven day', 'weekly', 'this week', 'next week', 'outlook', 'the forecast', 'coming days', 'how many days'] },
-  { id: 'layers', priority: 54, phrases: ['radar', 'overlay', 'layer', 'layers', 'isobar', 'pressure map', 'terminator', 'satellite', 'show me the map'] },
-  { id: 'pollen', priority: 53, phrases: ['pollen', 'allergy', 'allergies', 'hay fever', 'sinus', 'sneezing', 'pollen count'] },
-  { id: 'air', priority: 52, phrases: ['air quality', 'aqi', 'pollution', 'polluted', 'smog', 'smoke', 'breathe', 'breathing', 'lungs', 'asthma', 'air safe', 'safe to breathe', 'safe outside', 'is the air', 'air is bad'] },
-  { id: 'hazard', priority: 49, phrases: ['flood', 'flooding', 'flash flood', 'cyclone', 'typhoon', 'hurricane', 'tornado', 'blizzard', 'heatwave', 'cold wave', 'extreme weather', 'hail', 'hailstorm'] },
-  { id: 'visibility', priority: 48, phrases: ['visibility', 'fog', 'foggy', 'haze', 'hazy', 'mist', 'murky'] },
-  { id: 'rain', priority: 46, phrases: ['rain', 'raining', 'rainy', 'shower', 'showers', 'wet', 'precipitation', 'umbrella', 'drizzle', 'monsoon', 'pour', 'pouring', 'barish', 'baarish', 'barsaat', 'paani gir'] },
-  { id: 'wind', priority: 44, phrases: ['wind', 'windy', 'breeze', 'breezy', 'gale', 'storm', 'gust', 'gusts', 'hawa', 'tez hawa'] },
-  { id: 'humidity', priority: 42, phrases: ['humidity', 'humid', 'sticky', 'muggy', 'damp', 'moisture', 'dew point', 'dewpoint', 'chipchipa'] },
-  { id: 'temperature', priority: 40, phrases: ['temperature', 'how hot', 'how cold', 'hot', 'cold', 'warm', 'chilly', 'degrees', 'freezing', 'freeze', 'heat', 'weather like', 'feels hotter', 'feels colder', 'thand', 'garmi', 'sardi', 'kitni thand', 'kitni garmi'] },
-  { id: 'packing', priority: 59, phrases: ['pack', 'packing', 'suitcase', 'travel bag', 'vacation', 'holiday', 'trip', 'weekend getaway', 'what to pack', 'packing list', 'pack for'] },
-  { id: 'running', priority: 59, phrases: ['running', 'marathon', '5k', '10k', 'cardio run', 'jogging for exercise', 'running workout', 'long run', 'sprint training', 'tempo run', 'interval run', 'jog', 'jogging'] },
-  { id: 'cycling', priority: 59, phrases: ['cycling', 'bike', 'biking', 'bicycle', 'road bike', 'mountain bike', 'commute by bike', 'cycle to work', 'spin class', 'ride a bike', 'cycle'] },
-  { id: 'workfromhome', priority: 56, phrases: ['work from home', 'wfh', 'remote work', 'stay home from work', 'office closed', 'snow day', 'should i go to office', 'should i go into office', 'work remotely'] },
-  { id: 'farm', priority: 55, phrases: ['farm', 'farming', 'crop', 'crops', 'sow', 'sowing', 'plant', 'planting', 'harvest', 'irrigation', 'spray', 'spraying', 'fertilizer', 'fertiliser', 'soil moisture', 'frost', 'grow', 'growing', 'kisan', 'kheti', 'fasal', 'zameen', 'field', 'fields', 'agriculture', 'agricultural'] },
-  { id: 'overview', priority: 20, phrases: ['weather now', 'right now', 'current conditions', 'conditions', 'how is the weather', "what's the weather", 'summary', 'nice out', 'is it nice', 'worth going out'] },
-  { id: 'greeting', priority: 18, phrases: ['hi', 'hello', 'hey', 'good morning', 'good afternoon', 'good evening', 'yo', 'sup', 'howdy'] },
+  { id: 'help', priority: 90, phrases: ['what can you do', 'what do you do', 'help', 'help me', 'capabilities', 'commands', 'who are you', 'how do you work', 'what do i ask', 'kya kar sakte ho', 'kya kare', 'madad'] },
+  { id: 'place', priority: 88, phrases: ['weather in', 'weather at', 'weather for', 'forecast for', 'how is it in', "what's the weather in", 'mausam in', 'mausam kaise hai', 'kaisa hai mausam'] },
+  { id: 'alert', priority: 86, phrases: ['notify me', 'alert me', 'remind me', 'tell me when', 'set an alert', 'warn me', 'let me know when', 'mujhe batao', 'mujhe notify karo', 'alert karo'] },
+  { id: 'departure', priority: 72, phrases: ['best time to leave', 'when should i leave', 'best departure time', 'when to depart', 'safe time to drive', 'leave now or later', 'departure window', 'when can i leave', 'good time to leave', 'kab chalu', 'kab niklu', 'kitne baje niklu'] },
+  { id: 'compare', priority: 70, phrases: ['compare', 'versus', ' vs ', 'difference between', 'other city', 'another city', 'compare karo', 'difference'] },
+  { id: 'astronomy', priority: 68, phrases: ['sunset', 'sunrise', 'sun set', 'sun rise', 'golden hour', 'blue hour', 'stargazing', 'stars', 'star gazing', 'moon', 'moonlight', 'night sky', 'photography', 'photo', 'photo shoot', 'aurora', 'meteor shower', 'twilight', 'suraj', 'chaand', 'taare', 'nakshatra'] },
+  { id: 'healthAlerts', priority: 75, phrases: ['migraine', 'headache', 'joint pain', 'arthritis', 'asthma', 'respiratory', 'allergy', 'allergies', 'pollen', 'biometeorology', 'heat exhaustion', 'barometric migraine', 'sinus', 'head hurt', 'joints ache', 'sar dard', 'sar dard', 'dard', 'bimari'] },
+  { id: 'outdoorPlanner', priority: 74, phrases: ['best time to run', 'running window', 'cycling window', 'best time to cycle', 'spray window', 'spraying', 'best window to hike', 'pareto', 'outdoor planner', 'workout window', 'astrophotography window', 'optimal window', 'running ka time', 'cycling ka time'] },
+  { id: 'gridResilience', priority: 73, phrases: ['power outage', 'blackout', 'grid strain', 'voltage surge', 'surge protection', 'pre-cool', 'pre-heat', 'unplug appliances', 'grid alert', 'brownout', 'power grid', 'bijli', 'power cut'] },
+  { id: 'calendarWorkflow', priority: 71, phrases: ['export calendar', 'calendar invite', 'add to calendar', 'icalendar', '.ics', 'export to calendar', 'schedule weather event', 'download ics', 'calendar me add karo'] },
+  { id: 'dailyBriefing', priority: 67, phrases: ['morning briefing', 'daily briefing', 'brief me', 'my briefing', "today's briefing", 'week ahead', 'day ahead', 'briefing do', 'aj ka briefing'] },
+  { id: 'thunderstorm', priority: 66, phrases: ['thunder', 'lightning', 'thunderstorm', 'squall', 'lightning storm', 'bijli', 'garaj', 'thunderstorm'] },
+  { id: 'solar', priority: 65, phrases: ['solar energy', 'solar panel', 'solar power', 'solar generation', 'photovoltaic', 'pv output', 'sun energy', 'solar panel', 'urja'] },
+  { id: 'uv', priority: 64, phrases: ['uv', 'sunburn', 'burn risk', 'skin', 'sunscreen', 'wear sunscreen', 'spf', 'tan', 'shade', 'uv index', 'sunburn', 'dhoop', 'sunscreen'] },
+  { id: 'dining', priority: 63, phrases: ['restaurant', 'restaurants', 'food', 'eat', 'eating', 'dining', 'dinner', 'lunch', 'breakfast', 'brunch', 'cafe', 'coffee', 'hungry', 'place to eat', 'eat out', 'outing', 'picnic', 'khana', 'khaana', 'restaurant'] },
+  { id: 'clothing', priority: 62, phrases: ['what should i wear', 'what to wear', 'jacket', 'coat', 'sweater', 'hoodie', 'shorts', 't-shirt', 'wear', 'outfit', 'dress code', 'do i need a coat', 'need a jacket', 'kya pehnu', 'kapde', 'jacket chahiye'] },
+  { id: 'plan', priority: 61, phrases: ['plan my day', 'plan the day', 'my schedule', 'my agenda', 'itinerary', 'what should i do', 'what can i do', 'things to do', 'this weekend', 'free time', 'day plan', 'routine', 'din plan karo', 'plan banao'] },
+  { id: 'commute', priority: 60, phrases: ['commute', 'drive', 'driving', 'traffic', 'road', 'route', 'car', 'highway', 'journey', 'travel to work', 'grip', 'traction', 'braking', 'tyres', 'tires', 'motorcycle', 'scooter', 'office jana', 'commute', 'safar'] },
+  { id: 'outdoor', priority: 58, phrases: ['run', 'running', 'jog', 'jogging', 'workout', 'exercise', 'fitness', 'cycle', 'cycling', 'bike', 'biking', 'hike', 'hiking', 'walk', 'walking', 'sport', 'cricket', 'football', 'yoga', 'marathon', 'outdoor window', 'park', 'daudna', 'daud', 'jogging'] },
+  { id: 'forecast', priority: 56, phrases: ['tomorrow', 'weekend', '7 day', 'seven day', 'weekly', 'this week', 'next week', 'outlook', 'the forecast', 'coming days', 'how many days', 'kal', 'kal ka mausam', 'hafta'] },
+  { id: 'layers', priority: 54, phrases: ['radar', 'overlay', 'layer', 'layers', 'isobar', 'pressure map', 'terminator', 'satellite', 'show me the map', 'radar chalu', 'map dikhao'] },
+  { id: 'pollen', priority: 53, phrases: ['pollen', 'allergy', 'allergies', 'hay fever', 'sinus', 'sneezing', 'pollen count', 'allergy', 'cheenk', 'cheenkna'] },
+  { id: 'air', priority: 52, phrases: ['air quality', 'aqi', 'pollution', 'polluted', 'smog', 'smoke', 'breathe', 'breathing', 'lungs', 'asthma', 'air safe', 'safe to breathe', 'safe outside', 'is the air', 'air is bad', 'hawa', 'aqi', 'pradushan'] },
+  { id: 'hazard', priority: 49, phrases: ['flood', 'flooding', 'flash flood', 'cyclone', 'typhoon', 'hurricane', 'tornado', 'blizzard', 'heatwave', 'cold wave', 'extreme weather', 'hail', 'hailstorm', 'baadh', 'toofan'] },
+  { id: 'visibility', priority: 48, phrases: ['visibility', 'fog', 'foggy', 'haze', 'hazy', 'mist', 'murky', 'dhund', 'dhundla', 'fog'] },
+  { id: 'rain', priority: 46, phrases: ['rain', 'raining', 'rainy', 'shower', 'showers', 'wet', 'precipitation', 'umbrella', 'drizzle', 'monsoon', 'pour', 'pouring', 'barish', 'baarish', 'barsaat', 'paani gir', 'barish hogi', 'barish kab'] },
+  { id: 'wind', priority: 44, phrases: ['wind', 'windy', 'breeze', 'breezy', 'gale', 'storm', 'gust', 'gusts', 'hawa', 'tez hawa', 'hawa tez', 'hawaein'] },
+  { id: 'humidity', priority: 42, phrases: ['humidity', 'humid', 'sticky', 'muggy', 'damp', 'moisture', 'dew point', 'dewpoint', 'chipchipa', 'nam', 'nam hai'] },
+  { id: 'temperature', priority: 40, phrases: ['temperature', 'how hot', 'how cold', 'hot', 'cold', 'warm', 'chilly', 'degrees', 'freezing', 'freeze', 'heat', 'weather like', 'feels hotter', 'feels colder', 'thand', 'garmi', 'sardi', 'kitni thand', 'kitni garmi', 'tapman'] },
+  { id: 'packing', priority: 59, phrases: ['pack', 'packing', 'suitcase', 'travel bag', 'vacation', 'holiday', 'trip', 'weekend getaway', 'what to pack', 'packing list', 'pack for', 'pack karo', 'suitcase'] },
+  { id: 'running', priority: 59, phrases: ['running', 'marathon', '5k', '10k', 'cardio run', 'jogging for exercise', 'running workout', 'long run', 'sprint training', 'tempo run', 'interval run', 'jog', 'jogging', 'daudna'] },
+  { id: 'cycling', priority: 59, phrases: ['cycling', 'bike', 'biking', 'bicycle', 'road bike', 'mountain bike', 'commute by bike', 'cycle to work', 'spin class', 'ride a bike', 'cycle', 'cycle chalana'] },
+  { id: 'workfromhome', priority: 56, phrases: ['work from home', 'wfh', 'remote work', 'stay home from work', 'office closed', 'snow day', 'should i go to office', 'should i go into office', 'work remotely', 'ghar se kaam', 'wfh'] },
+  { id: 'farm', priority: 55, phrases: ['farm', 'farming', 'crop', 'crops', 'sow', 'sowing', 'plant', 'planting', 'harvest', 'irrigation', 'spray', 'spraying', 'fertilizer', 'fertiliser', 'soil moisture', 'frost', 'grow', 'growing', 'kisan', 'kheti', 'fasal', 'zameen', 'field', 'fields', 'agriculture', 'agricultural', 'kheti', 'kisan', 'fasal', 'khet', 'kheti karo'] },
+  { id: 'overview', priority: 20, phrases: ['weather now', 'right now', 'current conditions', 'conditions', 'how is the weather', "what's the weather", 'summary', 'nice out', 'is it nice', 'worth going out', 'abhi mausam', 'abhi kaisa hai'] },
+  { id: 'greeting', priority: 18, phrases: ['hi', 'hello', 'hey', 'good morning', 'good afternoon', 'good evening', 'yo', 'sup', 'howdy', 'namaste', 'namaskar', 'kaise ho', 'hello aura'] },
 ];
 
 import { shortPlaceName } from '../modules/geo.js';
@@ -101,7 +104,7 @@ import { ADWINDriftDetector } from '../modules/aura-drift.js';
 const REGEX_SPECIAL = /[.*+?^${}()|[\]\\]/g;
 const INTENTS = INTENT_DEFS.map((def) => ({
   ...def,
-  matchers: def.phrases.map((phrase) => {
+  matchers: Array.from(new Set(def.phrases)).map((phrase) => {
     const escaped = phrase.replace(REGEX_SPECIAL, '\\$&');
     if (phrase.includes(' ')) return new RegExp(escaped, 'i');
     const tail = phrase.length >= 4 ? '(s|ing)?' : '';
@@ -490,6 +493,8 @@ export class AuraAssistant {
     // Conversation memory: the last answerable intent, so bare follow-ups
     // like "and tomorrow?" re-run it instead of classifying fresh.
     this._lastIntent = null;
+    this._lastPlace = null; // Track last mentioned place for "what about there?" follow-ups
+    this._locationMutationObserver = null; // For location change detection
     this.bandit = new LinUCBBandit();
     this.healthEngine = new AuraHealthEngine();
     this.outdoorPlanner = new AuraOutdoorPlanner();
@@ -585,10 +590,17 @@ export class AuraAssistant {
   _watchLocation() {
     const nameEl = document.getElementById('panelLocationName');
     if (!nameEl) return;
-    const observer = new MutationObserver(() => {
+    
+    // Disconnect previous observer if exists
+    if (this._locationMutationObserver) {
+      this._locationMutationObserver.disconnect();
+    }
+    
+    this._locationMutationObserver = new MutationObserver(() => {
       const name = nameEl.textContent?.replace(/🏠\s*Home/g, '')?.trim();
       if (!name || name === this._lastLocation || name === 'Select location') return;
       this._lastLocation = name;
+      this._lastPlace = null; // Clear tracked place on location change
       if (this._chatIsEmpty()) {
         this._renderPresets();
         return;
@@ -601,7 +613,7 @@ export class AuraAssistant {
       this._systemNote(`Switched to ${name} — cleared the answers for the previous location.`);
       this._renderPresets();
     });
-    observer.observe(nameEl, { childList: true, characterData: true, subtree: true });
+    this._locationMutationObserver.observe(nameEl, { childList: true, characterData: true, subtree: true });
     this._lastLocation = nameEl.textContent?.trim() || '';
   }
 
@@ -668,6 +680,11 @@ export class AuraAssistant {
     this._streamToken++; // cancel any in-flight answer
     this._saveMemory();
     this._els.modal.classList.add('hidden');
+    // Cleanup location mutation observer
+    if (this._locationMutationObserver) {
+      this._locationMutationObserver.disconnect();
+      this._locationMutationObserver = null;
+    }
     // Restore focus to wherever the user was before opening.
     if (this._previousFocus && typeof this._previousFocus.focus === 'function') {
       try { this._previousFocus.focus(); } catch { /* ignore */ }
@@ -722,6 +739,7 @@ export class AuraAssistant {
    * the browser implements recognition (Chrome/Edge desktop + Android).
    * Everything is guarded: no support, no permission, or no speech all
    * degrade to the keyboard with no toast spam.
+   * Supports multilingual recognition based on app language.
    */
   _setupVoice() {
     const btn = this._els.mic;
@@ -754,9 +772,26 @@ export class AuraAssistant {
       try {
         rec = new SR();
       } catch { return; }
-      rec.lang = (navigator.language || 'en-US');
+      
+      // Set language based on app language for better multilingual recognition
+      const lang = this.app?.language || navigator.language || 'en-US';
+      const langMap = {
+        'hi': 'hi-IN', 'kn': 'kn-IN', 'ta': 'ta-IN', 'te': 'te-IN',
+        'mr': 'mr-IN', 'bn': 'bn-IN', 'gu': 'gu-IN', 'ml': 'ml-IN',
+        'pa': 'pa-IN', 'or': 'or-IN', 'as': 'as-IN', 'ur': 'ur-IN',
+        'es': 'es-ES', 'fr': 'fr-FR', 'de': 'de-DE', 'it': 'it-IT',
+        'pt': 'pt-PT', 'ru': 'ru-RU', 'ja': 'ja-JP', 'ko': 'ko-KR',
+        'zh-CN': 'zh-CN', 'zh-TW': 'zh-TW', 'ar': 'ar-SA',
+        'id': 'id-ID', 'tr': 'tr-TR', 'vi': 'vi-VN', 'th': 'th-TH',
+        'nl': 'nl-NL', 'pl': 'pl-PL', 'uk': 'uk-UA', 'el': 'el-GR',
+        'he': 'he-IL', 'sv': 'sv-SE', 'sw': 'sw-KE', 'tl': 'tl-PH',
+        'ms': 'ms-MY', 'fa': 'fa-IR', 'ne': 'ne-NP', 'si': 'si-LK'
+      };
+      rec.lang = langMap[lang] || lang;
       rec.interimResults = true;
       rec.maxAlternatives = 1;
+      rec.continuous = false; // Single utterance for better accuracy
+      
       rec.onresult = (e) => {
         let interim = '';
         let final = '';
@@ -771,7 +806,14 @@ export class AuraAssistant {
         }
       };
       rec.onend = () => { setLive(false); rec = null; };
-      rec.onerror = () => { setLive(false); rec = null; };
+      rec.onerror = (err) => { 
+        setLive(false); 
+        rec = null; 
+        // Silently handle common errors (no-speech, aborted, network)
+        if (err.error !== 'no-speech' && err.error !== 'aborted') {
+          console.warn('Voice recognition error:', err.error);
+        }
+      };
       try {
         rec.start();
         setLive(true);
@@ -792,17 +834,33 @@ export class AuraAssistant {
 
   _greeting() {
     const loc = this._locName();
+    const lang = this.app?.language || 'en';
+    const isHindi = lang === 'hi' || lang === 'kn' || lang === 'ta' || lang === 'te' || lang === 'mr' || lang === 'bn' || lang === 'gu' || lang === 'ml' || lang === 'pa' || lang === 'or' || lang === 'as' || lang === 'ur';
+    
     const row = document.createElement('div');
     row.className = 'aura-msg';
-    row.innerHTML = `
-      <div class="aura-avatar" aria-hidden="true">✨</div>
-      <div class="aura-col">
-        <div class="aura-bubble">
-          <p>Hi, I'm <strong>Aura</strong>${loc ? `, reading live data for <strong>${esc(loc)}</strong>` : ''}.</p>
-          <p class="mt-1">Ask me about rain timing, your commute, outdoor windows, air quality, UV, sunset and stargazing — or farming: spray windows, soil moisture, frost risk, irrigation, and what to grow. Tell me to <em>"notify me when it rains"</em> and I'll set the alert.</p>
-          <p class="mt-1">I remember the thread, so follow up with <em>"and tomorrow?"</em> or <em>"what about tonight?"</em> — in English or Hinglish (<em>barish, thand, hawa</em> all work).</p>
-        </div>
-      </div>`;
+    
+    if (isHindi) {
+      row.innerHTML = `
+        <div class="aura-avatar" aria-hidden="true">✨</div>
+        <div class="aura-col">
+          <div class="aura-bubble">
+            <p>Namaste, main <strong>Aura</strong> hoon${loc ? `, <strong>${esc(loc)}</strong> ke liye live data padh rahi hoon` : ''}.</p>
+            <p class="mt-1">Mujhse poochiye: barish ka time, aapka commute, outdoor window, air quality, UV, sunset, stargazing — ya farming: spray window, soil moisture, frost risk, irrigation, aur kya uga sakte hain. <em>"mujhe batao jab barish ho"</em> bolo to main alert laga dungi.</p>
+            <p class="mt-1">Main thread yaad rakhti hoon, toh follow up kar sakte hain: <em>"aur kal?"</em> ya <em>"raat ko kya?"</em> — English ya Hinglish (<em>barish, thand, hawa</em> sab chalega).</p>
+          </div>
+        </div>`;
+    } else {
+      row.innerHTML = `
+        <div class="aura-avatar" aria-hidden="true">✨</div>
+        <div class="aura-col">
+          <div class="aura-bubble">
+            <p>Hi, I'm <strong>Aura</strong>${loc ? `, reading live data for <strong>${esc(loc)}</strong>` : ''}.</p>
+            <p class="mt-1">Ask me about rain timing, your commute, outdoor windows, air quality, UV, sunset and stargazing — or farming: spray windows, soil moisture, frost risk, irrigation, and what to grow. Tell me to <em>"notify me when it rains"</em> and I'll set the alert.</p>
+            <p class="mt-1">I remember the thread, so follow up with <em>"and tomorrow?"</em> or <em>"what about tonight?"</em> — in English or Hinglish (<em>barish, thand, hawa</em> all work).</p>
+          </div>
+        </div>`;
+    }
     this._els.chat.appendChild(row);
     this._scrollToEnd();
   }
@@ -1097,7 +1155,16 @@ export class AuraAssistant {
         btn.className = 'aura-action';
         btn.dataset.auraAction = action.id;
         if (action.payload) btn.dataset.auraPayload = JSON.stringify(action.payload);
+        // Add tooltip with action description
+        const tooltip = action.tooltip || `Run ${action.label}`;
+        btn.setAttribute('title', tooltip);
+        btn.setAttribute('aria-label', tooltip);
         btn.innerHTML = `<span aria-hidden="true">${esc(action.icon || '⚡')}</span><span>${esc(action.label)}</span>`;
+        // Visual feedback on click
+        btn.addEventListener('click', () => {
+          btn.classList.add('aura-action-clicked');
+          setTimeout(() => btn.classList.remove('aura-action-clicked'), 150);
+        });
         bar.appendChild(btn);
       }
       bubble.appendChild(bar);
@@ -1206,77 +1273,93 @@ export class AuraAssistant {
   /**
    * The one-line teaser on the banner card. Picks the most time-sensitive
    * thing worth asking right now, so the entry point never shows a stale
-   * or irrelevant question.
+   * or irrelevant question. Supports Hinglish for Indian users.
    */
   bannerPrompt(locationName) {
     const loc = locationName || this._locName();
     const ctx = this._context();
-    if (!ctx.ready) return `Will it rain in ${loc}?`;
+    const lang = this.app?.language || 'en';
+    const isIndian = lang === 'hi' || lang === 'kn' || lang === 'ta' || lang === 'te' || lang === 'mr' || lang === 'bn' || lang === 'gu' || lang === 'ml' || lang === 'pa' || lang === 'or' || lang === 'as' || lang === 'ur';
+    
+    if (!ctx.ready) return isIndian ? `${loc} mein barish hogi kya?` : `Will it rain in ${loc}?`;
 
     if (ctx.nextRainIdx != null && ctx.nextRainIdx - ctx.idx <= 4) {
       const away = ctx.nextRainIdx - ctx.idx;
+      if (isIndian) {
+        return away <= 0
+          ? `Kya ${loc} mein abhi barish ho rahi hai?`
+          : away === 1
+            ? `Kya ${loc} ek ghante mein barish hogi?`
+            : `${loc} mein ${away} ghante baad barish hogi kya?`;
+      }
       return away <= 0
         ? `Is it raining in ${loc} right now?`
         : away === 1
           ? `Is rain hitting ${loc} within the hour?`
           : `Will it rain in ${loc} in ${away}h?`;
     }
+    
     const farmCtx = this.app?.farmCtx || null;
-    if (farmCtx?.soilMoisture?.status === 'dry') return `When to irrigate ${loc}?`;
+    if (farmCtx?.soilMoisture?.status === 'dry') return isIndian ? `${loc} mein kab seena chahiye?` : `When to irrigate ${loc}?`;
     if (farmCtx?.nightMin != null) {
       const frost = frostRiskForNight(farmCtx.nightMin, 2);
-      if (frost.level !== 'low') return `Frost risk tonight in ${loc}?`;
+      if (frost.level !== 'low') return isIndian ? `${loc} mein raat ko pahad jamne ka khatra?` : `Frost risk tonight in ${loc}?`;
     }
-    if ((ctx.curr?.uvIndex ?? 0) >= 8) return `How hot is it in ${loc}?`;
-    if ((ctx.curr?.windGusts ?? 0) >= 45) return `Is it too windy in ${loc}?`;
-    if (ctx.aqi != null && ctx.aqi > 120) return `Is the air safe in ${loc}?`;
+    if ((ctx.curr?.uvIndex ?? 0) >= 8) return isIndian ? `${loc} mein kitni garmi hai?` : `How hot is it in ${loc}?`;
+    if ((ctx.curr?.windGusts ?? 0) >= 45) return isIndian ? `${loc} mein hawa tez hai kya?` : `Is it too windy in ${loc}?`;
+    if (ctx.aqi != null && ctx.aqi > 120) return isIndian ? `${loc} ki hawa safe hai kya?` : `Is the air safe in ${loc}?`;
 
     const hour = new Date().getHours();
-    if (hour >= 17 && hour < 21) return `Sunset & stargazing in ${loc}?`;
-    if (hour >= 21 || hour < 5) return `Stargazing tonight in ${loc}?`;
-    if (hour >= 11 && hour < 16) return `Best outdoor window in ${loc}?`;
-    return `Plan my day in ${loc}`;
+    if (hour >= 17 && hour < 21) return isIndian ? `${loc} mein sunset aur stargazing kaise rahega?` : `Sunset & stargazing in ${loc}?`;
+    if (hour >= 21 || hour < 5) return isIndian ? `${loc} mein aaj raat stargazing kaisi rahegi?` : `Stargazing tonight in ${loc}?`;
+    if (hour >= 11 && hour < 16) return isIndian ? `${loc} mein best outdoor window kaunsa hai?` : `Best outdoor window in ${loc}?`;
+    return isIndian ? `${loc} ka din plan karo` : `Plan my day in ${loc}`;
   }
 
-  /** Time-of-day and data driven suggestions — always relevant to right now. */
+  /** Time-of-day and data driven suggestions — always relevant to right now. Supports Hinglish for Indian users. */
   _suggestions(ctx = this._activeCtx || this._context()) {
-    if (!ctx?.ready) return ['What can you do?', 'Enable rain radar', 'Plan my day'];
+    const lang = this.app?.language || 'en';
+    const isHindi = lang === 'hi' || lang === 'kn' || lang === 'ta' || lang === 'te' || lang === 'mr' || lang === 'bn' || lang === 'gu' || lang === 'ml' || lang === 'pa' || lang === 'or' || lang === 'as' || lang === 'ur';
+    
+    if (!ctx?.ready) {
+      return isHindi ? ['Kya kar sakte ho?', 'Rain radar chalu karo', 'Din plan karo'] : ['What can you do?', 'Enable rain radar', 'Plan my day'];
+    }
 
     const hour = new Date().getHours();
     const out = [];
 
-    if (ctx.rainSoon) out.push('When does the rain start?');
-    else if (ctx.prob6h >= 25) out.push('Should I carry an umbrella?');
+    if (ctx.rainSoon) out.push(isHindi ? 'Barish kab shuru hogi?' : 'When does the rain start?');
+    else if (ctx.prob6h >= 25) out.push(isHindi ? 'Chhatri le jaun kya?' : 'Should I carry an umbrella?');
 
     if (hour >= 5 && hour < 11) {
-      out.push('Plan my day', 'Best outdoor window today?', ctx.windBad ? 'How bad is the wind?' : 'Sunset time tonight?');
+      out.push(isHindi ? 'Din plan karo' : 'Plan my day', isHindi ? 'Best outdoor window kaunsa hai?' : 'Best outdoor window today?', ctx.windBad ? (isHindi ? 'Hawa kitni kharab hai?' : 'How bad is the wind?') : (isHindi ? 'Sunset kitne baje hai?' : 'Sunset time tonight?'));
     } else if (hour < 16) {
-      out.push('Best outdoor window today?', 'Outdoor dining tonight?');
-      if (ctx.uvHigh) out.push('UV advisory');
+      out.push(isHindi ? 'Best outdoor window kaunsa hai?' : 'Best outdoor window today?', isHindi ? 'Aaj raat outdoor dining kaisi rahegi?' : 'Outdoor dining tonight?');
+      if (ctx.uvHigh) out.push(isHindi ? 'UV advisory - sunscreen laga lo' : 'UV advisory');
     } else if (hour < 21) {
-      out.push('Outdoor dining tonight?', 'Sunset time tonight?', 'Stargazing tonight?');
+      out.push(isHindi ? 'Aaj raat outdoor dining kaisi rahegi?' : 'Outdoor dining tonight?', isHindi ? 'Sunset kitne baje hai?' : 'Sunset time tonight?', isHindi ? 'Aaj raat stargazing kar sakte hain?' : 'Stargazing tonight?');
     } else {
-      out.push('Stargazing tonight?', "Tomorrow's forecast", 'Notify me if it rains');
+      out.push(isHindi ? 'Aaj raat stargazing kaisi rahegi?' : 'Stargazing tonight?', isHindi ? "Kal ka mausam kaisa rahega?" : "Tomorrow's forecast", isHindi ? 'Barish ho to mujhe batao' : 'Notify me if it rains');
     }
 
-    if (ctx.aqi != null && ctx.aqi > 100) out.push('Is the air safe?');
-    if (ctx.gusty) out.push('How strong are the wind gusts?');
+    if (ctx.aqi != null && ctx.aqi > 100) out.push(isHindi ? 'Hawa safe hai kya?' : 'Is the air safe?');
+    if (ctx.gusty) out.push(isHindi ? 'Hawa ke jhonke kitne tez hain?' : 'How strong are the wind gusts?');
 
     // Severe weather suggestions
-    if (ctx.severe) out.push('Is severe weather expected?');
-    if (ctx.heatIndex >= 30) out.push('Is it too hot to be outside?');
-    if (ctx.freezingRisk) out.push('Is there a risk of ice?');
+    if (ctx.severe) out.push(isHindi ? 'Severe weather aane wala hai kya?' : 'Is severe weather expected?');
+    if (ctx.heatIndex >= 30) out.push(isHindi ? 'Bahut garmi hai, bahar jana safe hai?' : 'Is it too hot to be outside?');
+    if (ctx.freezingRisk) out.push(isHindi ? 'Baraf jamne ka khatra hai kya?' : 'Is there a risk of ice?');
 
     // Farming suggestions (only when soil telemetry is available)
     const farmCtx = this.app?.farmCtx || null;
     if (farmCtx?.soilMoisture) {
-      if (farmCtx.soilMoisture.status === 'dry') out.push('When to irrigate?');
-      else if (farmCtx.soilMoisture.status === 'saturated') out.push('Hold off irrigation — soil saturated');
-      else out.push('What to grow here?', 'Best spray window today?');
+      if (farmCtx.soilMoisture.status === 'dry') out.push(isHindi ? 'Kab seena chahiye?' : 'When to irrigate?');
+      else if (farmCtx.soilMoisture.status === 'saturated') out.push(isHindi ? 'Seena mat karo — mitti bheegi hai' : 'Hold off irrigation — soil saturated');
+      else out.push(isHindi ? 'Yahan kya uga sakte hain?' : 'What to grow here?', isHindi ? 'Aaj best spray window kaunsa?' : 'Best spray window today?');
     }
     if (farmCtx?.nightMin != null) {
       const frost = frostRiskForNight(farmCtx.nightMin, 2);
-      if (frost.level !== 'low') out.push('Frost risk tonight?');
+      if (frost.level !== 'low') out.push(isHindi ? 'Raat ko baraf jamne ka khatra?' : 'Frost risk tonight?');
     }
 
     // De-duplicate, keep order, cap at 4.
@@ -1441,12 +1524,20 @@ export class AuraAssistant {
       reply = await this._answer(text, ctx);
     } catch (err) {
       console.warn('Aura failed to answer:', err);
+      // Graceful fallback based on error type
+      const isNetwork = err instanceof TypeError && err.message.includes('fetch');
+      const isPermission = err instanceof DOMException && err.name === 'SecurityError';
+      
       reply = {
-        icon: '⚠️',
+        icon: isNetwork ? '📡' : isPermission ? '🔒' : '⚠️',
         tone: 'warn',
-        title: 'Something went wrong',
-        bullets: [{ k: 'Error', v: err?.message || 'Unknown error' }],
-        note: 'Try rephrasing, or ask about the weather here.',
+        title: isNetwork ? 'Offline or network issue' : isPermission ? 'Permission needed' : 'Something went wrong',
+        bullets: [
+          { k: 'Issue', v: isNetwork ? 'Cannot reach weather service' : isPermission ? 'Microphone/location access denied' : err?.message || 'Unknown error' },
+          { k: 'Try', v: isNetwork ? 'Check connection, use cached data' : isPermission ? 'Enable permissions in browser settings' : 'Rephrase or ask about current location' }
+        ],
+        note: isNetwork ? 'Aura works offline with cached forecasts. Tap a saved location or wait for reconnection.' : 'Try again or check browser permissions.',
+        actions: isNetwork ? [{ id: 'panel', label: 'Open weather panel', icon: '📋' }] : [],
       };
     }
 
@@ -1467,10 +1558,42 @@ export class AuraAssistant {
    */
   _resolveIntent(q) {
     const scope = detectTimeScope(q);
+
+    // 1. Bare time follow-up: "and tomorrow?", "what about tonight?"
     if (isBareTimeQuery(q) && this._lastIntent && RERUNNABLE.has(this._lastIntent)) {
       return { match: { id: this._lastIntent, score: 1, viaMemory: true }, scope };
     }
-    return { match: classify(q), scope };
+
+    // 2. Comparison follow-ups: "vs", "compare", "versus", "difference"
+    const isComparison = /\b(vs|versus|compare|difference|against|vs\.|vs\s)\b/i.test(q);
+    if (isComparison) {
+      const twoPlaces = extractTwoPlaces(q);
+      if (twoPlaces) {
+        return { match: { id: 'compare', score: 3 }, scope };
+      }
+    }
+
+    // 3. Location follow-up after place was mentioned
+    if (this._lastPlace && /^(and|what about|how about)\s/.test(q.trim())) {
+      const place = extractPlace(q);
+      if (place) {
+        return { match: { id: 'place', score: 3 }, scope };
+      }
+    }
+
+    // 4. Standard classification takes priority over vague context pronouns ("how windy is it")
+    const directMatch = classify(q);
+    if (directMatch) {
+      return { match: directMatch, scope };
+    }
+
+    // 5. Bare conversational references when no direct intent matched: "and there?", "same place"
+    const hasContextRef = /\b(it|there|that place|this location|current location|here|same place)\b/i.test(q);
+    if (hasContextRef && this._lastIntent && RERUNNABLE.has(this._lastIntent)) {
+      return { match: { id: this._lastIntent, score: 2, viaMemory: true }, scope };
+    }
+
+    return { match: null, scope };
   }
 
   async _answer(query, ctx) {
@@ -1489,6 +1612,7 @@ export class AuraAssistant {
     // and short-circuit into a fresh overview of the new place.
     const place = extractPlace(query);
     if (place) {
+      this._lastPlace = place; // Track for conversational follow-ups
       this._lastIntent = null; // new place, new thread
       return this._answerPlace(place, ctx);
     }

@@ -78,7 +78,11 @@ const CONTEXT_LADDER = [
 
 function clean(value) {
   if (value == null) return '';
-  return String(value).trim().replace(/\s+/g, ' ');
+  return String(value)
+    .replace(/\s+/g, ' ')
+    .replace(/(?:\s*,\s*)+/g, ', ')
+    .replace(/^[\s,]+|[\s,]+$/g, '')
+    .trim();
 }
 
 /**

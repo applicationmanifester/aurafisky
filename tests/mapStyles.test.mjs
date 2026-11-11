@@ -106,7 +106,7 @@ describe("Map Modes & Terrain Styles", () => {
     const html = fs.readFileSync("index.html", "utf-8");
     const flyoutMatch = html.match(/id="mapLayersFlyout"[\s\S]*?id="shortcutsModal"/);
     expect(flyoutMatch).not.toBeNull();
-    const flyoutHtml = flyoutMatch[0];
+    const flyoutHtml = flyoutMatch[0].replace(/\s+/g, " ");
     expect(flyoutHtml).not.toContain(">Map Modes<");
     expect(flyoutHtml).toContain(">Map Mode<");
     expect(flyoutHtml).toContain('id="closeMapLayersBtn"');
@@ -115,10 +115,10 @@ describe("Map Modes & Terrain Styles", () => {
   test("basemaps have correct provider maxZoom to prevent Esri placeholder tiles", () => {
     const fs = require("fs");
     const appJs = fs.readFileSync("app.js", "utf-8");
-    expect(appJs).toMatch(/terrainBasemap\s*=\s*new LayerGroup\(\{[\s\S]*?maxZoom:\s*17/);
-    expect(appJs).toMatch(/hillshadeBasemap\s*=\s*new LayerGroup\(\{[\s\S]*?maxZoom:\s*16/);
-    expect(appJs).toMatch(/oceanBasemap\s*=\s*new LayerGroup\(\{[\s\S]*?maxZoom:\s*10/);
-    expect(appJs).toMatch(/natGeoBasemap\s*=\s*new LayerGroup\(\{[\s\S]*?maxZoom:\s*12/);
+    expect(appJs).toMatch(/(?:terrainBasemap\s*=|createTerrainBasemap\s*=\s*\(\)\s*=>)\s*new LayerGroup\(\{[\s\S]*?maxZoom:\s*17/);
+    expect(appJs).toMatch(/(?:hillshadeBasemap\s*=|createHillshadeBasemap\s*=\s*\(\)\s*=>)\s*new LayerGroup\(\{[\s\S]*?maxZoom:\s*16/);
+    expect(appJs).toMatch(/(?:oceanBasemap\s*=|createOceanBasemap\s*=\s*\(\)\s*=>)\s*new LayerGroup\(\{[\s\S]*?maxZoom:\s*10/);
+    expect(appJs).toMatch(/(?:natGeoBasemap\s*=|createNatGeoBasemap\s*=\s*\(\)\s*=>)\s*new LayerGroup\(\{[\s\S]*?maxZoom:\s*12/);
   });
 
   test("app.js synchronizes dark mode so only 'dark' map mode activates dark mode and others switch to light", () => {
@@ -211,6 +211,20 @@ describe("Map Modes & Terrain Styles", () => {
     const extremeRgb = extreme.match(/\d+/g).map(Number);
     expect(extremeRgb[0]).toBeGreaterThan(200);
     expect(extremeRgb[1]).toBeLessThan(70);
+  });
+
+  test("#mapLayersFlyout starts hidden and respects .hidden close state in CSS and HTML", () => {
+    const fs = require("fs");
+    const html = fs.readFileSync("index.html", "utf-8");
+    const css = fs.readFileSync("styles.css", "utf-8");
+
+    expect(html).toMatch(/id="mapLayersFlyout"[^>]*class="[^"]*\bhidden\b/);
+    expect(html).not.toContain("window.AurafiskyApp");
+    expect(html).not.toMatch(/id="closeMapLayersBtn"[^>]*\bonclick=/i);
+
+    expect(css).toMatch(/#mapLayersFlyout\.hidden\s*\{\s*display:\s*none\s*!important;/);
+    expect(css).toContain("#mapLayersFlyout:not(.hidden)");
+    expect(css).not.toMatch(/#mapLayersFlyout:not\(\.minimized\)\s*\{[^}]*display:\s*flex/s);
   });
 });
 

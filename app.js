@@ -51,10 +51,16 @@ import {
   isCoordinateOnLand,
   isOceanName,
 } from "./modules/geo.js";
-import { reverseUrls, labelFromReverse, reverseGeocode } from "./modules/reverseGeocode.js";
+import { reverseUrls, labelFromReverse, reverseGeocode, getGeocodeCache } from "./modules/reverseGeocode.js";
 import { applyViewportHeight, watchViewport } from "./modules/viewport.js";
-import { t, detectLocale, setLocale, supportedLocales, translateText, translateDOM, refreshExternalTranslation } from "./modules/i18n.js";
+import { t, detectLocale, setLocale, supportedLocales, translateText, translateDOM, refreshExternalTranslation, translateAsync } from "./modules/i18n.js";
 import { isMobileLayout } from "./features/breakpoints.js";
+// localforage v1.x is UMD-only (no ESM default export). Load as a
+// side-effect so it self-attaches to window.localforage; access via global.
+// Direct `import localforage from "localforage"` fails:
+//
+//   The requested module '.../localforage.js' does not provide an export
+//   named 'default'
 import localforage from "localforage";
 import DOMPurify from "dompurify";
 import {
@@ -66,14 +72,7 @@ import {
   saveGeocodeLRU,
 } from "./modules/storage.js";
 
-localforage.config({
-  name: "aurafisky",
-  storeName: "aurafisky_store",
-  description: "Aurafisky bookmarks, settings, and cached weather data",
-});
-
 if (typeof window !== "undefined") {
-  if (!window.localforage) window.localforage = localforage;
   if (!window.DOMPurify) window.DOMPurify = DOMPurify;
   window.storageService = {
     forecastStore,
@@ -89,7 +88,7 @@ import './weather.js';
 import './modules/dom-utils.js';
 import './modules/toast.js';
 import './src/icons.js';
-import { initFeatures } from './features/registry.js';
+import { initFeatures, initHeavyFeatures } from './features/registry.js';
 import { initWebVitals } from './features/analytics.js';
 import { init as initErrorHandler } from './features/errorHandler.js';
 import { HapticEngine } from './modules/haptics.js';
@@ -939,6 +938,14 @@ class AurafiskyApp {
       document.documentElement.removeAttribute("data-theme");
     }
 
+    // Show empty state on initial load — hidden once a location is selected
+    const emptyEl = document.getElementById("emptyState");
+    if (emptyEl) {
+      emptyEl.style.display = "flex";
+      emptyEl.style.opacity = "1";
+      emptyEl.style.pointerEvents = "auto";
+    }
+
     // Attach feature-module methods (radar, bookmarks, audio, canvas effects, etc.)
     // eagerly and synchronously, before anything below binds an event handler or
     // calls one directly — avoids a load-order race where a listener could fire
@@ -1315,9 +1322,9 @@ class AurafiskyApp {
       this.lightBasemap = new LayerGroup({ layers: [instantLightTile] });
       this.darkBasemap = new LayerGroup({ layers: [instantDarkTile] });
 
-      // Satellite basemap: High-resolution Esri World Imagery + Reference Boundaries & Places
-      // Native hardware-accelerated image pipeline with browser edge caching
-      this.satelliteBasemap = new LayerGroup({
+      // Basemap factory functions — lazily create heavy basemaps on first use
+      // This saves ~200KB of initial JS and defers tile layer creation until needed.
+      const createSatelliteBasemap = () => new LayerGroup({
         layers: [
           new TileLayer({
             source: new XYZ({
@@ -1339,9 +1346,7 @@ class AurafiskyApp {
           })
         ]
       });
-
-      // Terrain basemap: Esri World Topo Map with mountain hillshading, contours, and physical relief
-      this.terrainBasemap = new LayerGroup({
+      const createTerrainBasemap = () => new LayerGroup({
         layers: [
           new TileLayer({
             source: new XYZ({
@@ -1354,11 +1359,7 @@ class AurafiskyApp {
           })
         ]
       });
-
-      // Additional basemaps (hillshade, opentopo, ocean, natgeo) are created
-      // below in the same style as the four above. Keeping them in a single
-      // object makes adding a new layer a one-line change.
-      this.hillshadeBasemap = new LayerGroup({
+      const createHillshadeBasemap = () => new LayerGroup({
         layers: [
           new TileLayer({
             source: new XYZ({
@@ -1371,7 +1372,7 @@ class AurafiskyApp {
           })
         ]
       });
-      this.openTopoBasemap = new LayerGroup({
+      const createOpenTopoBasemap = () => new LayerGroup({
         layers: [
           new TileLayer({
             source: new XYZ({
@@ -1384,7 +1385,7 @@ class AurafiskyApp {
           })
         ]
       });
-      this.oceanBasemap = new LayerGroup({
+      const createOceanBasemap = () => new LayerGroup({
         layers: [
           new TileLayer({
             source: new XYZ({
@@ -1406,7 +1407,7 @@ class AurafiskyApp {
           })
         ]
       });
-      this.natGeoBasemap = new LayerGroup({
+      const createNatGeoBasemap = () => new LayerGroup({
         layers: [
           new TileLayer({
             source: new XYZ({
@@ -1420,18 +1421,68 @@ class AurafiskyApp {
         ]
       });
 
-      const initialGroup = {
-        street: this.lightBasemap,
-        dark: this.darkBasemap,
-        satellite: this.satelliteBasemap,
-        terrain: this.terrainBasemap,
-        hillshade: this.hillshadeBasemap,
-        opentopo: this.openTopoBasemap,
-        ocean: this.oceanBasemap,
-        natgeo: this.natGeoBasemap
-      }[this.mapStyle] || (this.isDark ? this.darkBasemap : this.lightBasemap);
+      // Lazy getters for basemaps — created on first access
+      this._basemapFactories = {
+        satellite: createSatelliteBasemap,
+        terrain: createTerrainBasemap,
+        hillshade: createHillshadeBasemap,
+        opentopo: createOpenTopoBasemap,
+        ocean: createOceanBasemap,
+        natgeo: createNatGeoBasemap,
+      };
+      this._basemapCache = {};
+
+      // Helper to get basemap (creates on first call)
+      this._getBasemap = (style) => {
+        if (style === 'street') return this.lightBasemap;
+        if (style === 'dark') return this.darkBasemap;
+        if (this._basemapCache[style]) return this._basemapCache[style];
+        const factory = this._basemapFactories[style];
+        if (!factory) return this.lightBasemap;
+        const basemap = factory();
+        this._basemapCache[style] = basemap;
+        return basemap;
+      };
+
+      const initialGroup = this._getBasemap(this.mapStyle);
+      this._currentBasemapGroup = initialGroup;
 
       this.map.addLayer(initialGroup);
+
+      // Preload all basemaps upfront so mode switches are instant — no blank
+      // tiles or delayed layer creation when the user toggles map styles.
+      Object.values(this._basemapFactories).forEach((factory) => {
+        try { factory(); } catch (_) {}
+      });
+
+      // Paint the instant raster basemap at once and drop the loading overlay
+      // so the map is visible within ~100 ms — the user sees a map immediately
+      // instead of staring at a spinner while the vector style fetches. The
+      // OpenFreeMap vector style upgrades the same layers in the background
+      // via loadBasemap() below; we deliberately do not block first paint on it.
+      // Track actual tile loads so the spinner stays up until the map has real
+      // content — OL's "rendercomplete" fires on the first frame (often before
+      // tiles download), which used to hide the spinner over a blank canvas.
+      let _tilesLoaded = false;
+      const _markTilesLoaded = () => {
+        if (!_tilesLoaded) {
+          _tilesLoaded = true;
+          this.hideLoadingOverlay();
+        }
+      };
+      for (const lyr of initialGroup.getLayers().getArray()) {
+        const src = lyr.getSource();
+        if (src && typeof src.on === "function") {
+          src.on("tileloadstart", () => { /* tiles are fetching */ });
+          src.on("tileloadend", _markTilesLoaded);
+          src.on("tileloaderror", (e) => {
+            console.warn("Basemap tile failed:", e.tile?.src);
+          });
+        }
+      }
+      // Watchdog: never leave the spinner up forever if tiles never load.
+      setTimeout(_markTilesLoaded, 4000);
+      this.map.render();
 
       // Real vector basemap: OpenFreeMap's OpenMapTiles-schema tiles, styled
       // via the same Mapbox/MapLibre style JSON OpenFreeMap publishes,
@@ -1452,33 +1503,45 @@ class AurafiskyApp {
       this._glStyles = {}; // cache of the raw (un-localized) fetched style JSON, by theme
 
       const loadBasemap = async (theme, group) => {
-        try {
-          const res = await fetch(this._glStyleUrls[theme]);
-          const rawStyle = await res.json();
-          this._enhanceBasemapVibrance(rawStyle, theme);
-          this._glStyles[theme] = rawStyle;
-          await applyMapboxStyle(group, localizeGlStyle(rawStyle, this.mapLanguage));
-          // Preload 1 level of lower-resolution tiles beyond the viewport so
-          // panning into new territory shows something immediately instead
-          // of a blank tile while the full-res one is still being fetched
-          // and parsed (vector tiles decode on the main thread — there's no
-          // background worker like MapLibre GL had — so this preload buffer
-          // is what actually keeps panning feeling smooth).
-          for (const vtLayer of getMapboxLayers(group, "openmaptiles")) {
-            vtLayer.setPreload(1);
+        let lastErr;
+        // Retry with exponential backoff: 1s, 2s, 4s, then give up
+        for (let attempt = 0; attempt < 4; attempt++) {
+          try {
+            if (attempt > 0) {
+              await new Promise((r) => setTimeout(r, 1000 * 2 ** (attempt - 1)));
+            }
+            const res = await fetch(this._glStyleUrls[theme]);
+            const rawStyle = await res.json();
+            this._enhanceBasemapVibrance(rawStyle, theme);
+            this._glStyles[theme] = rawStyle;
+            await applyMapboxStyle(group, localizeGlStyle(rawStyle, this.mapLanguage));
+            // Preload 1 level of lower-resolution tiles beyond the viewport so
+            // panning into new territory shows something immediately instead
+            // of a blank tile while the full-res one is still being fetched
+            // and parsed (vector tiles decode on the main thread — there's no
+            // background worker like MapLibre GL had — so this preload buffer
+            // is what actually keeps panning feeling smooth).
+            for (const vtLayer of getMapboxLayers(group, "openmaptiles")) {
+              vtLayer.setPreload(1);
+            }
+            // A location passed in on startup (shared link, restored session)
+            // calls selectLocation() — and therefore view.animate() — before
+            // this fetch resolves, while the map still has zero layers. OL
+            // doesn't always notice that layers were added to a view that
+            // already has stale frame state from animating before anything
+            // was renderable: the map reports every layer/source as "ready"
+            // but the canvas stays blank until something else nudges it. Force
+            // that nudge here instead of relying on it happening implicitly.
+            this.map.render();
+            return; // success
+          } catch (err) {
+            lastErr = err;
+            console.warn(`Basemap load attempt ${attempt + 1} failed (${theme}):`, err.message);
           }
-          // A location passed in on startup (shared link, restored session)
-          // calls selectLocation() — and therefore view.animate() — before
-          // this fetch resolves, while the map still has zero layers. OL
-          // doesn't always notice that layers were added to a view that
-          // already has stale frame state from animating before anything
-          // was renderable: the map reports every layer/source as "ready"
-          // but the canvas stays blank until something else nudges it. Force
-          // that nudge here instead of relying on it happening implicitly.
-          this.map.render();
-        } catch (err) {
-          console.error(`Basemap load failed (${theme}):`, err);
         }
+        console.error(`Basemap load failed (${theme}) after 4 attempts:`, lastErr);
+        // Vector style unavailable — the instant OSM raster basemap remains
+        // visible as a graceful fallback. No spinner, no crash.
       };
       // Load the visible theme first, on its own — fetching+parsing both
       // basemaps at once (the old behavior) doubled network requests and
@@ -1586,7 +1649,7 @@ class AurafiskyApp {
               this.selectLocation(
                 this.defaultLocation.lat,
                 this.defaultLocation.lng,
-                this.defaultLocation.name,
+                this.getLocalizedLocationName(this.defaultLocation, this.language) || this.defaultLocation.name,
               );
               return;
             }
@@ -1609,9 +1672,11 @@ class AurafiskyApp {
       // the toggle with force:true (rather than just drawing directly) also
       // starts its 5-minute keep-alive timer, so a returning user with the
       // preference on doesn't need to touch the button for it to stay live.
-      if (this.terminatorEnabled) this.toggleDayNightTerminator(true);
+      // terminator.js is lazy-loaded, so guard for its absence during init.
+      if (this.toggleDayNightTerminator && this.terminatorEnabled) {
+        this.toggleDayNightTerminator(true);
+      }
 
-      this.hideLoadingOverlay();
       this.showToast("Click anywhere or search for a city!", "info");
 
       // Keep OL's idea of the viewport in sync with the container's real box.
@@ -1655,6 +1720,18 @@ class AurafiskyApp {
       this.handleSearchInput(),
     );
     this.$.searchClearBtn.addEventListener("click", () => this.clearSearch());
+
+    // Empty state — focus search when "Search a city" is tapped
+    const emptySearchBtn = document.getElementById("emptySearchBtn");
+    if (emptySearchBtn) {
+      emptySearchBtn.addEventListener("click", () => {
+        const si = this.$.searchInput;
+        if (si) {
+          si.focus();
+          si.scrollIntoView({ behavior: "smooth", block: "center" });
+        }
+      });
+    }
 
     // ── Filter Categories inside Search Dropdown ──────────────────
     if (this.$.searchFilterBar) {
@@ -2322,12 +2399,22 @@ class AurafiskyApp {
       this._haptic?.('selection');
     });
 
+    // Event delegation on flyout for robust close button handling (survives DOM recreation)
+    this.$.mapLayersFlyout?.addEventListener("click", (e) => {
+      if (e.target.closest("#closeMapLayersBtn")) {
+        e.stopPropagation();
+        this.toggleMapLayersFlyout(false);
+        this._haptic?.('selection');
+      }
+    });
+
     const mapModeSelect = document.getElementById("mapModeSelectDropdown");
     if (mapModeSelect) {
       const handleModeChange = (e) => {
         const val = e.target.value;
         if (val) {
           this.setMapStyle(val);
+          this.toggleMapLayersFlyout(false);
           this._haptic?.('selection');
         }
       };
@@ -2555,13 +2642,28 @@ class AurafiskyApp {
           this.showToast("Please select a location on the map first.", "info");
           return;
         }
+        const activeLang = this._normalizeLangKey(this.language || "en");
+        const rawName =
+          this.selectedName ||
+          `${this.selectedLat.toFixed(4)}, ${this.selectedLng.toFixed(4)}`;
+        const cleanName = this._cleanLocationName(rawName);
+        const localizedNames = {};
+        if (cleanName && !this._locationNeedsScriptTranslation(cleanName, activeLang)) {
+          localizedNames[activeLang] = cleanName;
+        }
         this.defaultLocation = {
           lat: this.selectedLat,
           lng: this.selectedLng,
-          name:
-            this.selectedName ||
-            `${this.selectedLat.toFixed(4)}, ${this.selectedLng.toFixed(4)}`,
+          name: cleanName,
+          localizedNames,
         };
+        this._defaultLocTriedKeys?.clear();
+        try {
+          localStorage.setItem("defaultLocation", JSON.stringify(this.defaultLocation));
+          if (typeof localforage !== "undefined") {
+            localforage.setItem("defaultLocation", this.defaultLocation).catch(() => {});
+          }
+        } catch (_) {}
         this.updateHomeButton();
         this.updateHomeMarker();
         this.updateSettingsUIFromLocal();
@@ -3739,7 +3841,7 @@ class AurafiskyApp {
         return true;
       }
       if (this.defaultLocation && this.defaultLocation.lat != null) {
-        this.selectLocation(this.defaultLocation.lat, this.defaultLocation.lng, this.defaultLocation.name);
+        this.selectLocation(this.defaultLocation.lat, this.defaultLocation.lng, this.getLocalizedLocationName(this.defaultLocation) || this.defaultLocation.name);
         if (this.defaultLocationNotify) {
           this.setupHourlyNotifications();
         }
@@ -3795,7 +3897,7 @@ class AurafiskyApp {
 
     // 4. Default Home location
     if (this.defaultLocation && this.defaultLocation.lat != null) {
-      this.selectLocation(this.defaultLocation.lat, this.defaultLocation.lng, this.defaultLocation.name);
+      this.selectLocation(this.defaultLocation.lat, this.defaultLocation.lng, this.getLocalizedLocationName(this.defaultLocation) || this.defaultLocation.name);
       if (this.defaultLocationNotify) {
         this.setupHourlyNotifications();
       }
@@ -3844,9 +3946,26 @@ class AurafiskyApp {
 
       if (this._localCache.defaultLocation) {
         this.defaultLocation = this._localCache.defaultLocation;
+      } else {
+        try {
+          const lsDef = localStorage.getItem("defaultLocation");
+          if (lsDef) {
+            const parsed = JSON.parse(lsDef);
+            if (parsed && parsed.lat != null && parsed.lng != null) {
+              this.defaultLocation = parsed;
+            }
+          }
+        } catch (_) {}
       }
       if (this._localCache.defaultLocationNotify != null) {
         this.defaultLocationNotify = this._localCache.defaultLocationNotify;
+      } else {
+        try {
+          const lsNotify = localStorage.getItem("defaultLocationNotify");
+          if (lsNotify != null) {
+            this.defaultLocationNotify = lsNotify === "true" || lsNotify === true;
+          }
+        } catch (_) {}
       }
       if (this._localCache.notifyIntervalMin != null) {
         this.notifyIntervalMin = this._localCache.notifyIntervalMin;
@@ -3949,7 +4068,7 @@ class AurafiskyApp {
     content.innerHTML = `
       <div class="py-1 text-[11px] text-slate-400 flex items-center gap-2 animate-pulse">
         <span class="w-3 h-3 rounded-full border-2 border-teal-500/30 border-t-teal-500 animate-spin flex-shrink-0"></span>
-        <span class="truncate">Resolving address details...</span>
+        <span class="truncate">${this._escapeHtml(translateText("Resolving address details...", this.language || "en") || "Resolving address details...")}</span>
       </div>
     `;
   }
@@ -4056,35 +4175,233 @@ class AurafiskyApp {
         toggleBtn.addEventListener("click", (e) => {
           e.stopPropagation();
           fullDetail.classList.toggle("hidden");
-          toggleBtn.textContent = fullDetail.classList.contains("hidden") ? "Full Address" : "Hide Details";
+          const labelKey = fullDetail.classList.contains("hidden") ? "Full Address" : "Hide Details";
+          toggleBtn.textContent = translateText(labelKey, this.language || "en") || labelKey;
         });
+      }
+      if (this.language && this.language !== "en" && typeof translateDOM === "function") {
+        const addrEl = document.getElementById("locationAddressContent");
+        if (addrEl) translateDOM(addrEl, this.language);
       }
     }
   }
 
-  async resolveLocationAddress(lat, lng, fallbackName) {
+  _normalizeLangKey(lang) {
+    const raw = String(lang || this.language || "en").trim();
+    if (!raw) return "en";
+    const lower = raw.toLowerCase().replace("_", "-");
+    if (lower.startsWith("zh-tw") || lower.startsWith("zh-hant")) return "zh-TW";
+    if (lower.startsWith("zh")) return "zh-CN";
+    return lower.split("-")[0] || "en";
+  }
+
+  _cleanLocationName(name) {
+    if (!name || typeof name !== "string") return "";
+    return name
+      .split(",")
+      .map((s) => s.replace(/\s+/g, " ").trim())
+      .filter(Boolean)
+      .join(", ");
+  }
+
+  _escapeHtml(text) {
+    return String(text ?? "")
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;")
+      .replace(/'/g, "&#39;");
+  }
+
+  _locationNeedsScriptTranslation(text, targetLang) {
+    const clean = this._cleanLocationName(text);
+    if (!clean) return false;
+    if (/^\s*[-+]?\d+(?:\.\d+)?°?\s*[NSEW]?\s*,\s*[-+]?\d+(?:\.\d+)?°?\s*[NSEW]?\s*$/i.test(clean)) {
+      return false;
+    }
+    const langKey = this._normalizeLangKey(targetLang);
+    const scriptRegexMap = {
+      ar: /[\u0600-\u06FF\u0750-\u077F]/,
+      fa: /[\u0600-\u06FF\u0750-\u077F]/,
+      ur: /[\u0600-\u06FF\u0750-\u077F]/,
+      he: /[\u0590-\u05FF]/,
+      ru: /[\u0400-\u04FF]/,
+      uk: /[\u0400-\u04FF]/,
+      el: /[\u0370-\u03FF]/,
+      hi: /[\u0900-\u097F]/,
+      mr: /[\u0900-\u097F]/,
+      ne: /[\u0900-\u097F]/,
+      sa: /[\u0900-\u097F]/,
+      bn: /[\u0980-\u09FF]/,
+      as: /[\u0980-\u09FF]/,
+      pa: /[\u0A00-\u0A7F]/,
+      gu: /[\u0A80-\u0AFF]/,
+      or: /[\u0B00-\u0B7F]/,
+      ta: /[\u0B80-\u0BFF]/,
+      te: /[\u0C00-\u0C7F]/,
+      kn: /[\u0C80-\u0CFF]/,
+      ml: /[\u0D00-\u0D7F]/,
+      si: /[\u0D80-\u0DFF]/,
+      th: /[\u0E00-\u0E7F]/,
+      ja: /[\u3040-\u30FF\u4E00-\u9FFF]/,
+      ko: /[\uAC00-\uD7AF\u1100-\u11FF]/,
+      "zh-CN": /[\u4E00-\u9FFF]/,
+      "zh-TW": /[\u4E00-\u9FFF]/,
+    };
+    const expectedScript = scriptRegexMap[langKey];
+    if (expectedScript) {
+      return !expectedScript.test(clean) || /[A-Za-z]{2,}/.test(clean);
+    }
+    return /[\u0370-\u03FF\u0400-\u052F\u0590-\u05FF\u0600-\u06FF\u0750-\u077F\u0900-\u0DFF\u0E00-\u0E7F\u1000-\u109F\u1100-\u11FF\u3040-\u30FF\u3400-\u9FFF\uAC00-\uD7AF]/.test(
+      clean,
+    );
+  }
+
+  getLocalizedLocationName(loc, targetLang = this.language) {
+    if (!loc || typeof loc !== "object") return "";
+    const langKey = this._normalizeLangKey(targetLang);
+    const localized = loc.localizedNames?.[langKey];
+    if (localized && typeof localized === "string") {
+      return this._cleanLocationName(localized);
+    }
+    return this._cleanLocationName(loc.name || "");
+  }
+
+  async _resolveLocalizedLocationName(lat, lng, fallbackName, targetLang) {
+    const langKey = this._normalizeLangKey(targetLang);
+    const cleanFallback = this._cleanLocationName(fallbackName || "");
+    let candidate = "";
+    if (lat != null && lng != null && typeof reverseGeocode === "function") {
+      try {
+        const res = await reverseGeocode(lat, lng, { lang: langKey });
+        const rawResName = this._cleanLocationName(res?.name || "");
+        if (
+          rawResName &&
+          !/^\s*[-+]?\d+(?:\.\d+)?°?\s*[NSEW]?\s*,\s*[-+]?\d+(?:\.\d+)?°?\s*[NSEW]?\s*$/i.test(rawResName) &&
+          !/^(locating\.\.\.|unknown location|fetching weather\.\.\.|location address)$/i.test(rawResName)
+        ) {
+          candidate = rawResName;
+        }
+      } catch (e) {}
+    }
+    const baseText = candidate || cleanFallback;
+    if (!baseText) return "";
+    const shouldTranslate =
+      this._locationNeedsScriptTranslation(baseText, langKey) ||
+      (!candidate && cleanFallback && langKey !== "en");
+    if (shouldTranslate && typeof translateAsync === "function") {
+      try {
+        const translated = await translateAsync(baseText, langKey);
+        const cleanTranslated = this._cleanLocationName(translated || "");
+        if (cleanTranslated && cleanTranslated !== baseText) {
+          return cleanTranslated;
+        }
+      } catch (e) {}
+    }
+    return baseText;
+  }
+
+  async _localizeDefaultLocation(targetLang = this.language) {
+    const loc = this.defaultLocation;
+    if (!loc || loc.lat == null || loc.lng == null) return "";
+    const langKey = this._normalizeLangKey(targetLang);
+    const cachedLocalized = loc.localizedNames?.[langKey];
+    if (cachedLocalized && !this._locationNeedsScriptTranslation(cachedLocalized, langKey)) {
+      return this._cleanLocationName(cachedLocalized);
+    }
+    const coordKey = `${Number(loc.lat).toFixed(4)},${Number(loc.lng).toFixed(4)}:${langKey}`;
+    if (!this._defaultLocTriedKeys) this._defaultLocTriedKeys = new Set();
+    if (this._defaultLocTriedKeys.has(coordKey)) {
+      return this.getLocalizedLocationName(loc, langKey);
+    }
+    this._defaultLocTriedKeys.add(coordKey);
+    if (!this._defaultLocInflight) this._defaultLocInflight = new Map();
+    if (this._defaultLocInflight.has(coordKey)) {
+      return this._defaultLocInflight.get(coordKey);
+    }
+    const promise = (async () => {
+      try {
+        const bestSource =
+          loc.localizedNames?.en ||
+          loc.name ||
+          `${Number(loc.lat).toFixed(4)}, ${Number(loc.lng).toFixed(4)}`;
+        const resolved = await this._resolveLocalizedLocationName(
+          loc.lat,
+          loc.lng,
+          bestSource,
+          langKey,
+        );
+        const cur = this.defaultLocation;
+        if (
+          !resolved ||
+          !cur ||
+          Math.abs(Number(cur.lat) - Number(loc.lat)) > 0.0001 ||
+          Math.abs(Number(cur.lng) - Number(loc.lng)) > 0.0001
+        ) {
+          return resolved || "";
+        }
+        if (!cur.localizedNames || typeof cur.localizedNames !== "object") {
+          cur.localizedNames = {};
+        }
+        cur.localizedNames[langKey] = resolved;
+        if (cur.name) {
+          cur.name = this._cleanLocationName(cur.name);
+        }
+        try {
+          localStorage.setItem("defaultLocation", JSON.stringify(cur));
+          if (typeof localforage !== "undefined") {
+            localforage.setItem("defaultLocation", cur).catch(() => {});
+          }
+        } catch (e) {}
+        this.updateSettingsUIFromLocal?.();
+        this.updateHomeButton?.();
+        this.updateHomeMarker?.();
+        return resolved;
+      } finally {
+        this._defaultLocInflight.delete(coordKey);
+      }
+    })();
+    this._defaultLocInflight.set(coordKey, promise);
+    return promise;
+  }
+
+  async resolveLocationAddress(lat, lng, fallbackName, opts = {}) {
     if (lat == null || lng == null || isNaN(lat) || isNaN(lng)) {
       this._renderLocationAddressCard(null, fallbackName, lat, lng);
       return;
     }
 
+    const reqSeq = (this._resolveAddrSeq = (this._resolveAddrSeq || 0) + 1);
     const cacheKey = `weathermap_cache_${lat.toFixed(3)}_${lng.toFixed(3)}`;
     const userLang = (() => {
-      if (this.mapLanguage && this.mapLanguage !== 'native') {
-        return this.mapLanguage;
+      if (this.language) {
+        return this._normalizeLangKey(this.language);
+      }
+      if (this.mapLanguage && this.mapLanguage !== "native") {
+        return this._normalizeLangKey(this.mapLanguage);
       }
       try {
-        return (navigator.language || "en").split(/[-_,]/)[0] || "en";
+        return this._normalizeLangKey(navigator.language || "en");
       } catch (e) {
         return "en";
       }
     })();
+    const reqLang = this._normalizeLangKey(this.language || userLang);
+    const isStale = () =>
+      this.selectedLat !== lat ||
+      this.selectedLng !== lng ||
+      reqSeq !== this._resolveAddrSeq ||
+      this._normalizeLangKey(this.language || userLang) !== reqLang;
 
     const sanitize = (str) => {
       if (typeof DOMPurify !== "undefined" && DOMPurify.sanitize)
         return DOMPurify.sanitize(String(str || ""));
       return String(str || "").replace(/[<>&]/g, "");
     };
+    const isCoordOrGenericName = (val) =>
+      !val ||
+      /^\s*[-+]?\d+\.?\d*°?\s*[NSEW]?\s*,\s*[-+]?\d+\.?\d*°?\s*[NSEW]?\s*$/i.test(val) ||
+      /^(locating\.\.\.|unknown location|fetching weather\.\.\.|location address)$/i.test(val.trim());
 
     try {
       const res = await reverseGeocode(lat, lng, {
@@ -4094,62 +4411,89 @@ class AurafiskyApp {
         describeFallback: this._describeCoordinates(lat, lng),
       });
 
-      if (this.selectedLat === lat && this.selectedLng === lng) {
-        this.selectedAddress = res.address;
-        this.selectedDisplayName = res.displayName || fallbackName || "";
-        this.addressResolvedForLat = lat;
-        this.addressResolvedForLng = lng;
-        this._renderLocationAddressCard(this.selectedAddress, this.selectedDisplayName, lat, lng);
+      if (isStale()) return;
 
-        const isGenericOrCoordOrInvalidOcean =
-          !this.selectedName ||
-          /^\s*[-+]?\d+\.?\d*°?\s*[NSEW]?\s*,\s*[-+]?\d+\.?\d*°?\s*[NSEW]?\s*$/i.test(this.selectedName) ||
-          /^(locating\.\.\.|unknown location|fetching weather\.\.\.|location address)$/i.test(this.selectedName.trim()) ||
-          (isOceanName(this.selectedName) && (!isOceanName(res.name) || isCoordinateOnLand(lat, lng)));
+      this.selectedAddress = res.address;
+      this.selectedDisplayName = res.displayName || fallbackName || "";
+      this.addressResolvedForLat = lat;
+      this.addressResolvedForLng = lng;
+      this._renderLocationAddressCard(this.selectedAddress, this.selectedDisplayName, lat, lng);
 
-        if (res.name && isGenericOrCoordOrInvalidOcean) {
-          this.selectedName = res.name;
-          this._updateHeaderLocationAndCoords(res.name, lat, lng);
-          this._updateUrlParams(lat, lng, res.name);
-          this._persistSession(lat, lng, res.name);
+      let resolvedName = this._cleanLocationName(res.name || "");
+      if (isCoordOrGenericName(resolvedName)) {
+        const cleanFallback = this._cleanLocationName(fallbackName || "");
+        if (!isCoordOrGenericName(cleanFallback)) {
+          resolvedName = cleanFallback;
         }
-        this._syncDocumentTitle(this.currentWeather);
-        if (this.marker) {
-          const timeOffset = this.timeline24hMode ? this._getTimelineOffset?.() || 0 : 0;
-          const targetIdx = parseInt(this.$.timelineSlider?.value || 0, 10) + timeOffset;
-          const currentWeather = this.weatherData ? WeatherService.getHourlyAtIndex(this.weatherData, targetIdx) : null;
-          if (currentWeather) {
-            this.marker.setHtml(this._buildMarkerHtml(currentWeather), this.selectedName, "location-tooltip");
+      }
+      if (
+        resolvedName &&
+        this._locationNeedsScriptTranslation(resolvedName, userLang) &&
+        typeof translateAsync === "function"
+      ) {
+        try {
+          const translatedResName = await translateAsync(resolvedName, userLang);
+          if (isStale()) return;
+          const cleanTranslated = this._cleanLocationName(translatedResName || "");
+          if (cleanTranslated && cleanTranslated !== resolvedName) {
+            resolvedName = cleanTranslated;
           }
-          const cityEl = this.marker.element?.querySelector(".weather-marker-city");
-          if (cityEl) {
-            const displayName = shortPlaceName(this.selectedName).trim();
-            cityEl.textContent = displayName;
-            cityEl.title = displayName;
-          }
-          const pinRoot = this.marker.element?.querySelector(".aurafisky-location-pin");
-          if (pinRoot) {
-            pinRoot.setAttribute("aria-label", this.selectedName);
-          }
-        }
+        } catch (e) {}
+      }
+      if (isStale()) return;
 
-        // Update cache with resolved address and verified coordinates
-        if (this.weatherData) {
-          this._persistWeatherCache(cacheKey, {
-            forecast: this.weatherData,
-            airQuality: this.airQualityData,
-            ts: this.freshnessTimestamp || Date.now(),
-            name: this.selectedName || fallbackName,
-            address: this.selectedAddress,
-            displayName: this.selectedDisplayName,
-            addressLat: lat,
-            addressLng: lng,
-          });
+      const isGenericOrCoordOrInvalidOcean =
+        isCoordOrGenericName(this.selectedName) ||
+        (isOceanName(this.selectedName) && (!isOceanName(resolvedName) || isCoordinateOnLand(lat, lng)));
+      const shouldForceUpdate =
+        Boolean(opts?.forceUpdateName) ||
+        this._locationNeedsScriptTranslation(this.selectedName || "", userLang);
+
+      if (resolvedName && (isGenericOrCoordOrInvalidOcean || shouldForceUpdate)) {
+        this.selectedName = resolvedName;
+        this._updateHeaderLocationAndCoords(resolvedName, lat, lng);
+        this._updateUrlParams(lat, lng, resolvedName);
+        this._persistSession(lat, lng, resolvedName);
+        if (typeof this.updateHomeButton === "function") {
+          this.updateHomeButton();
         }
+      }
+      this._syncDocumentTitle(this.currentWeather);
+      if (this.marker) {
+        const timeOffset = this.timeline24hMode ? this._getTimelineOffset?.() || 0 : 0;
+        const targetIdx = parseInt(this.$.timelineSlider?.value || 0, 10) + timeOffset;
+        const currentWeather = this.weatherData ? WeatherService.getHourlyAtIndex(this.weatherData, targetIdx) : null;
+        if (currentWeather) {
+          this.marker.setHtml(this._buildMarkerHtml(currentWeather), this.selectedName, "location-tooltip");
+        }
+        const cityEl = this.marker.element?.querySelector(".weather-marker-city");
+        if (cityEl) {
+          const displayName = shortPlaceName(this.selectedName).trim();
+          cityEl.textContent = displayName;
+          cityEl.title = displayName;
+        }
+        const pinRoot = this.marker.element?.querySelector(".aurafisky-location-pin");
+        if (pinRoot) {
+          pinRoot.setAttribute("aria-label", this.selectedName);
+        }
+      }
+
+      // Update cache with resolved address and verified coordinates
+      if (this.weatherData) {
+        this._persistWeatherCache(cacheKey, {
+          forecast: this.weatherData,
+          airQuality: this.airQualityData,
+          ts: this.freshnessTimestamp || Date.now(),
+          name: this.selectedName || fallbackName,
+          address: this.selectedAddress,
+          displayName: this.selectedDisplayName,
+          addressLat: lat,
+          addressLng: lng,
+        });
       }
     } catch (e) {
       console.warn("Reverse geocode failed:", e);
-      if (this.selectedLat === lat && this.selectedLng === lng) {
+      if (!isStale()) {
         this._renderLocationAddressCard(null, fallbackName || this.selectedName, lat, lng);
         this._syncDocumentTitle(this.currentWeather);
       }
@@ -4284,6 +4628,13 @@ class AurafiskyApp {
     if (lat == null || lng == null || isNaN(lat) || isNaN(lng)) {
       return;
     }
+    // Hide empty state once a location is being selected
+    const emptyEl = document.getElementById("emptyState");
+    if (emptyEl) {
+      emptyEl.style.opacity = "0";
+      emptyEl.style.pointerEvents = "none";
+      setTimeout(() => { emptyEl.style.display = "none"; }, 300);
+    }
     // While a fetch is in flight, don't drop the request — remember the
     // LATEST requested location and run it once the current fetch settles.
     // Rapid switching (tap A → quickly tap B) used to lose B entirely: the
@@ -4312,7 +4663,7 @@ class AurafiskyApp {
       this.addressResolvedForLng = null;
       const summaryEl = document.getElementById("locationAddressSummary");
       if (summaryEl) {
-        summaryEl.innerHTML = '<span class="text-slate-400">Resolving address...</span>';
+        summaryEl.innerHTML = `<span class="text-slate-400">${this._escapeHtml(translateText("Resolving address...", this.language || "en") || "Resolving address...")}</span>`;
       }
       this.updateSettingsUIFromLocal();
 
@@ -4799,7 +5150,7 @@ class AurafiskyApp {
         const cachedSpan = document.createElement("span");
         cachedSpan.className =
           "text-[9px] font-semibold text-amber-500 bg-amber-500/10 px-1.5 py-0.5 rounded ml-1.5 uppercase tracking-wider";
-        cachedSpan.textContent = "Cached";
+        cachedSpan.textContent = translateText("Cached", this.language || "en") || "Cached";
         this.$.panelLocationName.appendChild(cachedSpan);
       }
       this.$.offlineTimeMachineBadge.classList.remove("hidden");
@@ -5152,11 +5503,14 @@ class AurafiskyApp {
     this._syncDocumentTitle(weather);
 
     // Draw Astronomy Widget (Solar Arc + Moon Phase)
-    this.updateAstronomyWidget(weather, hourIndex);
+    if (typeof this.updateAstronomyWidget === "function") {
+      this.updateAstronomyWidget(weather, hourIndex);
+    }
 
     // Keep the day/night terminator (if enabled) synced to whatever
     // instant the timeline is showing, not just wall-clock "now".
-    if (this.terminatorEnabled) {
+    // terminator.js is lazy-loaded, so guard for its absence.
+    if (this.updateDayNightTerminator && this.terminatorEnabled) {
       this.updateDayNightTerminator(weather.time, this.weatherData?.utc_offset_seconds);
     }
 
@@ -5915,7 +6269,7 @@ class AurafiskyApp {
       const label = document.createElement("span");
       label.className = isToday
         ? "absolute whitespace-nowrap px-1.5 sm:px-2 py-0.5 rounded-full bg-primary/10 text-primary dark:bg-primary-light/15 dark:text-primary-light font-bold text-[8.5px] sm:text-[10px]"
-        : "absolute whitespace-nowrap px-1 sm:px-1.5 py-0.5 rounded-full bg-slate-200/60 dark:bg-slate-700/60 text-[8px] sm:text-[9.5px]";
+        : "absolute whitespace-nowrap px-1 sm:px-1.5 py-0.5 rounded-full bg-slate-200/60 dark:bg-slate-700/60 text-[9px] sm:text-[9.5px]";
       label.style.left = `${pct}%`;
       label.style.transform = "translateX(-50%)";
       label.textContent = compactDayText;
@@ -5961,7 +6315,7 @@ class AurafiskyApp {
         const tick = document.createElement("span");
         tick.className = this.timeline24hMode
           ? "absolute text-[7.5px] sm:text-[9px] md:text-[10px] text-slate-400 dark:text-slate-500 font-semibold select-none"
-          : "absolute text-[8px] sm:text-[9.5px] md:text-[10px] text-slate-400 dark:text-slate-500 font-semibold select-none";
+          : "absolute text-[9px] sm:text-[9.5px] md:text-[10px] text-slate-400 dark:text-slate-500 font-semibold select-none";
         tick.style.left = `${(i / (totalHours - 1)) * 100}%`;
         tick.style.transform = "translateX(-50%)";
         tick.style.top = "2px";
@@ -6613,7 +6967,8 @@ class AurafiskyApp {
     shortcutsGrid.appendChild(gpsBtn);
 
     // 2. Home Location
-    const homeName = this.defaultLocation?.name ? this.defaultLocation.name.split(",")[0] : "Set Home";
+    const localizedHome = this.defaultLocation ? this.getLocalizedLocationName(this.defaultLocation, this.language) : "";
+    const homeName = localizedHome ? localizedHome.split(",")[0].trim() : "Set Home";
     const homeBtn = createElement(
       "button",
       {
@@ -7009,7 +7364,7 @@ class AurafiskyApp {
       }
       row1.appendChild(
         createElement("span", {
-          className: `search-type-pill text-[8px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded ${badgeColor}`,
+          className: `search-type-pill text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded ${badgeColor}`,
           textContent: typeLabel,
         }),
       );
@@ -9436,9 +9791,12 @@ class AurafiskyApp {
       restorePill.classList.add("hidden");
     }
 
+    // The timeline's visibility is owned by snapSheet(): it hides the bar only
+    // while the sheet covers the screen. showWeatherPanel always ends in the
+    // peeked state on mobile, so the scrubber must stay usable.
     const timeline = document.getElementById("timelineBar");
-    if (timeline && isMobileLayout()) {
-      timeline.classList.add("hidden-by-sheet");
+    if (timeline && !isMobileLayout()) {
+      timeline.classList.remove("hidden-by-sheet");
     }
 
     if (!isMobileLayout()) {
@@ -9452,13 +9810,9 @@ class AurafiskyApp {
       this.$.weatherPanel.classList.toggle("wide-mode", isWidePref);
       this.updateWideButtonState(isWidePref);
     } else {
-      this.$.weatherPanel.classList.add("open", "sheet-full", "aura-sheet", "google-maps-sheet");
-      this.$.weatherPanel.style.height = '100dvh';
-      this.$.weatherPanel.style.maxHeight = '100dvh';
-      this.$.weatherPanel.style.top = '0px';
-      this.$.weatherPanel.style.bottom = '0px';
-      this.$.weatherPanel.style.left = '0px';
-      this.$.weatherPanel.style.right = '0px';
+      // Geometry comes from snapSheet (it knows about portrait vs landscape
+      // phones), so don't duplicate the inline full-screen rules here.
+      this.$.weatherPanel.classList.add("open", "aura-sheet", "google-maps-sheet");
       this.$.weatherPanel.style.transform = 'translateY(0)';
       // Remain below (minimized / peek) on mobile by default so the map stays visible
       if (this.googleMapsMobile) {
@@ -9491,7 +9845,7 @@ class AurafiskyApp {
   }
 
   hideWeatherPanel() {
-    this.$.weatherPanel.classList.remove("open", "minimized", "sheet-peek", "sheet-half", "sheet-full");
+    this.$.weatherPanel.classList.remove("open", "minimized", "sheet-peek", "sheet-half", "sheet-full", "sheet-side");
     this.$.weatherPanel.setAttribute("inert", "");
     this.$.weatherPanel.style.opacity = "0";
     this.$.weatherPanel.style.pointerEvents = "none";
@@ -9934,11 +10288,19 @@ class AurafiskyApp {
     // Feature panels render parts of their content from live data. Translate
     // the selected panel on entry, then ask the full-page fallback to pick up
     // any labels that do not have a first-party phrase yet.
-    if (tabName === "astronomy" && typeof this.updateCelestialBodies === "function") {
-      try { this.updateCelestialBodies(new Date()); } catch (_) {}
+    if (tabName === "astronomy") {
+      if (typeof this.updateCelestialBodies === "function") {
+        try { this.updateCelestialBodies(new Date()); } catch (_) {}
+      } else {
+        try { initHeavyFeatures(this); } catch (_) {}
+      }
     }
-    if (tabName === "farm" && typeof this.renderFarmTab === "function") {
-      try { this.renderFarmTab(this); } catch (_) {}
+    if (tabName === "farm") {
+      if (typeof this.renderFarmTab === "function") {
+        try { this.renderFarmTab(this); } catch (_) {}
+      } else {
+        try { initHeavyFeatures(this); } catch (_) {}
+      }
     }
 
     const activePanel = document.getElementById(targetPanelId);
@@ -10123,7 +10485,7 @@ class AurafiskyApp {
         if (this.selectedLat != null && this.selectedLng != null) {
           this.showWeatherPanel();
         } else if (this.defaultLocation && this.defaultLocation.lat != null) {
-          this.selectLocation(this.defaultLocation.lat, this.defaultLocation.lng, this.defaultLocation.name);
+          this.selectLocation(this.defaultLocation.lat, this.defaultLocation.lng, this.getLocalizedLocationName(this.defaultLocation) || this.defaultLocation.name);
         } else {
           this.getMyLocation();
         }
@@ -10640,6 +11002,7 @@ class AurafiskyApp {
 
       // Track auth state shifts
       this._fb.onAuthStateChanged(this._fb.auth, (user) => {
+        const wasSignedIn = Boolean(this.user);
         if (user) {
           this.user = user;
           this.onUserSignIn();
@@ -10655,7 +11018,8 @@ class AurafiskyApp {
             .catch(() => {});
         } else {
           this.user = null;
-          this.onUserSignOut();
+          // Initial logged-out auth state check on startup must not wipe local (guest) defaults.
+          this.onUserSignOut({ preserveLocalDefaults: !wasSignedIn });
         }
       });
 
@@ -10838,7 +11202,7 @@ class AurafiskyApp {
     return "U";
   }
 
-  onUserSignOut() {
+  onUserSignOut({ preserveLocalDefaults = false } = {}) {
     if (this.$.profileIconGeneric) {
       this.$.profileIconGeneric.classList.remove("hidden");
       this.$.profileIconGeneric.style.display = "";
@@ -10864,12 +11228,17 @@ class AurafiskyApp {
     if (this.$.googleSignOutBtn)
       this.$.googleSignOutBtn.classList.add("hidden");
 
-    this.defaultLocation = null;
-    this.defaultLocationNotify = false;
+    if (!preserveLocalDefaults) {
+      this.defaultLocation = null;
+      this.defaultLocationNotify = false;
+      localforage.setItem("defaultLocation", null);
+      localforage.setItem("defaultLocationNotify", false);
+      try {
+        localStorage.removeItem("defaultLocation");
+        localStorage.removeItem("defaultLocationNotify");
+      } catch (_) {}
+    }
     this.setupHourlyNotifications();
-
-    localforage.setItem("defaultLocation", null);
-    localforage.setItem("defaultLocationNotify", false);
 
     this.updateHomeButton();
     this.updateHomeMarker();
@@ -11226,12 +11595,25 @@ class AurafiskyApp {
       this.$.defaultLocationNotifyToggle.disabled = !this.defaultLocation;
       this.$.defaultLocationNotifyToggle.checked = this.defaultLocationNotify;
     }
+    const activeLang = this._normalizeLangKey(this.language || "en");
+    const localizedHomeName = this.defaultLocation
+      ? this.getLocalizedLocationName(this.defaultLocation, activeLang)
+      : "";
+    if (
+      this.defaultLocation &&
+      (!this.defaultLocation.localizedNames?.[activeLang] ||
+        this._locationNeedsScriptTranslation(localizedHomeName, activeLang))
+    ) {
+      this._localizeDefaultLocation(activeLang);
+    }
     if (this.$.defaultLocationNotifyHint) {
       if (this.defaultLocation) {
+        const displayLocName =
+          localizedHomeName || this._cleanLocationName(this.defaultLocation.name);
         const sendingTpl = t("sending_hourly_updates", this.language) || "Sending hourly updates for %s.";
         this.$.defaultLocationNotifyHint.textContent = sendingTpl.includes("%s")
-          ? sendingTpl.replace("%s", this.defaultLocation.name)
-          : `${sendingTpl} ${this.defaultLocation.name}.`;
+          ? sendingTpl.replace("%s", displayLocName)
+          : `${sendingTpl} ${displayLocName}.`;
         this.$.defaultLocationNotifyHint.classList.remove("text-slate-500", "dark:text-slate-400");
         this.$.defaultLocationNotifyHint.classList.add("text-primary");
       } else {
@@ -11248,9 +11630,12 @@ class AurafiskyApp {
     }
     if (this.$.defaultLocationStatus) {
       if (this.defaultLocation) {
+        const displayLocName =
+          localizedHomeName || this._cleanLocationName(this.defaultLocation.name);
+        const localTag = translateText("(local)", this.language || "en") || "(local)";
         this.setSafeHTML(
           this.$.defaultLocationStatus,
-          `<span class="text-emerald-500">📍</span> <strong>${this.defaultLocation.name}</strong> <span class="opacity-60">(${this.defaultLocation.lat.toFixed(2)}, ${this.defaultLocation.lng.toFixed(2)})</span>${hasUser ? "" : ' <span class="opacity-60">(local)</span>'}`,
+          `<span class="text-emerald-500">📍</span> <strong>${this._escapeHtml(displayLocName)}</strong> <span class="opacity-60">(${Number(this.defaultLocation.lat).toFixed(2)}, ${Number(this.defaultLocation.lng).toFixed(2)})</span>${hasUser ? "" : ` <span class="opacity-60">${this._escapeHtml(localTag)}</span>`}`,
         );
       } else {
         const noDefText = t("no_default_location_status", this.language) || "No default location set. Click map and set current.";
@@ -11341,7 +11726,8 @@ class AurafiskyApp {
       const desc = weatherInfo ? weatherInfo.description : "Unknown conditions";
       const emoji = weatherInfo?.icon || "🌡️";
 
-      const title = `Weather Update: ${this.defaultLocation.name}`;
+      const locLabel = this.getLocalizedLocationName(this.defaultLocation, this.language) || this.defaultLocation.name;
+      const title = `${translateText("Weather Update", this.language || "en") || "Weather Update"}: ${locLabel}`;
       const options = {
         body: `${emoji} ${desc} | ${tempStr} (H:${todayHigh}° L:${todayLow}°) | Humidity: ${hourWeather.humidity}% | Wind: ${hourWeather.windSpeed} | UV: ${hourWeather.uvIndex} | Precip: ${hourWeather.precipProb}%`,
         icon: "favicon.svg",
@@ -11745,9 +12131,25 @@ class AurafiskyApp {
         termsTitle.textContent = t("terms_privacy", lang) || "Terms & Privacy";
       }
 
-      // 11b. Update Settings UI local status and hints
+      // 11b. Update Settings UI local status, home UI, bookmarks, and re-localize active location
+      this._defaultLocTriedKeys?.clear();
       if (typeof this.updateSettingsUIFromLocal === "function") {
         this.updateSettingsUIFromLocal();
+      }
+      this.updateHomeButton?.();
+      this.updateHomeMarker?.();
+      this.renderBookmarksList?.();
+      if (this.defaultLocation && typeof this._localizeDefaultLocation === "function") {
+        this._localizeDefaultLocation(lang);
+      }
+      if (
+        this.selectedLat != null &&
+        this.selectedLng != null &&
+        typeof this.resolveLocationAddress === "function"
+      ) {
+        this.resolveLocationAddress(this.selectedLat, this.selectedLng, this.selectedName, {
+          forceUpdateName: true,
+        });
       }
 
       // 11c. Re-translate Route Studio if open
@@ -11915,22 +12317,28 @@ class AurafiskyApp {
 
   _updateActiveBasemap() {
     if (!this.map) return;
-    const styleGroups = {
-      street: this.lightBasemap,
-      dark: this.darkBasemap,
-      satellite: this.satelliteBasemap,
-      terrain: this.terrainBasemap,
-      hillshade: this.hillshadeBasemap,
-      opentopo: this.openTopoBasemap,
-      ocean: this.oceanBasemap,
-      natgeo: this.natGeoBasemap
-    };
-    const targetGroup = styleGroups[this.mapStyle] || (this.isDark ? this.darkBasemap : this.lightBasemap);
-    const allGroups = [this.lightBasemap, this.darkBasemap, this.satelliteBasemap, this.terrainBasemap, this.hillshadeBasemap, this.openTopoBasemap, this.oceanBasemap, this.natGeoBasemap];
+    const targetGroup = this._getBasemap(this.mapStyle);
+    if (!targetGroup) return;
+
+    // If the same basemap is already active, just ensure it's visible
+    if (this._currentBasemapGroup === targetGroup) {
+      targetGroup.setVisible(true);
+      this._applyMapOpacity();
+      this._applyTerrainOverlay();
+      return;
+    }
+
+    const FADE_MS = 250; // crossfade duration
     const layers = this.map.getLayers();
 
+    // Hide all other basemap groups first so only old + new are in play
+    const allGroups = [
+      this.lightBasemap,
+      this.darkBasemap,
+      ...Object.values(this._basemapCache)
+    ];
     allGroups.forEach((g) => {
-      if (g) {
+      if (g && g !== this._currentBasemapGroup && g !== targetGroup) {
         g.setVisible(false);
         while (layers.getArray().includes(g)) {
           layers.remove(g);
@@ -11938,20 +12346,57 @@ class AurafiskyApp {
       }
     });
 
-    if (targetGroup) {
-      targetGroup.setVisible(true);
-      if (typeof targetGroup.getLayers === "function") {
-        targetGroup.getLayers().forEach((l) => {
-          if (typeof l.setVisible === "function") l.setVisible(true);
-        });
-      }
+    // Ensure target group is in the map (at bottom) and fully transparent
+    targetGroup.setVisible(true);
+    if (typeof targetGroup.getLayers === "function") {
+      targetGroup.getLayers().forEach((l) => {
+        if (typeof l.setVisible === "function") l.setVisible(true);
+        if (typeof l.setOpacity === "function") l.setOpacity(0);
+      });
+    }
+    if (!layers.getArray().includes(targetGroup)) {
       layers.insertAt(0, targetGroup);
     }
-    this.map.render();
 
-    // Apply opacity and terrain overlay
-    this._applyMapOpacity();
-    this._applyTerrainOverlay();
+    // Fade out old group, fade in new group simultaneously
+    if (this._currentBasemapGroup) {
+      if (typeof this._currentBasemapGroup.getLayers === "function") {
+        this._currentBasemapGroup.getLayers().forEach((l) => {
+          if (typeof l.setOpacity === "function") {
+            l.setOpacity(1);
+            l.animate?.({ opacity: 0, duration: FADE_MS });
+          }
+        });
+      }
+    }
+    if (typeof targetGroup.getLayers === "function") {
+      targetGroup.getLayers().forEach((l) => {
+        if (typeof l.setOpacity === "function") {
+          l.animate?.({ opacity: this.mapOpacity || 1, duration: FADE_MS });
+        }
+      });
+    }
+
+    // After fade completes, remove old group from map and clean up
+    setTimeout(() => {
+      if (this._currentBasemapGroup) {
+        this._currentBasemapGroup.setVisible(false);
+        while (layers.getArray().includes(this._currentBasemapGroup)) {
+          layers.remove(this._currentBasemapGroup);
+        }
+        if (typeof this._currentBasemapGroup.getLayers === "function") {
+          this._currentBasemapGroup.getLayers().forEach((l) => {
+            if (typeof l.setOpacity === "function") l.setOpacity(1);
+          });
+        }
+      }
+      this._currentBasemapGroup = targetGroup;
+
+      // Apply opacity and terrain overlay to the new active basemap
+      this._applyMapOpacity();
+      this._applyTerrainOverlay();
+      this.map.render();
+    }, FADE_MS + 50);
   }
 
   /** Apply map opacity to all base layers */

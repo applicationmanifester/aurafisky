@@ -37,34 +37,17 @@ export default defineConfig(({ mode }) => {
           // Split OpenLayers core from mapbox-style parser — they're loaded at different times
           'vendor-ol': ['ol'],
           'vendor-mapbox-style': ['ol-mapbox-style'],
-          // Eager core features (loaded synchronously with features/registry.js)
+          // i18n dictionaries are huge (470KB gzipped) — load lazily
+          'vendor-i18n': [
+            './modules/i18n-data.js',
+            './modules/i18n-extended.js',
+          ],
+          // Only truly eager features go here (loaded synchronously before first paint)
           'features-core': [
-            './features/ensemble.js',
-            './features/radar.js',
+            './features/deviceProfile.js',
             './features/bookmarks.js',
             './features/units.js',
             './features/share.js',
-            './features/hourlyStrip.js',
-            './features/insights.js',
-            './features/minimalMode.js',
-            './features/canvasEffects.js',
-            './features/audio.js',
-            './features/myLocation.js',
-            './features/astronomy.js',
-            './features/advisories.js',
-            './features/appToggles.js',
-            './features/dashboard.js',
-            './features/keyboardShortcuts.js',
-            './features/terminator.js',
-            './features/isobars.js',
-            './features/stargazing.js',
-            './features/extremes.js',
-            './features/deviceProfile.js',
-            './features/tvNavigation.js',
-            './features/navigation.js',
-            './features/auraMapsMobile.js',
-            './features/activityWindow.js',
-            './features/marine.js',
             './features/analytics.js',
           ],
           // Heavy features (aura, routes, timeMachine, compareCities) are
@@ -118,6 +101,7 @@ export default defineConfig(({ mode }) => {
       workbox: {
         clientsClaim: true,
         skipWaiting: true,
+        cleanupOutdatedCaches: true,
         importScripts: ['sw-widgets.js'],
         // Web Share Target: serve the app shell for /share-target so the page
         // JS can read location.search and load the shared location.
@@ -195,6 +179,59 @@ export default defineConfig(({ mode }) => {
                 }
               ]
             }
+          },
+          // Vector map tiles + shaded relief (OpenFreeMap /planet and
+          // /natural_earth) — CacheFirst: once a tile has been fetched, panning
+          // back over it is instant and the base map keeps working offline.
+          // Kept *after* the styles/sprites/fonts route above so those stay
+          // NetworkFirst (first matching route wins in workbox).
+          {
+            urlPattern: ({ url }) => url.hostname === "tiles.openfreemap.org",
+            handler: "CacheFirst",
+            options: {
+              cacheName: "map-tiles",
+              expiration: {
+                maxEntries: 600,
+                maxAgeSeconds: 60 * 60 * 24 * 30 // 30d
+              },
+              cacheableResponse: { statuses: [0, 200] },
+              plugins: [
+                {
+                  handlerDidError: async () =>
+                    new Response("", {
+                      status: 404,
+                      statusText: "Tile Not Found",
+                    }),
+                },
+              ],
+            },
+          },
+          // Instant raster basemap (tile.openstreetmap.org) — CacheFirst.
+          {
+            urlPattern: ({ url }) => url.hostname === "tile.openstreetmap.org",
+            handler: "CacheFirst",
+            options: {
+              cacheName: "basemap-tiles",
+              expiration: {
+                maxEntries: 400,
+                maxAgeSeconds: 60 * 60 * 24 * 30 // 30d
+              },
+              cacheableResponse: { statuses: [0, 200] },
+            },
+          },
+          // Satellite & topography basemaps (server.arcgisonline.com) — imagery
+          // changes rarely, so CacheFirst keeps satellite/topo modes instant.
+          {
+            urlPattern: ({ url }) => url.hostname === "server.arcgisonline.com",
+            handler: "CacheFirst",
+            options: {
+              cacheName: "satellite-tiles",
+              expiration: {
+                maxEntries: 300,
+                maxAgeSeconds: 60 * 60 * 24 * 30 // 30d
+              },
+              cacheableResponse: { statuses: [0, 200] },
+            },
           }
         ]
       }

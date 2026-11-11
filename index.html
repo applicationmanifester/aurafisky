@@ -20,8 +20,10 @@
   <meta name="apple-mobile-web-app-capable" content="yes" />
 
   <!-- Critical viewport-height script (runs before paint). External file
-       (not inline) so the CSP below doesn't need 'unsafe-inline' for scripts. -->
-  <script src="/viewport-height.js"></script>
+       (not inline) so the CSP below doesn't need 'unsafe-inline' for scripts.
+       `defer` keeps it from blocking HTML parsing, so the map container and
+       everything else below it can parse/download in parallel. -->
+  <script src="/viewport-height.js" defer></script>
 
   <title>Weather Maps, Radar &amp; Route Forecasts | Aurafisky</title>
   <meta name="description"
@@ -54,10 +56,25 @@
 
   <!-- Critical CSS preload -->
   <link rel="preload" as="style" href="styles.css" />
+  <!-- Vector basemap style JSON: fetched by app.js after the module graph
+       boots; preloading it here starts the request with the HTML parser so
+       the OpenFreeMap vector tiles upgrade the instant basemap sooner.
+       `fetchpriority="high"` tells the browser to fetch it before other
+       same-priority resources. -->
+  <link rel="preload" as="fetch" href="https://tiles.openfreemap.org/styles/liberty" crossorigin fetchpriority="high" />
+
+  <!-- NOTE: the Inter variable font is bundled locally from
+       @fontsource-variable/inter (imported in app.js) and emitted into
+       /assets/fonts by Vite. A CDN <link rel=preload> for it used to live
+       here and 404'd (wrong @fontsource-variable version in the URL), so it
+       was removed — the locally-bundled woff2 needs no preload hint. -->
 
   <!-- DNS prefetch & Preconnect for Map Tile & Weather APIs -->
   <link rel="dns-prefetch" href="https://tiles.openfreemap.org" />
   <link rel="preconnect" href="https://tiles.openfreemap.org" />
+  <!-- Instant raster basemap (paints before the vector style finishes loading). -->
+  <link rel="dns-prefetch" href="https://tile.openstreetmap.org" />
+  <link rel="preconnect" href="https://tile.openstreetmap.org" crossorigin />
   <!-- ol-mapbox-style loads the vector basemap's label font (Noto Sans)
        from here when the style doesn't ship its own webfont metadata. -->
   <link rel="dns-prefetch" href="https://cdn.jsdelivr.net" />
@@ -72,12 +89,10 @@
   <!-- Tailwind CSS (processed by Vite/PostCSS) -->
   <link rel="stylesheet" href="css/tailwind-input.css" />
   <link rel="stylesheet" href="styles.css" />
-  <!-- Device-adaptive layer: phones, tablets, foldables, laptops, TVs -->
-  <link rel="stylesheet" href="css/device-adaptive.css" />
-  <!-- Device-adaptive layer: phones, tablets, foldables, laptops, TVs -->
-  <!-- device-adaptive.css is dead code — its rules were either duplicated
-       in css/aura-polish.css (which loads last and wins) or never applied.
-       Removing the link shrinks the critical CSS path by ~7.8 KB. -->
+  <!-- device-adaptive.css was removed: its rules were either duplicated in
+       css/aura-polish.css (which loads last and wins) or never applied, so it
+       only shrank the critical CSS path by ~7.8 KB. Removing the link saves
+       that download on every device. -->
   <!-- Aesthetic + precision polish: tokens, fluid type, per-device tuning -->
   <link rel="stylesheet" href="css/aura-polish.css" />
   <meta name="color-scheme" content="light dark" />
@@ -134,8 +149,13 @@
           </button>
 
           <!-- Input field with "Search here" -->
-          <input id="searchInput" type="search" inputmode="search" placeholder="Search here" autocomplete="off"
-            aria-label="Search here" aria-autocomplete="list" aria-controls="searchResults" aria-expanded="false"
+          <!-- role="combobox" is what makes aria-expanded / aria-controls legal
+               on an input (they are prohibited on a plain text role), and it is
+               the correct ARIA 1.2 pattern for a search field with a listbox
+               popup. app.js toggles aria-expanded on this element directly. -->
+          <input id="searchInput" type="search" inputmode="search" role="combobox" placeholder="Search here"
+            autocomplete="off" aria-label="Search here" aria-autocomplete="list" aria-controls="searchResults"
+            aria-expanded="false"
             class="flex-1 min-w-0 bg-transparent border-none outline-none text-sm text-slate-800 dark:text-slate-100 placeholder-slate-500 dark:placeholder-slate-400 font-normal selection:bg-teal-500/30" />
 
           <!-- Clear button -->
@@ -267,7 +287,26 @@
   <!-- ============================================================ -->
   <main id="main-content" class="relative w-full h-full" role="main">
     <div class="relative w-full h-full">
-      <div id="map" tabindex="0" aria-label="Interactive weather map"></div>
+      <div id="map" tabindex="0" role="application" aria-label="Interactive weather map"></div>
+      <!-- Empty state — shown until a location is selected -->
+      <div id="emptyState"
+        class="absolute inset-0 z-[100] flex flex-col items-center justify-center bg-white/60 dark:bg-slate-900/60 backdrop-blur-sm pointer-events-none transition-opacity duration-300">
+        <div class="text-center max-w-sm px-4">
+          <div class="empty-icon text-4xl mb-3 opacity-50">🗺️</div>
+          <h3 class="text-lg font-semibold text-slate-900 dark:text-slate-100 mb-1">Explore any location</h3>
+          <p class="text-slate-600 dark:text-slate-400 text-sm mb-6 leading-relaxed">Tap or click anywhere on the map,
+            or search for a city to see live weather.</p>
+          <div class="flex gap-2 justify-center">
+            <button id="emptySearchBtn"
+              class="inline-flex items-center gap-2 px-4 py-2 bg-white dark:bg-slate-800 border border-slate-200/60 dark:border-slate-700/60 text-slate-700 dark:text-slate-200 text-sm font-medium rounded-xl shadow-sm hover:bg-slate-50 dark:hover:bg-slate-700/80 hover:shadow-md transition-all active:scale-95">
+              <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+              </svg>
+              Search a city
+            </button>
+          </div>
+        </div>
+      </div>
       <canvas id="weatherCanvas" class="absolute inset-0 z-[499] pointer-events-none w-full h-full"
         aria-hidden="true"></canvas>
       <div id="pullToRefreshIndicator"
@@ -1083,7 +1122,7 @@
                     filter="drop-shadow(0 0 4px rgba(245,158,11,0.6))" />
                 </svg>
               </div>
-              <div class="flex justify-between text-[8px] text-slate-400 dark:text-slate-500 font-semibold mt-1">
+              <div class="flex justify-between text-[9px] text-slate-400 dark:text-slate-500 font-semibold mt-1">
                 <span id="sunSunrise">--:--</span>
                 <div class="flex flex-col items-center">
                   <span id="sunDayLength" class="text-slate-500 dark:text-slate-400">--h --m</span>
@@ -1115,7 +1154,7 @@
                   <div id="moonPhasePercent" class="text-[9px] text-slate-400 mt-0.5">--% lit</div>
                 </div>
               </div>
-              <div class="text-[8px] text-slate-400 dark:text-slate-500 font-semibold text-center truncate"
+              <div class="text-[9px] text-slate-400 dark:text-slate-500 font-semibold text-center truncate"
                 id="moonPhaseDesc">--</div>
             </div>
 
@@ -1230,7 +1269,7 @@
                 <span>🌠</span> Meteor Shower
               </span>
               <span id="meteorStatusBadge"
-                class="text-[8px] font-bold px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-600 dark:text-amber-400">Upcoming</span>
+                class="text-[9px] font-bold px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-600 dark:text-amber-400">Upcoming</span>
             </div>
             <div id="meteorShowerTitle" class="text-xs font-bold text-slate-800 dark:text-slate-200">--</div>
             <div id="meteorShowerDetail" class="text-[9px] text-slate-500 dark:text-slate-400 mt-0.5">--</div>
@@ -1244,7 +1283,7 @@
                 <span>🌑</span> Next Eclipse
               </span>
               <span id="eclipseBadge"
-                class="text-[8px] font-bold px-1.5 py-0.5 rounded bg-purple-500/15 text-purple-600 dark:text-purple-400">Global</span>
+                class="text-[9px] font-bold px-1.5 py-0.5 rounded bg-purple-500/15 text-purple-600 dark:text-purple-400">Global</span>
             </div>
             <div id="eclipseTitle" class="text-xs font-bold text-slate-800 dark:text-slate-200">--</div>
             <div id="eclipseDetail" class="text-[9px] text-slate-500 dark:text-slate-400 mt-0.5">--</div>
@@ -1458,7 +1497,7 @@
             <h4 class="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Climate
               Time-Machine</h4>
             <span id="offlineTimeMachineBadge"
-              class="hidden text-[8px] font-bold px-1.5 py-0.5 rounded-md bg-amber-500/10 text-amber-500">Offline
+              class="hidden text-[9px] font-bold px-1.5 py-0.5 rounded-md bg-amber-500/10 text-amber-500">Offline
               Only</span>
           </div>
           <div class="bg-slate-100/60 dark:bg-slate-700/40 rounded-xl p-3.5">
@@ -2350,7 +2389,10 @@
     <button id="compassBtn"
       class="w-10 h-10 sm:w-11 sm:h-11 flex items-center justify-center rounded-xl glass bg-white/85 dark:bg-slate-800/85 hover:bg-white dark:hover:bg-slate-700 transition-all duration-300 border border-slate-200/70 dark:border-slate-700/60 shadow-lg active:scale-95 cursor-pointer leading-none select-none relative group overflow-hidden"
       title="Reset North orientation" aria-label="Reset North orientation">
-      <svg id="compassNeedle"
+      <!-- The NSEW rose is decorative: the accessible name comes from
+           aria-label above, so hide the glyphs from the a11y tree to avoid a
+           visible-text / accessible-name mismatch. -->
+      <svg id="compassNeedle" aria-hidden="true"
         class="w-7 h-7 sm:w-8 sm:h-8 transition-transform duration-100 ease-out drop-shadow-sm select-none pointer-events-none"
         style="transform-origin: center;" viewBox="0 0 32 32" fill="none">
         <!-- Compass Outer Ring Accent -->
@@ -2680,11 +2722,11 @@
             class="flex-1 h-1.5 rounded-lg appearance-none bg-slate-300 dark:bg-slate-700 accent-primary cursor-pointer"
             aria-label="Radar opacity" />
         </div>
-        <div id="legendPrecip" class="flex items-center gap-1.5 text-[8px] font-semibold text-slate-400">
+        <div id="legendPrecip" class="flex items-center gap-1.5 text-[9px] font-semibold text-slate-400">
           <span>Light</span>
           <div class="flex-1 h-2 rounded-sm legend-gradient-precip"></div><span>Heavy</span>
         </div>
-        <div id="legendTemp" class="hidden flex items-center gap-1.5 text-[8px] font-semibold text-slate-400">
+        <div id="legendTemp" class="hidden flex items-center gap-1.5 text-[9px] font-semibold text-slate-400">
           <span>Cold</span>
           <div class="flex-1 h-2 rounded-sm legend-gradient-temp"></div><span>Hot</span>
         </div>
@@ -2714,9 +2756,9 @@
           <span class="text-[10px] text-slate-400 font-mono hidden sm:inline mr-1" id="mapLayersShortcutHint">Press
             L</span>
           <button id="closeMapLayersBtn" type="button"
-            class="w-6 h-6 flex items-center justify-center rounded-lg hover:bg-slate-200/60 dark:hover:bg-slate-700/60 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition-colors cursor-pointer"
+            class="w-10 h-10 flex items-center justify-center rounded-lg hover:bg-slate-200/60 dark:hover:bg-slate-700/60 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition-colors cursor-pointer touch-target"
             title="Close map modes" aria-label="Close map modes">
-            <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+            <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
               <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
             </svg>
           </button>
@@ -2770,7 +2812,7 @@
         </div>
         <div class="h-1.5 w-full rounded-sm"
           style="background: linear-gradient(90deg, #388e3c, #8bc34a, #fbc02d, #f57c00, #d32f2f, #795548);"></div>
-        <div class="flex justify-between text-[8px] font-medium text-slate-500 dark:text-slate-400">
+        <div class="flex justify-between text-[9px] font-medium text-slate-500 dark:text-slate-400">
           <span>🟢 0m (Coast)</span>
           <span>🟠 500m</span>
           <span>🔴 1000m+</span>
@@ -2798,7 +2840,7 @@
           <span class="text-[10px] font-semibold text-slate-700 dark:text-slate-300">Terrain Overlay</span>
         </div>
         <label class="relative inline-flex items-center cursor-pointer">
-          <input type="checkbox" id="terrainOverlayToggle" class="sr-only peer" />
+          <input type="checkbox" id="terrainOverlayToggle" class="sr-only peer" aria-label="Terrain overlay" />
           <div
             class="w-10 h-5 rounded-full bg-slate-300 peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-primary/30 peer dark:bg-slate-600 peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all dark:border-slate-600 peer-checked:bg-primary dark:peer-checked:bg-primary">
           </div>
@@ -2813,11 +2855,11 @@
           </div>
           <div>
             <span class="text-[10px] font-semibold text-slate-700 dark:text-slate-300 block">Temperature Grid</span>
-            <span class="text-[8px] text-slate-400 block">Live °C readings & color scale</span>
+            <span class="text-[9px] text-slate-400 block">Live °C readings & color scale</span>
           </div>
         </div>
         <label class="relative inline-flex items-center cursor-pointer">
-          <input type="checkbox" id="tempGridOverlayToggle" class="sr-only peer" />
+          <input type="checkbox" id="tempGridOverlayToggle" class="sr-only peer" aria-label="Temperature grid overlay" />
           <div
             class="w-10 h-5 rounded-full bg-slate-300 peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-primary/30 peer dark:bg-slate-600 peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all dark:border-slate-600 peer-checked:bg-primary dark:peer-checked:bg-primary">
           </div>
@@ -2832,7 +2874,7 @@
           </div>
           <div>
             <span class="text-[10px] font-semibold text-slate-700 dark:text-slate-300 block">Map Key / Legend</span>
-            <span class="text-[8px] text-slate-400 block">On-map color indication</span>
+            <span class="text-[9px] text-slate-400 block">On-map color indication</span>
           </div>
         </div>
         <button id="toggleMapLegendCardBtn" type="button"
@@ -2850,11 +2892,11 @@
             </div>
             <div>
               <span class="text-[10px] font-semibold text-slate-700 dark:text-slate-300 block">Marine Swell</span>
-              <span id="marineHazardDetail" class="text-[8px] text-slate-400 block">Open-Meteo Marine</span>
+              <span id="marineHazardDetail" class="text-[9px] text-slate-400 block">Open-Meteo Marine</span>
             </div>
           </div>
           <span id="marineHazardBadge"
-            class="text-[8px] font-bold px-1.5 py-0.5 rounded-md bg-slate-200 dark:bg-slate-700 text-slate-500 dark:text-slate-400">Normal</span>
+            class="text-[9px] font-bold px-1.5 py-0.5 rounded-md bg-slate-200 dark:bg-slate-700 text-slate-500 dark:text-slate-400">Normal</span>
         </div>
 
         <div class="flex items-center justify-between">
@@ -2864,11 +2906,11 @@
             </div>
             <div>
               <span class="text-[10px] font-semibold text-slate-700 dark:text-slate-300 block">River Flood Basin</span>
-              <span id="floodHazardDetail" class="text-[8px] text-slate-400 block">GloFAS Discharge</span>
+              <span id="floodHazardDetail" class="text-[9px] text-slate-400 block">GloFAS Discharge</span>
             </div>
           </div>
           <span id="floodHazardBadge"
-            class="text-[8px] font-bold px-1.5 py-0.5 rounded-md bg-slate-200 dark:bg-slate-700 text-slate-500 dark:text-slate-400">Normal</span>
+            class="text-[9px] font-bold px-1.5 py-0.5 rounded-md bg-slate-200 dark:bg-slate-700 text-slate-500 dark:text-slate-400">Normal</span>
         </div>
       </div>
     </div>
@@ -4108,7 +4150,7 @@
   <!-- ============================================================ -->
   <!-- TOAST CONTAINER                                              -->
   <!-- ============================================================ -->
-  <div id="toastContainer"
+  <div id="toastContainer" role="status"
     class="fixed bottom-28 left-3 right-3 sm:left-auto sm:right-4 sm:bottom-24 z-[1003] flex flex-col-reverse gap-2 pointer-events-none"
     aria-live="polite" aria-atomic="true" aria-label="Notifications"></div>
 
@@ -4166,10 +4208,16 @@
   <!-- LOADING OVERLAY                                              -->
   <!-- ============================================================ -->
   <div id="loadingOverlay"
-    class="fixed inset-0 z-[2000] flex items-center justify-center bg-white/95 dark:bg-slate-950/95 backdrop-blur-sm pointer-events-auto transition-opacity duration-300">
+    class="fixed inset-0 z-[2000] flex items-center justify-center bg-white/90 dark:bg-slate-950/90 backdrop-blur-md pointer-events-auto transition-opacity duration-300">
     <div class="text-center">
-      <div class="w-16 h-16 border-4 border-primary/30 border-t-primary rounded-full animate-spin mx-auto mb-4"></div>
-      <p class="text-slate-600 dark:text-slate-400 font-medium">Loading Aurafisky...</p>
+      <div class="relative w-20 h-20 mx-auto mb-5">
+        <svg class="w-full h-full transform -rotate-90" viewBox="0 0 64 64">
+          <circle cx="32" cy="32" r="26" fill="none" stroke-width="4" stroke="#e2e8f0" class="dark:stroke-slate-800"/>
+          <circle cx="32" cy="32" r="26" fill="none" stroke-width="4" stroke="#14b8a6" stroke-dasharray="82 132" stroke-dashoffset="25" class="dark:stroke-teal-400 animate-[spin_1.5s_linear_infinite]"/>
+        </svg>
+      </div>
+      <p class="text-slate-600 dark:text-slate-400 font-medium tracking-wide text-xs uppercase letter-widest">Loading Aurafisky</p>
+      <p class="text-slate-400 dark:text-slate-500 text-[10px] mt-1 tracking-wider">Preparing your weather map…</p>
     </div>
   </div>
 

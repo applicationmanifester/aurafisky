@@ -639,5 +639,91 @@ describe("Internationalisation (i18n) Engine & Language Support", () => {
     const footer = translateText("Generated from your live forecast — regenerated once a day.", "zh-CN");
     expect(footer).toContain("根据实时预报生成");
   });
+
+  it("translates Settings default-location, Home dropdown, offline badge, and address-card labels across languages", () => {
+    const keys = [
+      "(local)",
+      "Not set",
+      "Select a place first",
+      "Area / Locality",
+      "Taluk / Tehsil",
+      "District",
+      "State / Province",
+      "Coordinates (Lat, Long)",
+      "Local Time & Timezone",
+      "Full Address",
+      "Hide Details",
+      "Resolving address...",
+      "Resolving address details...",
+      "Cached",
+    ];
+    for (const lang of ["kn", "hi", "gu", "zh-CN"]) {
+      for (const key of keys) {
+        const translated = translateText(key, lang);
+        expect(translated, `${lang}:${key}`).toBeTruthy();
+        expect(translated, `${lang}:${key}`).not.toBe(key);
+      }
+    }
+    expect(translateText("(local)", "en")).toBe("(local)");
+    expect(translateText("(local)", "fr")).toBeTruthy();
+    for (const key of ["Not set", "Select a place first", "Area / Locality", "State / Province", "Full Address", "Hide Details", "Resolving address..."]) {
+      const frVal = translateText(key, "fr");
+      expect(frVal, `fr:${key}`).toBeTruthy();
+      expect(frVal, `fr:${key}`).not.toBe(key);
+    }
+  });
+
+  it("allows translateAsync to translate non-ASCII strings back to English and joins segments", async () => {
+    const { translateAsync } = await import("../modules/i18n.js");
+    const origFetch = globalThis.fetch;
+    let called = false;
+    globalThis.fetch = async (url) => {
+      called = true;
+      expect(String(url)).toContain("tl=en");
+      return {
+        ok: true,
+        json: async () => [[
+          ["Yalduru, ", "ಯಲ್ಲೂರು, "],
+          ["Srinivaspur Taluk, Kolar, Karnataka, India", "ಶ್ರೀನಿವಾಸಪುರ ತಾಲೂಕು, ಕೋಲಾರ ಜಿಲ್ಲೆ, ಕರ್ನಾಟಕ, ಭಾರತ"],
+        ]],
+      };
+    };
+    try {
+      const result = await translateAsync(
+        "ಯಲ್ಲೂರು, ಶ್ರೀನಿವಾಸಪುರ ತಾಲೂಕು, ಕೋಲಾರ ಜಿಲ್ಲೆ, ಕರ್ನಾಟಕ, ಭಾರತ",
+        "en",
+      );
+      expect(called).toBe(true);
+      expect(result).toBe("Yalduru, Srinivaspur Taluk, Kolar, Karnataka, India");
+    } finally {
+      globalThis.fetch = origFetch;
+    }
+  });
+
+  it("falls back to dict-chrome-ex endpoint when client=gtx returns HTTP 429", async () => {
+    const { translateAsync } = await import("../modules/i18n.js");
+    const origFetch = globalThis.fetch;
+    const urls = [];
+    globalThis.fetch = async (url) => {
+      urls.push(String(url));
+      if (String(url).includes("client=gtx")) {
+        return { ok: false, status: 429 };
+      }
+      return {
+        ok: true,
+        status: 200,
+        json: async () => [[["यल्दुरु", "Yalduru"]]],
+      };
+    };
+    try {
+      const result = await translateAsync("Yalduru", "hi");
+      expect(urls.length).toBe(2);
+      expect(urls[0]).toContain("client=gtx");
+      expect(urls[1]).toContain("client=dict-chrome-ex");
+      expect(result).toBe("यल्दुरु");
+    } finally {
+      globalThis.fetch = origFetch;
+    }
+  });
 });
 

@@ -193,12 +193,12 @@ export async function updateMarineFloodUI(app, lat, lng) {
       marineBadge.textContent = transLabel;
       marineBadge.className =
         marineResult.tone === 'rose'
-          ? 'text-[8px] font-bold px-1.5 py-0.5 rounded-md bg-rose-500/15 text-rose-600 dark:text-rose-400'
+          ? 'text-[9px] font-bold px-1.5 py-0.5 rounded-md bg-rose-500/15 text-rose-600 dark:text-rose-400'
           : marineResult.tone === 'amber'
-            ? 'text-[8px] font-bold px-1.5 py-0.5 rounded-md bg-amber-500/15 text-amber-600 dark:text-amber-400'
+            ? 'text-[9px] font-bold px-1.5 py-0.5 rounded-md bg-amber-500/15 text-amber-600 dark:text-amber-400'
             : marineResult.tone === 'emerald'
-              ? 'text-[8px] font-bold px-1.5 py-0.5 rounded-md bg-emerald-500/15 text-emerald-600 dark:text-emerald-400'
-              : 'text-[8px] font-bold px-1.5 py-0.5 rounded-md bg-slate-200 dark:bg-slate-700 text-slate-500 dark:text-slate-400';
+              ? 'text-[9px] font-bold px-1.5 py-0.5 rounded-md bg-emerald-500/15 text-emerald-600 dark:text-emerald-400'
+              : 'text-[9px] font-bold px-1.5 py-0.5 rounded-md bg-slate-200 dark:bg-slate-700 text-slate-500 dark:text-slate-400';
     }
     if (marineDetail && marineResult.detail) {
       let md = marineResult.detail;
@@ -233,12 +233,12 @@ export async function updateMarineFloodUI(app, lat, lng) {
       floodBadge.textContent = transFloodLabel;
       floodBadge.className =
         floodResult.tone === 'rose'
-          ? 'text-[8px] font-bold px-1.5 py-0.5 rounded-md bg-rose-500/15 text-rose-600 dark:text-rose-400'
+          ? 'text-[9px] font-bold px-1.5 py-0.5 rounded-md bg-rose-500/15 text-rose-600 dark:text-rose-400'
           : floodResult.tone === 'amber'
-            ? 'text-[8px] font-bold px-1.5 py-0.5 rounded-md bg-amber-500/15 text-amber-600 dark:text-amber-400'
+            ? 'text-[9px] font-bold px-1.5 py-0.5 rounded-md bg-amber-500/15 text-amber-600 dark:text-amber-400'
             : floodResult.tone === 'emerald'
-              ? 'text-[8px] font-bold px-1.5 py-0.5 rounded-md bg-emerald-500/15 text-emerald-600 dark:text-emerald-400'
-              : 'text-[8px] font-bold px-1.5 py-0.5 rounded-md bg-slate-200 dark:bg-slate-700 text-slate-500 dark:text-slate-400';
+              ? 'text-[9px] font-bold px-1.5 py-0.5 rounded-md bg-emerald-500/15 text-emerald-600 dark:text-emerald-400'
+              : 'text-[9px] font-bold px-1.5 py-0.5 rounded-md bg-slate-200 dark:bg-slate-700 text-slate-500 dark:text-slate-400';
     }
     if (floodDetail && floodResult.detail) {
       let fd = floodResult.detail;

@@ -965,21 +965,12 @@ class AurafiskyApp {
       document.documentElement.removeAttribute("data-theme");
     }
 
-    // Show empty state on initial load — hidden once a location is selected.
-    // If the page was opened with a location in URL (?lat=... or #lat=...), keep empty state
-    // hidden from frame 0 so the user never sees an "Explore" overlay covering their location.
+    // Keep empty state overlay permanently hidden so the map view is never blocked by an obstacle
     const emptyEl = document.getElementById("emptyState");
-    const hasInitialUrlLoc = Boolean(this._parseUrlMapParams().get("lat"));
     if (emptyEl) {
-      if (hasInitialUrlLoc) {
-        emptyEl.style.display = "none";
-        emptyEl.style.opacity = "0";
-        emptyEl.style.pointerEvents = "none";
-      } else {
-        emptyEl.style.display = "flex";
-        emptyEl.style.opacity = "1";
-        emptyEl.style.pointerEvents = "auto";
-      }
+      emptyEl.style.display = "none";
+      emptyEl.style.opacity = "0";
+      emptyEl.style.pointerEvents = "none";
     }
 
     // Attach feature-module methods (radar, bookmarks, audio, canvas effects, etc.)

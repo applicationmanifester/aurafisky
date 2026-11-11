@@ -391,9 +391,9 @@
   <main id="main-content" tabindex="-1" class="relative w-full h-full focus:outline-none" role="main">
     <div class="relative w-full h-full">
       <div id="map" tabindex="0" role="application" aria-label="Interactive weather map"></div>
-      <!-- Empty state — shown until a location is selected -->
+      <!-- Empty state — hidden so map view is completely unobstructed -->
       <div id="emptyState"
-        class="absolute inset-0 z-[100] flex flex-col items-center justify-center bg-white/60 dark:bg-slate-900/60 backdrop-blur-sm pointer-events-none transition-opacity duration-300">
+        class="hidden absolute inset-0 z-[100] flex-col items-center justify-center bg-white/60 dark:bg-slate-900/60 backdrop-blur-sm pointer-events-none transition-opacity duration-300">
         <div class="text-center max-w-sm px-4">
           <div class="empty-icon text-4xl mb-3 opacity-50">🗺️</div>
           <h3 class="text-lg font-semibold text-slate-900 dark:text-slate-100 mb-1">Explore any location</h3>

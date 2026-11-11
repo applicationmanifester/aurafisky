@@ -1,6 +1,6 @@
 {
   "name": "aurafisky-mcp-server",
-  "version": "20.2.1",
+  "version": "20.3.0",
   "description": "MCP Server for Aurafisky — weather, forecast, air quality, astronomy, location search",
   "type": "module",
   "main": "index.mjs",

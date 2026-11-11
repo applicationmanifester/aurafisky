@@ -1413,8 +1413,10 @@ class AurafiskyApp {
       this.MAP_MODES = MAP_MODES;
 
       // Map style preference: 'street' | 'satellite' | 'hybrid' | 'terrain' | ... | 'dark'
-      const savedMapStyle = localStorage.getItem("aurafisky_map_style");
-      const urlLayer = this._parseUrlMapParams().get("layer");
+      let savedMapStyle = localStorage.getItem("aurafisky_map_style");
+      if (savedMapStyle === "satellite") savedMapStyle = "hybrid";
+      let urlLayer = this._parseUrlMapParams().get("layer");
+      if (urlLayer === "satellite") urlLayer = "hybrid";
       const validInitStyles = MAP_MODE_IDS;
       this.mapStyle = (urlLayer && validInitStyles.includes(urlLayer))
         ? urlLayer
@@ -1658,8 +1660,20 @@ class AurafiskyApp {
       });
       // Highways, railways and airports — the roads the route-weather
       // feature is actually about.
+      // Highways, railways and airports — the roads the route-weather
+      // feature is actually about. Underlaid with light gray canvas base
+      // so the transparent overlay doesn't leak map canvas background color.
       const createTransportBasemap = () => new LayerGroup({
         layers: [
+          new TileLayer({
+            source: new XYZ({
+              url: "https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Light_Gray_Base/MapServer/tile/{z}/{y}/{x}",
+              maxZoom: 16,
+              crossOrigin: "anonymous",
+              attributions: "Tiles &copy; Esri &mdash; Esri, HERE, Garmin, (c) OpenStreetMap contributors, and the GIS user community"
+            }),
+            preload: 1
+          }),
           new TileLayer({
             source: new XYZ({
               url: "https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Transportation/MapServer/tile/{z}/{y}/{x}",
@@ -1668,13 +1682,22 @@ class AurafiskyApp {
               attributions: "Tiles &copy; Esri &mdash; Esri, HERE, Garmin, (c) OpenStreetMap contributors"
             }),
             preload: 1
+          }),
+          new TileLayer({
+            source: new XYZ({
+              url: "https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Light_Gray_Reference/MapServer/tile/{z}/{y}/{x}",
+              maxZoom: 16,
+              crossOrigin: "anonymous"
+            }),
+            opacity: 0.95,
+            preload: 1
           })
         ]
       });
 
       // Lazy getters for basemaps — created on first access
       this._basemapFactories = {
-        satellite: createSatelliteBasemap,
+        satellite: createHybridBasemap,
         hybrid: createHybridBasemap,
         terrain: createTerrainBasemap,
         hillshade: createHillshadeBasemap,
@@ -12820,6 +12843,7 @@ class AurafiskyApp {
   }
 
   setMapStyle(style) {
+    if (style === "satellite") style = "hybrid";
     if (!isMapMode(style)) style = 'street';
     this.mapStyle = style;
     try {

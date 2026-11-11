@@ -54,9 +54,8 @@ describe("the map mode registry", () => {
   test("the original nine modes are still there, in their original order", () => {
     // These nine predate the registry and every one of them has a shortcut
     // or a saved preference pointing at it.
-    expect(MAP_MODE_IDS.slice(0, 9)).toEqual([
+    expect(MAP_MODE_IDS.slice(0, 8)).toEqual([
       "street",
-      "satellite",
       "hybrid",
       "terrain",
       "hillshade",
@@ -74,7 +73,8 @@ describe("the map mode registry", () => {
   });
 
   test("isMapMode only accepts known modes", () => {
-    expect(isMapMode("satellite")).toBe(true);
+    expect(isMapMode("hybrid")).toBe(true);
+    expect(isMapMode("satellite")).toBe(false);
     expect(isMapMode("nonsense")).toBe(false);
     expect(isMapMode(undefined)).toBe(false);
     expect(isMapMode("toString")).toBe(false);
@@ -95,7 +95,7 @@ describe("the map mode registry", () => {
     expect(MAP_MODES_WITH_ELEVATION).toContain("hillshade");
     expect(MAP_MODES_WITH_ELEVATION).toContain("opentopo");
     expect(MAP_MODES_WITH_ELEVATION).toContain("hillshadedark");
-    expect(MAP_MODES_WITH_ELEVATION).not.toContain("satellite");
+    expect(MAP_MODES_WITH_ELEVATION).not.toContain("hybrid");
   });
 
   test("the modes that draw their own names are the ones that bundle a reference layer", () => {
@@ -104,11 +104,10 @@ describe("the map mode registry", () => {
     expect(MAP_MODES_WITH_REFERENCE_LABELS).toContain("hybrid");
     expect(MAP_MODES_WITH_REFERENCE_LABELS).toContain("gray");
     expect(MAP_MODES_WITH_REFERENCE_LABELS).toContain("darkgray");
-    // The imagery, topo and reference modes have no names of their own, so
+    expect(MAP_MODES_WITH_REFERENCE_LABELS).toContain("transport");
+    // The topo modes have no names of their own, so
     // the OSM place-name overlay is what puts them there.
-    expect(MAP_MODES_WITH_REFERENCE_LABELS).not.toContain("satellite");
     expect(MAP_MODES_WITH_REFERENCE_LABELS).not.toContain("terrain");
-    expect(MAP_MODES_WITH_REFERENCE_LABELS).not.toContain("transport");
   });
 
   test("the display helpers produce the labels the UI shows", () => {
@@ -116,7 +115,7 @@ describe("the map mode registry", () => {
     expect(mapModeName("dark")).toBe("Dark Mode");
     expect(mapModeSettingsName("hybrid")).toBe("Hybrid (Satellite + Labels)");
     expect(mapModeSettingsName("street")).toBe("Default");
-    expect(mapModeBadge("satellite")).toBe("🛰️ Satellite");
+    expect(mapModeBadge("hybrid")).toBe("🔀 Hybrid");
     expect(MAP_MODE_SHORT_NAMES.opentopo).toBe("OpenTopo");
     // Unknown modes must not throw — the UI falls back to the raw id.
     expect(mapModeName("nonsense")).toBe("");
@@ -125,10 +124,9 @@ describe("the map mode registry", () => {
 });
 
 describe("the numbered map-mode shortcuts", () => {
-  test("1-9 keep pointing at the modes they always pointed at", () => {
-    expect(NUMBERED_MAP_MODE_IDS.slice(0, 9)).toEqual([
+  test("1-8 keep pointing at the modes they always pointed at", () => {
+    expect(NUMBERED_MAP_MODE_IDS.slice(0, 8)).toEqual([
       "street",
-      "satellite",
       "hybrid",
       "terrain",
       "hillshade",
@@ -141,7 +139,8 @@ describe("the numbered map-mode shortcuts", () => {
 
   test("0 selects the tenth mode", () => {
     expect(NUMBERED_MAP_MODE_IDS).toHaveLength(10);
-    expect(NUMBERED_MAP_MODE_IDS[9]).toBe("gray");
+    expect(NUMBERED_MAP_MODE_IDS[8]).toBe("gray");
+    expect(NUMBERED_MAP_MODE_IDS[9]).toBe("transport");
   });
 
   test("every pinned shortcut is a real mode", () => {

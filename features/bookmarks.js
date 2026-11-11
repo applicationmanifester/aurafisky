@@ -556,7 +556,7 @@ function startBookmarkAlertPolling() {
 export function exportWorkspaceData(app) {
   try {
     const backup = {
-      version: "20.2.1",
+      version: "20.3.0",
       app: "Aurafisky",
       exportedAt: new Date().toISOString(),
       bookmarks: app.bookmarks || [],

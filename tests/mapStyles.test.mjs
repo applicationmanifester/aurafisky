@@ -70,7 +70,7 @@ describe("Map Modes & Terrain Styles", () => {
     const html = fs.readFileSync("index.html", "utf-8");
     expect(html).toContain('id="mapModeSelectDropdown"');
     expect(html).toContain('value="street"');
-    expect(html).toContain('value="satellite"');
+    expect(html).toContain('value="hybrid"');
     expect(html).toContain('value="terrain"');
     expect(html).toContain('value="dark"');
   });

@@ -44,16 +44,6 @@ export const MAP_MODES = Object.freeze([
     elevation: false,
   },
   {
-    id: "satellite",
-    name: "Satellite (Aerial)",
-    short: "Satellite",
-    icon: "🛰️",
-    kind: "raster",
-    theme: "light",
-    hasReferenceLabels: false,
-    elevation: false,
-  },
-  {
     id: "hybrid",
     name: "Hybrid (Sat + Labels)",
     short: "Hybrid",
@@ -178,7 +168,7 @@ export const MAP_MODES = Object.freeze([
     icon: "🛣️",
     kind: "raster",
     theme: "light",
-    hasReferenceLabels: false,
+    hasReferenceLabels: true,
     elevation: false,
   },
 ]);
@@ -201,7 +191,6 @@ export const MAP_MODE_BY_ID = Object.freeze(
  */
 export const NUMBERED_MAP_MODE_IDS = Object.freeze([
   "street",
-  "satellite",
   "hybrid",
   "terrain",
   "hillshade",
@@ -210,6 +199,7 @@ export const NUMBERED_MAP_MODE_IDS = Object.freeze([
   "natgeo",
   "dark",
   "gray",
+  "transport",
 ]);
 
 /** Modes that draw their own place names, so the overlay would double up. */
@@ -235,9 +225,10 @@ export const MAP_MODES_WITH_DARK_THEME = Object.freeze(
 );
 
 /** Short names, for the badge and the loading indicator. */
-export const MAP_MODE_SHORT_NAMES = Object.freeze(
-  Object.fromEntries(MAP_MODES.map((mode) => [mode.id, mode.short])),
-);
+export const MAP_MODE_SHORT_NAMES = Object.freeze({
+  satellite: "Satellite",
+  ...Object.fromEntries(MAP_MODES.map((mode) => [mode.id, mode.short])),
+});
 
 /**
  * Is this a mode the app knows about?

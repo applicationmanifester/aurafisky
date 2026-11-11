@@ -54,7 +54,7 @@ export class AuraWorkflowEngine {
     return [
       'BEGIN:VCALENDAR',
       'VERSION:2.0',
-      'PRODID:-//Aura of Sky Live//Aurafisky v20.2.1//EN',
+      'PRODID:-//Aura of Sky Live//Aurafisky v20.3.0//EN',
       'CALSCALE:GREGORIAN',
       'METHOD:PUBLISH',
       'BEGIN:VEVENT',

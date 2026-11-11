@@ -73,9 +73,10 @@
   filter: contrast(1.08) brightness(1.04);
 }
 
-/* Keyless instant dark basemap tile filter (zero watermark fallback) */
-.ol-dark-tile canvas,
-.ol-dark-tile img {
+/* Keyless instant dark basemap tile filter (zero watermark fallback; beats ol.css `.ol-viewport canvas { all: unset }`) */
+#map .ol-dark-tile canvas,
+#map .ol-dark-tile img,
+.ol-viewport > .ol-layers > .ol-dark-tile canvas {
   filter: invert(100%) hue-rotate(180deg) brightness(85%) contrast(90%);
 }
 

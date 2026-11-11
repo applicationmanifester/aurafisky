@@ -25,7 +25,7 @@ import {
   shouldPrewarm,
   tileRangeToUrls,
 } from "./basemap-prewarm.js";
-import { awaitBasemapReady, waitForFirstTile } from "./basemap-ready.js";
+import { awaitBasemapReady, isStagedPendingLayer, waitForFirstTile } from "./basemap-ready.js";
 
 // The OpenFreeMap vector basemaps. Their tiles are PBF, an order of
 // magnitude larger than the raster tiles of the other modes, so prewarming
@@ -146,6 +146,7 @@ export function crossfadeBasemap(app, targetGroup, token) {
   // Fade out the old group and fade in the new one simultaneously.
   if (previous && typeof previous.getLayers === "function") {
     previous.getLayers().forEach((l) => {
+      if (isStagedPendingLayer(l)) return;
       if (typeof l.setOpacity === "function") {
         l.setOpacity(1);
         l.animate?.({ opacity: 0, duration: CROSSFADE_MS });
@@ -154,6 +155,7 @@ export function crossfadeBasemap(app, targetGroup, token) {
   }
   if (typeof targetGroup.getLayers === "function") {
     targetGroup.getLayers().forEach((l) => {
+      if (isStagedPendingLayer(l)) return;
       if (typeof l.setOpacity === "function") {
         l.animate?.({ opacity: app.mapOpacity ?? 1, duration: CROSSFADE_MS });
       }
@@ -170,6 +172,7 @@ export function crossfadeBasemap(app, targetGroup, token) {
       }
       if (typeof previous.getLayers === "function") {
         previous.getLayers().forEach((l) => {
+          if (isStagedPendingLayer(l)) return;
           if (typeof l.setOpacity === "function") l.setOpacity(1);
         });
       }

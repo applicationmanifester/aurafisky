@@ -253,10 +253,9 @@ export default defineConfig(({ mode }) => {
             // Vector basemap: style JSON / sprite / glyph docs — small in count,
             // want fresh copies so a style update on OpenFreeMap's end shows up.
             urlPattern: ({ url }) => url.hostname === 'tiles.openfreemap.org' && /\/(styles|sprites|fonts)\//.test(url.pathname),
-            handler: 'NetworkFirst',
+            handler: 'StaleWhileRevalidate',
             options: {
               cacheName: 'map-style',
-              networkTimeoutSeconds: 3,
               expiration: {
                 maxEntries: 30,
                 maxAgeSeconds: 60 * 60 * 24 // 1d
@@ -303,7 +302,7 @@ export default defineConfig(({ mode }) => {
           },
           // Instant raster basemap (tile.openstreetmap.org) — CacheFirst.
           {
-            urlPattern: ({ url }) => url.hostname === "tile.openstreetmap.org",
+            urlPattern: ({ url }) => /^(?:[abc]\.)?tile\.openstreetmap\.org$/.test(url.hostname),
             handler: "CacheFirst",
             options: {
               cacheName: "basemap-tiles",

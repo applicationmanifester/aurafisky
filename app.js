@@ -39,12 +39,17 @@ import { apply as applyMapboxStyle, applyStyle as applyMapboxLayerStyle, getLaye
 import { HtmlMarker } from "./modules/ol-marker.js";
 import { localizeGlStyle } from "./modules/map-language.js";
 import {
+  isStagedPendingLayer,
+  isVectorViewportReady,
+} from "./modules/basemap-ready.js";
+import {
   initBasemapSwitching,
   prewarmBasemaps,
   scheduleBasemapPrewarm,
   setMapModeLoading,
   switchBasemap,
 } from "./modules/basemap-switch.js";
+import { shareVectorTiles } from "./modules/basemap-vector-tiles.js";
 import {
   formatPlaceName,
   shortPlaceName,
@@ -1418,10 +1423,11 @@ class AurafiskyApp {
       localStorage.removeItem("aurafisky_map_layers_minimized");
       this.mapLayersMinimized = false;
 
-      // Resilient OSM raster fallback (starts hidden so it does not compete with
-      // OpenFreeMap vector tiles on boot; activated only if OpenFreeMap fails/stalls).
+      // Instant keyless OSM raster base tiles start visible (zIndex 0) so the map
+      // paints complete, sharp tiles in ~200-400ms on cold boot rather than showing
+      // a blank canvas if OpenFreeMap vector PBF tiles stall or take many seconds.
       const instantLightTile = new TileLayer({
-        visible: false,
+        visible: true,
         source: new XYZ({
           url: "https://tile.openstreetmap.org/{z}/{x}/{y}.png",
           maxZoom: 19,
@@ -1432,7 +1438,7 @@ class AurafiskyApp {
         zIndex: 0
       });
       const instantDarkTile = new TileLayer({
-        visible: false,
+        visible: true,
         className: "ol-dark-tile",
         source: new XYZ({
           url: "https://tile.openstreetmap.org/{z}/{x}/{y}.png",
@@ -1643,10 +1649,8 @@ class AurafiskyApp {
           console.warn("Basemap tile failed:", e.tile?.src);
         });
       };
-      if (this.mapStyle !== "street" && this.mapStyle !== "dark") {
-        for (const lyr of initialGroup.getLayers().getArray()) {
-          attachTileHooks(lyr);
-        }
+      for (const lyr of initialGroup.getLayers().getArray()) {
+        attachTileHooks(lyr);
       }
       // Watchdog: never leave the spinner or prewarm gate stuck if tiles stall.
       setTimeout(() => {
@@ -1656,13 +1660,41 @@ class AurafiskyApp {
       this.map.render();
 
       // Vector basemaps (OpenFreeMap OpenMapTiles schema) localized client-side.
-      // Loaded lazily for the active theme only; inactive theme loads on demand.
+      // Staged behind the instant OSM raster layer so the opaque GL background fill
+      // never blanks out the map before every visible vector PBF tile has painted.
       this._glStyleUrls = {
         light: "https://tiles.openfreemap.org/styles/liberty",
         dark: "https://tiles.openfreemap.org/styles/dark",
       };
       this._glStyles = {}; // cache of the raw (un-localized) fetched style JSON, by theme
+      this._glBasemapReady = {};
       this._basemapLoadPromises = {};
+
+      const promoteStagedGlLayers = (normTheme, stagedLayers, fallbackTile, group, onPromoted) => {
+        if (this._glBasemapReady[normTheme]) return;
+        this._glBasemapReady[normTheme] = true;
+        onPromoted?.();
+        const targetOpacity = (typeof this.mapOpacity === "number" && !isNaN(this.mapOpacity)) ? this.mapOpacity : 1;
+        stagedLayers.forEach((l) => {
+          l.set?.("aurafiskyStagedPending", false);
+          l.setVisible?.(true);
+          if (typeof l.animate === "function") {
+            l.setOpacity?.(0);
+            l.animate({ opacity: targetOpacity, duration: 220 });
+          } else {
+            l.setOpacity?.(targetOpacity);
+          }
+        });
+        if (fallbackTile) {
+          setTimeout(() => {
+            if (!this._glBasemapReady[normTheme]) return;
+            fallbackTile.setVisible(false);
+            group?.getLayers?.().remove(fallbackTile);
+            this._applyMapOpacity();
+          }, 240);
+        }
+        this.map?.render();
+      };
 
       this._ensureBasemapLoaded = (theme) => {
         const normTheme = theme === "dark" ? "dark" : "light";
@@ -1671,22 +1703,19 @@ class AurafiskyApp {
         const group = normTheme === "dark" ? this.darkBasemap : this.lightBasemap;
         const fallbackTile = this._instantFallbackTiles?.[normTheme];
 
-        const promise = (async () => {
-          let fallbackTimer = null;
-          const showFallbackIfActive = () => {
-            const expectedStyle = normTheme === "dark" ? "dark" : "street";
-            if (!fallbackTile || this._glStyles[normTheme] || this.mapStyle !== expectedStyle) return;
-            const grpLayers = group?.getLayers?.();
-            if (grpLayers && !grpLayers.getArray().includes(fallbackTile)) {
-              grpLayers.insertAt(0, fallbackTile);
-            }
-            fallbackTile.setVisible(true);
-            attachTileHooks(fallbackTile);
-            this.map?.render();
-          };
-          // Keep OSM raster disabled unless OpenFreeMap fails or stalls past 5s.
-          fallbackTimer = setTimeout(showFallbackIfActive, 5000);
+        const ensureFallbackVisible = () => {
+          const expectedStyle = normTheme === "dark" ? "dark" : "street";
+          if (!fallbackTile || this._glBasemapReady[normTheme] || this.mapStyle !== expectedStyle) return;
+          const grpLayers = group?.getLayers?.();
+          if (grpLayers && !grpLayers.getArray().includes(fallbackTile)) {
+            grpLayers.insertAt(0, fallbackTile);
+          }
+          fallbackTile.setVisible(true);
+          attachTileHooks(fallbackTile);
+          this.map?.render();
+        };
 
+        const promise = (async () => {
           let lastErr;
           for (let attempt = 0; attempt < 4; attempt++) {
             try {
@@ -1698,20 +1727,76 @@ class AurafiskyApp {
               const rawStyle = await res.json();
               this._enhanceBasemapVibrance(rawStyle, normTheme);
               this._glStyles[normTheme] = rawStyle;
-              await applyMapboxStyle(group, localizeGlStyle(rawStyle, this.mapLanguage));
-              if (fallbackTimer) {
-                clearTimeout(fallbackTimer);
-                fallbackTimer = null;
-              }
-              if (fallbackTile) {
-                fallbackTile.setVisible(false);
-                group?.getLayers?.().remove(fallbackTile);
-              }
-              // Keep vector tile preload at 0 so OpenLayers does not double PBF requests
-              // on initial viewport load with zoom-1 tiles.
-              for (const lyr of group.getLayers().getArray()) {
-                attachTileHooks(lyr);
-              }
+
+              // Render GL layers in a temporary group first so applyMapboxStyle's
+              // opaque background fill cannot blank out the instant OSM raster
+              // before we mark staged layers hidden (opacity: 0).
+              const stagingGroup = new LayerGroup();
+              await applyMapboxStyle(stagingGroup, localizeGlStyle(rawStyle, this.mapLanguage));
+              // Every layer of the vector basemap draws from one source, but
+              // OpenLayers gives each layer its own renderer — and each
+              // renderer creates its own tile objects. One viewport therefore
+              // queued a dozen copies of every tile it needed, and the queue
+              // only starts a fixed number of loads at a time. Sharing the
+              // tiles keeps the queue to one entry per tile the viewport
+              // actually needs, which is what lets the full-detail map
+              // arrive at once instead of trickling in.
+              stagingGroup.getLayers().getArray().forEach((l) => {
+                const src = l?.getSource?.();
+                if (src) shareVectorTiles(src);
+              });
+              const mbStyle = stagingGroup.get("mapbox-style");
+              const mbMeta = stagingGroup.get("mapbox-metadata");
+              if (mbStyle) group.set("mapbox-style", mbStyle);
+              if (mbMeta) group.set("mapbox-metadata", mbMeta);
+
+              const stagedLayers = stagingGroup.getLayers().getArray().slice();
+              stagedLayers.forEach((l, i) => {
+                l.set?.("aurafiskyStagedPending", true);
+                l.setOpacity?.(0);
+                l.setVisible?.(true);
+                l.setZIndex?.(1 + i);
+                if (typeof l.render === "function" && typeof l.getSource?.()?.getTileGrid !== "function") {
+                  const origRender = l.render.bind(l);
+                  l.render = (frameState) => {
+                    const el = origRender(frameState);
+                    if (el?.style && el.classList?.contains?.("ol-mapbox-style-background")) {
+                      el.style.opacity = String(l.get?.("aurafiskyStagedPending") ? 0 : (l.getOpacity?.() ?? 1));
+                      el.style.pointerEvents = "none";
+                    }
+                    return el;
+                  };
+                }
+                group.getLayers().push(l);
+                attachTileHooks(l);
+              });
+
+              const vtLayers = getMapboxLayers(group, "openmaptiles");
+              const loadedTileKeys = new Set();
+              const trackedSources = new WeakSet();
+              const onMoveEnd = () => maybePromote();
+              const maybePromote = () => {
+                if (this._glBasemapReady[normTheme]) return;
+                if (isVectorViewportReady(this.map, vtLayers, loadedTileKeys)) {
+                  promoteStagedGlLayers(normTheme, stagedLayers, fallbackTile, group, () => {
+                    this.map?.un?.("moveend", onMoveEnd);
+                  });
+                }
+              };
+
+              vtLayers.forEach((vtLayer) => {
+                const src = vtLayer?.getSource?.();
+                if (!src || trackedSources.has(src)) return;
+                trackedSources.add(src);
+                src.on("tileloadend", (evt) => {
+                  const tc = evt?.tile?.tileCoord;
+                  if (tc && tc.length >= 3) {
+                    loadedTileKeys.add(`${tc[0]}/${tc[1]}/${tc[2]}`);
+                  }
+                  maybePromote();
+                });
+              });
+              this.map?.on?.("moveend", onMoveEnd);
               this.map?.render();
               return;
             } catch (err) {
@@ -1719,8 +1804,7 @@ class AurafiskyApp {
               console.warn(`Basemap load attempt ${attempt + 1} failed (${normTheme}):`, err.message);
             }
           }
-          if (fallbackTimer) clearTimeout(fallbackTimer);
-          showFallbackIfActive();
+          ensureFallbackVisible();
           console.error(`Basemap load failed (${normTheme}) after 4 attempts:`, lastErr);
           delete this._basemapLoadPromises[normTheme];
         })();
@@ -1731,9 +1815,19 @@ class AurafiskyApp {
 
       if (this.mapStyle === "street" || this.mapStyle === "dark") {
         const activeTheme = this.mapStyle === "dark" ? "dark" : "light";
-        this._ensureBasemapLoaded(activeTheme).then(() => {
-          this._updateMapStyleUI();
-        });
+        let _glBootStarted = false;
+        const startGlUpgrade = () => {
+          if (_glBootStarted) return;
+          _glBootStarted = true;
+          this._ensureBasemapLoaded(activeTheme).then(() => {
+            this._updateMapStyleUI();
+          });
+        };
+        // Give instant OSM raster tiles & weather requests uncontested network/CPU
+        // priority for the first paint, then stream OpenFreeMap vector tiles in background.
+        const initialSrc = initialGroup.getLayers().getArray()[0]?.getSource?.();
+        initialSrc?.once?.("tileloadend", () => setTimeout(startGlUpgrade, 150));
+        setTimeout(startGlUpgrade, 450);
       } else {
         this._updateMapStyleUI();
       }
@@ -12596,16 +12690,14 @@ class AurafiskyApp {
     if (targetStyle === 'dark' || targetStyle === 'street') {
       const targetTheme = targetStyle === 'dark' ? 'dark' : 'light';
       if (!this._glStyles?.[targetTheme] && this._ensureBasemapLoaded) {
-        // Hold the active basemap until the deferred vector style attaches its
-        // VectorTileLayer so switchBasemap crossfades cleanly on real tiles.
+        // Switch immediately onto the instant OSM raster layer (~200ms) while
+        // streaming the vector GL style in the background for seamless upgrade.
         setMapModeLoading(this, true);
         this._ensureBasemapLoaded(targetTheme).then(() => {
           if (this.mapStyle === targetStyle) {
-            this._updateActiveBasemap();
             this._updateMapStyleUI();
           }
         });
-        return;
       }
     }
     this._updateActiveBasemap();
@@ -12797,6 +12889,7 @@ class AurafiskyApp {
         if (this._pendingBasemapGroup && layer === this._pendingBasemapGroup) return;
         const scale = layer === this.terrainOverlayLayer ? 0.4 : 1;
         layer.getLayers().forEach((l) => {
+          if (isStagedPendingLayer(l)) return;
           if (typeof l.setOpacity === "function") {
             l.setOpacity(scale * opacity);
           }

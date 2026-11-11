@@ -43,6 +43,69 @@
  * @param {{settleGraceMs?: number, timeoutMs?: number, pollMs?: number}} [opts]
  * @returns {Promise<{loaded: boolean}>}
  */
+export function isStagedPendingLayer(layer) {
+  return Boolean(layer && typeof layer.get === "function" && layer.get("aurafiskyStagedPending"));
+}
+
+/**
+ * Verify that all in-bounds tiles covering the current map viewport have
+ * actually finished loading into `loadedTileKeys` for the given vector layers.
+ * Prevents promoting a half-loaded OpenFreeMap layer (whose opaque Mapbox
+ * background fill would cover the instant OSM raster fallback while other PBF
+ * tiles are still stalled).
+ *
+ * @param {any} map OpenLayers Map instance
+ * @param {any[]} layers vector layers covering the viewport
+ * @param {Set<string>} loadedTileKeys loaded `${z}/${x}/${y}` tile keys
+ * @returns {boolean}
+ */
+export function isVectorViewportReady(map, layers, loadedTileKeys) {
+  if (!map || !Array.isArray(layers) || !layers.length) return false;
+  if (!loadedTileKeys || typeof loadedTileKeys.has !== "function" || loadedTileKeys.size === 0) {
+    return false;
+  }
+  const view = typeof map.getView === "function" ? map.getView() : null;
+  const size = typeof map.getSize === "function" ? map.getSize() : null;
+  const res = typeof view?.getResolution === "function" ? view.getResolution() : null;
+  if (!view || !Array.isArray(size) || !(size[0] > 0) || !(size[1] > 0) || !Number.isFinite(res) || res <= 0) {
+    return false;
+  }
+  const extent = typeof view.calculateExtent === "function" ? view.calculateExtent(size) : null;
+  if (!extent) return false;
+
+  let layersChecked = 0;
+  for (const layer of layers) {
+    const src = typeof layer?.getSource === "function" ? layer.getSource() : null;
+    const grid =
+      (typeof src?.getTileGridForResolution === "function" && src.getTileGridForResolution(res)) ||
+      (typeof src?.getTileGrid === "function" && src.getTileGrid());
+    if (!grid || typeof grid.getZForResolution !== "function" || typeof grid.getTileRangeForExtentAndZ !== "function") {
+      continue;
+    }
+    const z = grid.getZForResolution(res);
+    const range = grid.getTileRangeForExtentAndZ(extent, z);
+    if (!range) return false;
+    const fullRange = typeof grid.getFullTileRange === "function" ? grid.getFullTileRange(z) : null;
+    const wrapSpanX =
+      fullRange && fullRange.maxX >= fullRange.minX ? fullRange.maxX - fullRange.minX + 1 : 0;
+
+    layersChecked += 1;
+    let checked = 0;
+    for (let x = range.minX; x <= range.maxX; x += 1) {
+      const normX = wrapSpanX > 0 ? fullRange.minX + ((((x - fullRange.minX) % wrapSpanX) + wrapSpanX) % wrapSpanX) : x;
+      for (let y = range.minY; y <= range.maxY; y += 1) {
+        if (fullRange && (y < fullRange.minY || y > fullRange.maxY)) continue;
+        checked += 1;
+        if (!loadedTileKeys.has(`${z}/${x}/${y}`) && !loadedTileKeys.has(`${z}/${normX}/${y}`)) {
+          return false;
+        }
+      }
+    }
+    if (checked === 0) return false;
+  }
+  return layersChecked > 0;
+}
+
 export function awaitBasemapReady(
   group,
   { settleGraceMs = 350, timeoutMs = 6000, pollMs = 60 } = {},
@@ -52,6 +115,7 @@ export function awaitBasemapReady(
     const sources = [];
     try {
       group.getLayers().forEach((layer) => {
+        if (isStagedPendingLayer(layer)) return;
         layers.push(layer);
         const src = typeof layer.getSource === "function" ? layer.getSource() : null;
         // Several layers of a vector basemap share one source — only wait
@@ -161,6 +225,7 @@ export function waitForFirstTile(group, { timeoutMs = 30000 } = {}) {
     const sources = [];
     try {
       group.getLayers().forEach((layer) => {
+        if (isStagedPendingLayer(layer)) return;
         const src = typeof layer.getSource === "function" ? layer.getSource() : null;
         if (src && typeof src.on === "function" && !sources.includes(src)) {
           sources.push(src);

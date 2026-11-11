@@ -1,7 +1,12 @@
 // Runs under Vitest
 import { test, describe, expect, vi, beforeEach, afterEach } from "vitest";
 
-import { awaitBasemapReady, waitForFirstTile } from "../modules/basemap-ready.js";
+import {
+  awaitBasemapReady,
+  isStagedPendingLayer,
+  isVectorViewportReady,
+  waitForFirstTile,
+} from "../modules/basemap-ready.js";
 
 /**
  * A fake OpenLayers tile source: records listeners and lets a test fire the
@@ -306,5 +311,58 @@ describe("waitForFirstTile", () => {
   test("resolves false for a group with no sources", async () => {
     const waiting = waitForFirstTile(fakeGroup([]));
     await expect(waiting).resolves.toBe(false);
+  });
+
+  test("ignores staged-pending GL vector layers so instant raster settles immediately", async () => {
+    const stagedSrc = fakeSource("stalled-pbf");
+    const osmSrc = fakeSource("fast-osm");
+    const stagedLayer = {
+      ...fakeLayer(stagedSrc),
+      get: (k) => (k === "aurafiskyStagedPending" ? true : undefined),
+    };
+    const osmLayer = fakeLayer(osmSrc);
+
+    let settled = false;
+    const ready = awaitBasemapReady(fakeGroup([osmLayer, stagedLayer])).then((r) => {
+      settled = true;
+      return r;
+    });
+
+    osmSrc.fire("tileloadend");
+    await vi.advanceTimersByTimeAsync(0);
+    expect(settled).toBe(true);
+    await expect(ready).resolves.toEqual({ loaded: true });
+    expect(stagedSrc.listenerCount("tileloadend")).toBe(0);
+  });
+});
+
+describe("isVectorViewportReady", () => {
+  function fakeMapAndLayer({ minX = 182, maxX = 185, minY = 117, maxY = 119, z = 8 } = {}) {
+    const grid = {
+      getZForResolution: () => z,
+      getTileRangeForExtentAndZ: () => ({ minX, maxX, minY, maxY }),
+      getFullTileRange: (lvl) => ({ minX: 0, maxX: (1 << lvl) - 1, minY: 0, maxY: (1 << lvl) - 1 }),
+    };
+    const layer = { getSource: () => ({ getTileGridForResolution: () => grid }) };
+    const map = {
+      getView: () => ({ getResolution: () => 300, calculateExtent: () => [0, 0, 100, 100] }),
+      getSize: () => [1440, 900],
+    };
+    return { map, layer };
+  }
+
+  test("returns false when no tiles or only partial viewport tiles are loaded", () => {
+    const { map, layer } = fakeMapAndLayer({ minX: 182, maxX: 183, minY: 117, maxY: 118, z: 8 });
+    expect(isStagedPendingLayer({ get: (k) => k === "aurafiskyStagedPending" })).toBe(true);
+    expect(isVectorViewportReady(map, [layer], new Set())).toBe(false);
+    // 1 of 4 viewport tiles (partial corner) must NOT promote and cover OSM with blank cream.
+    expect(isVectorViewportReady(map, [layer], new Set(["8/183/118"]))).toBe(false);
+  });
+
+  test("returns true only when every viewport tile has loaded (including wrapped longitudes)", () => {
+    const { map, layer } = fakeMapAndLayer({ minX: -1, maxX: 0, minY: 1, maxY: 1, z: 2 });
+    // z=2 world width is 4 tiles: x=-1 wraps to x=3.
+    const keys = new Set(["2/3/1", "2/0/1"]);
+    expect(isVectorViewportReady(map, [layer], keys)).toBe(true);
   });
 });

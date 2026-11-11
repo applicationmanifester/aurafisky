@@ -223,18 +223,25 @@ describe("Map startup loading optimizations", () => {
     expect(init).toContain("zoom: initialView.zoom");
   });
 
-  test("instant OSM fallback tiles start hidden and never preload vector zoom-1 tiles at boot", () => {
+  test("instant OSM raster tiles start visible and never preload vector zoom-1 tiles at boot", () => {
     const init = methodBody(appJs, "initMap");
-    expect(init).toContain("visible: false");
+    expect(init).toContain("visible: true");
+    expect(init).toContain("aurafiskyStagedPending");
+    expect(init).toContain("isVectorViewportReady");
     expect(init).not.toContain("vtLayer.setPreload(1)");
     expect(init).not.toContain("Object.values(this._basemapFactories).forEach");
     expect(init).not.toContain("loadBasemap(inactiveTheme");
   });
 
-  test("deferred theme switching waits for GL vector layers before crossfading", () => {
+  test("theme switching activates instant raster immediately while staging GL vector layers", () => {
     const activate = methodBody(appJs, "_activateStyleGroup");
     expect(activate).toContain("setMapModeLoading(this, true)");
     expect(activate).toContain("this._ensureBasemapLoaded(targetTheme)");
     expect(activate).toContain("this._updateActiveBasemap()");
+  });
+
+  test("OpenFreeMap preconnect matches CORS mode and SW serves styles via StaleWhileRevalidate", () => {
+    expect(indexHtml).toContain('<link rel="preconnect" href="https://tiles.openfreemap.org" crossorigin />');
+    expect(viteConfig).toContain("handler: 'StaleWhileRevalidate'");
   });
 });

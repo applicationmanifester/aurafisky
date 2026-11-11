@@ -567,7 +567,11 @@ export class AuraMobileController {
       panel.style.transition = '';
       panel.style.opacity = '';
       panel.style.pointerEvents = '';
-      panel.classList.add('open');
+      // Only open weather panel on desktop if a location is selected or requested from URL
+      const hasInitialLoc = this.app?.selectedLat != null || this.app?.selectedName || Boolean(this.app?._parseUrlMapParams?.().get("lat"));
+      if (hasInitialLoc) {
+        panel.classList.add('open');
+      }
       panel.removeAttribute('inert');
     }
 

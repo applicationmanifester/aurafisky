@@ -965,12 +965,21 @@ class AurafiskyApp {
       document.documentElement.removeAttribute("data-theme");
     }
 
-    // Show empty state on initial load — hidden once a location is selected
+    // Show empty state on initial load — hidden once a location is selected.
+    // If the page was opened with a location in URL (?lat=... or #lat=...), keep empty state
+    // hidden from frame 0 so the user never sees an "Explore" overlay covering their location.
     const emptyEl = document.getElementById("emptyState");
+    const hasInitialUrlLoc = Boolean(this._parseUrlMapParams().get("lat"));
     if (emptyEl) {
-      emptyEl.style.display = "flex";
-      emptyEl.style.opacity = "1";
-      emptyEl.style.pointerEvents = "auto";
+      if (hasInitialUrlLoc) {
+        emptyEl.style.display = "none";
+        emptyEl.style.opacity = "0";
+        emptyEl.style.pointerEvents = "none";
+      } else {
+        emptyEl.style.display = "flex";
+        emptyEl.style.opacity = "1";
+        emptyEl.style.pointerEvents = "auto";
+      }
     }
 
     // Attach feature-module methods (radar, bookmarks, audio, canvas effects, etc.)
@@ -4157,13 +4166,16 @@ class AurafiskyApp {
 
   async _loadInitialStartupLocation() {
     this._sweepStaleCache();
-    this.setLoadingProgress(70, "Finding your location");
-    await this._loadLocalCache();
 
     // 1. Priority 1: Check if page was opened via a shared link URL (?lat=...&lng=...&name=...)
+    // Run this synchronously BEFORE awaiting local cache/IndexedDB so deep-link clicks open immediately!
     if (this._checkUrlParamsOnStartup() || this._hasPendingShareTarget) {
+      this._loadLocalCache().catch(() => {});
       return;
     }
+
+    this.setLoadingProgress(70, "Finding your location");
+    await this._loadLocalCache();
 
     // Resolves an immediate regional city from user's timezone if no prior session exists
     const getStartupDefaultLocation = () => this._getTimezoneDefaultLocation();
@@ -4269,9 +4281,14 @@ class AurafiskyApp {
         "termsAccepted",
         "timeline24h",
       ];
-      const results = await Promise.all(
-        keys.map((k) => localforage.getItem(k)),
+      // Timeout guard: never hang startup if IndexedDB is slow or blocked by SW install
+      const timeoutPromise = new Promise((_, reject) =>
+        setTimeout(() => reject(new Error("IndexedDB cache read timed out")), 1200)
       );
+      const results = await Promise.race([
+        Promise.all(keys.map((k) => localforage.getItem(k))),
+        timeoutPromise,
+      ]);
       this._localCache = {};
       keys.forEach((k, i) => {
         this._localCache[k] = results[i];
@@ -4966,7 +4983,7 @@ class AurafiskyApp {
     if (emptyEl) {
       emptyEl.style.opacity = "0";
       emptyEl.style.pointerEvents = "none";
-      setTimeout(() => { emptyEl.style.display = "none"; }, 300);
+      emptyEl.style.display = "none";
     }
     // While a fetch is in flight, don't drop the request — remember the
     // LATEST requested location and run it once the current fetch settles.
@@ -5752,7 +5769,8 @@ class AurafiskyApp {
     const windShift = WeatherService.getWindShift(this.weatherData, hourIndex);
     if (windShift && this._lastNotifiedWindShiftHour !== hourIndex) {
       this._lastNotifiedWindShiftHour = hourIndex;
-      this.showToast(`${windShift.icon || "🌬️"} ${windShift.label}`, "info");
+      const shiftIcon = (windShift.icon && windShift.icon !== "undefined") ? windShift.icon : "🌬️";
+      this.showToast(`${shiftIcon} ${windShift.label}`, "info");
     }
 
     // Timeline rate-of-change deltas

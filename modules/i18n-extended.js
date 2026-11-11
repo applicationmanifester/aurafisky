@@ -1,6 +1,10 @@
 // modules/i18n-extended.js
 // Comprehensive extended feature and UI translations for all 41 languages in Aurafisky.
 // Provides instantaneous 0ms offline localization across Settings, Farm, Route, Astronomy, and Weather Cards.
+//
+// Like modules/i18n-data.js, this file is the SOURCE for the per-language
+// chunks the app loads — it is not bundled. Re-run
+// `node scripts/split-i18n-locales.mjs` after changing anything here.
 
 export const COMPREHENSIVE_TRANSLATIONS = {
   "Notify interval": {

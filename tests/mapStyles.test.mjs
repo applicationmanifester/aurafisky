@@ -121,18 +121,19 @@ describe("Map Modes & Terrain Styles", () => {
     expect(appJs).toMatch(/(?:natGeoBasemap\s*=|createNatGeoBasemap\s*=\s*\(\)\s*=>)\s*new LayerGroup\(\{[\s\S]*?maxZoom:\s*12/);
   });
 
-  test("app.js synchronizes dark mode so only 'dark' map mode activates dark mode and others switch to light", () => {
+  test("app.js synchronizes the dark theme with the basemap's brightness", () => {
     const fs = require("fs");
     const appJs = fs.readFileSync("app.js", "utf-8");
 
-    // setMapStyle synchronization
-    expect(appJs).toContain('if (style === "dark") {');
+    // setMapStyle synchronization — every dark basemap takes the app's theme
+    // with it, every light one brings it back.
+    expect(appJs).toContain("if (isDarkMapMode(style)) {");
     expect(appJs).toContain('document.documentElement.classList.add("dark");');
     expect(appJs).toContain('document.documentElement.classList.remove("dark");');
     expect(appJs).toContain('document.documentElement.removeAttribute("data-theme");');
 
     // Startup check verifies aurafisky_map_style
-    expect(appJs).toContain('savedMapStyle === "dark"');
+    expect(appJs).toContain("isDarkMapMode(savedMapStyle)");
   });
 
   test("zero Carto raster tile references and watermarks; enforces 100% keyless OSM/OpenFreeMap basemaps", () => {
@@ -238,10 +239,12 @@ describe("Map Modes & Terrain Styles", () => {
     expect(html).toContain('value="hybrid"');
     expect(appJs).not.toContain('mapModeSelect.addEventListener("input"');
 
-    // 2. Hybrid mode and canonical MAP_MODES ordering (matches 1-9 shortcuts & prev/next cycling)
+    // 2. Hybrid mode and the canonical MAP_MODES list (matches the numbered
+    //    shortcuts & prev/next cycling). The list lives in one module now.
     expect(appJs).toContain("hybrid: createHybridBasemap");
     expect(appJs).toContain("'hybrid'");
-    expect(appJs).toContain("this.MAP_MODES = [");
+    expect(appJs).toContain('from "./modules/map-modes.js"');
+    expect(appJs).toContain("this.MAP_MODES = MAP_MODES;");
 
     // 3. Place Labels toggle is wired to setPlaceLabelsEnabled & placeLabelsLayer
     expect(html).toContain('id="placeLabelsToggle"');

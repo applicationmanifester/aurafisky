@@ -1,5 +1,7 @@
 // -- KEYBOARD SHORTCUTS --
 
+import { NUMBERED_MAP_MODE_IDS } from "../modules/map-modes.js";
+
 function initKeyboardShortcuts() {
     document.addEventListener("keydown", (e) => {
       // Don't trigger if typing in an input, textarea or select dropdown
@@ -38,15 +40,15 @@ function initKeyboardShortcuts() {
         this._haptic?.('selection');
         return;
       }
-      // Numbered map-mode shortcuts (1-9). MAP_MODES lives on the app instance
-      // (this.MAP_MODES) — the same array the picker grid is built from — so
-      // cards, readout and keyboard never drift apart.
-      if (/^[1-9]$/.test(e.key)) {
-        const list = this.MAP_MODES || [];
-        const mode = list[parseInt(e.key, 10) - 1];
+      // Numbered map-mode shortcuts. The ids are pinned in map-modes.js
+      // rather than taken from the picker's order, so adding a mode to the
+      // picker can never repoint a shortcut somebody already has in their
+      // fingers. `1`-`9` take the first nine, `0` takes the tenth.
+      if (/^[0-9]$/.test(e.key)) {
+        const mode = NUMBERED_MAP_MODE_IDS[e.key === "0" ? 9 : parseInt(e.key, 10) - 1];
         if (mode) {
           e.preventDefault();
-          this.setMapStyle?.(mode.id);
+          this.setMapStyle?.(mode);
           return;
         }
       }

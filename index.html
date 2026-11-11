@@ -151,6 +151,13 @@
        same-priority resources. -->
   <link rel="preload" as="fetch" href="https://tiles.openfreemap.org/styles/liberty" crossorigin fetchpriority="high" />
 
+  <!-- The vector basemap's tile index (TileJSON). The style JSON names it as
+       the source, and OpenLayers fetches it *after* the style has arrived —
+       so without this preload the full-detail map waits an extra round trip
+       before its first tile can even be requested. Preloading it alongside
+       the style takes that round trip off the critical path. -->
+  <link rel="preload" as="fetch" href="https://tiles.openfreemap.org/planet" crossorigin fetchpriority="high" />
+
   <!-- NOTE: the Inter variable font is bundled locally from
        @fontsource-variable/inter (imported in app.js) and emitted into
        /assets/fonts by Vite. A CDN <link rel=preload> for it used to live
@@ -2893,6 +2900,10 @@
             <option value="ocean">🌊 Ocean (Bathymetry)</option>
             <option value="natgeo">🌍 National Geographic</option>
             <option value="dark">🌙 Dark Mode</option>
+            <option value="gray">⬜ Light Gray (Canvas)</option>
+            <option value="darkgray">⬛ Dark Gray (Canvas)</option>
+            <option value="hillshadedark">🌒 Dark Hillshade (Elevation)</option>
+            <option value="transport">🛣️ Transportation</option>
           </select>
           <div class="absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none text-slate-400">
             <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
@@ -3179,7 +3190,7 @@
         <div class="border-t border-slate-100 dark:border-slate-800/40 my-3"></div>
 
         <p class="text-xs text-slate-500 dark:text-slate-400">
-          Version 20.0.0 · No API keys, no tracking, and no ads. Weather data provided by Open-Meteo under CC BY 4.0.
+          Version 20.1.0 · No API keys, no tracking, and no ads. Weather data provided by Open-Meteo under CC BY 4.0.
         </p>
       </div>
       <div class="p-4 bg-slate-50 dark:bg-slate-800/50 rounded-b-2xl">
@@ -3567,6 +3578,10 @@
               <option value="ocean">Ocean</option>
               <option value="natgeo">National Geographic</option>
               <option value="dark">Dark</option>
+              <option value="gray">Light Gray</option>
+              <option value="darkgray">Dark Gray</option>
+              <option value="hillshadedark">Dark Hillshade</option>
+              <option value="transport">Transportation</option>
             </select>
           </div>
 
@@ -3839,7 +3854,7 @@
         <h4 class="font-semibold">Offline Use</h4>
         <p>Install as PWA for full offline access. Recent weather data cached in IndexedDB.</p>
         <h4 class="font-semibold">License</h4>
-        <p>Version 20.0.0 · Proprietary. All rights reserved. Copyright &copy; 2026 Aurafisky.</p>
+        <p>Version 20.1.0 · Proprietary. All rights reserved. Copyright &copy; 2026 Aurafisky.</p>
       </div>
       <div class="p-4 bg-slate-50 dark:bg-slate-800/50 rounded-b-2xl flex gap-3"><button id="termsAcceptBtn"
           class="flex-1 bg-primary hover:bg-primary-dark text-white font-semibold py-2.5 rounded-xl transition-colors">Accept

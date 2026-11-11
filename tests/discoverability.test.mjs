@@ -215,6 +215,20 @@ describe("Offline and installability", () => {
 });
 
 describe("Browser support", () => {
+  test("the vector basemap's tile index is preloaded, not fetched on the critical path", () => {
+    // The style JSON names the vector source, and OpenLayers fetches its
+    // tile index only *after* the style has arrived — so without this
+    // preload the full-detail map waits an extra round trip before its
+    // first tile can even be requested.
+    expect(indexHtml).toMatch(
+      /<link rel="preload" as="fetch" href="https:\/\/tiles\.openfreemap\.org\/planet"/,
+    );
+    // The style itself is preloaded for the same reason.
+    expect(indexHtml).toMatch(
+      /<link rel="preload" as="fetch" href="https:\/\/tiles\.openfreemap\.org\/styles\/liberty"/,
+    );
+  });
+
   test("the build targets browsers that can actually run the app", () => {
     // ES2022 syntax locked out Safari 15 and every browser older than
     // Chrome 94 for no reason — the app's newest syntax is ES2020.

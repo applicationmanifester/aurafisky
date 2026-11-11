@@ -650,7 +650,7 @@ async function handleRequest(message) {
       result: {
         protocolVersion: "2024-11-05",
         capabilities: { tools: {}, resources: {} },
-        serverInfo: { name: "aurafisky-mcp-server", version: "20.0.0" },
+        serverInfo: { name: "aurafisky-mcp-server", version: "20.1.0" },
       },
     };
   }

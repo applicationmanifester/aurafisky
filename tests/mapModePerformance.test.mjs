@@ -223,11 +223,13 @@ describe("Map startup loading optimizations", () => {
     expect(init).toContain("zoom: initialView.zoom");
   });
 
-  test("instant OSM raster tiles start visible and never preload vector zoom-1 tiles at boot", () => {
+  test("instant OSM raster tiles start visible and start OpenFreeMap upgrade immediately", () => {
     const init = methodBody(appJs, "initMap");
     expect(init).toContain("visible: true");
     expect(init).toContain("aurafiskyStagedPending");
     expect(init).toContain("isVectorViewportReady");
+    expect(init).toContain("this._ensureBasemapLoaded(activeTheme)");
+    expect(init).not.toContain("startGlUpgrade");
     expect(init).not.toContain("vtLayer.setPreload(1)");
     expect(init).not.toContain("Object.values(this._basemapFactories).forEach");
     expect(init).not.toContain("loadBasemap(inactiveTheme");

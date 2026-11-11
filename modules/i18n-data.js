@@ -1,6 +1,15 @@
 // modules/i18n-data.js
 // Complete, authentic, zero-fallback dictionary data for all 41 supported languages in Aurafisky.
 // Generated and verified statically for instantaneous offline translation.
+//
+// This file is the SOURCE for the per-language chunks the app actually
+// loads — it is not bundled. `scripts/split-i18n-locales.mjs` turns it into
+// modules/i18n-locales/<language>.js, and the app fetches only the language
+// it needs. After changing anything here, re-run:
+//
+//     node scripts/split-i18n-locales.mjs
+//
+// tests/i18nLocales.test.mjs fails if the two drift apart.
 
 export const ALL_DICTIONARIES = {
   "en": {

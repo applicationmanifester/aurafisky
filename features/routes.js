@@ -1288,7 +1288,7 @@ async function resolvePointName(pt) {
   try {
     const lang = typeof navigator !== "undefined" && navigator.language ? navigator.language : "en";
     const url = `https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${pt.lat}&lon=${pt.lng}&zoom=14&addressdetails=1&namedetails=1&accept-language=en,${lang};q=0.8`;
-    const res = await fetch(url, { headers: { "User-Agent": "Aurafisky/20.0.0", Accept: "application/json" } });
+    const res = await fetch(url, { headers: { "User-Agent": "Aurafisky/20.1.0", Accept: "application/json" } });
     if (!res.ok) return;
     const data = await res.json();
     const city =
@@ -1375,7 +1375,7 @@ async function searchPlacesForRoute(query) {
   try {
     const lang = typeof navigator !== "undefined" && navigator.language ? navigator.language : "en";
     const url = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(q)}&format=json&limit=5&addressdetails=1&namedetails=1&accept-language=en,${lang};q=0.8`;
-    const res = await fetch(url, { headers: { "User-Agent": "Aurafisky/20.0.0", Accept: "application/json" } });
+    const res = await fetch(url, { headers: { "User-Agent": "Aurafisky/20.1.0", Accept: "application/json" } });
     if (res.ok) {
       const list = await res.json();
       return list.map((item) => {

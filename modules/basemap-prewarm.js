@@ -21,6 +21,10 @@
  *
  * "dark" sits second because switching between the street and dark vector
  * basemaps is the most frequent switch of all.
+ *
+ * The list is a general-purpose guess. The modes this user has actually
+ * switched to in this session are put in front of it at prewarm time, so
+ * the budget follows the user's own habits rather than everybody's.
  */
 export const PREWARM_PRIORITY = [
   "satellite",
@@ -32,6 +36,10 @@ export const PREWARM_PRIORITY = [
   "opentopo",
   "ocean",
   "natgeo",
+  "gray",
+  "darkgray",
+  "transport",
+  "hillshadedark",
 ];
 
 /** Maximum number of tiles fetched for a single basemap layer per cycle. */

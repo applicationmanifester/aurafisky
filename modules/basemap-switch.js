@@ -20,12 +20,14 @@
 import {
   MAX_TILES_PER_CYCLE,
   MAX_TILES_PER_LAYER,
+  PREWARM_PRIORITY,
   clampZoomToGrid,
   planPrewarm,
   shouldPrewarm,
   tileRangeToUrls,
 } from "./basemap-prewarm.js";
 import { awaitBasemapReady, isStagedPendingLayer, waitForFirstTile } from "./basemap-ready.js";
+import { MAP_MODE_SHORT_NAMES } from "./map-modes.js";
 
 // The OpenFreeMap vector basemaps. Their tiles are PBF, an order of
 // magnitude larger than the raster tiles of the other modes, so prewarming
@@ -45,6 +47,9 @@ export function initBasemapSwitching(app) {
   app._prewarmedTileUrls = new Set();
   app._basemapPrewarmTimer = null;
   app._pendingBasemapGroup = null;
+  // The modes this session switched to, most recent first. Prewarming puts
+  // them in front of the static priority list.
+  app._recentMapModes = [];
 }
 
 /**
@@ -208,18 +213,8 @@ export function setMapModeLoading(app, on) {
   if (on) {
     const label = document.getElementById("mapModeLoadingLabel");
     if (label) {
-      const names = {
-        street: "Default",
-        satellite: "Satellite",
-        hybrid: "Hybrid",
-        terrain: "Terrain",
-        hillshade: "Hillshade",
-        opentopo: "OpenTopo",
-        ocean: "Ocean",
-        natgeo: "NatGeo",
-        dark: "Dark",
-      };
-      label.textContent = `Loading ${names[app.mapStyle] || app.mapStyle || "map"}…`;
+      const name = MAP_MODE_SHORT_NAMES[app.mapStyle] || app.mapStyle || "map";
+      label.textContent = `Loading ${name}…`;
     }
     indicator.classList.remove("hidden");
   } else {
@@ -401,10 +396,16 @@ export function prewarmBasemaps(
   }
 
   const candidates = prewarmCandidates(app);
+  // The modes this session actually switched to go first. The static
+  // priority list only knows what is popular in general, and with a
+  // per-cycle tile budget the tail of it never gets warmed at all.
+  const recent = Array.isArray(app._recentMapModes) ? app._recentMapModes : [];
+  const priority = recent.concat(PREWARM_PRIORITY.filter((style) => !recent.includes(style)));
   const styles = planPrewarm({
     available: Array.from(candidates.keys()),
     activeStyle: app.mapStyle,
     maxStyles,
+    priority,
   });
 
   for (const style of styles) {

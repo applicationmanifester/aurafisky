@@ -49,7 +49,17 @@ import {
   setMapModeLoading,
   switchBasemap,
 } from "./modules/basemap-switch.js";
-import { shareVectorTiles } from "./modules/basemap-vector-tiles.js";
+import {
+  MAP_MODES,
+  MAP_MODE_BY_ID,
+  MAP_MODE_IDS,
+  MAP_MODE_SHORT_NAMES,
+  MAP_MODES_WITH_ELEVATION,
+  MAP_MODES_WITH_REFERENCE_LABELS,
+  isDarkMapMode,
+  isMapMode,
+  mapModeBadge,
+} from "./modules/map-modes.js";
 import {
   formatPlaceName,
   shortPlaceName,
@@ -937,8 +947,9 @@ class AurafiskyApp {
     try {
       const savedMapStyle = localStorage.getItem("aurafisky_map_style");
       if (savedMapStyle) {
-        // Only dark mode map style should have dark tabs / theme; all other map modes are light
-        initialDark = savedMapStyle === "dark";
+        // A dark basemap means dark tabs / theme; every other map mode is
+        // light. The dark canvas and dark hillshade count as dark too.
+        initialDark = isDarkMapMode(savedMapStyle);
       } else {
         initialDark = localStorage.getItem("aurafisky_theme") === "dark";
       }
@@ -1385,23 +1396,16 @@ class AurafiskyApp {
     this._clearLegacyGoogleTranslate();
     this.applyLanguage(this.language);
 
-      // Canonical ordered list of map modes (matches picker dropdown & 1-9 shortcuts)
-      this.MAP_MODES = [
-        'street',
-        'satellite',
-        'hybrid',
-        'terrain',
-        'hillshade',
-        'opentopo',
-        'ocean',
-        'natgeo',
-        'dark'
-      ].map((id) => ({ id }));
+      // Canonical ordered list of map modes. It lives in modules/map-modes.js
+      // so the picker dropdown, the settings dropdown, the keyboard
+      // shortcuts, the validation lists and the label/elevation capability
+      // sets can never drift apart.
+      this.MAP_MODES = MAP_MODES;
 
       // Map style preference: 'street' | 'satellite' | 'hybrid' | 'terrain' | ... | 'dark'
       const savedMapStyle = localStorage.getItem("aurafisky_map_style");
       const urlLayer = this._parseUrlMapParams().get("layer");
-      const validInitStyles = this.MAP_MODES.map((m) => m.id);
+      const validInitStyles = MAP_MODE_IDS;
       this.mapStyle = (urlLayer && validInitStyles.includes(urlLayer))
         ? urlLayer
         : (validInitStyles.includes(savedMapStyle) ? savedMapStyle : (this.isDark ? "dark" : "street"));
@@ -1578,6 +1582,86 @@ class AurafiskyApp {
         ]
       });
 
+      // Esri's neutral canvas basemaps. A muted base is what makes the
+      // weather overlays readable — the street map's own colours fight the
+      // radar and temperature palettes. The base layer ships without any
+      // labels, so it is paired with its companion reference layer, which
+      // draws the place names.
+      const createLightGrayBasemap = () => new LayerGroup({
+        layers: [
+          new TileLayer({
+            source: new XYZ({
+              url: "https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Light_Gray_Base/MapServer/tile/{z}/{y}/{x}",
+              maxZoom: 16,
+              crossOrigin: "anonymous",
+              attributions: "Tiles &copy; Esri &mdash; Esri, HERE, Garmin, (c) OpenStreetMap contributors, and the GIS user community"
+            }),
+            preload: 1
+          }),
+          new TileLayer({
+            source: new XYZ({
+              url: "https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Light_Gray_Reference/MapServer/tile/{z}/{y}/{x}",
+              maxZoom: 16,
+              crossOrigin: "anonymous"
+            }),
+            opacity: 0.95,
+            preload: 1
+          })
+        ]
+      });
+      const createDarkGrayBasemap = () => new LayerGroup({
+        layers: [
+          new TileLayer({
+            source: new XYZ({
+              url: "https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}",
+              maxZoom: 16,
+              crossOrigin: "anonymous",
+              attributions: "Tiles &copy; Esri &mdash; Esri, HERE, Garmin, (c) OpenStreetMap contributors, and the GIS user community"
+            }),
+            preload: 1
+          }),
+          new TileLayer({
+            source: new XYZ({
+              url: "https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Reference/MapServer/tile/{z}/{y}/{x}",
+              maxZoom: 16,
+              crossOrigin: "anonymous"
+            }),
+            opacity: 0.95,
+            preload: 1
+          })
+        ]
+      });
+      // The dark counterpart of the hillshade mode. Relief shading reads
+      // badly on a light basemap behind a dark UI.
+      const createDarkHillshadeBasemap = () => new LayerGroup({
+        layers: [
+          new TileLayer({
+            source: new XYZ({
+              url: "https://server.arcgisonline.com/ArcGIS/rest/services/Elevation/World_Hillshade_Dark/MapServer/tile/{z}/{y}/{x}",
+              maxZoom: 16,
+              crossOrigin: "anonymous",
+              attributions: "Tiles &copy; Esri &mdash; USGS, NGA, NASA, CGIAR, NCEAS, NLS, OS, NMA, Geodatastyrelsen, GSA, GSI, GIS, NOAA, NOAA NGDC"
+            }),
+            preload: 1
+          })
+        ]
+      });
+      // Highways, railways and airports — the roads the route-weather
+      // feature is actually about.
+      const createTransportBasemap = () => new LayerGroup({
+        layers: [
+          new TileLayer({
+            source: new XYZ({
+              url: "https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Transportation/MapServer/tile/{z}/{y}/{x}",
+              maxZoom: 16,
+              crossOrigin: "anonymous",
+              attributions: "Tiles &copy; Esri &mdash; Esri, HERE, Garmin, (c) OpenStreetMap contributors"
+            }),
+            preload: 1
+          })
+        ]
+      });
+
       // Lazy getters for basemaps — created on first access
       this._basemapFactories = {
         satellite: createSatelliteBasemap,
@@ -1587,6 +1671,10 @@ class AurafiskyApp {
         opentopo: createOpenTopoBasemap,
         ocean: createOceanBasemap,
         natgeo: createNatGeoBasemap,
+        gray: createLightGrayBasemap,
+        darkgray: createDarkGrayBasemap,
+        hillshadedark: createDarkHillshadeBasemap,
+        transport: createTransportBasemap,
       };
       this._basemapCache = {};
 
@@ -1733,18 +1821,6 @@ class AurafiskyApp {
               // before we mark staged layers hidden (opacity: 0).
               const stagingGroup = new LayerGroup();
               await applyMapboxStyle(stagingGroup, localizeGlStyle(rawStyle, this.mapLanguage));
-              // Every layer of the vector basemap draws from one source, but
-              // OpenLayers gives each layer its own renderer — and each
-              // renderer creates its own tile objects. One viewport therefore
-              // queued a dozen copies of every tile it needed, and the queue
-              // only starts a fixed number of loads at a time. Sharing the
-              // tiles keeps the queue to one entry per tile the viewport
-              // actually needs, which is what lets the full-detail map
-              // arrive at once instead of trickling in.
-              stagingGroup.getLayers().getArray().forEach((l) => {
-                const src = l?.getSource?.();
-                if (src) shareVectorTiles(src);
-              });
               const mbStyle = stagingGroup.get("mapbox-style");
               const mbMeta = stagingGroup.get("mapbox-metadata");
               if (mbStyle) group.set("mapbox-style", mbStyle);
@@ -1815,19 +1891,9 @@ class AurafiskyApp {
 
       if (this.mapStyle === "street" || this.mapStyle === "dark") {
         const activeTheme = this.mapStyle === "dark" ? "dark" : "light";
-        let _glBootStarted = false;
-        const startGlUpgrade = () => {
-          if (_glBootStarted) return;
-          _glBootStarted = true;
-          this._ensureBasemapLoaded(activeTheme).then(() => {
-            this._updateMapStyleUI();
-          });
-        };
-        // Give instant OSM raster tiles & weather requests uncontested network/CPU
-        // priority for the first paint, then stream OpenFreeMap vector tiles in background.
-        const initialSrc = initialGroup.getLayers().getArray()[0]?.getSource?.();
-        initialSrc?.once?.("tileloadend", () => setTimeout(startGlUpgrade, 150));
-        setTimeout(startGlUpgrade, 450);
+        this._ensureBasemapLoaded(activeTheme).then(() => {
+          this._updateMapStyleUI();
+        });
       } else {
         this._updateMapStyleUI();
       }
@@ -7986,15 +8052,9 @@ class AurafiskyApp {
       // ignore — storage unavailable
     }
 
-    if (this.isDark) {
-      this.mapStyle = "dark";
-      try { localStorage.setItem("aurafisky_map_style", "dark"); } catch (_) {}
-    } else if (this.mapStyle === "dark") {
-      this.mapStyle = "street";
-      try { localStorage.setItem("aurafisky_map_style", "street"); } catch (_) {}
-    }
-
-    // Swap basemap style (handles language preference)
+    // Swap basemap style (handles language preference). The map follows the
+    // theme unless it is already a dark basemap — _switchBasemapTheme owns
+    // that decision, so it is not repeated here.
     this._switchBasemapTheme();
 
     // Update theme-color meta tag for browser chrome
@@ -12710,10 +12770,15 @@ class AurafiskyApp {
   _switchBasemapTheme() {
     if (!this.map || !this.lightBasemap || !this.darkBasemap) return;
     if (this.isDark) {
-      this.mapStyle = 'dark';
-      try { localStorage.setItem("aurafisky_map_style", "dark"); } catch (_) {}
+      // The map only follows the theme when it is not already a dark
+      // basemap — turning the app dark must not throw away a deliberate
+      // choice of the dark canvas or the dark hillshade.
+      if (!isDarkMapMode(this.mapStyle)) {
+        this.mapStyle = 'dark';
+        try { localStorage.setItem("aurafisky_map_style", "dark"); } catch (_) {}
+      }
     } else {
-      if (this.mapStyle === 'dark') {
+      if (isDarkMapMode(this.mapStyle)) {
         this.mapStyle = 'street';
         try { localStorage.setItem("aurafisky_map_style", "street"); } catch (_) {}
       }
@@ -12723,12 +12788,20 @@ class AurafiskyApp {
   }
 
   setMapStyle(style) {
-    const validStyles = ['street', 'satellite', 'hybrid', 'terrain', 'hillshade', 'opentopo', 'ocean', 'natgeo', 'dark'];
-    if (!validStyles.includes(style)) style = 'street';
+    if (!isMapMode(style)) style = 'street';
     this.mapStyle = style;
     try {
       localStorage.setItem("aurafisky_map_style", style);
     } catch (_) {}
+
+    // Remember the modes this session actually switches to, most recent
+    // first. Prewarming has a per-cycle tile budget, so it spends that
+    // budget on the modes this user reaches for rather than on a fixed
+    // popularity list that knows nothing about them.
+    this._recentMapModes = [
+      style,
+      ...(Array.isArray(this._recentMapModes) ? this._recentMapModes : []).filter((m) => m !== style),
+    ].slice(0, 4);
 
     // Sync opacity slider if visible
     const opacitySlider = document.getElementById("mapOpacitySlider");
@@ -12740,8 +12813,10 @@ class AurafiskyApp {
       opacitySlider.style.setProperty("--opacity-pct", `${pct}%`);
     }
 
-    // Synchronize dark theme: only in darkmode tabs/UI should be in dark, not in other map modes
-    if (style === "dark") {
+    // Synchronize dark theme: the map's brightness and the app's brightness
+    // are kept in step — a dark basemap takes the UI with it, a light one
+    // brings it back.
+    if (isDarkMapMode(style)) {
       if (!this.isDark) {
         this.isDark = true;
         document.documentElement.classList.add("dark");
@@ -12770,18 +12845,8 @@ class AurafiskyApp {
     this._activateStyleGroup(style);
     this._applyPlaceLabels();
     this._updateMapStyleUI();
-    const styleNames = {
-      street: "Default (Street)",
-      satellite: "Satellite (Aerial)",
-      hybrid: "Hybrid (Sat + Labels)",
-      terrain: "Terrain (Topographic)",
-      hillshade: "Hillshade (Elevation)",
-      opentopo: "OpenTopoMap",
-      ocean: "Ocean (Bathymetry)",
-      natgeo: "National Geographic",
-      dark: "Dark"
-    };
-    this.showToast(`Map mode: ${styleNames[style] || style}`, "info");
+    const mode = MAP_MODE_BY_ID[style];
+    this.showToast(`Map mode: ${mode ? mode.name : style}`, "info");
   }
 
   _updateActiveBasemap() {
@@ -12965,9 +13030,11 @@ class AurafiskyApp {
     if (!this.map || !this.placeLabelsLayer) return;
     const layers = this.map.getLayers();
     const layersArr = layers.getArray();
-    // Vector modes ('street', 'dark') already render localized place labels;
-    // 'hybrid' already bundles Reference/World_Boundaries_and_Places.
-    const alreadyHasBuiltInLabels = ['street', 'dark', 'hybrid'].includes(this.mapStyle);
+    // The vector modes ('street', 'dark') already render localized place
+    // labels, and the modes that bundle an Esri reference layer ('hybrid',
+    // 'gray', 'darkgray') already draw their own names. Laying the OSM
+    // place-name overlay on top of those would double every label.
+    const alreadyHasBuiltInLabels = MAP_MODES_WITH_REFERENCE_LABELS.includes(this.mapStyle);
     const showOverlay = Boolean(this.placeLabelsEnabled && !alreadyHasBuiltInLabels);
 
     if (showOverlay) {
@@ -13018,6 +13085,10 @@ class AurafiskyApp {
         hint = "Always shown in Hybrid mode";
       } else if (isVector && this.placeLabelsEnabled) {
         hint = "Vector labels active · Enabled for imagery";
+      } else if (MAP_MODES_WITH_REFERENCE_LABELS.includes(this.mapStyle)) {
+        // The canvas basemaps bundle their own reference layer, so the
+        // overlay never applies to them.
+        hint = `Always shown in ${MAP_MODE_SHORT_NAMES[this.mapStyle] || this.mapStyle} mode`;
       } else if (this.placeLabelsEnabled) {
         hint = "Place & boundary labels active";
       }
@@ -13108,20 +13179,9 @@ class AurafiskyApp {
   }
 
   _updateMapLayersActiveBadge() {
-    const styleNames = {
-      street: "🗺️ Default",
-      satellite: "🛰️ Satellite",
-      hybrid: "🔀 Hybrid",
-      terrain: "🏔️ Terrain",
-      hillshade: "⛰️ Hillshade",
-      opentopo: "🧭 OpenTopo",
-      ocean: "🌊 Ocean",
-      natgeo: "🌍 NatGeo",
-      dark: "🌙 Dark",
-    };
     const badge = document.getElementById("mapLayersActiveBadge");
     if (badge) {
-      badge.textContent = styleNames[this.mapStyle] || this.mapStyle || "Default";
+      badge.textContent = mapModeBadge(this.mapStyle) || this.mapStyle || "Default";
     }
     const dropdown = document.getElementById("mapModeSelectDropdown");
     if (dropdown && dropdown.value !== this.mapStyle) {
@@ -13130,7 +13190,7 @@ class AurafiskyApp {
   }
 
   cycleMapStyle(direction = 1) {
-    const validStyles = ['street', 'satellite', 'hybrid', 'terrain', 'hillshade', 'opentopo', 'ocean', 'natgeo', 'dark'];
+    const validStyles = MAP_MODE_IDS;
     let idx = validStyles.indexOf(this.mapStyle);
     if (idx === -1) idx = 0;
     const nextIdx = (idx + direction + validStyles.length) % validStyles.length;
@@ -13232,7 +13292,7 @@ class AurafiskyApp {
     if (!widget) return;
 
     const isTempActive = Boolean(this.temperatureOverlayEnabled || (this.radarActive && this.overlayType === "temperature"));
-    const isElevationActive = ["opentopo", "terrain", "hillshade"].includes(this.mapStyle) || Boolean(this.terrainOverlayEnabled);
+    const isElevationActive = MAP_MODES_WITH_ELEVATION.includes(this.mapStyle) || Boolean(this.terrainOverlayEnabled);
 
     // Synchronize flyout toggle
     const tempToggle = document.getElementById("tempGridOverlayToggle");
@@ -13241,7 +13301,7 @@ class AurafiskyApp {
     // Synchronize flyout elevation hint
     const elevHint = document.getElementById("mapModeElevationHint");
     if (elevHint) {
-      elevHint.classList.toggle("hidden", !isElevationActive && !["opentopo", "terrain", "hillshade"].includes(this.mapStyle));
+      elevHint.classList.toggle("hidden", !isElevationActive);
     }
 
     const pillIcon = document.getElementById("mapLegendPillIcon");

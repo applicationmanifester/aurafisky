@@ -99,6 +99,7 @@ export function getWindShift(
   return {
     shift: absShift,
     direction,
+    icon: '🌬️',
     label: `${Math.round(absShift)}° ${direction} shift`,
     desc: `A significant ${direction} wind shift of ${Math.round(absShift)}° was detected — may indicate a frontal passage.`,
   };

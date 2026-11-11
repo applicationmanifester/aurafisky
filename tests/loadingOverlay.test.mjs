@@ -6,6 +6,8 @@ describe("Loading Overlay & Progress Contract", () => {
     const html = fs.readFileSync("index.html", "utf-8");
     const requiredIds = [
       'id="loadingOverlay"',
+      'id="loaderLogoImg"',
+      'src="icon-192.png"',
       'id="loaderProgressRing"',
       'id="loaderBarFill"',
       'id="loaderPercent"',
@@ -35,6 +37,7 @@ describe("Loading Overlay & Progress Contract", () => {
     expect(css).toContain(".dark #loadingOverlay");
     expect(css).toContain("prefers-reduced-motion: reduce");
     expect(css).toContain(".loader-orbit-halo");
+    expect(css).toContain(".loader-logo");
     expect(css).toContain("transform-box: fill-box");
   });
 });

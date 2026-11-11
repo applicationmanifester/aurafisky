@@ -2213,6 +2213,7 @@ const WeatherService = (() => {
       return {
         shift: diff,
         direction: dir,
+        icon: "🌬️",
         label: `${Math.round(diff)}° ${dir} shift`,
         desc: "Wind direction shifted — frontal passage possible",
       };

@@ -296,6 +296,7 @@ export interface WindShift {
   shift: number;
   direction: 'clockwise' | 'counterclockwise';
   label: string;
+  icon: string;
   desc: string;
 }
 

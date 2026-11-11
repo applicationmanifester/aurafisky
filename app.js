@@ -5521,7 +5521,7 @@ class AurafiskyApp {
     const windShift = WeatherService.getWindShift(this.weatherData, hourIndex);
     if (windShift && this._lastNotifiedWindShiftHour !== hourIndex) {
       this._lastNotifiedWindShiftHour = hourIndex;
-      this.showToast(`${windShift.icon} ${windShift.label}`, "info");
+      this.showToast(`${windShift.icon || "🌬️"} ${windShift.label}`, "info");
     }
 
     // Timeline rate-of-change deltas

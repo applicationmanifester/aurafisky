@@ -223,16 +223,8 @@
         <div id="logoBtn"
           class="hidden sm:flex flex-shrink-0 pointer-events-auto glass rounded-2xl h-12 px-3 items-center gap-2 shadow-sm transition-all cursor-pointer"
           title="Aurafisky" role="button" tabindex="0" aria-label="Aurafisky Home">
-          <svg class="w-6 h-6 flex-shrink-0" viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg"
-            aria-hidden="true">
-            <circle cx="50" cy="36" r="18" fill="#ff9f1c" stroke="#fff" stroke-width="2.5" />
-            <path
-              d="M 28,52 h 22 a 7,7 0 0,0 7,-7 a 8,8 0 0,0 -6,-7.7 a 11,11 0 0,0 -19,-2.3 a 8,8 0 0,0 -9,8 a 7,7 0 0,0 5,9 z"
-              fill="#ffffff" />
-            <path
-              d="M 40,64 h 24 a 8,8 0 0,0 8,-8 a 9,9 0 0,0 -7,-8.7 a 13,13 0 0,0 -22,-2.6 a 9,9 0 0,0 -10,9.3 a 8,8 0 0,0 5,10 z"
-              fill="#e0f2fe" />
-          </svg>
+          <img src="icon-192.png" alt="" width="24" height="24"
+            class="w-6 h-6 rounded-md object-cover flex-shrink-0" loading="eager" decoding="async" />
           <span class="text-sm font-black select-none tracking-tight notranslate" translate="no">
             <span class="text-[#ff6600]">Aura</span><span class="text-[#3b82f6]">fisky</span>
           </span>
@@ -4362,17 +4354,25 @@
               <stop offset="55%" stop-color="#14b8a6" />
               <stop offset="100%" stop-color="#38bdf8" />
             </linearGradient>
-            <linearGradient id="loaderSunGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+            <linearGradient id="loaderSunGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+              <stop offset="0%" stop-color="#ff9f1c" />
+              <stop offset="100%" stop-color="#e84c3c" />
+            </linearGradient>
+            <linearGradient id="loaderSunRayGrad" x1="0%" y1="0%" x2="0%" y2="100%">
               <stop offset="0%" stop-color="#ffb347" />
-              <stop offset="100%" stop-color="#f97316" />
+              <stop offset="100%" stop-color="#ff8a00" />
             </linearGradient>
             <linearGradient id="loaderCloudTopGrad" x1="0%" y1="0%" x2="100%" y2="100%">
               <stop offset="0%" stop-color="#ffffff" />
               <stop offset="100%" stop-color="#e0f2fe" />
             </linearGradient>
             <linearGradient id="loaderCloudFrontGrad" x1="0%" y1="0%" x2="100%" y2="100%">
-              <stop offset="0%" stop-color="#f0f9ff" />
+              <stop offset="0%" stop-color="#f8fafc" />
               <stop offset="100%" stop-color="#bae6fd" />
+            </linearGradient>
+            <linearGradient id="loaderWindGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+              <stop offset="0%" stop-color="#64748b" />
+              <stop offset="100%" stop-color="#94a3b8" />
             </linearGradient>
           </defs>
 
@@ -4394,23 +4394,38 @@
           </g>
 
           <!-- Inner frosted instrument lens -->
-          <circle cx="60" cy="60" r="34" class="loader-lens" stroke-width="1" />
+          <circle cx="60" cy="60" r="35" class="loader-lens" stroke-width="1" />
 
-          <!-- Aurafisky atmospheric emblem centered mathematically inside lens -->
+          <!-- Full Aurafisky vector mark (instant byte-1 paint before icon PNG settles) -->
           <g transform="translate(60 60)">
             <g class="loader-mark">
-              <g transform="scale(0.76) translate(-46.5 -41)">
-                <circle cx="50" cy="36" r="18" fill="url(#loaderSunGrad)" stroke="#ffffff" stroke-width="2.2" />
-                <path
-                  d="M 28,52 h 22 a 7,7 0 0,0 7,-7 a 8,8 0 0,0 -6,-7.7 a 11,11 0 0,0 -19,-2.3 a 8,8 0 0,0 -9,8 a 7,7 0 0,0 5,9 z"
-                  fill="url(#loaderCloudTopGrad)" />
-                <path
-                  d="M 40,64 h 24 a 8,8 0 0,0 8,-8 a 9,9 0 0,0 -7,-8.7 a 13,13 0 0,0 -22,-2.6 a 9,9 0 0,0 -10,9.3 a 8,8 0 0,0 5,10 z"
-                  fill="url(#loaderCloudFrontGrad)" />
+              <g transform="scale(0.56) translate(-50 -46)">
+                <g fill="url(#loaderSunRayGrad)" opacity="0.92">
+                  <polygon points="50,11 46.5,18 53.5,18" transform="rotate(-60, 50, 36)" />
+                  <polygon points="50,11 46.5,18 53.5,18" transform="rotate(-35, 50, 36)" />
+                  <polygon points="50,11 46.5,18 53.5,18" transform="rotate(-10, 50, 36)" />
+                  <polygon points="50,11 46.5,18 53.5,18" transform="rotate(15, 50, 36)" />
+                  <polygon points="50,11 46.5,18 53.5,18" transform="rotate(40, 50, 36)" />
+                  <polygon points="50,11 46.5,18 53.5,18" transform="rotate(65, 50, 36)" />
+                </g>
+                <circle cx="50" cy="36" r="18" fill="url(#loaderSunGrad)" stroke="#ffffff" stroke-width="2.5" stroke-linejoin="round" />
+                <path d="M 28,52 h 22 a 7,7 0 0,0 7,-7 a 8,8 0 0,0 -6,-7.7 a 11,11 0 0,0 -19,-2.3 a 8,8 0 0,0 -9,8 a 7,7 0 0,0 5,9 z"
+                  fill="url(#loaderCloudTopGrad)" stroke="#ffffff" stroke-width="2.5" stroke-linejoin="round" />
+                <path d="M 62,40 h 11 C 76,40 78,38 78,36 C 78,34 76,32 74,32 C 72,32 71,34 72,36"
+                  stroke="url(#loaderWindGrad)" stroke-width="2.5" stroke-linecap="round" fill="none" />
+                <path d="M 67,48 h 11 C 81,48 83,50 83,52 C 83,54 81,56 79,56 C 77,56 76,54 77,52"
+                  stroke="url(#loaderWindGrad)" stroke-width="2.5" stroke-linecap="round" fill="none" />
+                <path d="M 40,64 h 24 a 8,8 0 0,0 8,-8 a 9,9 0 0,0 -7,-8.7 a 13,13 0 0,0 -22,-2.6 a 9,9 0 0,0 -10,9.3 a 8,8 0 0,0 5,10 z"
+                  fill="url(#loaderCloudFrontGrad)" stroke="#ffffff" stroke-width="2.5" stroke-linejoin="round" />
+                <line x1="44" y1="72" x2="42" y2="78" stroke="#3b82f6" stroke-width="2.5" stroke-linecap="round" />
+                <line x1="54" y1="72" x2="52" y2="78" stroke="#3b82f6" stroke-width="2.5" stroke-linecap="round" />
+                <line x1="64" y1="72" x2="62" y2="78" stroke="#3b82f6" stroke-width="2.5" stroke-linecap="round" />
               </g>
             </g>
           </g>
         </svg>
+        <img id="loaderLogoImg" src="icon-192.png" alt="" width="60" height="60"
+          decoding="sync" fetchpriority="high" class="loader-logo" />
       </div>
 
       <!-- Brand Lockup & Active Stage -->

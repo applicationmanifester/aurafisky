@@ -702,6 +702,7 @@ it('formatPressure returns inHg', () => {
       const shift = getWindShift(data, 3);
       expect(shift).not.toBeNull();
       expect(shift!.shift).toBeGreaterThan(45);
+      expect(shift!.icon).toBeTruthy();
     });
 
     it('returns null for small shifts', () => {

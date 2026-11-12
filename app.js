@@ -286,6 +286,10 @@ class AurafiskyApp {
     this.bookmarkMarkers = []; // Leaflet markers for bookmarked locations
     this.showBookmarksOnMap = localStorage.getItem("aurafisky_show_bookmarks_map") !== "false";
 
+    // Bottom map tabs visibility (Map Key pill & Timeline slider bar)
+    this.showMapLegend = localStorage.getItem("aurafisky_show_map_legend") !== "false";
+    this.showTimelineBar = localStorage.getItem("aurafisky_show_timeline_bar") !== "false";
+
     // Wallpaper preset state
     this.wallpaperPreset = localStorage.getItem("aurafisky_wallpaper_preset") || "none";
 
@@ -2667,6 +2671,22 @@ class AurafiskyApp {
         this._haptic('selection');
       });
     }
+    const settingsMapLegend = document.getElementById("settingsMapLegendToggle");
+    if (settingsMapLegend) {
+      settingsMapLegend.checked = this.showMapLegend !== false;
+      settingsMapLegend.addEventListener("change", (e) => {
+        this.setMapLegendVisible(e.target.checked);
+        this._haptic?.('selection');
+      });
+    }
+    const settingsTimelineBar = document.getElementById("settingsTimelineBarToggle");
+    if (settingsTimelineBar) {
+      settingsTimelineBar.checked = this.showTimelineBar !== false;
+      settingsTimelineBar.addEventListener("change", (e) => {
+        this.setTimelineBarVisible(e.target.checked);
+        this._haptic?.('selection');
+      });
+    }
     if (this.$.settingsMapLanguageToggle) {
       this.$.settingsMapLanguageToggle.addEventListener("change", (e) => {
         const newLang = e.target.checked ? this.getNativeMapLanguage() : 'en';
@@ -2764,6 +2784,25 @@ class AurafiskyApp {
       this.toggleMapLayersFlyout(false);
       this._haptic?.('selection');
     });
+
+    // ── Map Legend & Timeline Bar Toggles in Flyout ─────
+    const flyoutLegendToggle = document.getElementById("mapLegendVisibilityToggle");
+    if (flyoutLegendToggle) {
+      flyoutLegendToggle.checked = this.showMapLegend !== false;
+      flyoutLegendToggle.addEventListener("change", (e) => {
+        this.setMapLegendVisible(e.target.checked);
+        this._haptic?.('selection');
+      });
+    }
+
+    const flyoutTimelineToggle = document.getElementById("timelineBarVisibilityToggle");
+    if (flyoutTimelineToggle) {
+      flyoutTimelineToggle.checked = this.showTimelineBar !== false;
+      flyoutTimelineToggle.addEventListener("change", (e) => {
+        this.setTimelineBarVisible(e.target.checked);
+        this._haptic?.('selection');
+      });
+    }
 
     this._initMapColorLegend();
 
@@ -4207,16 +4246,10 @@ class AurafiskyApp {
     this.setLoadingProgress(70, "Finding your location");
     await this._loadLocalCache();
 
-    // 2. Fallback to previous location if the user previously changed/selected one
-    if (this._restoreSession()) {
-      return;
-    }
-
-    // 3. Fallback hierarchy when no previous user-selected location exists:
-    //    First try live device coordinates (GPS).
-    //    If coordinates are not available, fall back to the user's set Home location.
-    //    If Home location is not set either, fall back to regional timezone default
-    //    (marked isFallback: true so it is never permanently saved as a user choice).
+    // Hierarchy when coordinates are not available:
+    // 1) User's set Home location
+    // 2) Previously changed/selected location session (if user explicitly navigated elsewhere)
+    // 3) Regional timezone default
     const onCoordsUnavailable = () => {
       if (this.defaultLocation && this.defaultLocation.lat != null) {
         this.selectLocation(
@@ -4230,6 +4263,11 @@ class AurafiskyApp {
         }
         return;
       }
+
+      if (this._restoreSession()) {
+        return;
+      }
+
       const def = this._getTimezoneDefaultLocation();
       this.selectLocation(def.lat, def.lng, def.name, { isFallback: true, isAutomaticDefault: true });
     };
@@ -4256,8 +4294,9 @@ class AurafiskyApp {
       return;
     }
 
+    // 2. Priority 2: Always attempt live device coordinates (GPS) first
     this.getMyLocation({
-      silent: false,
+      silent: true,
       precise: true,
       onFail: () => {
         onCoordsUnavailable();
@@ -4272,18 +4311,15 @@ class AurafiskyApp {
       if (saved.isFallback || saved.isHomeFallback || saved.isAutomaticDefault || saved.userExplicit === false) {
         return false;
       }
-      // Ignore a persisted location that is just the user's Home fallback, so a
-      // reopen/refresh re-runs GPS instead of re-opening that same place.
+      // Ignore a persisted location that is just the user's Home fallback
       if (this.defaultLocation && this.defaultLocation.lat != null && this.defaultLocation.lng != null &&
           Math.abs(saved.lat - this.defaultLocation.lat) < 0.005 &&
           Math.abs(saved.lng - this.defaultLocation.lng) < 0.005) {
         return false;
       }
-      // Migrate legacy sessions: previously, the app auto-persisted Bengaluru for GMT+5:30
-      // without setting userExplicit. Filter those out so mobile devices are not hijacked.
+      // Ignore legacy auto-default timezone locations (e.g. Bengaluru for GMT+5:30)
       const tzDef = this._getTimezoneDefaultLocation();
       const isLegacyAutoDefault =
-        saved.userExplicit === undefined &&
         ((Math.abs(saved.lat - tzDef.lat) < 0.005 && Math.abs(saved.lng - tzDef.lng) < 0.005) ||
          (Math.abs(saved.lat - 12.9716) < 0.005 && Math.abs(saved.lng - 77.5946) < 0.005));
       if (isLegacyAutoDefault) {
@@ -12188,6 +12224,14 @@ class AurafiskyApp {
     if (this.$.settingsTimeline24hToggle) {
       this.$.settingsTimeline24hToggle.checked = this.timeline24hMode;
     }
+    const sMapLegend = document.getElementById("settingsMapLegendToggle");
+    if (sMapLegend) sMapLegend.checked = this.showMapLegend !== false;
+    const sTimelineBar = document.getElementById("settingsTimelineBarToggle");
+    if (sTimelineBar) sTimelineBar.checked = this.showTimelineBar !== false;
+    const fMapLegend = document.getElementById("mapLegendVisibilityToggle");
+    if (fMapLegend) fMapLegend.checked = this.showMapLegend !== false;
+    const fTimelineBar = document.getElementById("timelineBarVisibilityToggle");
+    if (fTimelineBar) fTimelineBar.checked = this.showTimelineBar !== false;
 
     const hasUser = !!this.user;
     if (this.$.setDefaultLocationBtn) {
@@ -12581,10 +12625,10 @@ class AurafiskyApp {
     this.setMapLanguage(lang);
 
     const title = document.querySelector("title");
-    if (title) title.textContent = `${t("app_name", lang)} ΓÇö ${t("app_tagline", lang)}`;
+    if (title) title.textContent = `${t("app_name", lang)} — ${t("app_tagline", lang)}`;
     if (this.$.searchInput) {
-      const ph = t("search_placeholder", lang) || "Search a cityΓÇª";
-      this.$.searchInput.setAttribute("data-orig-placeholder", "Search a cityΓÇª");
+      const ph = t("search_placeholder", lang) || "Search a city…";
+      this.$.searchInput.setAttribute("data-orig-placeholder", "Search a city…");
       this.$.searchInput.placeholder = ph;
       this.$.searchInput.setAttribute("placeholder", ph);
       this.$.searchInput.setAttribute("aria-label", ph);
@@ -12602,7 +12646,7 @@ class AurafiskyApp {
       daily: t("tab_daily", lang) || "7-Day",
       metrics: t("tab_metrics", lang) || "Details & AQI",
       astronomy: t("tab_astronomy", lang) || "Astronomy",
-      farm: t("tab_farm", lang) || "≡ƒî╛ Farm",
+      farm: t("tab_farm", lang) || "🌾 Farm",
     };
     document.querySelectorAll(".weather-tab-btn").forEach((btn) => {
       const tab = btn.dataset.tab;
@@ -12637,7 +12681,7 @@ class AurafiskyApp {
     const detailsBtn = document.getElementById("toggleAddressCardText");
     if (detailsBtn) detailsBtn.textContent = t("details", lang) || "Details";
     const briefingBtn = document.getElementById("briefingBtn");
-    if (briefingBtn) briefingBtn.textContent = `≡ƒôí ${t("generate_briefing", lang) || "Generate Briefing"}`;
+    if (briefingBtn) briefingBtn.textContent = `📡 ${t("generate_briefing", lang) || "Generate Briefing"}`;
     const discHeader = document.getElementById("discoveriesHeaderTitle");
     if (discHeader) discHeader.textContent = t("live_weather_intelligence_safety", lang) || "Live Weather Intelligence & Safety";
 
@@ -12843,7 +12887,7 @@ class AurafiskyApp {
     if (!this.map || !this.lightBasemap || !this.darkBasemap) return;
     if (this.isDark) {
       // The map only follows the theme when it is not already a dark
-      // basemap ΓÇö turning the app dark must not throw away a deliberate
+      // basemap — turning the app dark must not throw away a deliberate
       // choice of the dark canvas or the dark hillshade.
       if (!isDarkMapMode(this.mapStyle)) {
         this.mapStyle = 'dark';
@@ -12887,7 +12931,7 @@ class AurafiskyApp {
     }
 
     // Synchronize dark theme: the map's brightness and the app's brightness
-    // are kept in step ΓÇö a dark basemap takes the UI with it, a light one
+    // are kept in step — a dark basemap takes the UI with it, a light one
     // brings it back.
     if (isDarkMapMode(style)) {
       if (!this.isDark) {
@@ -13022,7 +13066,7 @@ class AurafiskyApp {
       }
       if (layer instanceof LayerGroup) {
         // A basemap that is still fading in is on its way to `mapOpacity`
-        // already ΓÇö setting it here would make it pop in before the
+        // already — setting it here would make it pop in before the
         // crossfade starts.
         if (this._pendingBasemapGroup && layer === this._pendingBasemapGroup) return;
         const scale = layer === this.terrainOverlayLayer ? 0.4 : 1;
@@ -13093,7 +13137,7 @@ class AurafiskyApp {
     this._applyPlaceLabels();
     this._syncMapFlyoutControls();
     this.showToast?.(
-      next ? "≡ƒÅ╖∩╕Å Place labels overlay enabled" : "Place labels overlay hidden",
+      next ? "🏷️ Place labels overlay enabled" : "Place labels overlay hidden",
       "info",
     );
   }
@@ -13157,7 +13201,7 @@ class AurafiskyApp {
       if (isHybrid) {
         hint = "Always shown in Hybrid mode";
       } else if (isVector && this.placeLabelsEnabled) {
-        hint = "Vector labels active ┬╖ Enabled for imagery";
+        hint = "Vector labels active · Enabled for imagery";
       } else if (MAP_MODES_WITH_REFERENCE_LABELS.includes(this.mapStyle)) {
         // The canvas basemaps bundle their own reference layer, so the
         // overlay never applies to them.
@@ -13220,7 +13264,7 @@ class AurafiskyApp {
         this.updateMarineFloodUI?.(this.selectedLat, this.selectedLng);
       }
       // The user is about to pick a mode, so this is the moment to warm the
-      // tiles for all of them ΓÇö the switch that follows should be a cache
+      // tiles for all of them — the switch that follows should be a cache
       // hit rather than a download.
       setTimeout(() => {
         try {
@@ -13281,7 +13325,7 @@ class AurafiskyApp {
     const theme = this.isDark ? "dark" : "light";
     const group = this.isDark ? this.darkBasemap : this.lightBasemap;
     const rawStyle = this._glStyles?.[theme];
-    // Style hasn't finished loading yet ΓÇö nothing to re-style. initMap()
+    // Style hasn't finished loading yet — nothing to re-style. initMap()
     // already applies the current this.mapLanguage once the fetch resolves,
     // so there's no missed update, just nothing to do yet.
     if (!group || !rawStyle) return;
@@ -13304,7 +13348,7 @@ class AurafiskyApp {
 
     if (this.temperatureOverlayEnabled) {
       this.initTempOverlayLayers?.();
-      this.showToast?.("≡ƒîí∩╕Å Live temperature grid loaded on map", "info");
+      this.showToast?.("🌡️ Live temperature grid loaded on map", "info");
     } else {
       this.clearTempOverlay?.();
       this.showToast?.("Temperature grid cleared", "info");
@@ -13356,13 +13400,53 @@ class AurafiskyApp {
       });
     }
 
+    this.setMapLegendVisible(this.showMapLegend !== false);
+    this.setTimelineBarVisible(this.showTimelineBar !== false);
+
     this._updateMapColorLegend();
+  }
+
+  setMapLegendVisible(visible) {
+    this.showMapLegend = Boolean(visible);
+    try {
+      localStorage.setItem("aurafisky_show_map_legend", String(this.showMapLegend));
+    } catch (_) {}
+    const widget = document.getElementById("mapColorLegendWidget");
+    if (widget) {
+      widget.classList.toggle("hidden", !this.showMapLegend);
+    }
+    const t1 = document.getElementById("settingsMapLegendToggle");
+    const t2 = document.getElementById("mapLegendVisibilityToggle");
+    if (t1) t1.checked = this.showMapLegend;
+    if (t2) t2.checked = this.showMapLegend;
+    if (this.showMapLegend) {
+      this._updateMapColorLegend();
+    }
+  }
+
+  setTimelineBarVisible(visible) {
+    this.showTimelineBar = Boolean(visible);
+    try {
+      localStorage.setItem("aurafisky_show_timeline_bar", String(this.showTimelineBar));
+    } catch (_) {}
+    const bar = document.getElementById("timelineBar");
+    if (bar) {
+      bar.classList.toggle("hidden", !this.showTimelineBar);
+    }
+    const t1 = document.getElementById("settingsTimelineBarToggle");
+    const t2 = document.getElementById("timelineBarVisibilityToggle");
+    if (t1) t1.checked = this.showTimelineBar;
+    if (t2) t2.checked = this.showTimelineBar;
   }
 
   /** Update on-map color indication widget based on active layers & map modes */
   _updateMapColorLegend() {
     const widget = document.getElementById("mapColorLegendWidget");
     if (!widget) return;
+    if (!this.showMapLegend) {
+      widget.classList.add("hidden");
+      return;
+    }
 
     const isTempActive = Boolean(this.temperatureOverlayEnabled || (this.radarActive && this.overlayType === "temperature"));
     const isElevationActive = MAP_MODES_WITH_ELEVATION.includes(this.mapStyle) || Boolean(this.terrainOverlayEnabled);
@@ -13393,63 +13477,63 @@ class AurafiskyApp {
     const loc = this.language || detectLocale();
 
     if (isTempActive) {
-      // ΓöÇΓöÇ Temperature Mode ΓöÇΓöÇ
+      // ── Temperature Mode ──
       widget.classList.remove("hidden");
-      if (pillIcon) pillIcon.textContent = "≡ƒîí∩╕Å";
+      if (pillIcon) pillIcon.textContent = "🌡️";
       if (pillTitle) pillTitle.textContent = translateText("Temperature Scale", loc) || "Temperature Scale";
       if (pillSwatches) {
         pillSwatches.innerHTML = `
-          <span class="w-2.5 h-2.5 rounded-full bg-[#1d4ed8]" title="Cold (<10┬░C)"></span>
-          <span class="w-2.5 h-2.5 rounded-full bg-[#16a34a]" title="Mild (10-22┬░C)"></span>
-          <span class="w-2.5 h-2.5 rounded-full bg-[#eab308]" title="Warm (22-28┬░C)"></span>
-          <span class="w-2.5 h-2.5 rounded-full bg-[#ea580c]" title="Hot (28-35┬░C)"></span>
-          <span class="w-2.5 h-2.5 rounded-full bg-[#dc2626]" title="Extreme (>35┬░C)"></span>
+          <span class="w-2.5 h-2.5 rounded-full bg-[#1d4ed8]" title="Cold (<10°C)"></span>
+          <span class="w-2.5 h-2.5 rounded-full bg-[#16a34a]" title="Mild (10-22°C)"></span>
+          <span class="w-2.5 h-2.5 rounded-full bg-[#eab308]" title="Warm (22-28°C)"></span>
+          <span class="w-2.5 h-2.5 rounded-full bg-[#ea580c]" title="Hot (28-35°C)"></span>
+          <span class="w-2.5 h-2.5 rounded-full bg-[#dc2626]" title="Extreme (>35°C)"></span>
         `;
       }
-      if (cardIcon) cardIcon.textContent = "≡ƒîí∩╕Å";
+      if (cardIcon) cardIcon.textContent = "🌡️";
       if (cardTitle) cardTitle.textContent = translateText("Live Temperature Scale", loc) || "Live Temperature Scale";
-      if (cardSubtitle) cardSubtitle.textContent = translateText("Ground Air Temperature (┬░C)", loc) || "Ground Air Temperature (┬░C)";
+      if (cardSubtitle) cardSubtitle.textContent = translateText("Ground Air Temperature (°C)", loc) || "Ground Air Temperature (°C)";
       if (notification) {
         notification.className = "px-2.5 py-1.5 rounded-xl bg-blue-500/10 dark:bg-blue-500/15 border border-blue-500/30 text-[11px] font-medium text-blue-900 dark:text-blue-200 leading-snug";
-        notification.innerHTML = `<span>≡ƒîí∩╕Å <strong>${translateText("Active", loc) || "Active"}:</strong> ${translateText("Color circles denote Air Temperature across the region.", loc) || "Color circles denote Air Temperature across the region."}</span>`;
+        notification.innerHTML = `<span>🌡️ <strong>${translateText("Active", loc) || "Active"}:</strong> ${translateText("Color circles denote Air Temperature across the region.", loc) || "Color circles denote Air Temperature across the region."}</span>`;
       }
       if (gradientBar) {
         gradientBar.style.background = "linear-gradient(90deg, #1d4ed8, #0284c7, #16a34a, #eab308, #ea580c, #dc2626)";
       }
       if (gradientLabels) {
-        gradientLabels.innerHTML = `<span>&lt; 5┬░C (${translateText("Cold", loc) || "Cold"})</span><span>22┬░C (${translateText("Mild", loc) || "Mild"})</span><span>&gt; 38┬░C (${translateText("Extreme", loc) || "Extreme"})</span>`;
+        gradientLabels.innerHTML = `<span>&lt; 5°C (${translateText("Cold", loc) || "Cold"})</span><span>22°C (${translateText("Mild", loc) || "Mild"})</span><span>&gt; 38°C (${translateText("Extreme", loc) || "Extreme"})</span>`;
       }
       if (swatchesList) {
         swatchesList.innerHTML = `
           <div class="flex items-center gap-2">
             <span class="w-3 h-3 rounded-full bg-[#1d4ed8] flex-shrink-0"></span>
-            <span class="text-slate-600 dark:text-slate-300"><strong class="text-slate-900 dark:text-slate-100">&lt; 10┬░C</strong> (&lt; 50┬░F) ┬╖ ${translateText("Cold / Chilly", loc) || "Cold / Chilly"}</span>
+            <span class="text-slate-600 dark:text-slate-300"><strong class="text-slate-900 dark:text-slate-100">&lt; 10°C</strong> (&lt; 50°F) · ${translateText("Cold / Chilly", loc) || "Cold / Chilly"}</span>
           </div>
           <div class="flex items-center gap-2">
             <span class="w-3 h-3 rounded-full bg-[#16a34a] flex-shrink-0"></span>
-            <span class="text-slate-600 dark:text-slate-300"><strong class="text-slate-900 dark:text-slate-100">10┬░C ΓÇô 22┬░C</strong> (50┬░F ΓÇô 72┬░F) ┬╖ ${translateText("Mild & Pleasant", loc) || "Mild & Pleasant"}</span>
+            <span class="text-slate-600 dark:text-slate-300"><strong class="text-slate-900 dark:text-slate-100">10°C – 22°C</strong> (50°F – 72°F) · ${translateText("Mild & Pleasant", loc) || "Mild & Pleasant"}</span>
           </div>
           <div class="flex items-center gap-2">
             <span class="w-3 h-3 rounded-full bg-[#eab308] flex-shrink-0"></span>
-            <span class="text-slate-600 dark:text-slate-300"><strong class="text-slate-900 dark:text-slate-100">22┬░C ΓÇô 28┬░C</strong> (72┬░F ΓÇô 82┬░F) ┬╖ ${translateText("Warm", loc) || "Warm"}</span>
+            <span class="text-slate-600 dark:text-slate-300"><strong class="text-slate-900 dark:text-slate-100">22°C – 28°C</strong> (72°F – 82°F) · ${translateText("Warm", loc) || "Warm"}</span>
           </div>
           <div class="flex items-center gap-2">
             <span class="w-3 h-3 rounded-full bg-[#ea580c] flex-shrink-0"></span>
-            <span class="text-slate-600 dark:text-slate-300"><strong class="text-slate-900 dark:text-slate-100">28┬░C ΓÇô 35┬░C</strong> (82┬░F ΓÇô 95┬░F) ┬╖ ${translateText("Hot", loc) || "Hot"}</span>
+            <span class="text-slate-600 dark:text-slate-300"><strong class="text-slate-900 dark:text-slate-100">28°C – 35°C</strong> (82°F – 95°F) · ${translateText("Hot", loc) || "Hot"}</span>
           </div>
           <div class="flex items-center gap-2">
             <span class="w-3 h-3 rounded-full bg-[#dc2626] flex-shrink-0"></span>
-            <span class="text-slate-600 dark:text-slate-300"><strong class="text-slate-900 dark:text-slate-100">&gt; 35┬░C</strong> (&gt; 95┬░F) ┬╖ ${translateText("Very Hot / Extreme Heat", loc) || "Very Hot / Extreme Heat"}</span>
+            <span class="text-slate-600 dark:text-slate-300"><strong class="text-slate-900 dark:text-slate-100">&gt; 35°C</strong> (&gt; 95°F) · ${translateText("Very Hot / Extreme Heat", loc) || "Very Hot / Extreme Heat"}</span>
           </div>
         `;
       }
-      if (switchModeIcon) switchModeIcon.textContent = "≡ƒº¡";
+      if (switchModeIcon) switchModeIcon.textContent = "🧭";
       if (switchModeText) switchModeText.textContent = translateText("Switch to Elevation Relief", loc) || "Switch to Elevation Relief";
 
     } else if (isElevationActive) {
-      // ΓöÇΓöÇ Elevation Relief Mode ΓöÇΓöÇ
+      // ── Elevation Relief Mode ──
       widget.classList.remove("hidden");
-      if (pillIcon) pillIcon.textContent = "≡ƒº¡";
+      if (pillIcon) pillIcon.textContent = "🧭";
       if (pillTitle) pillTitle.textContent = translateText("Elevation Key", loc) || "Elevation Key";
       if (pillSwatches) {
         pillSwatches.innerHTML = `
@@ -13459,7 +13543,7 @@ class AurafiskyApp {
           <span class="w-2.5 h-2.5 rounded-full bg-[#d32f2f]" title="Peaks (>1000m)"></span>
         `;
       }
-      if (cardIcon) cardIcon.textContent = "≡ƒº¡";
+      if (cardIcon) cardIcon.textContent = "🧭";
       if (cardTitle) cardTitle.textContent = translateText("Topographic Elevation", loc) || "Topographic Elevation";
       if (cardSubtitle) cardSubtitle.textContent = translateText("Height Above Sea Level (Relief)", loc) || "Height Above Sea Level (Relief)";
       if (notification) {
@@ -13476,29 +13560,29 @@ class AurafiskyApp {
         swatchesList.innerHTML = `
           <div class="flex items-center gap-2">
             <span class="w-3 h-3 rounded-full bg-[#388e3c] flex-shrink-0"></span>
-            <span class="text-slate-600 dark:text-slate-300"><strong class="text-slate-900 dark:text-slate-100">0 ΓÇô 200 m</strong> (0 ΓÇô 650 ft) ┬╖ ${translateText("Coastal lowlands & plains", loc) || "Coastal lowlands & plains"}</span>
+            <span class="text-slate-600 dark:text-slate-300"><strong class="text-slate-900 dark:text-slate-100">0 – 200 m</strong> (0 – 650 ft) · ${translateText("Coastal lowlands & plains", loc) || "Coastal lowlands & plains"}</span>
           </div>
           <div class="flex items-center gap-2">
             <span class="w-3 h-3 rounded-full bg-[#8bc34a] flex-shrink-0"></span>
-            <span class="text-slate-600 dark:text-slate-300"><strong class="text-slate-900 dark:text-slate-100">200 ΓÇô 500 m</strong> (650 ΓÇô 1,600 ft) ┬╖ ${translateText("Foothills & river valleys", loc) || "Foothills & river valleys"}</span>
+            <span class="text-slate-600 dark:text-slate-300"><strong class="text-slate-900 dark:text-slate-100">200 – 500 m</strong> (650 – 1,600 ft) · ${translateText("Foothills & river valleys", loc) || "Foothills & river valleys"}</span>
           </div>
           <div class="flex items-center gap-2">
             <span class="w-3 h-3 rounded-full bg-[#f57c00] flex-shrink-0"></span>
-            <span class="text-slate-600 dark:text-slate-300"><strong class="text-slate-900 dark:text-slate-100">500 ΓÇô 1,000 m</strong> (1,600 ΓÇô 3,300 ft) ┬╖ ${translateText("Tablelands & plateaus", loc) || "Tablelands & plateaus"}</span>
+            <span class="text-slate-600 dark:text-slate-300"><strong class="text-slate-900 dark:text-slate-100">500 – 1,000 m</strong> (1,600 – 3,300 ft) · ${translateText("Tablelands & plateaus", loc) || "Tablelands & plateaus"}</span>
           </div>
           <div class="flex items-center gap-2">
             <span class="w-3 h-3 rounded-full bg-[#d32f2f] flex-shrink-0"></span>
-            <span class="text-slate-600 dark:text-slate-300"><strong class="text-slate-900 dark:text-slate-100">&gt; 1,000 m</strong> (&gt; 3,300 ft) ┬╖ ${translateText("Mountain ridges & peaks", loc) || "Mountain ridges & peaks"}</span>
+            <span class="text-slate-600 dark:text-slate-300"><strong class="text-slate-900 dark:text-slate-100">&gt; 1,000 m</strong> (&gt; 3,300 ft) · ${translateText("Mountain ridges & peaks", loc) || "Mountain ridges & peaks"}</span>
           </div>
         `;
       }
-      if (switchModeIcon) switchModeIcon.textContent = "≡ƒîí∩╕Å";
+      if (switchModeIcon) switchModeIcon.textContent = "🌡️";
       if (switchModeText) switchModeText.textContent = translateText("Show Live Temperature Grid", loc) || "Show Live Temperature Grid";
 
     } else {
-      // ΓöÇΓöÇ Standard Basemap (Street/Satellite) ΓöÇΓöÇ
+      // ── Standard Basemap (Street/Satellite) ──
       widget.classList.remove("hidden");
-      if (pillIcon) pillIcon.textContent = "≡ƒù║∩╕Å";
+      if (pillIcon) pillIcon.textContent = "🗺️";
       if (pillTitle) pillTitle.textContent = translateText("Map Key", loc) || "Map Key";
       if (pillSwatches) {
         pillSwatches.innerHTML = `
@@ -13507,7 +13591,7 @@ class AurafiskyApp {
           <span class="w-2.5 h-2.5 rounded-full bg-[#d32f2f]" title="Peaks"></span>
         `;
       }
-      if (cardIcon) cardIcon.textContent = "≡ƒù║∩╕Å";
+      if (cardIcon) cardIcon.textContent = "🗺️";
       if (cardTitle) cardTitle.textContent = translateText("Map Color Legend", loc) || "Map Color Legend";
       if (cardSubtitle) cardSubtitle.textContent = translateText("Elevation & Temperature Keys", loc) || "Elevation & Temperature Keys";
       if (notification) {
@@ -13536,7 +13620,7 @@ class AurafiskyApp {
           </div>
         `;
       }
-      if (switchModeIcon) switchModeIcon.textContent = "≡ƒîí∩╕Å";
+      if (switchModeIcon) switchModeIcon.textContent = "🌡️";
       if (switchModeText) switchModeText.textContent = translateText("Show Live Temperature Grid", loc) || "Show Live Temperature Grid";
     }
 
@@ -13546,7 +13630,7 @@ class AurafiskyApp {
   }
 }
 
-// ΓöÇΓöÇ Instantiate App ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+// ── Instantiate App ─────────────────────────────────────────────
 // app.js is an ES module (deferred), so DOMContentLoaded may have
 // already fired by the time this evaluates. Instantiate immediately
 // if the DOM is ready, otherwise wait for it.
@@ -13558,7 +13642,7 @@ function bootAurafisky() {
       if (window.app?.destroy) window.app.destroy();
     });
 
-    // ΓöÇΓöÇ Web Share Target ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+    // ── Web Share Target ──────────────────────────────
     // Handle "Share ΓåÆ Aurafisky" from Google Maps / other apps.
     // The OS opens /share-target?text=...&url=... and we load that location.
     const shareParams = new URLSearchParams(window.location.search);
@@ -13569,14 +13653,14 @@ function bootAurafisky() {
       window.app._hasPendingShareTarget = true;
       const mapsMatch = shareUrl.match(/@(-?\d+\.\d+),(-?\d+\.\d+)/);
       if (mapsMatch) {
-        // Google Maps URL with embedded coordinates ΓÇö load directly
+        // Google Maps URL with embedded coordinates — load directly
         window.app.selectLocation(
           parseFloat(mapsMatch[1]),
           parseFloat(mapsMatch[2]),
           shareText || "Shared location",
         );
       } else if (shareText) {
-        // Place name ΓÇö geocode via Open-Meteo
+        // Place name — geocode via Open-Meteo
         const WS = typeof WeatherService !== "undefined" ? WeatherService : globalThis.WeatherService;
         if (WS?.searchLocations) {
           WS.searchLocations(shareText).then((results) => {

@@ -15,12 +15,12 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
   <meta http-equiv="Content-Security-Policy"
-    content="default-src 'self'; child-src 'self' https://aurafisky.firebaseapp.com https://aurafisky.web.app; worker-src 'self' blob:; frame-src 'self' https://aurafisky.firebaseapp.com https://aurafisky.web.app; script-src 'self' 'unsafe-inline' https://unpkg.com https://cdn.jsdelivr.net https://www.gstatic.com https://apis.google.com https://accounts.google.com https://*.gstatic.com https://*.google.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://unpkg.com https://cdn.jsdelivr.net https://www.gstatic.com https://*.gstatic.com; font-src 'self' https://fonts.gstatic.com https://cdn.jsdelivr.net; img-src 'self' data: blob: https://tiles.openfreemap.org https://tile.openstreetmap.org https://*.tile.openstreetmap.org https://*.openstreetmap.org https://*.rainviewer.com https://*.open-meteo.com https://*.googleusercontent.com https://server.arcgisonline.com https://services.arcgisonline.com https://*.arcgisonline.com https://*.tile.opentopomap.org https://www.google.com https://www.gstatic.com https://fonts.gstatic.com https://*.gstatic.com; connect-src 'self' https://tiles.openfreemap.org https://tile.openstreetmap.org https://*.tile.openstreetmap.org https://api.open-meteo.com https://air-quality-api.open-meteo.com https://geocoding-api.open-meteo.com https://archive-api.open-meteo.com https://*.open-meteo.com https://nominatim.openstreetmap.org https://router.project-osrm.org https://api.rainviewer.com https://tilecache.rainviewer.com https://*.firebaseio.com https://*.googleapis.com https://www.gstatic.com https://cdn.jsdelivr.net https://server.arcgisonline.com https://services.arcgisonline.com https://*.arcgisonline.com https://*.tile.opentopomap.org https://rest.isric.org https://api.gbif.org https://translate.googleapis.com;" />
+    content="default-src 'self'; child-src 'self' https://aurafisky.firebaseapp.com https://aurafisky.web.app; worker-src 'self' blob:; frame-src 'self' https://aurafisky.firebaseapp.com https://aurafisky.web.app; script-src 'self' '' https://unpkg.com https://cdn.jsdelivr.net https://www.gstatic.com https://apis.google.com https://accounts.google.com https://*.gstatic.com https://*.google.com; style-src 'self' '' https://fonts.googleapis.com https://unpkg.com https://cdn.jsdelivr.net https://www.gstatic.com https://*.gstatic.com; font-src 'self' https://fonts.gstatic.com https://cdn.jsdelivr.net; img-src 'self' data: blob: https://tiles.openfreemap.org https://tile.openstreetmap.org https://*.tile.openstreetmap.org https://*.openstreetmap.org https://*.rainviewer.com https://*.open-meteo.com https://*.googleusercontent.com https://server.arcgisonline.com https://services.arcgisonline.com https://*.arcgisonline.com https://*.tile.opentopomap.org https://www.google.com https://www.gstatic.com https://fonts.gstatic.com https://*.gstatic.com; connect-src 'self' https://tiles.openfreemap.org https://tile.openstreetmap.org https://*.tile.openstreetmap.org https://api.open-meteo.com https://air-quality-api.open-meteo.com https://geocoding-api.open-meteo.com https://archive-api.open-meteo.com https://*.open-meteo.com https://nominatim.openstreetmap.org https://router.project-osrm.org https://api.rainviewer.com https://tilecache.rainviewer.com https://*.firebaseio.com https://*.googleapis.com https://www.gstatic.com https://cdn.jsdelivr.net https://server.arcgisonline.com https://services.arcgisonline.com https://*.arcgisonline.com https://*.tile.opentopomap.org https://rest.isric.org https://api.gbif.org https://translate.googleapis.com;" />
   <meta name="mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
 
   <!-- Critical viewport-height script (runs before paint). External file
-       (not inline) so the CSP below doesn't need 'unsafe-inline' for scripts.
+       (not inline) so the CSP below doesn't need '' for scripts.
        `defer` keeps it from blocking HTML parsing, so the map container and
        everything else below it can parse/download in parallel. -->
   <script src="/viewport-height.js" defer></script>
@@ -3017,10 +3017,39 @@
             <span class="text-[9px] text-slate-400 block">On-map color indication</span>
           </div>
         </div>
-        <button id="toggleMapLegendCardBtn" type="button"
-          class="px-2.5 py-1 rounded-lg bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-[10px] font-bold text-slate-700 dark:text-slate-200 transition-colors cursor-pointer active:scale-95">
-          View Key
-        </button>
+        <div class="flex items-center gap-2">
+          <button id="toggleMapLegendCardBtn" type="button"
+            class="px-2 py-0.5 rounded-lg bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-[10px] font-bold text-slate-700 dark:text-slate-200 transition-colors cursor-pointer active:scale-95">
+            View
+          </button>
+          <label class="relative inline-flex items-center cursor-pointer">
+            <input type="checkbox" id="mapLegendVisibilityToggle" class="sr-only peer" checked
+              aria-label="Toggle map key visibility" />
+            <div
+              class="w-10 h-5 rounded-full bg-slate-300 peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-primary/30 peer dark:bg-slate-600 peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all dark:border-slate-600 peer-checked:bg-primary dark:peer-checked:bg-primary">
+            </div>
+          </label>
+        </div>
+      </div>
+
+      <!-- Timeline Bar Visibility -->
+      <div class="flex items-center justify-between pt-2 border-t border-slate-200/40 dark:border-slate-700/30">
+        <div class="flex items-center gap-2">
+          <div class="w-7 h-7 rounded-lg bg-cyan-500/10 text-cyan-500 flex items-center justify-center text-xs">
+            <span>📅</span>
+          </div>
+          <div>
+            <span class="text-[10px] font-semibold text-slate-700 dark:text-slate-300 block">Timeline Slider</span>
+            <span class="text-[9px] text-slate-400 block">Bottom date & time bar</span>
+          </div>
+        </div>
+        <label class="relative inline-flex items-center cursor-pointer">
+          <input type="checkbox" id="timelineBarVisibilityToggle" class="sr-only peer" checked
+            aria-label="Toggle timeline slider bar visibility" />
+          <div
+            class="w-10 h-5 rounded-full bg-slate-300 peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-primary/30 peer dark:bg-slate-600 peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all dark:border-slate-600 peer-checked:bg-primary dark:peer-checked:bg-primary">
+          </div>
+        </label>
       </div>
 
       <!-- Marine Swell Hazard & River Flood Alert -->
@@ -3548,6 +3577,38 @@
             <label class="relative inline-flex items-center cursor-pointer">
               <input type="checkbox" id="settingsTimeline24hToggle" class="sr-only peer"
                 aria-label="24-hour timeline mode">
+              <div
+                class="w-11 h-6 bg-slate-300 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-primary/30 rounded-full peer dark:bg-slate-600 peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-slate-600 peer-checked:bg-primary dark:peer-checked:bg-primary">
+              </div>
+            </label>
+          </div>
+
+          <div class="flex items-center justify-between">
+            <div class="flex items-center gap-3">
+              <div class="w-8 h-8 rounded-xl bg-emerald-500/10 text-emerald-500 flex items-center justify-center text-sm">🗺️</div>
+              <div class="flex flex-col">
+                <span id="settingsMapLegendLabel" class="text-sm font-semibold text-slate-700 dark:text-slate-300">Map Key (Legend)</span>
+                <span id="settingsMapLegendSub" class="text-xs text-slate-500 dark:text-slate-400">Show elevation & temperature pill on map</span>
+              </div>
+            </div>
+            <label class="relative inline-flex items-center cursor-pointer">
+              <input type="checkbox" id="settingsMapLegendToggle" class="sr-only peer" checked aria-label="Toggle map key pill">
+              <div
+                class="w-11 h-6 bg-slate-300 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-primary/30 rounded-full peer dark:bg-slate-600 peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-slate-600 peer-checked:bg-primary dark:peer-checked:bg-primary">
+              </div>
+            </label>
+          </div>
+
+          <div class="flex items-center justify-between">
+            <div class="flex items-center gap-3">
+              <div class="w-8 h-8 rounded-xl bg-cyan-500/10 text-cyan-500 flex items-center justify-center text-sm">📅</div>
+              <div class="flex flex-col">
+                <span id="settingsTimelineBarLabel" class="text-sm font-semibold text-slate-700 dark:text-slate-300">Timeline Bar</span>
+                <span id="settingsTimelineBarSub" class="text-xs text-slate-500 dark:text-slate-400">Show bottom time-travel forecast slider</span>
+              </div>
+            </div>
+            <label class="relative inline-flex items-center cursor-pointer">
+              <input type="checkbox" id="settingsTimelineBarToggle" class="sr-only peer" checked aria-label="Toggle bottom timeline bar">
               <div
                 class="w-11 h-6 bg-slate-300 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-primary/30 rounded-full peer dark:bg-slate-600 peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-slate-600 peer-checked:bg-primary dark:peer-checked:bg-primary">
               </div>
@@ -4472,7 +4533,7 @@
 
   <!-- Accessibility keyboard navigation & modal listeners now live in app.js
        (moved out of an inline <script> so the CSP below doesn't need
-       'unsafe-inline' for scripts). The Service Worker is registered by
+       '' for scripts). The Service Worker is registered by
        AurafiskyApp.registerServiceWorker() in app.js, which sets
        updateViaCache:'none' and forces update checks. Registering here as
        well would create a second, weaker path. -->

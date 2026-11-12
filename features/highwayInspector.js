@@ -16,6 +16,7 @@ import LineString from "ol/geom/LineString.js";
 import Point from "ol/geom/Point.js";
 import { Style, Stroke, Fill, Circle as CircleStyle, Text } from "ol/style.js";
 import { fromLonLat, toLonLat } from "ol/proj.js";
+import Overlay from "ol/Overlay.js";
 import { haversineMeters } from "../modules/geo.js";
 
 let appRef = null;
@@ -923,22 +924,125 @@ export function init(app) {
   window.clearHighwayBadge = clearHighwayBadge;
   window.openHighwayInspectorModal = openHighwayInspectorModal;
 
-  // Intercept location address resolution to show Highway badge when detected, or remove it when not on a highway
-  const origRenderLocationAddressCard = app._renderLocationAddressCard?.bind(app);
-  if (origRenderLocationAddressCard) {
-    app._renderLocationAddressCard = function(address, displayName, lat, lng) {
-      origRenderLocationAddressCard(address, displayName, lat, lng);
-      try {
-        const detected = detectHighway(address || displayName, lat, lng);
-        const container = document.getElementById("locationAddressCard") || document.getElementById("locationAddressContent") || document.getElementById("locationAddressSummary")?.parentElement;
-        if (detected && container) {
-          renderHighwaySummaryBadge(container, detected);
-        } else {
-          clearHighwayBadge();
-        }
-      } catch (e) {
-        console.warn("Highway detection hook error:", e);
-      }
+  // Highways are no longer rendered on the location weather/address card.
+  // Instead, show highway info on the map when hovering over a road.
+  try {
+    let hoverOverlay = null;
+    let lastHoverHighwayId = null;
+    const ensureHoverOverlay = () => {
+      if (hoverOverlay) return hoverOverlay;
+      if (!appRef?.map) return null;
+      const el = document.createElement("div");
+      el.id = "highwayHoverTooltip";
+      el.style.cssText = "display:none;pointer-events:none;padding:6px 10px;border-radius:10px;background:rgba(15,23,42,0.92);color:#fff;font-size:11px;font-weight:600;box-shadow:0 4px 14px rgba(0,0,0,0.35);border:1px solid rgba(56,189,248,0.45);white-space:nowrap;";
+      hoverOverlay = new Overlay({
+        element: el,
+        positioning: "bottom-center",
+        offset: [0, -12],
+        stopEvent: false
+      });
+      appRef.map.addOverlay(hoverOverlay);
+      return hoverOverlay;
     };
+    const showHover = (highway, coordinate) => {
+      const overlay = ensureHoverOverlay();
+      if (!overlay || !highway) return;
+      const el = overlay.getElement();
+      el.innerHTML = `<span style="color:#38bdf8;">${highway.ref || "HWY"}</span> ${highway.shortName || highway.name || ""}`;
+      el.style.display = "block";
+      overlay.setPosition(coordinate);
+      lastHoverHighwayId = highway.id || highway.ref;
+    };
+    const hideHover = () => {
+      if (hoverOverlay) {
+        hoverOverlay.setPosition(undefined);
+        const el = hoverOverlay.getElement();
+        if (el) el.style.display = "none";
+      }
+      lastHoverHighwayId = null;
+      try { appRef.map.getTargetElement().style.cursor = ""; } catch (_) {}
+    };
+
+    if (appRef?.map && typeof appRef.map.on === "function") {
+      // Throttled Nominatim reverse-geocode on pointer move to detect highways.
+      // We debounce 400ms so we fire at most once per hover pause,
+      // not on every pixel during panning.
+      let _hoverTimer = null;
+      let _lastHoverCoord = null;
+      let _hoverAbort = null;
+
+      appRef.map.on("pointermove", (evt) => {
+        // Don't trigger during active drag/pan
+        if (evt.dragging) { hideHover(); return; }
+
+        // 1. Immediate: show tooltip if cursor is over a traced highway vector feature
+        let vectorDetected = null;
+        try {
+          appRef.map.forEachFeatureAtPixel(evt.pixel, (feature) => {
+            if (vectorDetected) return;
+            if (activeTraceHighway && feature.get && (
+              feature.get("highwayId") === activeTraceHighway.id ||
+              feature.get("name") === activeTraceHighway.name
+            )) {
+              vectorDetected = activeTraceHighway;
+            }
+          }, { hitTolerance: 6 });
+        } catch (_) {}
+
+        if (vectorDetected) {
+          showHover(vectorDetected, evt.coordinate);
+          try { appRef.map.getTargetElement().style.cursor = "pointer"; } catch (_) {}
+          clearTimeout(_hoverTimer);
+          return;
+        }
+
+        // 2. Debounced: reverse-geocode at cursor position after 400ms pause
+        _lastHoverCoord = evt.coordinate.slice();
+        clearTimeout(_hoverTimer);
+        _hoverTimer = setTimeout(async () => {
+          try {
+            if (_hoverAbort) { _hoverAbort.abort(); }
+            _hoverAbort = new AbortController();
+            const [lng, lat] = toLonLat(_lastHoverCoord);
+            const zoom = appRef.map?.getView?.()?.getZoom?.() ?? 10;
+            // Only detect highways at zoom ≥ 9 (road-visible zoom levels)
+            if (zoom < 9) { hideHover(); return; }
+            const url = `https://nominatim.openstreetmap.org/reverse?lat=${lat.toFixed(5)}&lon=${lng.toFixed(5)}&format=json&zoom=16&addressdetails=1`;
+            const resp = await fetch(url, {
+              signal: _hoverAbort.signal,
+              headers: { "Accept-Language": "en", "User-Agent": "Aurafisky/1.0" }
+            });
+            if (!resp.ok) { hideHover(); return; }
+            const data = await resp.json();
+            // Only show tooltip if the result is a road/highway OSM type
+            const osmType = data.type || data.class || "";
+            const isRoad = /^(motorway|trunk|primary|secondary|tertiary|motorway_link|trunk_link|road|highway)$/i.test(osmType);
+            if (!isRoad) { hideHover(); return; }
+            const addr = {
+              road: data.address?.road || data.name || data.display_name,
+              ref: data.address?.ref || (data.namedetails?.ref),
+              highway: osmType
+            };
+            const detected = detectHighway(addr, lat, lng);
+            if (detected) {
+              showHover(detected, _lastHoverCoord);
+              try { appRef.map.getTargetElement().style.cursor = "pointer"; } catch (_) {}
+            } else {
+              hideHover();
+            }
+          } catch (e) {
+            if (e?.name !== "AbortError") hideHover();
+          }
+        }, 400);
+      });
+
+      appRef.map.on("pointerout", () => {
+        clearTimeout(_hoverTimer);
+        if (_hoverAbort) { _hoverAbort.abort(); _hoverAbort = null; }
+        hideHover();
+      });
+    }
+  } catch (e) {
+    console.warn("Highway hover hook error:", e);
   }
 }

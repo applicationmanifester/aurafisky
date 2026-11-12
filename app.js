@@ -4064,27 +4064,29 @@ class AurafiskyApp {
   }
 
   _updateUrlParams(lat, lng, name) {
+    // No-op during normal navigation — writing lat/lng/name into the URL bar
+    // causes them to be re-read on every page refresh, overriding the proper
+    // startup fallback chain (GPS → Home → timezone default).
+    // Share URLs are built explicitly by _buildShareUrl() on demand.
+    // This method is intentionally left as a no-op to prevent URL pollution.
+  }
+
+  /**
+   * Build a one-time shareable URL for the current location.
+   * Called explicitly by share flows — never on automatic navigation.
+   */
+  _buildShareUrl(lat, lng, name, extraParams = {}) {
     try {
-      if (lat != null && lng != null && !isNaN(lat) && !isNaN(lng)) {
-        const url = new URL(window.location.href);
-        url.searchParams.set("lat", lat.toFixed(4));
-        url.searchParams.set("lng", lng.toFixed(4));
-        if (name) {
-          url.searchParams.set("name", name);
-        } else {
-          url.searchParams.delete("name");
-        }
-        // State serialization in URL hash for zero-backend shareable state
-        const hashParams = new URLSearchParams(window.location.hash.slice(1));
-        hashParams.set("lat", lat.toFixed(4));
-        hashParams.set("lng", lng.toFixed(4));
-        if (this.mapStyle) hashParams.set("layer", this.mapStyle);
-        if (name) hashParams.set("name", name);
-        url.hash = hashParams.toString();
-        window.history.replaceState(null, "", url.toString());
+      const url = new URL(window.location.origin + window.location.pathname);
+      url.searchParams.set("lat", lat.toFixed(4));
+      url.searchParams.set("lng", lng.toFixed(4));
+      if (name) url.searchParams.set("name", name);
+      for (const [k, v] of Object.entries(extraParams)) {
+        if (v != null) url.searchParams.set(k, String(v));
       }
-    } catch (e) {
-      console.warn("Could not update URL params:", e);
+      return url.toString();
+    } catch (_) {
+      return window.location.href;
     }
   }
 
@@ -4165,6 +4167,17 @@ class AurafiskyApp {
             name = null;
           }
           const effName = name || `${lat.toFixed(4)}, ${lng.toFixed(4)}`;
+          // Clear URL params immediately after consuming them so a page
+          // refresh doesn't re-trigger this branch and re-load the same
+          // location instead of falling through to session/home/GPS.
+          try {
+            const cleanUrl = new URL(window.location.href);
+            cleanUrl.searchParams.delete("lat");
+            cleanUrl.searchParams.delete("lng");
+            cleanUrl.searchParams.delete("name");
+            cleanUrl.hash = "";
+            window.history.replaceState(null, "", cleanUrl.toString());
+          } catch (_) {}
           this.selectLocation(lat, lng, effName);
           // Shared wallpaper link: open the wallpaper overlay for this location
           if (wallpaperStr === "true") {
@@ -4255,8 +4268,15 @@ class AurafiskyApp {
   _restoreSession() {
     const saved = this._localCache?._lastSession;
     if (saved && saved.lat != null && saved.lng != null) {
-      // Ignore automatic fallbacks or sessions not explicitly chosen by user
-      if (saved.isFallback || saved.userExplicit === false) {
+      // Ignore automatic fallbacks, home fallbacks, or sessions not explicitly chosen by user
+      if (saved.isFallback || saved.isHomeFallback || saved.isAutomaticDefault || saved.userExplicit === false) {
+        return false;
+      }
+      // Ignore a persisted location that is just the user's Home fallback, so a
+      // reopen/refresh re-runs GPS instead of re-opening that same place.
+      if (this.defaultLocation && this.defaultLocation.lat != null && this.defaultLocation.lng != null &&
+          Math.abs(saved.lat - this.defaultLocation.lat) < 0.005 &&
+          Math.abs(saved.lng - this.defaultLocation.lng) < 0.005) {
         return false;
       }
       // Migrate legacy sessions: previously, the app auto-persisted Bengaluru for GMT+5:30
@@ -5016,7 +5036,7 @@ class AurafiskyApp {
     }
     this._isFetching = true;
     try {
-      if (!options?.isFallback && !options?.isAutomaticDefault && !options?.restored) {
+      if (!options?.isFallback && !options?.isAutomaticDefault && !options?.isHomeFallback && !options?.restored) {
         this._persistSession(lat, lng, name, true);
       }
       this.syncBus?.syncLocation(lat, lng, name);
@@ -8615,11 +8635,7 @@ class AurafiskyApp {
     const activeTab = this.wallpaperLocations[this.activeWallpaperIndex];
     if (!activeTab) return;
 
-    const url = new URL(window.location.href);
-    url.searchParams.set("wallpaper", "true");
-    url.searchParams.set("lat", activeTab.lat.toFixed(4));
-    url.searchParams.set("lng", activeTab.lng.toFixed(4));
-    url.searchParams.set("name", activeTab.name);
+    const url = new URL(this._buildShareUrl(activeTab.lat, activeTab.lng, activeTab.name, { wallpaper: "true" }));
 
     try {
       if (navigator.share) {
@@ -12565,10 +12581,10 @@ class AurafiskyApp {
     this.setMapLanguage(lang);
 
     const title = document.querySelector("title");
-    if (title) title.textContent = `${t("app_name", lang)} — ${t("app_tagline", lang)}`;
+    if (title) title.textContent = `${t("app_name", lang)} ΓÇö ${t("app_tagline", lang)}`;
     if (this.$.searchInput) {
-      const ph = t("search_placeholder", lang) || "Search a city…";
-      this.$.searchInput.setAttribute("data-orig-placeholder", "Search a city…");
+      const ph = t("search_placeholder", lang) || "Search a cityΓÇª";
+      this.$.searchInput.setAttribute("data-orig-placeholder", "Search a cityΓÇª");
       this.$.searchInput.placeholder = ph;
       this.$.searchInput.setAttribute("placeholder", ph);
       this.$.searchInput.setAttribute("aria-label", ph);
@@ -12586,7 +12602,7 @@ class AurafiskyApp {
       daily: t("tab_daily", lang) || "7-Day",
       metrics: t("tab_metrics", lang) || "Details & AQI",
       astronomy: t("tab_astronomy", lang) || "Astronomy",
-      farm: t("tab_farm", lang) || "🌾 Farm",
+      farm: t("tab_farm", lang) || "≡ƒî╛ Farm",
     };
     document.querySelectorAll(".weather-tab-btn").forEach((btn) => {
       const tab = btn.dataset.tab;
@@ -12621,7 +12637,7 @@ class AurafiskyApp {
     const detailsBtn = document.getElementById("toggleAddressCardText");
     if (detailsBtn) detailsBtn.textContent = t("details", lang) || "Details";
     const briefingBtn = document.getElementById("briefingBtn");
-    if (briefingBtn) briefingBtn.textContent = `📡 ${t("generate_briefing", lang) || "Generate Briefing"}`;
+    if (briefingBtn) briefingBtn.textContent = `≡ƒôí ${t("generate_briefing", lang) || "Generate Briefing"}`;
     const discHeader = document.getElementById("discoveriesHeaderTitle");
     if (discHeader) discHeader.textContent = t("live_weather_intelligence_safety", lang) || "Live Weather Intelligence & Safety";
 
@@ -12789,11 +12805,11 @@ class AurafiskyApp {
       this.saveUserDataToCloud();
     }
     const langNames = {
-      en: "English", kn: "ಕನ್ನಡ (Kannada)", hi: "हिन्दी (Hindi)",
-      ta: "தமிழ் (Tamil)", te: "తెలుగు (Telugu)", mr: "मराठी (Marathi)",
-      bn: "বাংলা (Bengali)", gu: "ગુજરાતી (Gujarati)", ml: "മലയാളം (Malayalam)",
-      es: "Español", fr: "Français", de: "Deutsch", ja: "日本語", ar: "العربية",
-      pt: "Português", ru: "Русский", "zh-CN": "简体中文"
+      en: "English", kn: "α▓òα▓¿α│ìα▓¿α▓í (Kannada)", hi: "αñ╣αñ┐αñ¿αÑìαñªαÑÇ (Hindi)",
+      ta: "α«ñα««α«┐α«┤α»ì (Tamil)", te: "α░ñα▒åα░▓α▒üα░ùα▒ü (Telugu)", mr: "αñ«αñ░αñ╛αñáαÑÇ (Marathi)",
+      bn: "αª¼αª╛αªéαª▓αª╛ (Bengali)", gu: "α¬ùα½üα¬£α¬░α¬╛α¬ñα½Ç (Gujarati)", ml: "α┤«α┤▓α┤»α┤╛α┤│α┤é (Malayalam)",
+      es: "Espa├▒ol", fr: "Fran├ºais", de: "Deutsch", ja: "µùÑµ£¼Φ¬₧", ar: "╪º┘ä╪╣╪▒╪¿┘è╪⌐",
+      pt: "Portugu├¬s", ru: "╨á╤â╤ü╤ü╨║╨╕╨╣", "zh-CN": "τ«ÇΣ╜ôΣ╕¡µûç"
     };
     const selectedLanguageName = this.$.settingsAppLanguageSelect?.selectedOptions?.[0]?.textContent?.trim();
     if (!silent) {
@@ -12827,7 +12843,7 @@ class AurafiskyApp {
     if (!this.map || !this.lightBasemap || !this.darkBasemap) return;
     if (this.isDark) {
       // The map only follows the theme when it is not already a dark
-      // basemap — turning the app dark must not throw away a deliberate
+      // basemap ΓÇö turning the app dark must not throw away a deliberate
       // choice of the dark canvas or the dark hillshade.
       if (!isDarkMapMode(this.mapStyle)) {
         this.mapStyle = 'dark';
@@ -12871,7 +12887,7 @@ class AurafiskyApp {
     }
 
     // Synchronize dark theme: the map's brightness and the app's brightness
-    // are kept in step — a dark basemap takes the UI with it, a light one
+    // are kept in step ΓÇö a dark basemap takes the UI with it, a light one
     // brings it back.
     if (isDarkMapMode(style)) {
       if (!this.isDark) {
@@ -13006,7 +13022,7 @@ class AurafiskyApp {
       }
       if (layer instanceof LayerGroup) {
         // A basemap that is still fading in is on its way to `mapOpacity`
-        // already — setting it here would make it pop in before the
+        // already ΓÇö setting it here would make it pop in before the
         // crossfade starts.
         if (this._pendingBasemapGroup && layer === this._pendingBasemapGroup) return;
         const scale = layer === this.terrainOverlayLayer ? 0.4 : 1;
@@ -13077,7 +13093,7 @@ class AurafiskyApp {
     this._applyPlaceLabels();
     this._syncMapFlyoutControls();
     this.showToast?.(
-      next ? "🏷️ Place labels overlay enabled" : "Place labels overlay hidden",
+      next ? "≡ƒÅ╖∩╕Å Place labels overlay enabled" : "Place labels overlay hidden",
       "info",
     );
   }
@@ -13141,7 +13157,7 @@ class AurafiskyApp {
       if (isHybrid) {
         hint = "Always shown in Hybrid mode";
       } else if (isVector && this.placeLabelsEnabled) {
-        hint = "Vector labels active · Enabled for imagery";
+        hint = "Vector labels active ┬╖ Enabled for imagery";
       } else if (MAP_MODES_WITH_REFERENCE_LABELS.includes(this.mapStyle)) {
         // The canvas basemaps bundle their own reference layer, so the
         // overlay never applies to them.
@@ -13204,7 +13220,7 @@ class AurafiskyApp {
         this.updateMarineFloodUI?.(this.selectedLat, this.selectedLng);
       }
       // The user is about to pick a mode, so this is the moment to warm the
-      // tiles for all of them — the switch that follows should be a cache
+      // tiles for all of them ΓÇö the switch that follows should be a cache
       // hit rather than a download.
       setTimeout(() => {
         try {
@@ -13265,7 +13281,7 @@ class AurafiskyApp {
     const theme = this.isDark ? "dark" : "light";
     const group = this.isDark ? this.darkBasemap : this.lightBasemap;
     const rawStyle = this._glStyles?.[theme];
-    // Style hasn't finished loading yet — nothing to re-style. initMap()
+    // Style hasn't finished loading yet ΓÇö nothing to re-style. initMap()
     // already applies the current this.mapLanguage once the fetch resolves,
     // so there's no missed update, just nothing to do yet.
     if (!group || !rawStyle) return;
@@ -13288,7 +13304,7 @@ class AurafiskyApp {
 
     if (this.temperatureOverlayEnabled) {
       this.initTempOverlayLayers?.();
-      this.showToast?.("🌡️ Live temperature grid loaded on map", "info");
+      this.showToast?.("≡ƒîí∩╕Å Live temperature grid loaded on map", "info");
     } else {
       this.clearTempOverlay?.();
       this.showToast?.("Temperature grid cleared", "info");
@@ -13377,63 +13393,63 @@ class AurafiskyApp {
     const loc = this.language || detectLocale();
 
     if (isTempActive) {
-      // ── Temperature Mode ──
+      // ΓöÇΓöÇ Temperature Mode ΓöÇΓöÇ
       widget.classList.remove("hidden");
-      if (pillIcon) pillIcon.textContent = "🌡️";
+      if (pillIcon) pillIcon.textContent = "≡ƒîí∩╕Å";
       if (pillTitle) pillTitle.textContent = translateText("Temperature Scale", loc) || "Temperature Scale";
       if (pillSwatches) {
         pillSwatches.innerHTML = `
-          <span class="w-2.5 h-2.5 rounded-full bg-[#1d4ed8]" title="Cold (<10°C)"></span>
-          <span class="w-2.5 h-2.5 rounded-full bg-[#16a34a]" title="Mild (10-22°C)"></span>
-          <span class="w-2.5 h-2.5 rounded-full bg-[#eab308]" title="Warm (22-28°C)"></span>
-          <span class="w-2.5 h-2.5 rounded-full bg-[#ea580c]" title="Hot (28-35°C)"></span>
-          <span class="w-2.5 h-2.5 rounded-full bg-[#dc2626]" title="Extreme (>35°C)"></span>
+          <span class="w-2.5 h-2.5 rounded-full bg-[#1d4ed8]" title="Cold (<10┬░C)"></span>
+          <span class="w-2.5 h-2.5 rounded-full bg-[#16a34a]" title="Mild (10-22┬░C)"></span>
+          <span class="w-2.5 h-2.5 rounded-full bg-[#eab308]" title="Warm (22-28┬░C)"></span>
+          <span class="w-2.5 h-2.5 rounded-full bg-[#ea580c]" title="Hot (28-35┬░C)"></span>
+          <span class="w-2.5 h-2.5 rounded-full bg-[#dc2626]" title="Extreme (>35┬░C)"></span>
         `;
       }
-      if (cardIcon) cardIcon.textContent = "🌡️";
+      if (cardIcon) cardIcon.textContent = "≡ƒîí∩╕Å";
       if (cardTitle) cardTitle.textContent = translateText("Live Temperature Scale", loc) || "Live Temperature Scale";
-      if (cardSubtitle) cardSubtitle.textContent = translateText("Ground Air Temperature (°C)", loc) || "Ground Air Temperature (°C)";
+      if (cardSubtitle) cardSubtitle.textContent = translateText("Ground Air Temperature (┬░C)", loc) || "Ground Air Temperature (┬░C)";
       if (notification) {
         notification.className = "px-2.5 py-1.5 rounded-xl bg-blue-500/10 dark:bg-blue-500/15 border border-blue-500/30 text-[11px] font-medium text-blue-900 dark:text-blue-200 leading-snug";
-        notification.innerHTML = `<span>🌡️ <strong>${translateText("Active", loc) || "Active"}:</strong> ${translateText("Color circles denote Air Temperature across the region.", loc) || "Color circles denote Air Temperature across the region."}</span>`;
+        notification.innerHTML = `<span>≡ƒîí∩╕Å <strong>${translateText("Active", loc) || "Active"}:</strong> ${translateText("Color circles denote Air Temperature across the region.", loc) || "Color circles denote Air Temperature across the region."}</span>`;
       }
       if (gradientBar) {
         gradientBar.style.background = "linear-gradient(90deg, #1d4ed8, #0284c7, #16a34a, #eab308, #ea580c, #dc2626)";
       }
       if (gradientLabels) {
-        gradientLabels.innerHTML = `<span>&lt; 5°C (${translateText("Cold", loc) || "Cold"})</span><span>22°C (${translateText("Mild", loc) || "Mild"})</span><span>&gt; 38°C (${translateText("Extreme", loc) || "Extreme"})</span>`;
+        gradientLabels.innerHTML = `<span>&lt; 5┬░C (${translateText("Cold", loc) || "Cold"})</span><span>22┬░C (${translateText("Mild", loc) || "Mild"})</span><span>&gt; 38┬░C (${translateText("Extreme", loc) || "Extreme"})</span>`;
       }
       if (swatchesList) {
         swatchesList.innerHTML = `
           <div class="flex items-center gap-2">
             <span class="w-3 h-3 rounded-full bg-[#1d4ed8] flex-shrink-0"></span>
-            <span class="text-slate-600 dark:text-slate-300"><strong class="text-slate-900 dark:text-slate-100">&lt; 10°C</strong> (&lt; 50°F) · ${translateText("Cold / Chilly", loc) || "Cold / Chilly"}</span>
+            <span class="text-slate-600 dark:text-slate-300"><strong class="text-slate-900 dark:text-slate-100">&lt; 10┬░C</strong> (&lt; 50┬░F) ┬╖ ${translateText("Cold / Chilly", loc) || "Cold / Chilly"}</span>
           </div>
           <div class="flex items-center gap-2">
             <span class="w-3 h-3 rounded-full bg-[#16a34a] flex-shrink-0"></span>
-            <span class="text-slate-600 dark:text-slate-300"><strong class="text-slate-900 dark:text-slate-100">10°C – 22°C</strong> (50°F – 72°F) · ${translateText("Mild & Pleasant", loc) || "Mild & Pleasant"}</span>
+            <span class="text-slate-600 dark:text-slate-300"><strong class="text-slate-900 dark:text-slate-100">10┬░C ΓÇô 22┬░C</strong> (50┬░F ΓÇô 72┬░F) ┬╖ ${translateText("Mild & Pleasant", loc) || "Mild & Pleasant"}</span>
           </div>
           <div class="flex items-center gap-2">
             <span class="w-3 h-3 rounded-full bg-[#eab308] flex-shrink-0"></span>
-            <span class="text-slate-600 dark:text-slate-300"><strong class="text-slate-900 dark:text-slate-100">22°C – 28°C</strong> (72°F – 82°F) · ${translateText("Warm", loc) || "Warm"}</span>
+            <span class="text-slate-600 dark:text-slate-300"><strong class="text-slate-900 dark:text-slate-100">22┬░C ΓÇô 28┬░C</strong> (72┬░F ΓÇô 82┬░F) ┬╖ ${translateText("Warm", loc) || "Warm"}</span>
           </div>
           <div class="flex items-center gap-2">
             <span class="w-3 h-3 rounded-full bg-[#ea580c] flex-shrink-0"></span>
-            <span class="text-slate-600 dark:text-slate-300"><strong class="text-slate-900 dark:text-slate-100">28°C – 35°C</strong> (82°F – 95°F) · ${translateText("Hot", loc) || "Hot"}</span>
+            <span class="text-slate-600 dark:text-slate-300"><strong class="text-slate-900 dark:text-slate-100">28┬░C ΓÇô 35┬░C</strong> (82┬░F ΓÇô 95┬░F) ┬╖ ${translateText("Hot", loc) || "Hot"}</span>
           </div>
           <div class="flex items-center gap-2">
             <span class="w-3 h-3 rounded-full bg-[#dc2626] flex-shrink-0"></span>
-            <span class="text-slate-600 dark:text-slate-300"><strong class="text-slate-900 dark:text-slate-100">&gt; 35°C</strong> (&gt; 95°F) · ${translateText("Very Hot / Extreme Heat", loc) || "Very Hot / Extreme Heat"}</span>
+            <span class="text-slate-600 dark:text-slate-300"><strong class="text-slate-900 dark:text-slate-100">&gt; 35┬░C</strong> (&gt; 95┬░F) ┬╖ ${translateText("Very Hot / Extreme Heat", loc) || "Very Hot / Extreme Heat"}</span>
           </div>
         `;
       }
-      if (switchModeIcon) switchModeIcon.textContent = "🧭";
+      if (switchModeIcon) switchModeIcon.textContent = "≡ƒº¡";
       if (switchModeText) switchModeText.textContent = translateText("Switch to Elevation Relief", loc) || "Switch to Elevation Relief";
 
     } else if (isElevationActive) {
-      // ── Elevation Relief Mode ──
+      // ΓöÇΓöÇ Elevation Relief Mode ΓöÇΓöÇ
       widget.classList.remove("hidden");
-      if (pillIcon) pillIcon.textContent = "🧭";
+      if (pillIcon) pillIcon.textContent = "≡ƒº¡";
       if (pillTitle) pillTitle.textContent = translateText("Elevation Key", loc) || "Elevation Key";
       if (pillSwatches) {
         pillSwatches.innerHTML = `
@@ -13443,12 +13459,12 @@ class AurafiskyApp {
           <span class="w-2.5 h-2.5 rounded-full bg-[#d32f2f]" title="Peaks (>1000m)"></span>
         `;
       }
-      if (cardIcon) cardIcon.textContent = "🧭";
+      if (cardIcon) cardIcon.textContent = "≡ƒº¡";
       if (cardTitle) cardTitle.textContent = translateText("Topographic Elevation", loc) || "Topographic Elevation";
       if (cardSubtitle) cardSubtitle.textContent = translateText("Height Above Sea Level (Relief)", loc) || "Height Above Sea Level (Relief)";
       if (notification) {
         notification.className = "px-2.5 py-1.5 rounded-xl bg-amber-500/10 dark:bg-amber-500/15 border border-amber-500/30 text-[11px] font-medium text-amber-900 dark:text-amber-200 leading-snug";
-        notification.innerHTML = `<span>⚠️ <strong>${translateText("Notice", loc) || "Notice"}:</strong> ${translateText("Red, orange & green shades denote Elevation above sea level, not temperature.", loc) || "Red, orange & green shades denote Elevation above sea level, not temperature."}</span>`;
+        notification.innerHTML = `<span>ΓÜá∩╕Å <strong>${translateText("Notice", loc) || "Notice"}:</strong> ${translateText("Red, orange & green shades denote Elevation above sea level, not temperature.", loc) || "Red, orange & green shades denote Elevation above sea level, not temperature."}</span>`;
       }
       if (gradientBar) {
         gradientBar.style.background = "linear-gradient(90deg, #388e3c, #8bc34a, #fbc02d, #f57c00, #d32f2f, #795548)";
@@ -13460,29 +13476,29 @@ class AurafiskyApp {
         swatchesList.innerHTML = `
           <div class="flex items-center gap-2">
             <span class="w-3 h-3 rounded-full bg-[#388e3c] flex-shrink-0"></span>
-            <span class="text-slate-600 dark:text-slate-300"><strong class="text-slate-900 dark:text-slate-100">0 – 200 m</strong> (0 – 650 ft) · ${translateText("Coastal lowlands & plains", loc) || "Coastal lowlands & plains"}</span>
+            <span class="text-slate-600 dark:text-slate-300"><strong class="text-slate-900 dark:text-slate-100">0 ΓÇô 200 m</strong> (0 ΓÇô 650 ft) ┬╖ ${translateText("Coastal lowlands & plains", loc) || "Coastal lowlands & plains"}</span>
           </div>
           <div class="flex items-center gap-2">
             <span class="w-3 h-3 rounded-full bg-[#8bc34a] flex-shrink-0"></span>
-            <span class="text-slate-600 dark:text-slate-300"><strong class="text-slate-900 dark:text-slate-100">200 – 500 m</strong> (650 – 1,600 ft) · ${translateText("Foothills & river valleys", loc) || "Foothills & river valleys"}</span>
+            <span class="text-slate-600 dark:text-slate-300"><strong class="text-slate-900 dark:text-slate-100">200 ΓÇô 500 m</strong> (650 ΓÇô 1,600 ft) ┬╖ ${translateText("Foothills & river valleys", loc) || "Foothills & river valleys"}</span>
           </div>
           <div class="flex items-center gap-2">
             <span class="w-3 h-3 rounded-full bg-[#f57c00] flex-shrink-0"></span>
-            <span class="text-slate-600 dark:text-slate-300"><strong class="text-slate-900 dark:text-slate-100">500 – 1,000 m</strong> (1,600 – 3,300 ft) · ${translateText("Tablelands & plateaus", loc) || "Tablelands & plateaus"}</span>
+            <span class="text-slate-600 dark:text-slate-300"><strong class="text-slate-900 dark:text-slate-100">500 ΓÇô 1,000 m</strong> (1,600 ΓÇô 3,300 ft) ┬╖ ${translateText("Tablelands & plateaus", loc) || "Tablelands & plateaus"}</span>
           </div>
           <div class="flex items-center gap-2">
             <span class="w-3 h-3 rounded-full bg-[#d32f2f] flex-shrink-0"></span>
-            <span class="text-slate-600 dark:text-slate-300"><strong class="text-slate-900 dark:text-slate-100">&gt; 1,000 m</strong> (&gt; 3,300 ft) · ${translateText("Mountain ridges & peaks", loc) || "Mountain ridges & peaks"}</span>
+            <span class="text-slate-600 dark:text-slate-300"><strong class="text-slate-900 dark:text-slate-100">&gt; 1,000 m</strong> (&gt; 3,300 ft) ┬╖ ${translateText("Mountain ridges & peaks", loc) || "Mountain ridges & peaks"}</span>
           </div>
         `;
       }
-      if (switchModeIcon) switchModeIcon.textContent = "🌡️";
+      if (switchModeIcon) switchModeIcon.textContent = "≡ƒîí∩╕Å";
       if (switchModeText) switchModeText.textContent = translateText("Show Live Temperature Grid", loc) || "Show Live Temperature Grid";
 
     } else {
-      // ── Standard Basemap (Street/Satellite) ──
+      // ΓöÇΓöÇ Standard Basemap (Street/Satellite) ΓöÇΓöÇ
       widget.classList.remove("hidden");
-      if (pillIcon) pillIcon.textContent = "🗺️";
+      if (pillIcon) pillIcon.textContent = "≡ƒù║∩╕Å";
       if (pillTitle) pillTitle.textContent = translateText("Map Key", loc) || "Map Key";
       if (pillSwatches) {
         pillSwatches.innerHTML = `
@@ -13491,7 +13507,7 @@ class AurafiskyApp {
           <span class="w-2.5 h-2.5 rounded-full bg-[#d32f2f]" title="Peaks"></span>
         `;
       }
-      if (cardIcon) cardIcon.textContent = "🗺️";
+      if (cardIcon) cardIcon.textContent = "≡ƒù║∩╕Å";
       if (cardTitle) cardTitle.textContent = translateText("Map Color Legend", loc) || "Map Color Legend";
       if (cardSubtitle) cardSubtitle.textContent = translateText("Elevation & Temperature Keys", loc) || "Elevation & Temperature Keys";
       if (notification) {
@@ -13520,7 +13536,7 @@ class AurafiskyApp {
           </div>
         `;
       }
-      if (switchModeIcon) switchModeIcon.textContent = "🌡️";
+      if (switchModeIcon) switchModeIcon.textContent = "≡ƒîí∩╕Å";
       if (switchModeText) switchModeText.textContent = translateText("Show Live Temperature Grid", loc) || "Show Live Temperature Grid";
     }
 
@@ -13530,7 +13546,7 @@ class AurafiskyApp {
   }
 }
 
-// ── Instantiate App ─────────────────────────────────────────────
+// ΓöÇΓöÇ Instantiate App ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
 // app.js is an ES module (deferred), so DOMContentLoaded may have
 // already fired by the time this evaluates. Instantiate immediately
 // if the DOM is ready, otherwise wait for it.
@@ -13542,8 +13558,8 @@ function bootAurafisky() {
       if (window.app?.destroy) window.app.destroy();
     });
 
-    // ── Web Share Target ──────────────────────────────
-    // Handle "Share → Aurafisky" from Google Maps / other apps.
+    // ΓöÇΓöÇ Web Share Target ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+    // Handle "Share ΓåÆ Aurafisky" from Google Maps / other apps.
     // The OS opens /share-target?text=...&url=... and we load that location.
     const shareParams = new URLSearchParams(window.location.search);
     const shareText = shareParams.get("text") || "";
@@ -13553,14 +13569,14 @@ function bootAurafisky() {
       window.app._hasPendingShareTarget = true;
       const mapsMatch = shareUrl.match(/@(-?\d+\.\d+),(-?\d+\.\d+)/);
       if (mapsMatch) {
-        // Google Maps URL with embedded coordinates — load directly
+        // Google Maps URL with embedded coordinates ΓÇö load directly
         window.app.selectLocation(
           parseFloat(mapsMatch[1]),
           parseFloat(mapsMatch[2]),
           shareText || "Shared location",
         );
       } else if (shareText) {
-        // Place name — geocode via Open-Meteo
+        // Place name ΓÇö geocode via Open-Meteo
         const WS = typeof WeatherService !== "undefined" ? WeatherService : globalThis.WeatherService;
         if (WS?.searchLocations) {
           WS.searchLocations(shareText).then((results) => {

@@ -366,7 +366,7 @@ export function buildCompareSummary(A, B) {
 export const ACTIONS = {
   routeStudio: {
     label: 'Route Studio',
-    icon: '🛣️',
+    icon: '🚗',
     run: (app) => {
       if (typeof app?.openRouteStudio === 'function') {
         app.openRouteStudio();
@@ -2336,7 +2336,7 @@ export class AuraAssistant {
       bullets,
       note: recommendation,
       actions: [
-        { id: 'routeStudio', label: 'Route Studio', icon: '🛣️' },
+        { id: 'routeStudio', label: 'Route Studio', icon: '🚗' },
         { id: 'radar', label: 'View Radar', icon: '🌧️' },
         { id: 'nextRain', label: 'Jump to Next Rain', icon: '⏭️' },
       ],

@@ -1049,7 +1049,7 @@ export function openRouteStudio() {
   } else if (pts.length === 1) {
     appRef.showToast?.(`Start set: ${pts[0].name}. Choose a destination by search or map.`, "info");
   } else {
-    appRef.showToast?.(`🛣️ Route Weather: ${pts.length} stops ready.`, "info");
+    appRef.showToast?.(`🚗 Route Weather: ${pts.length} stops ready.`, "info");
   }
 }
 
@@ -2701,7 +2701,7 @@ function renderEmptyRoutePanel() {
       ${singleStopCardHtml}
 
       <div class="py-3 sm:py-8 text-center space-y-1.5 sm:space-y-2">
-        <div class="text-2xl sm:text-3xl">🛣️</div>
+        <div class="text-2xl sm:text-3xl">🚗</div>
         <div class="font-extrabold text-sm text-slate-800 dark:text-slate-100">
           ${pts.length === 0 ? "Check Weather Along Your Route" : "Where are you heading?"}
         </div>

@@ -15,12 +15,12 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
   <meta http-equiv="Content-Security-Policy"
-    content="default-src 'self'; child-src 'self' https://aurafisky.firebaseapp.com https://aurafisky.web.app; worker-src 'self' blob:; frame-src 'self' https://aurafisky.firebaseapp.com https://aurafisky.web.app; script-src 'self' '' https://unpkg.com https://cdn.jsdelivr.net https://www.gstatic.com https://apis.google.com https://accounts.google.com https://*.gstatic.com https://*.google.com; style-src 'self' '' https://fonts.googleapis.com https://unpkg.com https://cdn.jsdelivr.net https://www.gstatic.com https://*.gstatic.com; font-src 'self' https://fonts.gstatic.com https://cdn.jsdelivr.net; img-src 'self' data: blob: https://tiles.openfreemap.org https://tile.openstreetmap.org https://*.tile.openstreetmap.org https://*.openstreetmap.org https://*.rainviewer.com https://*.open-meteo.com https://*.googleusercontent.com https://server.arcgisonline.com https://services.arcgisonline.com https://*.arcgisonline.com https://*.tile.opentopomap.org https://www.google.com https://www.gstatic.com https://fonts.gstatic.com https://*.gstatic.com; connect-src 'self' https://tiles.openfreemap.org https://tile.openstreetmap.org https://*.tile.openstreetmap.org https://api.open-meteo.com https://air-quality-api.open-meteo.com https://geocoding-api.open-meteo.com https://archive-api.open-meteo.com https://*.open-meteo.com https://nominatim.openstreetmap.org https://router.project-osrm.org https://api.rainviewer.com https://tilecache.rainviewer.com https://*.firebaseio.com https://*.googleapis.com https://www.gstatic.com https://cdn.jsdelivr.net https://server.arcgisonline.com https://services.arcgisonline.com https://*.arcgisonline.com https://*.tile.opentopomap.org https://rest.isric.org https://api.gbif.org https://translate.googleapis.com;" />
+    content="default-src 'self'; child-src 'self' https://aurafisky.firebaseapp.com https://aurafisky.web.app; worker-src 'self' blob:; frame-src 'self' https://aurafisky.firebaseapp.com https://aurafisky.web.app; script-src 'self' 'unsafe-inline' https://unpkg.com https://cdn.jsdelivr.net https://www.gstatic.com https://apis.google.com https://accounts.google.com https://*.gstatic.com https://*.google.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://unpkg.com https://cdn.jsdelivr.net https://www.gstatic.com https://*.gstatic.com; font-src 'self' https://fonts.gstatic.com https://cdn.jsdelivr.net; img-src 'self' data: blob: https://tiles.openfreemap.org https://tile.openstreetmap.org https://*.tile.openstreetmap.org https://*.openstreetmap.org https://*.rainviewer.com https://*.open-meteo.com https://*.googleusercontent.com https://server.arcgisonline.com https://services.arcgisonline.com https://*.arcgisonline.com https://*.tile.opentopomap.org https://www.google.com https://www.gstatic.com https://fonts.gstatic.com https://*.gstatic.com; connect-src 'self' https://tiles.openfreemap.org https://tile.openstreetmap.org https://*.tile.openstreetmap.org https://api.open-meteo.com https://air-quality-api.open-meteo.com https://geocoding-api.open-meteo.com https://archive-api.open-meteo.com https://*.open-meteo.com https://nominatim.openstreetmap.org https://router.project-osrm.org https://api.rainviewer.com https://tilecache.rainviewer.com https://*.firebaseio.com https://*.googleapis.com https://www.gstatic.com https://cdn.jsdelivr.net https://server.arcgisonline.com https://services.arcgisonline.com https://*.arcgisonline.com https://*.tile.opentopomap.org https://rest.isric.org https://api.gbif.org https://translate.googleapis.com;" />
   <meta name="mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
 
   <!-- Critical viewport-height script (runs before paint). External file
-       (not inline) so the CSP below doesn't need '' for scripts.
+       (not inline) so the CSP below doesn't need 'unsafe-inline' for scripts.
        `defer` keeps it from blocking HTML parsing, so the map container and
        everything else below it can parse/download in parallel. -->
   <script src="/viewport-height.js" defer></script>
@@ -378,7 +378,7 @@
           class="mobile-quick-chip flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-white/95 dark:bg-[#282a2d] border border-slate-200/80 dark:border-slate-700/60 shadow-sm text-xs font-medium text-slate-800 dark:text-slate-100 flex-shrink-0 active:scale-95 transition-all cursor-pointer"
           data-category="route-weather" title="Check weather and road hazards along your route"
           aria-label="Route Weather">
-          <span class="text-xs">🛣️</span>
+          <span class="text-xs">🚗</span>
           <span>Route Weather</span>
         </button>
       </div>
@@ -3287,7 +3287,7 @@
         <!-- 3. Route Weather Studio -->
         <div class="p-3 rounded-2xl bg-indigo-500/10 dark:bg-indigo-500/15 border border-indigo-500/20 space-y-1">
           <div class="flex items-center gap-2 font-bold text-indigo-900 dark:text-indigo-200">
-            <span>🛣️</span>
+            <span>🚗</span>
             <span>Route Weather Studio</span>
           </div>
           <p class="text-slate-600 dark:text-slate-300 leading-relaxed">
@@ -4242,7 +4242,7 @@
         <!-- Open Route Weather Option -->
         <button id="routeDropdownOpenStudioBtn" type="button"
           class="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-left text-xs font-semibold text-indigo-600 dark:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-950/40 transition-all cursor-pointer">
-          <span class="text-base shrink-0">🛣️</span>
+          <span class="text-base shrink-0">🚗</span>
           <div class="min-w-0 flex-1">
             <div class="font-bold flex items-center justify-between">
               <span>Route Weather</span>
@@ -4533,7 +4533,7 @@
 
   <!-- Accessibility keyboard navigation & modal listeners now live in app.js
        (moved out of an inline <script> so the CSP below doesn't need
-       '' for scripts). The Service Worker is registered by
+       'unsafe-inline' for scripts). The Service Worker is registered by
        AurafiskyApp.registerServiceWorker() in app.js, which sets
        updateViaCache:'none' and forces update checks. Registering here as
        well would create a second, weaker path. -->

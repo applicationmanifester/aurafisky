@@ -238,6 +238,56 @@ export const HIGHWAY_DATABASE = {
       { name: "Vellore", lat: 12.9165, lng: 79.1325, role: "destination", km: 533 }
     ]
   },
+  NH40: {
+    id: "NH40",
+    ref: "NH 40",
+    type: "National Highway (Rayalaseema Corridor)",
+    name: "National Highway 40 (Kurnool–Kadapa–Chittoor–Ranipet)",
+    shortName: "NH 40 (Kurnool ➔ Ranipet)",
+    origin: "Kurnool, Andhra Pradesh",
+    destination: "Ranipet, Tamil Nadu",
+    lengthKm: 408,
+    lengthMi: 254,
+    lanes: "4 Lanes",
+    states: ["Andhra Pradesh", "Tamil Nadu"],
+    description: "Major National Highway connecting Kurnool in north Rayalaseema through Nandyal, Kadapa, Rayachoti, Pileru, and Chittoor to Ranipet in Tamil Nadu.",
+    waypoints: [
+      { name: "Kurnool", lat: 15.8281, lng: 78.0373, role: "origin", km: 0 },
+      { name: "Nandyal", lat: 15.4870, lng: 78.4842, km: 74 },
+      { name: "Allagadda", lat: 15.1320, lng: 78.5130, km: 114 },
+      { name: "Mydukur", lat: 14.7330, lng: 78.6830, km: 160 },
+      { name: "Kadapa", lat: 14.4673, lng: 78.8242, km: 195 },
+      { name: "Guvvalacheruvu", lat: 14.3000, lng: 78.8500, km: 220 },
+      { name: "Rayachoti", lat: 14.0560, lng: 78.7520, km: 250 },
+      { name: "Kalakada", lat: 13.8800, lng: 78.7800, km: 280 },
+      { name: "Pileru", lat: 13.6540, lng: 78.9380, km: 310 },
+      { name: "Chittoor", lat: 13.2172, lng: 79.1003, km: 365 },
+      { name: "Ranipet", lat: 12.9272, lng: 79.3330, role: "destination", km: 408 }
+    ]
+  },
+  NH42: {
+    id: "NH42",
+    ref: "NH 42",
+    type: "National Highway",
+    name: "National Highway 42 (Jolarpettai–Kuppam–Punganur–Madanapalle–Anantapur)",
+    shortName: "NH 42 (Jolarpettai ➔ Anantapur)",
+    origin: "Jolarpettai, Tamil Nadu",
+    destination: "Anantapur, Andhra Pradesh",
+    lengthKm: 342,
+    lengthMi: 212,
+    lanes: "2 to 4 Lanes",
+    states: ["Tamil Nadu", "Andhra Pradesh"],
+    description: "Connects northern Tamil Nadu via Kuppam, Punganur, and Madanapalle with Kadiri and Anantapur in central Andhra Pradesh.",
+    waypoints: [
+      { name: "Jolarpettai", lat: 12.5650, lng: 78.5770, role: "origin", km: 0 },
+      { name: "Kuppam", lat: 12.7500, lng: 78.3670, km: 38 },
+      { name: "Punganur", lat: 13.3660, lng: 78.5800, km: 110 },
+      { name: "Madanapalle", lat: 13.5560, lng: 78.5010, km: 140 },
+      { name: "Kadiri", lat: 14.1160, lng: 78.1660, km: 220 },
+      { name: "Mudigubba", lat: 14.3400, lng: 77.9800, km: 260 },
+      { name: "Anantapur", lat: 14.6819, lng: 77.6006, role: "destination", km: 342 }
+    ]
+  },
   NH275: {
     id: "NH275",
     ref: "NH 275",
@@ -379,6 +429,10 @@ export function detectHighway(textOrAddress, lat = null, lng = null) {
     matchedHighway = HIGHWAY_DATABASE.NH27;
   } else if (/\b(?:NH\s*75|NATIONAL HIGHWAY\s*75|NH-75)\b/i.test(upper)) {
     matchedHighway = HIGHWAY_DATABASE.NH75;
+  } else if (/\b(?:NH\s*40|NATIONAL HIGHWAY\s*40|NH-40)\b/i.test(upper)) {
+    matchedHighway = HIGHWAY_DATABASE.NH40;
+  } else if (/\b(?:NH\s*42|NATIONAL HIGHWAY\s*42|NH-42)\b/i.test(upper)) {
+    matchedHighway = HIGHWAY_DATABASE.NH42;
   } else if (/\b(?:NH\s*275|NATIONAL HIGHWAY\s*275|BENGALURU[- ]MYSURU\s*EXPRESSWAY)\b/i.test(upper)) {
     matchedHighway = HIGHWAY_DATABASE.NH275;
   } else if (/\b(?:MUMBAI[- ]PUNE\s*EXPRESSWAY|YASHWANTRAO CHAVAN)\b/i.test(upper)) {
@@ -387,6 +441,15 @@ export function detectHighway(textOrAddress, lat = null, lng = null) {
     matchedHighway = HIGHWAY_DATABASE.AH43;
   } else if (/\b(?:I-95|INTERSTATE\s*95)\b/i.test(upper)) {
     matchedHighway = HIGHWAY_DATABASE.I95;
+  } else {
+    // Generic regex extractor for any numbered National Highway (e.g. NH 69, NH 71, etc.)
+    const anyNh = upper.match(/\b(?:NH|NATIONAL HIGHWAY)\s*[- ]?(\d+[A-Z]?)\b/i);
+    if (anyNh) {
+      const code = "NH" + anyNh[1];
+      if (HIGHWAY_DATABASE[code]) {
+        matchedHighway = HIGHWAY_DATABASE[code];
+      }
+    }
   }
 
   // 2. Spatial proximity fallback: if lat/lng is provided and no regex hit, check distance to corridors
@@ -906,6 +969,139 @@ export function openHighwayInspectorModal(highwayId, userLat = null, userLng = n
 }
 
 /**
+ * Initializes map hover detection for highways and road corridors.
+ */
+export function initHighwayMapHover(app) {
+  const currentApp = app || appRef;
+  if (!currentApp?.map || typeof currentApp.map.on !== "function") return;
+  if (currentApp._highwayHoverAttached) return;
+  currentApp._highwayHoverAttached = true;
+
+  try {
+    let hoverOverlay = null;
+    let lastHoverHighwayId = null;
+
+    const ensureHoverOverlay = () => {
+      if (hoverOverlay) return hoverOverlay;
+      if (!currentApp?.map) return null;
+      const el = document.createElement("div");
+      el.id = "highwayHoverTooltip";
+      el.style.cssText = "display:none;pointer-events:none;padding:6px 10px;border-radius:10px;background:rgba(15,23,42,0.92);color:#fff;font-size:11px;font-weight:600;box-shadow:0 4px 14px rgba(0,0,0,0.35);border:1px solid rgba(56,189,248,0.45);white-space:nowrap;z-index:9999;";
+      hoverOverlay = new Overlay({
+        element: el,
+        positioning: "bottom-center",
+        offset: [0, -12],
+        stopEvent: false
+      });
+      currentApp.map.addOverlay(hoverOverlay);
+      return hoverOverlay;
+    };
+
+    const showHover = (highway, coordinate) => {
+      const overlay = ensureHoverOverlay();
+      if (!overlay || !highway) return;
+      const el = overlay.getElement();
+      el.innerHTML = `<span style="color:#38bdf8;">🛣️ ${highway.ref || "HWY"}</span> ${highway.shortName || highway.name || ""}`;
+      el.style.display = "block";
+      overlay.setPosition(coordinate);
+      lastHoverHighwayId = highway.id || highway.ref;
+    };
+
+    const hideHover = () => {
+      if (hoverOverlay) {
+        hoverOverlay.setPosition(undefined);
+        const el = hoverOverlay.getElement();
+        if (el) el.style.display = "none";
+      }
+      lastHoverHighwayId = null;
+      try { currentApp.map.getTargetElement().style.cursor = ""; } catch (_) {}
+    };
+
+    let _hoverTimer = null;
+    let _lastHoverCoord = null;
+    let _hoverAbort = null;
+
+    currentApp.map.on("pointermove", (evt) => {
+      if (evt.dragging) { hideHover(); return; }
+
+      // 1. Immediate: show tooltip if cursor is over a traced highway vector feature
+      let vectorDetected = null;
+      try {
+        currentApp.map.forEachFeatureAtPixel(evt.pixel, (feature) => {
+          if (vectorDetected) return;
+          if (activeTraceHighway && feature.get && (
+            feature.get("highwayId") === activeTraceHighway.id ||
+            feature.get("name") === activeTraceHighway.name
+          )) {
+            vectorDetected = activeTraceHighway;
+          }
+        }, { hitTolerance: 6 });
+      } catch (_) {}
+
+      if (vectorDetected) {
+        showHover(vectorDetected, evt.coordinate);
+        try { currentApp.map.getTargetElement().style.cursor = "pointer"; } catch (_) {}
+        clearTimeout(_hoverTimer);
+        return;
+      }
+
+      // 2. Debounced: reverse-geocode at cursor position after 350ms pause
+      _lastHoverCoord = evt.coordinate.slice();
+      clearTimeout(_hoverTimer);
+      _hoverTimer = setTimeout(async () => {
+        try {
+          if (_hoverAbort) { _hoverAbort.abort(); }
+          _hoverAbort = new AbortController();
+          const [lng, lat] = toLonLat(_lastHoverCoord);
+          const zoom = currentApp.map?.getView?.()?.getZoom?.() ?? 10;
+          if (zoom < 9) { hideHover(); return; }
+          const url = `https://nominatim.openstreetmap.org/reverse?lat=${lat.toFixed(5)}&lon=${lng.toFixed(5)}&format=json&zoom=16&addressdetails=1`;
+          const resp = await fetch(url, {
+            signal: _hoverAbort.signal,
+            headers: { "Accept-Language": "en", "User-Agent": "Aurafisky/1.0" }
+          });
+          if (!resp.ok) { hideHover(); return; }
+          const data = await resp.json();
+          const osmType = data.type || data.class || "";
+          const roadName = data.address?.road || "";
+          const isRoad = data.class === "highway" ||
+            /^(motorway|trunk|primary|secondary|tertiary|motorway_link|trunk_link|road|highway)$/i.test(osmType) ||
+            /\b(?:NH|SH|National Highway|State Highway|Expressway)\b/i.test(roadName);
+
+          if (!isRoad) { hideHover(); return; }
+          const addr = {
+            road: data.address?.road || data.name || data.display_name,
+            ref: data.address?.ref || (data.namedetails?.ref),
+            highway: osmType,
+            village: data.address?.village,
+            town: data.address?.town,
+            city: data.address?.city,
+            state: data.address?.state
+          };
+          const detected = detectHighway(addr, lat, lng);
+          if (detected) {
+            showHover(detected, _lastHoverCoord);
+            try { currentApp.map.getTargetElement().style.cursor = "pointer"; } catch (_) {}
+          } else {
+            hideHover();
+          }
+        } catch (e) {
+          if (e?.name !== "AbortError") hideHover();
+        }
+      }, 350);
+    });
+
+    currentApp.map.on("pointerout", () => {
+      clearTimeout(_hoverTimer);
+      if (_hoverAbort) { _hoverAbort.abort(); _hoverAbort = null; }
+      hideHover();
+    });
+  } catch (e) {
+    console.warn("Highway hover hook error:", e);
+  }
+}
+
+/**
  * Attaches the Highway Inspector to the application instance.
  */
 export function init(app) {
@@ -917,6 +1113,7 @@ export function init(app) {
   app.openHighwayInspectorModal = openHighwayInspectorModal;
   app.openHighwayWeather = openHighwayWeather;
   app.renderHighwaySummaryBadge = renderHighwaySummaryBadge;
+  app.initHighwayMapHover = () => initHighwayMapHover(app);
 
   window.detectHighway = detectHighway;
   window.traceHighwayOnMap = traceHighwayOnMap;
@@ -924,125 +1121,7 @@ export function init(app) {
   window.clearHighwayBadge = clearHighwayBadge;
   window.openHighwayInspectorModal = openHighwayInspectorModal;
 
-  // Highways are no longer rendered on the location weather/address card.
-  // Instead, show highway info on the map when hovering over a road.
-  try {
-    let hoverOverlay = null;
-    let lastHoverHighwayId = null;
-    const ensureHoverOverlay = () => {
-      if (hoverOverlay) return hoverOverlay;
-      if (!appRef?.map) return null;
-      const el = document.createElement("div");
-      el.id = "highwayHoverTooltip";
-      el.style.cssText = "display:none;pointer-events:none;padding:6px 10px;border-radius:10px;background:rgba(15,23,42,0.92);color:#fff;font-size:11px;font-weight:600;box-shadow:0 4px 14px rgba(0,0,0,0.35);border:1px solid rgba(56,189,248,0.45);white-space:nowrap;";
-      hoverOverlay = new Overlay({
-        element: el,
-        positioning: "bottom-center",
-        offset: [0, -12],
-        stopEvent: false
-      });
-      appRef.map.addOverlay(hoverOverlay);
-      return hoverOverlay;
-    };
-    const showHover = (highway, coordinate) => {
-      const overlay = ensureHoverOverlay();
-      if (!overlay || !highway) return;
-      const el = overlay.getElement();
-      el.innerHTML = `<span style="color:#38bdf8;">${highway.ref || "HWY"}</span> ${highway.shortName || highway.name || ""}`;
-      el.style.display = "block";
-      overlay.setPosition(coordinate);
-      lastHoverHighwayId = highway.id || highway.ref;
-    };
-    const hideHover = () => {
-      if (hoverOverlay) {
-        hoverOverlay.setPosition(undefined);
-        const el = hoverOverlay.getElement();
-        if (el) el.style.display = "none";
-      }
-      lastHoverHighwayId = null;
-      try { appRef.map.getTargetElement().style.cursor = ""; } catch (_) {}
-    };
-
-    if (appRef?.map && typeof appRef.map.on === "function") {
-      // Throttled Nominatim reverse-geocode on pointer move to detect highways.
-      // We debounce 400ms so we fire at most once per hover pause,
-      // not on every pixel during panning.
-      let _hoverTimer = null;
-      let _lastHoverCoord = null;
-      let _hoverAbort = null;
-
-      appRef.map.on("pointermove", (evt) => {
-        // Don't trigger during active drag/pan
-        if (evt.dragging) { hideHover(); return; }
-
-        // 1. Immediate: show tooltip if cursor is over a traced highway vector feature
-        let vectorDetected = null;
-        try {
-          appRef.map.forEachFeatureAtPixel(evt.pixel, (feature) => {
-            if (vectorDetected) return;
-            if (activeTraceHighway && feature.get && (
-              feature.get("highwayId") === activeTraceHighway.id ||
-              feature.get("name") === activeTraceHighway.name
-            )) {
-              vectorDetected = activeTraceHighway;
-            }
-          }, { hitTolerance: 6 });
-        } catch (_) {}
-
-        if (vectorDetected) {
-          showHover(vectorDetected, evt.coordinate);
-          try { appRef.map.getTargetElement().style.cursor = "pointer"; } catch (_) {}
-          clearTimeout(_hoverTimer);
-          return;
-        }
-
-        // 2. Debounced: reverse-geocode at cursor position after 400ms pause
-        _lastHoverCoord = evt.coordinate.slice();
-        clearTimeout(_hoverTimer);
-        _hoverTimer = setTimeout(async () => {
-          try {
-            if (_hoverAbort) { _hoverAbort.abort(); }
-            _hoverAbort = new AbortController();
-            const [lng, lat] = toLonLat(_lastHoverCoord);
-            const zoom = appRef.map?.getView?.()?.getZoom?.() ?? 10;
-            // Only detect highways at zoom ≥ 9 (road-visible zoom levels)
-            if (zoom < 9) { hideHover(); return; }
-            const url = `https://nominatim.openstreetmap.org/reverse?lat=${lat.toFixed(5)}&lon=${lng.toFixed(5)}&format=json&zoom=16&addressdetails=1`;
-            const resp = await fetch(url, {
-              signal: _hoverAbort.signal,
-              headers: { "Accept-Language": "en", "User-Agent": "Aurafisky/1.0" }
-            });
-            if (!resp.ok) { hideHover(); return; }
-            const data = await resp.json();
-            // Only show tooltip if the result is a road/highway OSM type
-            const osmType = data.type || data.class || "";
-            const isRoad = /^(motorway|trunk|primary|secondary|tertiary|motorway_link|trunk_link|road|highway)$/i.test(osmType);
-            if (!isRoad) { hideHover(); return; }
-            const addr = {
-              road: data.address?.road || data.name || data.display_name,
-              ref: data.address?.ref || (data.namedetails?.ref),
-              highway: osmType
-            };
-            const detected = detectHighway(addr, lat, lng);
-            if (detected) {
-              showHover(detected, _lastHoverCoord);
-              try { appRef.map.getTargetElement().style.cursor = "pointer"; } catch (_) {}
-            } else {
-              hideHover();
-            }
-          } catch (e) {
-            if (e?.name !== "AbortError") hideHover();
-          }
-        }, 400);
-      });
-
-      appRef.map.on("pointerout", () => {
-        clearTimeout(_hoverTimer);
-        if (_hoverAbort) { _hoverAbort.abort(); _hoverAbort = null; }
-        hideHover();
-      });
-    }
-  } catch (e) {
-    console.warn("Highway hover hook error:", e);
+  if (app.map) {
+    initHighwayMapHover(app);
   }
 }

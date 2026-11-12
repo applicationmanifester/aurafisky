@@ -100,5 +100,23 @@ describe("Interactive Highway Inspector", () => {
     expect(res.ref).toBe("SH 233");
     expect(res.isDynamic).toBe(true);
   });
+
+  it("detects NH 40 corridor from road ref or name", () => {
+    expect(HIGHWAY_DATABASE.NH40).toBeDefined();
+    expect(HIGHWAY_DATABASE.NH40.origin).toContain("Kurnool");
+    expect(HIGHWAY_DATABASE.NH40.destination).toContain("Ranipet");
+
+    const res = detectHighway({ road: "National Highway 40", ref: "NH 40", state: "Andhra Pradesh" });
+    expect(res).not.toBeNull();
+    expect(res.id).toBe("NH40");
+    expect(res.origin).toContain("Kurnool");
+    expect(res.destination).toContain("Ranipet");
+  });
+
+  it("detects NH 40 from plain text string 'NH40'", () => {
+    const res = detectHighway("Near Pileru on NH40");
+    expect(res).not.toBeNull();
+    expect(res.id).toBe("NH40");
+  });
 });
 

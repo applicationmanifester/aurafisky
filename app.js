@@ -1029,6 +1029,7 @@ class AurafiskyApp {
 
     // Setup Particle Canvas Overlay
     this.initWeatherCanvas();
+    this.initHighwayMapHover?.();
 
     // Bind event handlers
     this.bindEvents();
@@ -4557,6 +4558,11 @@ class AurafiskyApp {
       ? WeatherService.getFormattedLocationCurrentDateTime(tzName, utcOffSec || 0)
       : "";
     const detailTzBadge = [tzName, tzAbbr, utcOffsetStr].filter(Boolean).join(" · ");
+    const detectedHwy = this.detectHighway ? this.detectHighway(address || displayName, effLat, effLng) : null;
+    const rawRoad = address?.road || (typeof displayName === "string" ? (displayName.match(/\b(?:NH|SH|National Highway|State Highway)\s*[- ]?\d+[A-Z]?\b/i)?.[0]) : "");
+    const roadDisplay = detectedHwy
+      ? `${detectedHwy.ref}${detectedHwy.shortName && detectedHwy.shortName !== detectedHwy.ref ? ` (${detectedHwy.shortName})` : (detectedHwy.name ? ` (${detectedHwy.name})` : '')}`
+      : rawRoad;
 
     if (content) {
       content.innerHTML = `
@@ -4577,6 +4583,15 @@ class AurafiskyApp {
             <span class="text-[8.5px] uppercase font-bold text-slate-400 tracking-wider select-text">State / Province</span>
             <span class="font-semibold text-slate-800 dark:text-slate-200 truncate select-text cursor-text" title="${stateVal}">${stateVal}</span>
           </div>
+          ${roadDisplay ? `
+          <div class="col-span-2 flex flex-col min-w-0 select-text pt-1 border-t border-slate-200/50 dark:border-slate-700/40">
+            <span class="text-[8.5px] uppercase font-bold text-slate-400 tracking-wider select-text">Road / Highway</span>
+            <div class="flex items-center justify-between gap-1.5 min-w-0">
+              <span class="font-semibold text-slate-800 dark:text-slate-200 truncate select-text cursor-text" title="${this._escapeHtml(roadDisplay)}">🛣️ ${this._escapeHtml(roadDisplay)}</span>
+              ${detectedHwy ? `<button type="button" onclick="window.traceHighwayOnMap?.('${detectedHwy.id}')" class="text-[9.5px] text-teal-600 dark:text-teal-400 font-bold hover:underline flex-shrink-0 cursor-pointer">Trace Corridor ➔</button>` : ''}
+            </div>
+          </div>
+          ` : ''}
           <div class="col-span-2 flex flex-col min-w-0 select-text pt-1 border-t border-slate-200/50 dark:border-slate-700/40">
             <span class="text-[8.5px] uppercase font-bold text-slate-400 tracking-wider select-text">Coordinates (Lat, Long)</span>
             <span class="font-mono font-semibold text-teal-700 dark:text-teal-300 truncate select-text cursor-text" title="${coordAccuracy}">📍 ${coordFormatted}</span>

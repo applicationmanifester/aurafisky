@@ -27,6 +27,14 @@ describe("Map Bottom Tabs Visibility Toggles", () => {
     expect(appJs).not.toContain("≡ƒù║");
     expect(appJs).not.toContain("≡ƒîí");
     expect(appJs).not.toContain("ΓöÇ");
+    expect(appJs).not.toContain("ΓÜá");
+    expect(appJs).not.toContain("ΓåÆ");
+  });
+
+  it("defines openPlainPromptWeatherCard in app.js with clean prompt text", () => {
+    const appJs = fs.readFileSync(path.resolve(__dirname, "../app.js"), "utf8");
+    expect(appJs).toContain("openPlainPromptWeatherCard()");
+    expect(appJs).toContain("Click on map or search the place to get the weather data");
   });
 });
 

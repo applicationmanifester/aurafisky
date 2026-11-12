@@ -83,9 +83,11 @@ describe("Startup Location Fallback Hierarchy", () => {
             if (this.defaultLocationNotify) this.setupHourlyNotifications();
             return;
           }
-          // 5. Regional timezone default (marked isFallback: true)
-          const def = this._getTimezoneDefaultLocation();
-          this.selectLocation(def.lat, def.lng, def.name, { isFallback: true, isAutomaticDefault: true });
+          if (this._restoreSession()) {
+            return;
+          }
+          // Regional timezone default removed: do not force any arbitrary city
+          this.setLoadingProgress(100);
         };
 
         this.getMyLocation({
@@ -149,7 +151,7 @@ describe("Startup Location Fallback Hierarchy", () => {
     );
   });
 
-  it("Priority 4: if coordinates unavailable AND Home location not set, falls back to timezone default with isFallback: true", async () => {
+  it("Priority 4: if coordinates unavailable AND Home location not set, does NOT select any arbitrary timezone city", async () => {
     app.defaultLocation = null;
 
     app.getMyLocation.mockImplementation(({ onFail }) => {
@@ -158,15 +160,10 @@ describe("Startup Location Fallback Hierarchy", () => {
 
     await app._loadInitialStartupLocation();
 
-    expect(app.selectLocation).toHaveBeenCalledWith(
-      12.9716,
-      77.5946,
-      "Bengaluru",
-      { isFallback: true, isAutomaticDefault: true }
-    );
-
-    // CRITICAL: Ensure automatic fallback was NOT saved to _lastSession!
+    // Ensures arbitrary regional timezone city is NEVER forced onto the user
+    expect(app.selectLocation).not.toHaveBeenCalled();
     expect(app._localCache._lastSession).toBeUndefined();
+    expect(app.setLoadingProgress).toHaveBeenCalledWith(100);
   });
 
   it("disregards legacy auto-saved Bengaluru default so mobile users are not permanently stuck", async () => {

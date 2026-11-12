@@ -1343,8 +1343,8 @@ class AurafiskyApp {
         }
       }
     } catch (_) {}
-    const tzLoc = this._getTimezoneDefaultLocation();
-    return { center: fromLonLat([tzLoc.lng, clampLat(tzLoc.lat)]), zoom: 9 };
+    // If neither URL coordinates nor Home location are available, show clean global map
+    return { center: fromLonLat([0, 20]), zoom: 2.5 };
   }
 
   initMap() {
@@ -4268,8 +4268,10 @@ class AurafiskyApp {
         return;
       }
 
-      const def = this._getTimezoneDefaultLocation();
-      this.selectLocation(def.lat, def.lng, def.name, { isFallback: true, isAutomaticDefault: true });
+      // No GPS coordinates, no Home location, and no previous location:
+      // Do not force any arbitrary regional/timezone city. Finish loading cleanly.
+      this.setLoadingProgress(100);
+      this.hideLoadingProgress?.();
     };
 
     // Mobile-first smart auto-location check

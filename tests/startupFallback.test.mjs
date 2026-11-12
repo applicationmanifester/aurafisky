@@ -26,6 +26,7 @@ describe("Startup Location Fallback Hierarchy", () => {
       getLocalizedLocationName: vi.fn((loc) => loc?.name),
       setupHourlyNotifications: vi.fn(),
       getMyLocation: vi.fn(),
+      openPlainPromptWeatherCard: vi.fn(),
       selectLocation: vi.fn((lat, lng, name, opts) => {
         app.selectedLat = lat;
         app.selectedLng = lng;
@@ -87,6 +88,7 @@ describe("Startup Location Fallback Hierarchy", () => {
             return;
           }
           // Regional timezone default removed: do not force any arbitrary city
+          this.openPlainPromptWeatherCard();
           this.setLoadingProgress(100);
         };
 
@@ -163,6 +165,7 @@ describe("Startup Location Fallback Hierarchy", () => {
     // Ensures arbitrary regional timezone city is NEVER forced onto the user
     expect(app.selectLocation).not.toHaveBeenCalled();
     expect(app._localCache._lastSession).toBeUndefined();
+    expect(app.openPlainPromptWeatherCard).toHaveBeenCalled();
     expect(app.setLoadingProgress).toHaveBeenCalledWith(100);
   });
 

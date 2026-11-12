@@ -4269,7 +4269,9 @@ class AurafiskyApp {
       }
 
       // No GPS coordinates, no Home location, and no previous location:
-      // Do not force any arbitrary regional/timezone city. Finish loading cleanly.
+      // Do not force any arbitrary regional/timezone city.
+      // Open plain card showing "Click on map or search the place to get the weather data".
+      this.openPlainPromptWeatherCard();
       this.setLoadingProgress(100);
       this.hideLoadingProgress?.();
     };
@@ -10225,6 +10227,80 @@ class AurafiskyApp {
     if (this._panelClockTimer) clearInterval(this._panelClockTimer);
   }
 
+  openPlainPromptWeatherCard() {
+    this.selectedLat = null;
+    this.selectedLng = null;
+    this.selectedName = null;
+    this.currentWeather = null;
+    this.weatherData = null;
+
+    if (this._panelClockTimer) {
+      clearInterval(this._panelClockTimer);
+      this._panelClockTimer = null;
+    }
+
+    const selectLocText = translateText("Select location", this.language) || "Select location";
+    const promptText = translateText("Click on map or search the place to get the weather data", this.language) || "Click on map or search the place to get the weather data";
+
+    if (this.$.panelLocationName) {
+      this.$.panelLocationName.textContent = selectLocText;
+      this.$.panelLocationName.title = selectLocText;
+    }
+    const auraTitle = document.getElementById("auraLocationTitle");
+    if (auraTitle) auraTitle.textContent = selectLocText;
+    const googleTitle = document.getElementById("googleLocationTitle");
+    if (googleTitle) googleTitle.textContent = selectLocText;
+
+    if (this.$.panelCoordinates) {
+      this.$.panelCoordinates.textContent = "";
+      this.$.panelCoordinates.title = "";
+    }
+    const mobileCoords = this.$.locationAddressCoordsText || document.getElementById("locationAddressCoordsText");
+    if (mobileCoords) {
+      mobileCoords.textContent = "";
+    }
+
+    const summaryEl = document.getElementById("locationAddressSummary");
+    if (summaryEl) {
+      summaryEl.innerHTML = `<span class="text-slate-600 dark:text-slate-300 font-medium">${promptText}</span>`;
+      summaryEl.title = promptText;
+    }
+
+    if (this.$.panelDescription) {
+      this.$.panelDescription.textContent = promptText;
+    }
+    if (this.$.panelTemp) {
+      this.$.panelTemp.textContent = "--°";
+      this.$.panelTemp.className = "text-4xl font-extrabold text-slate-900 dark:text-white";
+    }
+    if (this.$.panelFeelsLike) {
+      this.$.panelFeelsLike.textContent = translateText("Tap anywhere on the map or search above", this.language) || "Tap anywhere on the map or search above";
+    }
+    if (this.$.panelTempRange) this.$.panelTempRange.textContent = "";
+    if (this.$.panelTimeLabel) this.$.panelTimeLabel.textContent = "";
+    if (this.$.mobilePanelTimeLabel) this.$.mobilePanelTimeLabel.textContent = "--";
+    if (this.$.panelCardLocalTimeText) this.$.panelCardLocalTimeText.textContent = "--";
+
+    const freshnessEl = document.getElementById("panelCardFreshness");
+    if (freshnessEl) freshnessEl.textContent = translateText("Ready to explore", this.language) || "Ready to explore";
+
+    const timelineLabel = document.getElementById("timelineMinimizedLabel");
+    if (timelineLabel) {
+      timelineLabel.textContent = translateText("Click map or search to view timeline", this.language) || "Click map or search to view timeline";
+    }
+
+    document.getElementById("sheetWeatherAqiBadge")?.classList.add("hidden");
+    document.getElementById("locationHighwayBadge")?.remove();
+    document.getElementById("panelHomeBadge")?.classList.add("hidden");
+
+    if (this.$.weatherPanelSkeleton) this.$.weatherPanelSkeleton.classList.add("hidden");
+    if (this.$.weatherPanelError) this.$.weatherPanelError.classList.add("hidden");
+    if (this.$.weatherPanelContent) this.$.weatherPanelContent.classList.remove("hidden");
+
+    this.showWeatherPanel();
+    this.switchWeatherTab?.("overview");
+  }
+
   showWeatherPanel() {
     this.$.weatherPanel.classList.add("open");
     this.$.weatherPanel.classList.remove("minimized");
@@ -13550,7 +13626,7 @@ class AurafiskyApp {
       if (cardSubtitle) cardSubtitle.textContent = translateText("Height Above Sea Level (Relief)", loc) || "Height Above Sea Level (Relief)";
       if (notification) {
         notification.className = "px-2.5 py-1.5 rounded-xl bg-amber-500/10 dark:bg-amber-500/15 border border-amber-500/30 text-[11px] font-medium text-amber-900 dark:text-amber-200 leading-snug";
-        notification.innerHTML = `<span>ΓÜá∩╕Å <strong>${translateText("Notice", loc) || "Notice"}:</strong> ${translateText("Red, orange & green shades denote Elevation above sea level, not temperature.", loc) || "Red, orange & green shades denote Elevation above sea level, not temperature."}</span>`;
+        notification.innerHTML = `<span>⚠️ <strong>${translateText("Notice", loc) || "Notice"}:</strong> ${translateText("Red, orange & green shades denote Elevation above sea level, not temperature.", loc) || "Red, orange & green shades denote Elevation above sea level, not temperature."}</span>`;
       }
       if (gradientBar) {
         gradientBar.style.background = "linear-gradient(90deg, #388e3c, #8bc34a, #fbc02d, #f57c00, #d32f2f, #795548)";
@@ -13645,7 +13721,7 @@ function bootAurafisky() {
     });
 
     // ── Web Share Target ──────────────────────────────
-    // Handle "Share ΓåÆ Aurafisky" from Google Maps / other apps.
+    // Handle "Share → Aurafisky" from Google Maps / other apps.
     // The OS opens /share-target?text=...&url=... and we load that location.
     const shareParams = new URLSearchParams(window.location.search);
     const shareText = shareParams.get("text") || "";
